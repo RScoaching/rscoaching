@@ -201,6 +201,7 @@
       <select class="ctrl-select" id="sel-group" onchange="onGroupChange()">
         <option value="">Seleziona gruppo...</option>
       </select>
+      <button class="btn btn-outline btn-sm" onclick="reloadGroups()" title="Ricarica gruppi">↺</button>
     </div>
     <div class="ctrl-group">
       <button class="btn btn-outline btn-sm" onclick="shiftWeek(-1)">← Prec</button>
@@ -214,6 +215,13 @@
     <div class="sep"></div>
     <button class="btn btn-amber btn-sm" onclick="generateSuggestions()">⚡ Suggerimenti</button>
     <button class="btn btn-teal" onclick="publishPlan()">Pubblica piano →</button>
+  </div>
+
+  <!-- DEBUG (si nasconde automaticamente quando ci sono gruppi) -->
+  <div id="debug-box" style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.18);border-radius:10px;padding:10px 16px;margin-bottom:12px;font-size:12px;color:var(--red);display:none;">
+    <strong>⚠ Nessun gruppo trovato nel database.</strong><br>
+    <span style="color:var(--muted);">Per usare la pianificazione devi prima creare un gruppo dalla dashboard coach → sezione ◈ Gruppi → + Nuovo gruppo.</span><br>
+    <a href="/coach/" style="color:var(--teal);margin-top:4px;display:inline-block;">→ Vai alla dashboard per creare un gruppo</a>
   </div>
 
   <!-- STATUS -->
@@ -370,16 +378,37 @@ function populateGroupSelector(){
   const prev=currentGroup||sel.value;
   sel.innerHTML='<option value="">Seleziona gruppo...</option>';
   const ids=Object.keys(groups);
+
+  // Show debug box if no groups
+  const dbg=document.getElementById('debug-box');
+  if(!ids.length){
+    if(dbg)dbg.style.display='block';
+    return;
+  }
+  if(dbg)dbg.style.display='none';
+
   ids.forEach(k=>{
     const opt=document.createElement('option');
     opt.value=k; opt.textContent=groups[k].name;
     sel.appendChild(opt);
   });
-  if(prev&&groups[prev]){currentGroup=prev;sel.value=prev;}
-  else if(ids.length){currentGroup=ids[0];sel.value=ids[0];}
+
+  // Auto-select: keep previous or pick first
+  if(prev&&groups[prev]){ currentGroup=prev; sel.value=prev; }
+  else { currentGroup=ids[0]; sel.value=ids[0]; }
+
+  renderGrid();
   updateStatus();
   generateSuggestions();
 }
+
+window.reloadGroups=function(){
+  get(ref(db,'groups')).then(s=>{
+    groups=s.val()||{};
+    populateGroupSelector();
+    showToast(Object.keys(groups).length?`✓ ${Object.keys(groups).length} gruppi caricati`:'⚠ Nessun gruppo trovato');
+  });
+};
 
 window.onGroupChange=function(){
   currentGroup=document.getElementById('sel-group').value||null;
