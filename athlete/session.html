@@ -211,7 +211,37 @@ const SINT={pesi:'🏋️',campo:'⚽',sprint:'⚡',conditioning:'🔥',recupero
 const SCOL={pesi:'rgba(167,139,250,.12)',campo:'rgba(6,214,160,.1)',sprint:'rgba(248,113,113,.1)',conditioning:'rgba(251,113,74,.1)',recupero:'rgba(52,211,153,.08)'};
 
 async function init(){
-  if(!AID||!PROG||!SESS){err('Parametri mancanti');return;}
+  if(!AID){err('Parametri mancanti');return;}
+  const isQuick=p.get('quick')==='1';
+
+  // QUICK SESSION (piano rapido)
+  if(isQuick){
+    try{
+      const stored=sessionStorage.getItem(`rsc_quick_${AID}`);
+      if(!stored){err('Sessione non trovata');return;}
+      const {day,exs,best1rm:savedRm}=JSON.parse(stored);
+      const aS=await get(ref(db,`athletes/${AID}`));
+      if(!aS.exists()){err('Atleta non trovato');return;}
+      athlete=aS.val();
+      // Build best1rm from saved + firebase
+      const rmS=await get(ref(db,`rm_records/${AID}`));
+      Object.values(rmS.val()||{}).forEach(er=>{Object.values(er).forEach(r=>{if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;});});
+      // Merge saved
+      Object.entries(savedRm||{}).forEach(([k,v])=>{if(!best1rm[k]||v>best1rm[k])best1rm[k]=v;});
+      // Build session from day data
+      session={name:day.note||'Sessione rapida',type:day.type};
+      buildQuickSession(day,exs);
+      document.getElementById('loading').style.display='none';
+      document.getElementById('sapp').style.display='block';
+      document.getElementById('sh-name').textContent=session.name;
+      document.getElementById('sh-meta').textContent=`${athlete.name} · Piano rapido`;
+      document.getElementById('home-btn').onclick=()=>{location.href=`/athlete/?id=${AID}`;};
+      render();
+    }catch(e){console.error(e);err('Errore: '+e.message);}
+    return;
+  }
+
+  if(!PROG||!SESS){err('Parametri mancanti');return;}
   try{
     const [aS,pS,rmS]=await Promise.all([
       get(ref(db,`athletes/${AID}`)),
@@ -252,6 +282,20 @@ async function init(){
   }
 }
 init();
+
+function buildQuickSession(day,exs){
+  session.type=day.type||'pesi';
+  if(day.type==='conditioning'){
+    exs=[{_type:'conditioning',name:day.type||'Conditioning',condType:day.detail,condContent:day.detail}];
+  } else if(!exs||!exs.length){
+    // No exercises — just show note
+    exs=[{_type:'nota',name:day.note||'Seduta',note:day.detail||''}];
+  }
+  // Build from array
+  const fake={type:day.type,exercises:{}};
+  exs.forEach((e,i)=>{fake.exercises[i]={...e,order:i};});
+  buildExercises(fake);
+}
 
 function buildExercises(s){
   exs=[];
@@ -305,7 +349,8 @@ function render(){
   if(!ex){document.getElementById('content').innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);">Nessun esercizio in questa sessione.</div>';return;}
 
   let html='';
-  if(ex._type==='conditioning') html=renderCond(ex);
+  if(ex._type==='nota') html=renderNota(ex);
+  else if(ex._type==='conditioning') html=renderCond(ex);
   else if(ex._type==='campo') html=renderCampo(ex,cur);
   else if(ex._type==='complex') html=renderComplex(ex,cur);
   else html=renderPesi(ex,cur);
@@ -406,6 +451,15 @@ function renderCampo(ex,ei){
       ${ex.cue?`<div style="font-size:11px;color:var(--amber);margin-top:5px;">💡 ${ex.cue}</div>`:''}
     </div>
     <button class="campo-check${ck?' ck':''}" onclick="toggleCampo(${ei})">${ck?'✓':''}</button>
+  </div>`;
+}
+
+// ── NOTA (sessione senza esercizi strutturati)
+function renderNota(ex){
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:12px;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--white);margin-bottom:8px;">${ex.name}</div>
+    ${ex.note?`<div style="font-size:14px;color:var(--text);white-space:pre-line;line-height:1.6;">${ex.note}</div>`:''}
+    <div style="margin-top:16px;font-size:12px;color:var(--muted);">Completa la seduta e registra il check-in.</div>
   </div>`;
 }
 

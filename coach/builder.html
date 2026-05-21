@@ -364,12 +364,14 @@ function renderSessionCard(wid,sid,s){
   const st=SESS_TYPES[s.type]||SESS_TYPES.pesi;
   const exs=s.exercises?Object.entries(s.exercises).sort((a,b)=>(a[1].order||0)-(b[1].order||0)):[];
   const exHtml=s.type==='conditioning'?renderConditioningBlock(wid,sid,s):renderExerciseBlocks(wid,sid,exs);
+  const DAYNAMES=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const dayBadge=s.dayOfWeek!=null?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(59,130,246,.12);color:var(--blue);margin-left:6px;">${DAYNAMES[s.dayOfWeek]}</span>`:'<span style="font-size:10px;color:var(--muted);margin-left:6px;">ogni giorno</span>';
 
   return `<div class="sess-card">
     <div class="sess-card-head" onclick="toggleSession('${sid}')">
       <div class="sess-type-icon ${st.cls}">${st.icon}</div>
       <div style="flex:1;">
-        <div class="sess-name">${s.name||st.label}</div>
+        <div class="sess-name">${s.name||st.label}${dayBadge}</div>
         <div class="sess-type-lbl">${st.label} · ${exs.length} esercizi</div>
       </div>
       <div class="sess-actions" onclick="event.stopPropagation()">
@@ -510,6 +512,10 @@ window.openModal=function(type,...args){
           ${Object.entries(SESS_TYPES).map(([k,v])=>`<option value="${k}"${s.type===k?' selected':''}>${v.label}</option>`).join('')}
         </select></div>
       </div>
+      <div class="field"><label>Giorno della settimana</label><select id="m-sday">
+        <option value="">— Non specificato (appare sempre) —</option>
+        ${['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'].map((d,i)=>`<option value="${i}"${s.dayOfWeek===i?' selected':''}>${d}</option>`).join('')}
+      </select></div>
       <div class="field"><label>Note sessione</label><input id="m-snotes" value="${s.notes||''}" placeholder="Es. 60min · forza + pliometria"></div>
       <div class="mactions">
         <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
@@ -639,19 +645,45 @@ window.saveWeek=async function(editWid){
 };
 
 window.addSession=async function(wid,type){
+  // Open modal to pick day + name
   const st=SESS_TYPES[type];
   const sessions=programs[currentProgId]?.weeks?.[wid]?.sessions||{};
   const order=Object.keys(sessions).length;
-  const name=`Sessione ${String.fromCharCode(65+order)} — ${st.label}`;
-  await push(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions`),{name,type,order,exercises:{},notes:''});
-  showToast(`✓ ${st.label} aggiunta!`);
+  const defaultName=`Sessione ${String.fromCharCode(65+order)} — ${st.label}`;
+  const mb=document.getElementById('modal-body');
+  mb.innerHTML=`<h3>Nuova sessione ${st.icon} ${st.label}</h3>
+    <div class="field"><label>Nome sessione</label><input id="ns-name" value="${defaultName}" placeholder="Es. Sessione A — Forza"></div>
+    <div class="field"><label>Giorno della settimana</label><select id="ns-day">
+      <option value="">— Non specificato (appare sempre) —</option>
+      ${['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'].map((d,i)=>`<option value="${i}">${d}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Note</label><input id="ns-notes" placeholder="Es. 60min · forza + pliometria"></div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-teal" onclick="confirmAddSession('${wid}','${type}',${order})">Aggiungi →</button>
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+};
+
+window.confirmAddSession=async function(wid,type,order){
+  const name=document.getElementById('ns-name').value.trim();
+  const dayOfWeek=document.getElementById('ns-day').value;
+  const notes=document.getElementById('ns-notes').value.trim();
+  await push(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions`),{
+    name,type,order,exercises:{},notes,
+    dayOfWeek:dayOfWeek!==''?parseInt(dayOfWeek):null
+  });
+  closeModal();
+  showToast(`✓ Sessione aggiunta!`);
 };
 
 window.saveSess=async function(wid,sid){
+  const dayVal=document.getElementById('m-sday').value;
   await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),{
     name:document.getElementById('m-sname').value.trim(),
     type:document.getElementById('m-stype').value,
-    notes:document.getElementById('m-snotes').value.trim()
+    notes:document.getElementById('m-snotes').value.trim(),
+    dayOfWeek:dayVal!==''?parseInt(dayVal):null
   });
   closeModal();showToast('✓ Sessione aggiornata!');
 };
