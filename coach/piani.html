@@ -133,7 +133,7 @@ const db=getDatabase(app);
 const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("PIN:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#4A5568;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
-let athletes={}, allPlans={};
+let athletes={}, allPlans={}, cachedExercises={};
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
 const TYPES={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo'};
@@ -142,7 +142,8 @@ const TCLS={squadra:'sm-squadra',forza:'sm-forza',sprint:'sm-sprint',plyo:'sm-pl
 async function init(){
   document.getElementById('loading').style.display='none';
   document.getElementById('app').style.display='flex';
-  const [aSnap,pSnap]=await Promise.all([get(ref(db,'athletes')),get(ref(db,'athlete_plans'))]);
+  const [aSnap,pSnap,eSnap]=await Promise.all([get(ref(db,'athletes')),get(ref(db,'athlete_plans')),get(ref(db,'exercise_db'))]);
+  cachedExercises=eSnap.val()||{};
   athletes=aSnap.val()||{};
   // Flatten all plans: {aid_wk: {aid, wk, plan}}
   const ap=pSnap.val()||{};
@@ -287,34 +288,119 @@ window.createPlan=async function(){
 };
 
 // ── MODAL: EDIT DAY
+let editExercises=[];
+
 window.openEditDay=function(aid,wk,dayIdx){
   const plan=allPlans[`${aid}__${wk}`]?.plan;
   const day=plan?.days?.[dayIdx]||{};
+  editExercises=Object.values(day.exercises||{});
   const monday=new Date(wk+'T00:00:00'); monday.setDate(monday.getDate()+parseInt(dayIdx));
-  const dateStr=monday.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
   const mb=document.getElementById('modal-body');
+  renderDayModal(aid,wk,dayIdx,day,monday);
+  document.getElementById('modal').classList.add('open');
+};
+
+function renderDayModal(aid,wk,dayIdx,day,monday){
+  const mb=document.getElementById('modal-body');
+  const exOpts=Object.values(cachedExercises||{}).sort((a,b)=>(a.order||0)-(b.order||0)).map(e=>`<option value="${e.name}" data-cat="${e.cat}">${e.name}</option>`).join('');
   mb.innerHTML=`<h3>${DAYS[dayIdx]} · ${monday.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}</h3>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${athletes[aid]?.name||aid} · ${dateStr}</div>
-    <div class="field"><label>Tipo seduta</label><select id="ed-type">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${athletes[aid]?.name||aid}</div>
+    <div class="field"><label>Tipo seduta</label><select id="ed-type" onchange="onEdTypeChange()">
       <option value="">— Nessuna seduta —</option>
       ${Object.entries(TYPES).map(([k,v])=>`<option value="${k}"${day.type===k?' selected':''}>${v}</option>`).join('')}
     </select></div>
-    <div class="field"><label>Note / descrizione</label><textarea id="ed-note" placeholder="Es. 45min · possessi + prevenzione fine seduta">${day.note||''}</textarea></div>
-    <div class="field"><label>Esercizi / dettagli (testo libero)</label><textarea id="ed-detail" placeholder="Es. Nordic 3×6 · Calf Raise 3×12 · Jump Squat 3×5 @30%">${day.detail||''}</textarea></div>
-    <div class="mactions">
+    <div class="field"><label>Note / descrizione</label><input type="text" id="ed-note" value="${day.note||''}" placeholder="Es. 45min · possessi + prevenzione"></div>
+
+    <!-- ESERCIZI STRUTTURATI -->
+    <div id="ed-ex-section" style="${day.type&&!['squadra','riposo'].includes(day.type)?'':'display:none'}">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;margin-top:4px;">Esercizi</div>
+      <div id="ed-ex-list"></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <select id="ed-ex-picker" style="flex:1;padding:8px 10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);">
+          <option value="">Scegli esercizio...</option>${exOpts}
+          <option value="__custom">✏ Nome personalizzato</option>
+        </select>
+        <button class="btn btn-purple btn-sm" onclick="addEdEx()">+ Add</button>
+      </div>
+      <div id="ed-custom-name-wrap" style="display:none;margin-bottom:8px;">
+        <input type="text" id="ed-custom-name" placeholder="Nome esercizio personalizzato..." style="width:100%;padding:8px 10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);">
+      </div>
+    </div>
+
+    <!-- TESTO LIBERO per sprint/conditioning -->
+    <div id="ed-detail-section" style="${day.type&&['sprint','conditioning'].includes(day.type)?'':'display:none'}">
+      <div class="field"><label>Dettagli seduta</label><textarea id="ed-detail" style="min-height:80px;" placeholder="Es.
+6×30m sprint · rec 90&quot;
+4×20m lanciati Vmax · rec 3'">${day.detail||''}</textarea></div>
+    </div>
+
+    <div class="mactions" style="margin-top:12px;">
       <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
       ${day.type?`<button class="btn btn-red btn-sm" onclick="clearDay('${aid}','${wk}',${dayIdx})">Rimuovi</button>`:''}
       <button class="btn btn-teal" onclick="saveDay('${aid}','${wk}',${dayIdx})">Salva →</button>
     </div>`;
-  document.getElementById('modal').classList.add('open');
+  renderEdExList();
+  document.getElementById('ed-ex-picker').addEventListener('change',function(){
+    document.getElementById('ed-custom-name-wrap').style.display=this.value==='__custom'?'block':'none';
+  });
+}
+
+window.onEdTypeChange=function(){
+  const t=document.getElementById('ed-type').value;
+  document.getElementById('ed-ex-section').style.display=t&&!['squadra','riposo',''].includes(t)?'block':'none';
+  document.getElementById('ed-detail-section').style.display=['sprint','conditioning'].includes(t)?'block':'none';
 };
+
+window.addEdEx=function(){
+  const picker=document.getElementById('ed-ex-picker');
+  const isCustom=picker.value==='__custom';
+  const name=isCustom?document.getElementById('ed-custom-name').value.trim():picker.value;
+  if(!name)return;
+  editExercises.push({name,sets:3,reps:5,pct:'',kg:'',rpe:'',rest:''});
+  picker.value='';
+  if(isCustom){document.getElementById('ed-custom-name').value='';document.getElementById('ed-custom-name-wrap').style.display='none';}
+  renderEdExList();
+};
+
+function renderEdExList(){
+  const el=document.getElementById('ed-ex-list');
+  if(!el)return;
+  if(!editExercises.length){el.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 0 10px;">Nessun esercizio aggiunto.</div>';return;}
+  el.innerHTML=editExercises.map((e,i)=>`
+    <div style="background:var(--card2);border-radius:10px;padding:10px 12px;margin-bottom:7px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:600;color:var(--white);">${e.name}</div>
+        <button onclick="removeEdEx(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
+        ${[['sets','Serie',e.sets,'number'],['reps','Reps',e.reps,'text'],['pct','%1RM',e.pct,'number'],['kg','Kg diretti',e.kg,'number'],['rest','Rec.',e.rest,'text']].map(([field,lbl,val,type])=>`
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">${lbl}</div>
+          <input type="${type}" value="${val||''}" placeholder="${lbl}" onchange="updEdEx(${i},'${field}',this.value)" style="width:100%;padding:5px 6px;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);text-align:center;">
+        </div>`).join('')}
+      </div>
+      <div style="margin-top:6px;">
+        <input type="text" value="${e.cue||''}" placeholder="💡 Cue tecnico (opzionale)" onchange="updEdEx(${i},'cue',this.value)" style="width:100%;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:11px;color:var(--amber);">
+      </div>
+    </div>`).join('');
+}
+
+window.updEdEx=function(i,field,val){if(editExercises[i])editExercises[i][field]=val;};
+window.removeEdEx=function(i){editExercises.splice(i,1);renderEdExList();};
 
 window.saveDay=async function(aid,wk,dayIdx){
   const type=document.getElementById('ed-type').value;
   const note=document.getElementById('ed-note').value.trim();
-  const detail=document.getElementById('ed-detail').value.trim();
+  const detailEl=document.getElementById('ed-detail');
+  const detail=detailEl?detailEl.value.trim():'';
   if(!type){await clearDay(aid,wk,dayIdx);return;}
-  await set(ref(db,`athlete_plans/${aid}/${wk}/days/${dayIdx}`),{type,note:note||null,detail:detail||null});
+  // Convert exercises array to object
+  const exObj={};
+  editExercises.forEach((e,i)=>{exObj[i]={...e,order:i};});
+  await set(ref(db,`athlete_plans/${aid}/${wk}/days/${dayIdx}`),{
+    type,note:note||null,detail:detail||null,
+    exercises:Object.keys(exObj).length?exObj:null
+  });
   closeModal();showToast('✓ Giorno salvato!');
 };
 

@@ -504,41 +504,132 @@ async function loadTodayPlan(athlete,records){
   const wk=monday.toISOString().slice(0,10);
   const wrap=document.getElementById('today-content');
   const DAYS2=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  const TLABELS={squadra:'Allenamento Squadra',forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero attivo',priming:'Priming G-1',riposo:'Riposo'};
+  const TCOLORS={squadra:'var(--blue)',forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)',riposo:'var(--muted)'};
+  const TBANNER={squadra:'tb-squadra',forza:'tb-forza',sprint:'tb-sprint',plyo:'tb-plyo',rec:'tb-rec',priming:'tb-priming',riposo:'tb-riposo'};
+  const TICONS={squadra:'⚽',forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',riposo:'😴'};
 
-  // Build 1rm map from passed records
+  // Build 1rm map
   const best1rm={};
-  Object.entries(records).forEach(([exKey,exRecs])=>{
-    Object.values(exRecs).forEach(r=>{
-      if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;
-    });
+  Object.entries(records).forEach(([,exRecs])=>{
+    Object.values(exRecs).forEach(r=>{if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;});
   });
 
-  // 1. Piano rapido (athlete_plans) — priorità
+  // Helper: render a session card with exercises and open-to-session button
+  function renderSessionCard(type, note, exercises, progId, weekIdx, sessId, extra){
+    const color=TCOLORS[type]||'var(--text)';
+    const banner=TBANNER[type]||'tb-riposo';
+    const label=TLABELS[type]||type;
+    const icon=TICONS[type]||'📋';
+    const hasLive=progId&&sessId;
+
+    // Exercises list
+    let exHtml='';
+    if(exercises&&exercises.length){
+      exHtml=`<div style="padding:12px 16px;border-top:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;">Esercizi</div>
+        ${exercises.map(ex=>{
+          const rm=best1rm[ex.name]||0;
+          const pct=parseFloat(ex.pct)||0;
+          const kgSug=rm>0&&pct>0?Math.round(rm*pct/100/2.5)*2.5:0;
+          const kgDirect=parseFloat(ex.kg)||0;
+          const kgShow=kgDirect>0?kgDirect:kgSug>0?kgSug:0;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;color:var(--white);">${ex.name}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px;">${ex.sets||3}×${ex.reps||'—'}${pct>0?` @${pct}% 1RM`:''}${ex.rpe?` · RPE ${ex.rpe}`:''}</div>
+              ${ex.cue?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">💡 ${ex.cue}</div>`:''}
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              ${kgShow>0?`<div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--purple);letter-spacing:.5px;">${kgShow}kg</div><div style="font-size:10px;color:var(--muted);">${kgDirect>0?'diretto':pct+'% 1RM'}</div>`:'<div style="font-size:12px;color:var(--muted);">—</div>'}
+              ${rm===0&&pct>0?`<div style="font-size:10px;color:var(--amber);">⚠ imposta 1RM</div>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    // Extra info (sprint, plyo, etc.)
+    let extraHtml='';
+    if(extra){extraHtml=`<div style="padding:10px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);white-space:pre-line;">${extra}</div>`;}
+
+    return `<div class="today-wrap">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:10px;">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:${color};margin-bottom:4px;">${icon} ${label}</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;color:var(--white);line-height:1;">${DAYS2[dayIdx]}</div>
+          ${note?`<div style="font-size:12px;color:var(--muted);margin-top:5px;">${note}</div>`:''}
+        </div>
+        ${exHtml}
+        ${extraHtml}
+        <div style="padding:12px 16px;">
+          ${hasLive
+            ?`<a href="/athlete/session.html?id=${aid}&prog=${progId}&week=${weekIdx}&sess=${sessId}" style="display:block;width:100%;padding:14px;background:var(--teal);color:#070B12;border:none;border-radius:12px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;cursor:pointer;text-align:center;text-decoration:none;">▶ INIZIA SESSIONE</a>`
+            :`<button onclick="bnSwitch('checkin',document.querySelectorAll('.bn-item')[2])" style="width:100%;padding:13px;background:rgba(6,214,160,.1);border:1px solid rgba(6,214,160,.25);color:var(--teal);border-radius:12px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;cursor:pointer;">⚡ REGISTRA COME TI SENTI</button>`
+          }
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── 1. PROGRAMMI ASSEGNATI (Program Builder) — massima priorità se c'è una sessione oggi
+  const progSnap=await get(ref(db,'programs'));
+  const progs=progSnap.val()||{};
+  const myProgs=Object.entries(progs).filter(([,p])=>p.assignedTo&&p.assignedTo[aid]);
+  for(const [progId,prog] of myProgs){
+    const weeks=Object.entries(prog.weeks||{}).sort((a,b)=>a[1].order-b[1].order);
+    // Find current week by matching weekStart or by index heuristic
+    // Try to find a session marked for today's day in any week
+    // For now: check each week for a session that matches today
+    for(let wi=0;wi<weeks.length;wi++){
+      const [,wk2]=weeks[wi];
+      const sessions=Object.entries(wk2.sessions||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+      if(!sessions.length)continue;
+      // Check if this week is "current" — use localStorage to track progress
+      const storageKey=`rsc_prog_${aid}_${progId}`;
+      const saved=JSON.parse(localStorage.getItem(storageKey)||'{"weekIdx":0,"lastOpened":0}');
+      const currentWI=saved.weekIdx||0;
+      if(wi!==currentWI)continue;
+      // Found current week — show first uncompleted session
+      const firstSess=sessions[0];
+      const [sid,s]=firstSess;
+      const exs=Object.entries(s.exercises||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).map(([,e])=>e);
+      let extra='';
+      if(s.type==='sprint'&&s.sprint)extra=`Acc: ${s.sprint.acc||'—'}
+Vmax: ${s.sprint.vmax||'—'}
+CoD: ${s.sprint.cod||'—'}`;
+      if(s.type==='plyo'&&s.plyo)extra=s.plyo;
+      if(s.type==='conditioning')extra=`${s.condType||''}${s.duration?' · '+s.duration:''}
+${s.condContent||''}`;
+      wrap.innerHTML=`<div style="font-size:11px;color:var(--muted);padding:0 20px 8px;">Programma: <strong style="color:var(--white);">${prog.name}</strong> · Settimana ${wi+1}${weeks[wi][1].label?' — '+weeks[wi][1].label:''}</div>`
+        +renderSessionCard(s.type||'pesi',s.name,exs,progId,wi,sid,extra);
+      if(sessions.length>1){
+        wrap.innerHTML+=`<div style="padding:0 20px;margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Altre sessioni oggi:</div>${sessions.slice(1).map(([sid2,s2])=>{
+          const exs2=Object.entries(s2.exercises||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).map(([,e])=>e);
+          return renderSessionCard(s2.type||'pesi',s2.name,exs2,progId,wi,sid2,'');
+        }).join('')}</div>`;
+      }
+      return;
+    }
+  }
+
+  // ── 2. PIANO RAPIDO per oggi
   const qpSnap=await get(ref(db,`athlete_plans/${aid}/${wk}`));
   if(qpSnap.exists()){
     const qp=qpSnap.val();
     const day=qp.days?.[dayIdx];
     if(day&&day.type){
       if(day.type==='riposo'){wrap.innerHTML=renderNoPlan('Riposo 😴','Recupera bene. Sonno, idratazione, alimentazione.');return;}
-      const TLABELS={squadra:'Allenamento Squadra',forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero attivo',priming:'Priming G-1'};
-      const TCOLORS={squadra:'var(--blue)',forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)'};
-      const TBANNER={squadra:'tb-squadra',forza:'tb-forza',sprint:'tb-sprint',plyo:'tb-plyo',rec:'tb-rec',priming:'tb-priming'};
-      const color=TCOLORS[day.type]||'var(--text)';
-      wrap.innerHTML=`
-        <div class="today-wrap">
-          <div class="type-banner ${TBANNER[day.type]||'tb-riposo'}">
-            <div class="type-tag" style="color:${color}">${(TLABELS[day.type]||day.type).toUpperCase()}</div>
-            <div class="type-title" style="color:${color}">${DAYS2[dayIdx]}</div>
-            ${day.note?`<div class="type-note">${day.note}</div>`:''}
-            ${day.detail?`<div class="type-note" style="margin-top:6px;white-space:pre-line;font-size:12px;">${day.detail}</div>`:''}
-          </div>
-        </div>
-        <button class="complete-btn" onclick="bnSwitch('checkin',document.querySelectorAll('.bn-item')[2])">⚡ Registra come ti senti →</button>`;
+      // Build exercises from day.exercises if present
+      const dayExs=Object.values(day.exercises||{});
+      let extra='';
+      if(day.detail)extra=day.detail;
+      wrap.innerHTML=renderSessionCard(day.type,day.note,dayExs,null,null,null,extra);
       return;
     }
   }
 
-  // 2. Piano gruppo (planner)
+  // ── 3. PIANO GRUPPO (planner)
   const groupId=athlete.group;
   if(groupId){
     const planSnap=await get(ref(db,`plans/${wk}/${groupId}/${dayIdx}`));
@@ -546,41 +637,21 @@ async function loadTodayPlan(athlete,records){
       const raw=planSnap.val()||{};
       const daySessions=Object.entries(raw).filter(([k])=>k!=='_published').map(([k,v])=>({...v,_key:k})).sort((a,b)=>a.ts-b.ts);
       if(daySessions.length){
-        const SESS_COLORS={forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)',squadra:'var(--blue)',riposo:'var(--muted)'};
-        const SESS_LABELS={forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo'};
-        const SESS_BANNERS={forza:'tb-forza',sprint:'tb-sprint',plyo:'tb-plyo',rec:'tb-rec',priming:'tb-priming',squadra:'tb-squadra',riposo:'tb-riposo'};
         wrap.innerHTML=daySessions.map(s=>{
-          const color=SESS_COLORS[s.type]||'var(--text)';
-          const label=SESS_LABELS[s.type]||s.type;
-          const bannerCls=SESS_BANNERS[s.type]||'tb-riposo';
-          const exHtml=s.exercises&&s.exercises.length?`<div style="margin-top:12px;">${s.exercises.map((ex,ei)=>{
-            const rm=best1rm[ex.name]||0;
-            const pct=parseFloat(ex.pct)||0;
-            const kgSug=rm>0&&pct>0?Math.round(rm*pct/100/2.5)*2.5:0;
-            return `<div class="ex-card">
-              <div class="ex-top">
-                <div><div class="ex-name">${ex.name}</div><div class="ex-params">${ex.sets||3}×${ex.reps||'—'}${pct>0?` @${pct}%`:''}</div></div>
-                <div class="ex-right"><div class="ex-kg">${kgSug>0?kgSug+'kg':'—'}</div><div class="ex-kg-lbl">kg suggeriti</div>${pct>0?`<div class="ex-pct">${pct}% 1RM</div>`:''}</div>
-              </div>
-              ${rm===0&&pct>0?`<div class="no-rm-warn">⚠ Imposta 1RM nella sezione 💪</div>`:''}
-              <div class="weight-row"><label>Peso usato</label><input class="weight-input" type="number" id="ex-real-${ei}" inputmode="decimal" placeholder="${kgSug||'—'}"><span class="weight-unit">kg</span></div>
-              <div class="ex-saved" id="ex-saved-${ei}">✓ Salvato!</div>
-              <button class="ex-save-btn" onclick="saveExWeight(${ei},'${ex.name}','${s._key}')">Salva peso →</button>
-            </div>`;
-          }).join('')}</div>`:'';
-          return `<div class="today-wrap"><div class="type-banner ${bannerCls}">
-            <div class="type-tag" style="color:${color}">${label.toUpperCase()}</div>
-            <div class="type-title" style="color:${color}">${DAYS2[dayIdx]}</div>
-            ${s.note?`<div class="type-note">${s.note}</div>`:''}
-          </div>${exHtml}</div>`;
+          const exs=s.exercises||[];
+          let extra='';
+          if(s.sprint)extra=`Acc: ${s.sprint.acc||'—'}
+Vmax: ${s.sprint.vmax||'—'}
+CoD: ${s.sprint.cod||'—'}`;
+          if(s.plyo)extra=s.plyo;
+          return renderSessionCard(s.type,s.note,exs,null,null,null,extra);
         }).join('');
-        wrap.innerHTML+=`<button class="complete-btn" onclick="bnSwitch('checkin',document.querySelectorAll('.bn-item')[2])">⚡ Registra come ti senti →</button>`;
         return;
       }
     }
   }
 
-  // 3. Nessun piano
+  // ── 4. Nessun piano
   wrap.innerHTML=renderNoPlan('Nessun piano per oggi.','Il tuo preparatore pubblicherà il piano a breve.');
 }
 
