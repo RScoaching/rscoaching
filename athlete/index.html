@@ -502,75 +502,88 @@ async function loadTodayPlan(athlete,records){
   const dayIdx=now.getDay()===0?6:now.getDay()-1;
   const monday=getMondayOf(now);
   const wk=monday.toISOString().slice(0,10);
-  const groupId=athlete.group;
   const wrap=document.getElementById('today-content');
+  const DAYS2=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 
-  if(!groupId){wrap.innerHTML=renderNoPlan('Nessun gruppo assegnato.',`Contatta il tuo preparatore per ricevere il piano.`);return;}
-
-  const planSnap=await get(ref(db,`plans/${wk}/${groupId}/${dayIdx}`));
-  if(!planSnap.exists()||!Object.keys(planSnap.val()).length){
-    wrap.innerHTML=renderNoPlan('Nessun piano per oggi.','Il tuo preparatore pubblicherà il piano a breve.');
-    return;
-  }
-
-  const daySessions=Object.entries(planSnap.val()).map(([k,v])=>({...v,_key:k})).sort((a,b)=>a.ts-b.ts);
-
-  // Build best 1RM map by name
+  // Build 1rm map from passed records
   const best1rm={};
-  // from rm_records
-  const recSnap=await get(ref(db,`rm_records/${athlete._id||''}`));
-  // use passed records
   Object.entries(records).forEach(([exKey,exRecs])=>{
     Object.values(exRecs).forEach(r=>{
-      if(!best1rm[r.exName]||r.value>best1rm[r.exName])best1rm[r.exName]=r.value;
+      if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;
     });
   });
 
-  wrap.innerHTML=daySessions.map(s=>{
-    const color=SESS_COLORS[s.type]||'var(--text)';
-    const label=SESS_LABELS[s.type]||s.type;
-    const bannerCls=SESS_BANNERS[s.type]||'tb-riposo';
-    let extraInfo='';
-    if(s.sprint){extraInfo=`<div class="type-note">Acc: ${s.sprint.acc||'—'}<br>Vmax: ${s.sprint.vmax||'—'}<br>CoD: ${s.sprint.cod||'—'}</div>`;}
-    if(s.plyo){extraInfo=`<div class="type-note">${s.plyo}</div>`;}
-
-    const exHtml=s.exercises&&s.exercises.length?`<div style="margin-top:12px;">${s.exercises.map((ex,ei)=>{
-      const rm=best1rm[ex.name]||0;
-      const pct=parseFloat(ex.pct)||0;
-      const kgSug=rm>0?Math.round(rm*pct/100/2.5)*2.5:0;
-      const pcts=[60,70,75,80,85,90];
-      const pctTable=rm>0?`<div class="pct-row">${pcts.map(p=>{const kg=Math.round(rm*p/100/2.5)*2.5;const hl=p===Math.round(pct/5)*5;return `<div class="pc${hl?' hl':''}"><div class="pc-p">${p}%</div><div class="pc-k">${kg}</div></div>`;}).join('')}</div>`:'';
-      return `<div class="ex-card">
-        <div class="ex-top">
-          <div><div class="ex-name">${ex.name}</div><div class="ex-params">${ex.sets||'3'} serie × ${ex.reps||'5'} reps</div></div>
-          <div class="ex-right">
-            <div class="ex-kg">${kgSug>0?kgSug+'kg':'—'}</div>
-            <div class="ex-kg-lbl">kg suggeriti</div>
-            ${pct>0?`<div class="ex-pct">${pct}% 1RM</div>`:''}
+  // 1. Piano rapido (athlete_plans) — priorità
+  const qpSnap=await get(ref(db,`athlete_plans/${aid}/${wk}`));
+  if(qpSnap.exists()){
+    const qp=qpSnap.val();
+    const day=qp.days?.[dayIdx];
+    if(day&&day.type){
+      if(day.type==='riposo'){wrap.innerHTML=renderNoPlan('Riposo 😴','Recupera bene. Sonno, idratazione, alimentazione.');return;}
+      const TLABELS={squadra:'Allenamento Squadra',forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero attivo',priming:'Priming G-1'};
+      const TCOLORS={squadra:'var(--blue)',forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)'};
+      const TBANNER={squadra:'tb-squadra',forza:'tb-forza',sprint:'tb-sprint',plyo:'tb-plyo',rec:'tb-rec',priming:'tb-priming'};
+      const color=TCOLORS[day.type]||'var(--text)';
+      wrap.innerHTML=`
+        <div class="today-wrap">
+          <div class="type-banner ${TBANNER[day.type]||'tb-riposo'}">
+            <div class="type-tag" style="color:${color}">${(TLABELS[day.type]||day.type).toUpperCase()}</div>
+            <div class="type-title" style="color:${color}">${DAYS2[dayIdx]}</div>
+            ${day.note?`<div class="type-note">${day.note}</div>`:''}
+            ${day.detail?`<div class="type-note" style="margin-top:6px;white-space:pre-line;font-size:12px;">${day.detail}</div>`:''}
           </div>
         </div>
-        ${rm===0?`<div class="no-rm-warn">⚠ Imposta il tuo 1RM nella sezione 💪 per vedere i kg esatti</div>`:''}
-        <div class="weight-row">
-          <label>Peso usato</label>
-          <input class="weight-input" type="number" id="ex-real-${ei}" inputmode="decimal" placeholder="${kgSug||'—'}">
-          <span class="weight-unit">kg</span>
-        </div>
-        <div class="ex-saved" id="ex-saved-${ei}">✓ Salvato!</div>
-        ${pctTable}
-        <button class="ex-save-btn" onclick="saveExWeight(${ei},'${ex.name}','${s._key}')">Salva peso →</button>
-      </div>`;
-    }).join('')}</div>`:'';
+        <button class="complete-btn" onclick="bnSwitch('checkin',document.querySelectorAll('.bn-item')[2])">⚡ Registra come ti senti →</button>`;
+      return;
+    }
+  }
 
-    return `<div class="today-wrap"><div class="type-banner ${bannerCls}">
-      <div class="type-tag" style="color:${color}">${label.toUpperCase()}</div>
-      <div class="type-title" style="color:${color}">${DAYS[dayIdx]}</div>
-      ${s.note?`<div class="type-note">${s.note}</div>`:''}${extraInfo}
-    </div>${exHtml}</div>`;
-  }).join('');
+  // 2. Piano gruppo (planner)
+  const groupId=athlete.group;
+  if(groupId){
+    const planSnap=await get(ref(db,`plans/${wk}/${groupId}/${dayIdx}`));
+    if(planSnap.exists()){
+      const raw=planSnap.val()||{};
+      const daySessions=Object.entries(raw).filter(([k])=>k!=='_published').map(([k,v])=>({...v,_key:k})).sort((a,b)=>a.ts-b.ts);
+      if(daySessions.length){
+        const SESS_COLORS={forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)',squadra:'var(--blue)',riposo:'var(--muted)'};
+        const SESS_LABELS={forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo'};
+        const SESS_BANNERS={forza:'tb-forza',sprint:'tb-sprint',plyo:'tb-plyo',rec:'tb-rec',priming:'tb-priming',squadra:'tb-squadra',riposo:'tb-riposo'};
+        wrap.innerHTML=daySessions.map(s=>{
+          const color=SESS_COLORS[s.type]||'var(--text)';
+          const label=SESS_LABELS[s.type]||s.type;
+          const bannerCls=SESS_BANNERS[s.type]||'tb-riposo';
+          const exHtml=s.exercises&&s.exercises.length?`<div style="margin-top:12px;">${s.exercises.map((ex,ei)=>{
+            const rm=best1rm[ex.name]||0;
+            const pct=parseFloat(ex.pct)||0;
+            const kgSug=rm>0&&pct>0?Math.round(rm*pct/100/2.5)*2.5:0;
+            return `<div class="ex-card">
+              <div class="ex-top">
+                <div><div class="ex-name">${ex.name}</div><div class="ex-params">${ex.sets||3}×${ex.reps||'—'}${pct>0?` @${pct}%`:''}</div></div>
+                <div class="ex-right"><div class="ex-kg">${kgSug>0?kgSug+'kg':'—'}</div><div class="ex-kg-lbl">kg suggeriti</div>${pct>0?`<div class="ex-pct">${pct}% 1RM</div>`:''}</div>
+              </div>
+              ${rm===0&&pct>0?`<div class="no-rm-warn">⚠ Imposta 1RM nella sezione 💪</div>`:''}
+              <div class="weight-row"><label>Peso usato</label><input class="weight-input" type="number" id="ex-real-${ei}" inputmode="decimal" placeholder="${kgSug||'—'}"><span class="weight-unit">kg</span></div>
+              <div class="ex-saved" id="ex-saved-${ei}">✓ Salvato!</div>
+              <button class="ex-save-btn" onclick="saveExWeight(${ei},'${ex.name}','${s._key}')">Salva peso →</button>
+            </div>`;
+          }).join('')}</div>`:'';
+          return `<div class="today-wrap"><div class="type-banner ${bannerCls}">
+            <div class="type-tag" style="color:${color}">${label.toUpperCase()}</div>
+            <div class="type-title" style="color:${color}">${DAYS2[dayIdx]}</div>
+            ${s.note?`<div class="type-note">${s.note}</div>`:''}
+          </div>${exHtml}</div>`;
+        }).join('');
+        wrap.innerHTML+=`<button class="complete-btn" onclick="bnSwitch('checkin',document.querySelectorAll('.bn-item')[2])">⚡ Registra come ti senti →</button>`;
+        return;
+      }
+    }
+  }
 
-  // Add complete/register button
-  wrap.innerHTML+=`<button class="complete-btn" onclick="bnSwitch('registra',document.querySelectorAll('.bn-item')[2])">Registra seduta →</button>`;
+  // 3. Nessun piano
+  wrap.innerHTML=renderNoPlan('Nessun piano per oggi.','Il tuo preparatore pubblicherà il piano a breve.');
 }
+
 
 function renderNoPlan(title,sub){
   return `<div class="no-plan"><div class="np-icon">📋</div><div class="np-title">${title}</div><div class="np-sub">${sub}</div></div>`;
