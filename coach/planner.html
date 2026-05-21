@@ -329,15 +329,24 @@ const SESS_LABELS={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliomet
 const SESS_CLS={squadra:'sb-squadra',forza:'sb-forza',sprint:'sb-sprint',plyo:'sb-plyo',rec:'sb-rec',priming:'sb-priming',riposo:'sb-riposo'};
 
 // Init
-document.getElementById('loading').style.display='none';
-document.getElementById('app').style.display='flex';
-goToday();
+// Init: load groups first with get(), then set up realtime listeners
+async function init(){
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='flex';
+  goToday();
 
-// Load data
-onValue(ref(db,'groups'), s=>{ groups=s.val()||{}; populateGroupSelector(); renderGrid(); });
-onValue(ref(db,'athletes'), s=>{ athletes=s.val()||{}; renderGrid(); });
-onValue(ref(db,'exercise_db'), s=>{ exercises=s.val()||{}; });
-onValue(ref(db,'plans'), s=>{ plans=s.val()||{}; renderGrid(); updateStatus(); });
+  // Load groups immediately with get() to avoid timing issues
+  const gSnap = await get(ref(db,'groups'));
+  groups = gSnap.val()||{};
+  populateGroupSelector();
+
+  // Then set up realtime listeners
+  onValue(ref(db,'groups'), s=>{ groups=s.val()||{}; populateGroupSelector(); });
+  onValue(ref(db,'athletes'), s=>{ athletes=s.val()||{}; renderGrid(); });
+  onValue(ref(db,'exercise_db'), s=>{ exercises=s.val()||{}; });
+  onValue(ref(db,'plans'), s=>{ plans=s.val()||{}; renderGrid(); updateStatus(); });
+}
+init();
 
 // ── WEEK NAVIGATION
 window.goToday=function(){
