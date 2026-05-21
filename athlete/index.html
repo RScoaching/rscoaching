@@ -178,6 +178,30 @@
   .toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--card);border:1px solid var(--teal);color:var(--teal);padding:11px 20px;border-radius:50px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 8px 30px rgba(0,0,0,.4);transition:transform .4s cubic-bezier(.34,1.56,.64,1);z-index:999;white-space:nowrap;}
   .toast.show{transform:translateX(-50%) translateY(0);}
   .empty{text-align:center;padding:24px 0;color:var(--muted);font-size:13px;}
+
+  /* PROGRAM CARDS */
+  .prog-card{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden;}
+  .prog-card-head{padding:14px 16px;border-bottom:1px solid var(--border);}
+  .prog-card-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--white);}
+  .prog-card-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .prog-sport-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;display:inline-block;margin-top:4px;}
+  .pst-calcio{background:rgba(6,214,160,.1);color:var(--teal);}
+  .pst-hybrid{background:rgba(251,191,36,.1);color:var(--amber);}
+  .pst-forza{background:rgba(167,139,250,.1);color:var(--purple);}
+  .prog-weeks{padding:10px 16px;display:flex;flex-direction:column;gap:6px;}
+  .week-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--card2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s;}
+  .week-row:hover{border-color:var(--blue);}
+  .week-row-name{font-size:13px;font-weight:600;color:var(--white);}
+  .week-row-meta{font-size:11px;color:var(--muted);margin-top:1px;}
+  .week-sessions{padding:0 16px 10px;display:none;flex-direction:column;gap:5px;}
+  .week-sessions.open{display:flex;}
+  .sess-start-btn{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .15s;text-decoration:none;}
+  .sess-start-btn:hover{border-color:var(--teal);background:rgba(6,214,160,.04);}
+  .sess-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+  .sess-info{flex:1;}
+  .sess-start-name{font-size:13px;font-weight:600;color:var(--white);}
+  .sess-start-meta{font-size:11px;color:var(--muted);}
+  .start-arrow{font-size:16px;color:var(--teal);}
   #error-screen{display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:40px;text-align:center;}
   #error-screen h2{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--white);}
 </style>
@@ -245,6 +269,11 @@
     <button class="save-btn" id="btn-save" onclick="saveSession()">SALVA SEDUTA</button>
   </div>
 
+  <div id="page-programmi" style="display:none">
+    <div class="sec-lbl">I tuoi programmi</div>
+    <div id="prog-list-athlete" style="padding:0 20px;"></div>
+  </div>
+
   <div id="page-profilo" style="display:none">
     <!-- PROFILO TABS -->
     <div style="display:flex;border-bottom:1px solid var(--border);margin:0 20px 16px;gap:2px;">
@@ -276,7 +305,7 @@
   <!-- BOTTOM NAV -->
   <div class="bottom-nav">
     <button class="bn-item active" onclick="bnSwitch('oggi',this)"><span class="bn-icon">📋</span><span class="bn-label">Oggi</span></button>
-    <button class="bn-item" onclick="bnSwitch('settimana',this)"><span class="bn-icon">📅</span><span class="bn-label">Settimana</span></button>
+    <button class="bn-item" onclick="bnSwitch('programmi',this)"><span class="bn-icon">🔨</span><span class="bn-label">Programmi</span></button>
     <button class="bn-item" onclick="bnSwitch('registra',this)"><span class="bn-icon">⚡</span><span class="bn-label">Registra</span></button>
     <button class="bn-item" onclick="bnSwitch('profilo',this)"><span class="bn-icon">👤</span><span class="bn-label">Profilo</span></button>
   </div>
@@ -323,6 +352,9 @@ else {
       const list=Object.entries(s.val()||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.ts-a.ts);
       renderHistory(list);renderAverages(list);
     });
+
+    // Load programs
+    onValue(ref(db,'programs'),pSnap=>{renderPrograms(pSnap.val()||{});});
 
     onValue(ref(db,`rm_exercises/${aid}`),exSnap=>{
       onValue(ref(db,`rm_records/${aid}`),recSnap=>{
@@ -547,6 +579,52 @@ function renderAverages(list){
 
 function getMondayOf(d){const c=new Date(d);c.setHours(0,0,0,0);const day=c.getDay();const diff=day===0?-6:1-day;c.setDate(c.getDate()+diff);return c;}
 
+function renderPrograms(progData){
+  const el=document.getElementById('prog-list-athlete');
+  if(!el)return;
+  const myProgs=Object.entries(progData||{}).filter(([pid,p])=>p.assignedTo&&p.assignedTo[aid]);
+  if(!myProgs.length){el.innerHTML='<div class="empty">Nessun programma assegnato.<br>Il tuo preparatore te ne assegnerà uno.</div>';return;}
+  const SPORT_LABELS={calcio:'Calcio',hybrid:'Hybrid Training',forza:'Solo Forza',corsa:'Corsa',conditioning:'Conditioning'};
+  const SPORT_CLS={calcio:'pst-calcio',hybrid:'pst-hybrid',forza:'pst-forza',corsa:'pst-calcio',conditioning:'pst-hybrid'};
+  const SESS_ICONS={pesi:'🏋️',campo:'⚽',sprint:'⚡',conditioning:'🔥',recupero:'🔄'};
+  const SESS_COLORS={pesi:'rgba(167,139,250,.12)',campo:'rgba(6,214,160,.1)',sprint:'rgba(248,113,113,.1)',conditioning:'rgba(251,113,74,.1)',recupero:'rgba(52,211,153,.08)'};
+  el.innerHTML=myProgs.map(([pid,p])=>{
+    const weeks=Object.entries(p.weeks||{}).sort((a,b)=>a[1].order-b[1].order);
+    const sp=SPORT_LABELS[p.sport]||p.sport;
+    const cls=SPORT_CLS[p.sport]||'pst-calcio';
+    return `<div class="prog-card">
+      <div class="prog-card-head">
+        <div class="prog-card-name">${p.name}</div>
+        <div class="prog-card-meta">${weeks.length} settimane · ${p.notes||''}</div>
+        <span class="prog-sport-tag ${cls}">${sp}</span>
+      </div>
+      <div class="prog-weeks">${weeks.map(([wid,w],wi)=>{
+        const sessions=Object.entries(w.sessions||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+        return `<div class="week-row" onclick="toggleWeek('${wid}')">
+          <div><div class="week-row-name">Settimana ${wi+1}${w.label?' — '+w.label:''}</div>
+          <div class="week-row-meta">${sessions.length} sessioni${w.notes?' · '+w.notes:''}</div></div>
+          <span style="color:var(--muted);font-size:13px;" id="wchev-${wid}">▾</span>
+        </div>
+        <div class="week-sessions" id="wsess-${wid}">${sessions.map(([sid,s])=>`
+          <a class="sess-start-btn" href="/athlete/session.html?id=${aid}&prog=${pid}&week=${wi}&sess=${sid}">
+            <div class="sess-icon" style="background:${SESS_COLORS[s.type]||'var(--card2)'};">${SESS_ICONS[s.type]||'🏋️'}</div>
+            <div class="sess-info"><div class="sess-start-name">${s.name||s.type}</div>
+            <div class="sess-start-meta">${Object.keys(s.exercises||{}).length} esercizi${s.notes?' · '+s.notes:''}</div></div>
+            <span class="start-arrow">▶</span>
+          </a>`).join('')}
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleWeek=function(wid){
+  const el=document.getElementById('wsess-'+wid);
+  const chev=document.getElementById('wchev-'+wid);
+  const open=el.classList.toggle('open');
+  if(chev)chev.textContent=open?'▴':'▾';
+};
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 </script>
 
@@ -558,7 +636,7 @@ function slide(id,val,color){
   document.getElementById(id+'-thumb').style.cssText=`left:${pct};background:${color}`;
 }
 function bnSwitch(id,el){
-  ['oggi','settimana','registra','profilo'].forEach(p=>document.getElementById('page-'+p).style.display=p===id?'block':'none');
+  ['oggi','programmi','registra','profilo'].forEach(p=>document.getElementById('page-'+p).style.display=p===id?'block':'none');
   document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
   if(el)el.classList.add('active');
 }
