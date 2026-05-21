@@ -165,6 +165,7 @@
     <a class="nav-item" href="/coach/planner.html">📅 Pianificazione</a>
     <a class="nav-item" href="/coach/builder.html">🔨 Program Builder</a>
     <div class="nav-item" onclick="pg('database',this)">🗄 Database Esercizi</div>
+    <div class="nav-item" onclick="pg('analytics',this)">📊 Analytics</div>
     <div class="nav-item" onclick="pg('sessions',this)">≡ Sedute</div>
   </div>
   <div class="sb-foot"><strong>Raoul Simon</strong>Preparatore Atletico</div>
@@ -258,6 +259,17 @@
     <div id="db-content"></div>
   </div>
 
+  <!-- ANALYTICS -->
+  <div id="page-analytics" style="display:none">
+    <div class="pg-head">
+      <div><div class="pg-title">Analytics</div><div class="pg-sub">Compliance, trend benessere, progressione atleti</div></div>
+      <select class="ctrl-sel" id="an-athlete" onchange="renderAnalytics()" style="padding:8px 12px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
+        <option value="">Tutti gli atleti</option>
+      </select>
+    </div>
+    <div id="analytics-content"></div>
+  </div>
+
   <!-- SESSIONS -->
   <div id="page-sessions" style="display:none">
     <div class="pg-head"><div><div class="pg-title">Sedute</div><div class="pg-sub">Cronologia completa</div></div></div>
@@ -328,6 +340,8 @@ onValue(ref(db,'sessions'),s=>{sessions=s.val()||{};renderAll();});
 onValue(ref(db,'groups'),s=>{groups=s.val()||{};renderAll();});
 onValue(ref(db,'tests'),s=>{tests=s.val()||{};renderAll();});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDatabase();});
+onValue(ref(db,'checkins'),s=>{window._checkins=s.val()||{};});
+onValue(ref(db,'session_logs'),s=>{window._sessionLogs=s.val()||{};});
 
 function renderAll(){renderDash();renderAthletes();renderGroups();renderAllSess();if(currentAid)openDetail(currentAid,true);}
 
@@ -651,6 +665,120 @@ window.delSess=async(aid,key)=>{if(!confirm('Cancellare?'))return;await remove(r
 window.delTest=async(aid,key)=>{if(!confirm('Cancellare?'))return;await remove(ref(db,`tests/${aid}/${key}`));};
 window.delAthlete=async function(id){if(!confirm(`Cancellare "${athletes[id]?.name}"? Irreversibile.`))return;await remove(ref(db,`athletes/${id}`));await remove(ref(db,`sessions/${id}`));await remove(ref(db,`tests/${id}`));closeDetail();};
 window.delGroup=async function(id){if(!confirm('Cancellare questo gruppo?'))return;await remove(ref(db,`groups/${id}`));};
+// ── ANALYTICS
+window.renderAnalytics=function(){
+  const selAid=document.getElementById('an-athlete').value;
+  const el=document.getElementById('analytics-content');
+  if(!el)return;
+
+  // Populate athlete selector
+  const sel=document.getElementById('an-athlete');
+  const prevVal=sel.value;
+  sel.innerHTML='<option value="">Tutti gli atleti</option>';
+  Object.entries(athletes).forEach(([id,a])=>{
+    const opt=document.createElement('option');
+    opt.value=id;opt.textContent=a.name;
+    sel.appendChild(opt);
+  });
+  sel.value=prevVal;
+
+  const ids=selAid?[selAid]:Object.keys(athletes);
+  if(!ids.length){el.innerHTML='<div class="empty">Nessun atleta nel sistema.</div>';return;}
+
+  // Build analytics data
+  const now=Date.now();
+  const ago30=now-30*864e5;
+  const ago7=now-7*864e5;
+
+  let html='';
+
+  // ── COMPLIANCE (sessioni completate vs attese)
+  const compData=ids.map(id=>{
+    const a=athletes[id];
+    const slog=Object.values(sessions[id]||{});
+    const last30=slog.filter(s=>s.ts>ago30);
+    const last7=slog.filter(s=>s.ts>ago7);
+    // Session logs from program
+    const progLogs=Object.values((window._sessionLogs||{})[id]||{});
+    return {id,name:a.name,last7:last7.length,last30:last30.length,total:slog.length};
+  });
+
+  html+=`<div class="sec-lbl">Attività ultimi 7 giorni</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;">
+    ${compData.map(d=>`<div class="metric">
+      <div class="metric-lbl">${d.name}</div>
+      <div class="metric-val">${d.last7}</div>
+      <div style="font-size:11px;color:var(--muted);">sedute · ${d.last30} ultimi 30g</div>
+    </div>`).join('')}
+  </div>`;
+
+  // ── TREND CHECK-IN per atleta selezionato
+  if(selAid&&window._checkins?.[selAid]){
+    const cklist=Object.values(window._checkins[selAid]).sort((a,b)=>b.ts-a.ts).slice(0,14);
+    if(cklist.length){
+      const avg=k=>(cklist.reduce((s,e)=>s+(e[k]||0),0)/cklist.length).toFixed(1);
+      html+=`<div class="sec-lbl">Benessere — ${athletes[selAid]?.name}</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;">
+        ${[['fatica','😤','var(--red)'],['sonno','😴','var(--blue)'],['stress','🧠','var(--amber)'],['motivazione','🔥','var(--green)'],['doms','🦵','var(--orange)']].map(([k,ic,col])=>`
+        <div class="metric"><div class="metric-lbl">${ic} ${k}</div><div class="metric-val" style="color:${col};">${avg(k)}</div><div style="font-size:11px;color:var(--muted);">media ${cklist.length}gg</div></div>`).join('')}
+      </div>`;
+
+      // Mini trend bars
+      html+=`<div class="sec-lbl">Trend ultimi check-in</div>
+      <div class="card" style="margin-bottom:20px;">
+        <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:8px;">
+          ${[...cklist].reverse().map(ci=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end;">
+            <div style="width:100%;background:var(--red);border-radius:3px 3px 0 0;height:${(ci.fatica||0)*8}px;opacity:.7;" title="Fatica ${ci.fatica}"></div>
+          </div>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);">
+          <span>${cklist[cklist.length-1]?.date||''}</span>
+          <span style="color:var(--red);">Fatica</span>
+          <span>${cklist[0]?.date||''}</span>
+        </div>
+        ${cklist.find(ci=>ci.pains?.length)?`<div style="margin-top:10px;font-size:12px;color:var(--red);">⚠ Dolori segnalati: ${[...new Set(cklist.flatMap(ci=>ci.pains||[]))].join(', ')}</div>`:''}
+      </div>`;
+    }
+  }
+
+  // ── RPE TREND per atleta
+  if(selAid){
+    const sesslist=Object.values(sessions[selAid]||{}).sort((a,b)=>a.ts-b.ts).slice(-14);
+    if(sesslist.length){
+      html+=`<div class="sec-lbl">Trend RPE — ${athletes[selAid]?.name}</div>
+      <div class="card" style="margin-bottom:20px;">
+        <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:8px;">
+          ${sesslist.map(s=>{const rpeH=(s.rpe||0)*8;const col=s.rpe>=9?'var(--red)':s.rpe>=7?'var(--amber)':'var(--green)';return `<div style="flex:1;background:${col};border-radius:3px 3px 0 0;height:${rpeH}px;" title="RPE ${s.rpe} · ${s.date}"></div>`;}).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);">
+          <span>${sesslist[0]?.date||''}</span><span>RPE per seduta</span><span>${sesslist.slice(-1)[0]?.date||''}</span>
+        </div>
+      </div>`;
+    }
+  }
+
+  // ── ALERT RECAP
+  const alerts=[];
+  ids.forEach(id=>{
+    const cks=Object.values(window._checkins?.[id]||{}).sort((a,b)=>b.ts-a.ts).slice(0,3);
+    cks.forEach(ci=>{
+      if(ci.fatica>=8)alerts.push({name:athletes[id]?.name,msg:`Fatica ${ci.fatica}/10`,date:ci.date,type:'red'});
+      if(ci.doms>=7)alerts.push({name:athletes[id]?.name,msg:`DOMS ${ci.doms}/10`,date:ci.date,type:'amber'});
+      if(ci.motivazione<=3)alerts.push({name:athletes[id]?.name,msg:`Motivazione ${ci.motivazione}/10`,date:ci.date,type:'amber'});
+      if(ci.pains?.length&&!ci.pains.includes('Nessuno'))alerts.push({name:athletes[id]?.name,msg:`Dolore: ${ci.pains.join(', ')}`,date:ci.date,type:'red'});
+    });
+  });
+
+  if(alerts.length){
+    html+=`<div class="sec-lbl">Alert check-in</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:20px;">
+      ${alerts.slice(0,10).map(a=>`<div class="alert-item ${a.type==='red'?'red':''}">⚡ <strong>${a.name}</strong> — ${a.msg} · ${a.date}</div>`).join('')}
+    </div>`;
+  }
+
+  el.innerHTML=html||'<div class="empty">Nessun dato disponibile.</div>';
+};
+
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
 window.cpClip=txt=>navigator.clipboard.writeText(txt).then(()=>alert('✓ Link copiato!'));
 function ini(n){return n?n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2):'?';}
@@ -658,7 +786,7 @@ function ini(n){return n?n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(
 
 <script>
 window.pg=function(id,el){
-  ['dashboard','athletes','groups','database','sessions'].forEach(p=>document.getElementById('page-'+p).style.display=p===id?'block':'none');
+  ['dashboard','athletes','groups','database','analytics','sessions'].forEach(p=>document.getElementById('page-'+p).style.display=p===id?'block':'none');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   if(el)el.classList.add('active');
 };
