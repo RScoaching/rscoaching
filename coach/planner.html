@@ -180,6 +180,17 @@
   .mob-ov.open{display:block;}
 }
 @media(min-width:769px){.mob-bar{display:none !important;}.mob-ov{display:none;}}
+
+@media(max-width:768px){
+  .sidebar{display:none;position:fixed;top:0;left:0;height:100vh;width:260px;z-index:500;transform:none;box-shadow:4px 0 40px rgba(0,0,0,.6);}
+  .sidebar.open{display:flex !important;}
+  #mob-header{display:flex !important;}
+  .content{padding:14px 12px;}
+  .controls{flex-wrap:wrap;gap:6px;}
+  .ctrl-select{max-width:160px;}
+  .day-strip{display:grid;grid-template-columns:repeat(4,1fr);}
+}
+@media(min-width:769px){#mob-header{display:none !important;}}
 </style>
 </head>
 <body>
@@ -187,6 +198,14 @@
 <div id="loading"><div class="logo-big">RS<span>.</span></div><div class="dots"><i></i><i></i><i></i></div></div>
 
 <div id="app" style="display:none">
+
+<!-- MOBILE HEADER -->
+<div id="mob-header" style="display:none;align-items:center;background:var(--sb);border-bottom:1px solid var(--sbb);position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.4);">
+  <button onclick="document.querySelector('.sidebar').classList.toggle('open');document.getElementById('mob-ov').classList.toggle('open')" style="background:rgba(6,214,160,.1);border:none;border-right:1px solid var(--sbb);color:var(--teal);font-size:20px;cursor:pointer;padding:14px 16px;min-width:52px;">☰</button>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--white);padding-left:12px;">RS<span style="color:var(--teal);">.</span> Planner</div>
+</div>
+<div id="mob-ov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:199;" onclick="document.querySelector('.sidebar').classList.remove('open');this.style.display='none'"></div>
+
 <div class="sidebar">
   <div class="sb-top">
     <div class="logo">RS<span>.</span>Coaching</div>
@@ -205,6 +224,7 @@
     <div class="nav-lbl" style="margin-top:10px;">Risorse</div>
     <a class="nav-item" href="./">🗄 Database Esercizi</a>
     <a class="nav-item" href="./">🧮 Strumenti S&C</a>
+    <a class="nav-item" href="/coach/hybrid.html">🏃 Hybrid Training</a>
     <div class="nav-lbl" style="margin-top:10px;">Storico</div>
     <a class="nav-item" href="./">≡ Tutte le sedute</a>
   </div>
@@ -407,26 +427,30 @@ function weekKey(){return currentMonday?currentMonday.toISOString().slice(0,10):
 function populateGroupSelector(){
   const sel=document.getElementById('sel-group');
   const prev=currentGroup||sel.value;
-  sel.innerHTML='<option value="">Seleziona gruppo...</option>';
   const ids=Object.keys(groups);
 
-  // Show debug box if no groups
+  // Show/hide no-group warning
   const dbg=document.getElementById('debug-box');
   if(!ids.length){
     if(dbg)dbg.style.display='block';
+    sel.innerHTML='<option value="">Nessun gruppo — creane uno prima</option>';
     return;
   }
   if(dbg)dbg.style.display='none';
 
+  // Rebuild options
+  sel.innerHTML='';
   ids.forEach(k=>{
     const opt=document.createElement('option');
-    opt.value=k; opt.textContent=groups[k].name;
+    opt.value=k;
+    const g=groups[k];
+    opt.textContent=g.name+(g.gameDay?' · Gara: '+g.gameDay:'');
     sel.appendChild(opt);
   });
 
   // Auto-select: keep previous or pick first
   if(prev&&groups[prev]){ currentGroup=prev; sel.value=prev; }
-  else { currentGroup=ids[0]; sel.value=ids[0]; }
+  else{ currentGroup=ids[0]; sel.value=ids[0]; }
 
   renderGrid();
   updateStatus();
