@@ -95,6 +95,15 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 #toast.show{transform:translateX(-50%) translateY(0);}
 .empty{text-align:center;padding:28px;color:var(--muted);font-size:13px;}
 @media(max-width:768px){.sidebar{display:none;}.content{padding:20px 14px;}.day-strip{grid-template-columns:repeat(4,1fr);}}
+
+@media(max-width:768px){
+  .sidebar{display:none;position:fixed;top:0;left:0;height:100vh;z-index:500;transform:translateX(-100%);transition:transform .3s;}
+  .sidebar.open{display:flex !important;transform:translateX(0);}
+  .mob-bar{display:flex !important;}
+  .mob-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:499;}
+  .mob-ov.open{display:block;}
+}
+@media(min-width:769px){.mob-bar{display:none !important;}.mob-ov{display:none;}}
 </style>
 </head>
 <body>
@@ -229,6 +238,7 @@ function renderAthleteWeek({aid,plan,key},monday){
       <div style="display:flex;gap:6px;">
         <button class="btn btn-purple btn-sm" onclick="openEditPlan('${aid}','${plan.weekStart||key.split('__')[1]}')">✏ Modifica</button>
         <button class="btn btn-teal btn-sm" onclick="publishPlan('${aid}','${plan.weekStart||key.split('__')[1]}')">Pubblica</button>
+        <button class="btn btn-amber btn-sm" onclick="exportPlanWA('${aid}','${plan.weekStart||key.split('__')[1]}')">📋 WA</button>
         <button class="btn btn-red btn-sm" onclick="deletePlan('${aid}','${plan.weekStart||key.split('__')[1]}')">🗑</button>
       </div>
     </div>
@@ -449,6 +459,47 @@ window.openEditPlan=function(aid,wk){
 };
 window.openEditWeek=function(wk){
   showToast('Clicca su ogni giorno nella griglia per modificarlo');
+};
+
+window.exportPlanWA=function(aid,wk){
+  const plan=allPlans[`${aid}__${wk}`]?.plan;
+  if(!plan)return;
+  const DAYS2=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  const TLABELS={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo'};
+  const monday=new Date(wk+'T00:00:00');
+  const end=new Date(monday); end.setDate(end.getDate()+6);
+  const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+  let txt=`*${athletes[aid]?.name||aid} — ${fmt(monday)} / ${fmt(end)}*
+
+`;
+  const days=plan.days||{};
+  DAYS2.forEach((d,i)=>{
+    const day=days[i];
+    if(!day||day.type==='riposo')return;
+    txt+=`*${d}*
+`;
+    txt+=`${TLABELS[day.type]||day.type}`;
+    if(day.note)txt+=` — ${day.note}`;
+    txt+='
+';
+    const exs=Object.values(day.exercises||{});
+    exs.filter(e=>e.name).forEach(e=>{
+      txt+=`• ${e.name}`;
+      if(e.sets)txt+=` ${e.sets}×${e.reps||'—'}`;
+      if(e.pct)txt+=` @${e.pct}%`;
+      if(e.kg)txt+=` ${e.kg}kg`;
+      if(e.rest)txt+=` rec ${e.rest}`;
+      if(e.cue)txt+=`
+  💡 ${e.cue}`;
+      txt+='
+';
+    });
+    if(day.detail)txt+=`${day.detail}
+`;
+    txt+='
+';
+  });
+  navigator.clipboard.writeText(txt).then(()=>showToast('✓ Piano copiato per WhatsApp!'));
 };
 
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
