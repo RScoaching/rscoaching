@@ -6,6 +6,7 @@
 <title>RS Coaching</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{--bg:#0A0E17;--card:#131928;--card2:#1A2235;--border:#1E2A40;--border2:#253048;--blue:#3B82F6;--teal:#06D6A0;--amber:#FBBF24;--red:#F87171;--green:#34D399;--purple:#A78BFA;--orange:#FB923C;--white:#EEF2FF;--muted:#4A5568;--text:#B8C4D8;}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -359,6 +360,25 @@
 
     <!-- STORICO -->
     <div id="prof-storico">
+      <!-- RPE TREND CHART -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;margin:0 20px 14px;padding:16px;">
+        <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:12px;">📊 Andamento RPE</div>
+        <div style="height:110px;"><canvas id="athlete-rpe-chart"></canvas></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <div style="flex:1;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.15);border-radius:8px;padding:8px 10px;text-align:center;">
+            <div style="font-size:10px;color:var(--muted);">RPE medio</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--green);" id="athlete-avg-rpe">—</div>
+          </div>
+          <div style="flex:1;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:8px 10px;text-align:center;">
+            <div style="font-size:10px;color:var(--muted);">Sedute totali</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--blue);" id="athlete-sess-count">—</div>
+          </div>
+          <div style="flex:1;background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.15);border-radius:8px;padding:8px 10px;text-align:center;">
+            <div style="font-size:10px;color:var(--muted);">DOMS medio</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--red);" id="athlete-avg-doms">—</div>
+          </div>
+        </div>
+      </div>
       <div class="sec-lbl">Ultime sedute</div>
       <div class="card" style="padding:4px 18px;"><div id="history-list"><div class="empty">Nessuna seduta ancora.</div></div></div>
     </div>
@@ -367,6 +387,15 @@
     <div id="prof-1rm" style="display:none">
       <div class="sec-lbl">Massimali</div>
       <div id="rm-list"></div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;margin:0 20px 14px;padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--white);">📈 Progressione 1RM</div>
+          <select id="rm-prog-sel" onchange="renderRmProgChart()" style="padding:5px 9px;background:var(--card2);border:1px solid var(--border);border-radius:8px;font-family:'Outfit',sans-serif;font-size:11px;color:var(--white);">
+            <option value="">Seleziona esercizio</option>
+          </select>
+        </div>
+        <div style="height:130px;"><canvas id="rm-prog-chart"></canvas></div>
+      </div>
       <div class="sec-lbl" style="margin-top:8px;">Aggiungi esercizio</div>
       <div class="add-ex-row">
         <input type="text" class="add-ex-input" id="new-ex-name" placeholder="Es. Back Squat, RDL...">
@@ -457,7 +486,7 @@ else {
     // Listeners
     onValue(ref(db,`sessions/${aid}`),s=>{
       const list=Object.entries(s.val()||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.ts-a.ts);
-      renderHistory(list);renderAverages(list);
+      renderHistory(list);renderAverages(list);renderRpeChart(list);
     });
 
     // Load body composition
@@ -736,6 +765,31 @@ function renderRmList(exercises,records){
   }).join('');
 }
 
+function renderRpeChart(sessions){
+  const canvas=document.getElementById('athlete-rpe-chart');
+  if(!canvas||!sessions.length)return;
+  const sorted=sessions.slice().sort((a,b)=>a.ts-b.ts).slice(-21);
+  const rpeVals=sorted.map(s=>s.rpe||0);
+  const avgRpe=rpeVals.filter(v=>v>0).length?(rpeVals.filter(v=>v>0).reduce((a,b)=>a+b,0)/rpeVals.filter(v=>v>0).length).toFixed(1):null;
+  const avgDoms=sessions.filter(s=>s.doms).length?(sessions.filter(s=>s.doms).reduce((t,s)=>t+(s.doms||0),0)/sessions.filter(s=>s.doms).length).toFixed(1):null;
+  const avgRpeEl=document.getElementById('athlete-avg-rpe');
+  const countEl=document.getElementById('athlete-sess-count');
+  const domsEl=document.getElementById('athlete-avg-doms');
+  if(avgRpeEl){avgRpeEl.textContent=avgRpe||'—';avgRpeEl.style.color=avgRpe?parseFloat(avgRpe)>=9?'var(--red)':parseFloat(avgRpe)>=7?'var(--amber)':'var(--green)':'var(--muted)';}
+  if(countEl)countEl.textContent=sessions.length;
+  if(domsEl)domsEl.textContent=avgDoms||'—';
+  if(canvas._chart)canvas._chart.destroy();
+  canvas._chart=new Chart(canvas,{type:'bar',data:{
+    labels:sorted.map(s=>s.date),
+    datasets:[{label:'RPE',data:rpeVals,
+      backgroundColor:rpeVals.map(v=>v>=9?'rgba(248,113,113,.7)':v>=7?'rgba(251,191,36,.6)':'rgba(52,211,153,.55)'),
+      borderRadius:4,borderSkipped:false}]
+  },options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{x:{display:false},y:{min:0,max:10,ticks:{color:'#4A5568',font:{size:9}},grid:{color:'rgba(30,42,64,.6)'}}}}
+  });
+}
+
 function renderHistory(list){
   const el=document.getElementById('history-list');
   if(!list.length){el.innerHTML='<div class="empty">Nessuna seduta ancora.</div>';return;}
@@ -987,6 +1041,36 @@ function renderBodyComp(list){
       </div>
     </div>`).join('');
 }
+
+// ── 1RM PROGRESSION CHART
+window.renderRmProgChart=function(){
+  const sel=document.getElementById('rm-prog-sel');if(!sel)return;
+  const exKey=sel.value;if(!exKey)return;
+  const recs=Object.values((window._rmRecordsCache||{})[exKey]||{}).sort((a,b)=>a.ts-b.ts);
+  if(!recs.length)return;
+  const canvas=document.getElementById('rm-prog-chart');if(!canvas)return;
+  if(canvas._chart)canvas._chart.destroy();
+  canvas._chart=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:recs.map(r=>r.date),
+      datasets:[{
+        label:'1RM',data:recs.map(r=>r.value),
+        borderColor:'rgba(167,139,250,.9)',backgroundColor:'rgba(167,139,250,.08)',
+        borderWidth:2.5,fill:true,tension:.3,
+        pointRadius:5,pointBackgroundColor:'rgba(167,139,250,.9)',
+        pointBorderColor:'#131928',pointBorderWidth:2
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw+'kg'}}},
+      scales:{
+        x:{ticks:{color:'#4A5568',font:{size:9},maxRotation:0},grid:{display:false}},
+        y:{ticks:{color:'#4A5568',font:{size:9},callback:v=>v+'kg'},grid:{color:'rgba(30,42,64,.5)'},beginAtZero:false}
+      }
+    }
+  });
+};
 
 function loadTodayFromCache(){
   // Re-trigger today plan with cached data

@@ -314,8 +314,17 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
         <div class="metric"><div class="metric-lbl">Compliance</div><div class="metric-val" id="det-compliance">—</div><div class="metric-sub">sessioni live</div></div>
       </div>
       <div class="chart-card" style="margin-bottom:12px;">
-        <div class="chart-title">Trend RPE ultimi 14 giorni</div>
-        <div style="height:120px;"><canvas id="det-chart-rpe"></canvas></div>
+        <div class="chart-title">
+          Trend RPE ultimi 21 giorni
+          <span id="det-rpe-avg-badge" style="font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(52,211,153,.1);color:var(--green);margin-left:8px;"></span>
+        </div>
+        <div style="height:130px;"><canvas id="det-chart-rpe"></canvas></div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          <span style="font-size:10px;color:var(--muted);">Zona ottimale:</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(52,211,153,.1);color:var(--green);">6-7 Recovery</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(251,191,36,.08);color:var(--amber);">7-8 Development</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.08);color:var(--red);">9-10 Overreach ⚠</span>
+        </div>
       </div>
       <div class="sec-lbl">Note cliniche</div>
       <div id="det-notes" style="font-size:13px;color:var(--muted);font-style:italic;padding:6px 0;"></div>
@@ -325,6 +334,15 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
       <div class="test-grid" id="test-grid"></div>
       <div class="sec-lbl">1RM principali</div>
       <div class="test-grid" id="rm-grid"></div>
+      <div class="chart-card" style="margin-bottom:12px;">
+        <div class="chart-title">
+          Progressione 1RM
+          <select id="rm-ex-sel" onchange="renderRmChart()" style="padding:4px 8px;background:var(--card2);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:11px;color:var(--white);margin-left:8px;">
+            <option value="">Seleziona esercizio...</option>
+          </select>
+        </div>
+        <div style="height:140px;"><canvas id="rm-chart"></canvas></div>
+      </div>
       <div class="sec-lbl" style="margin-top:6px;">Storico completo</div>
       <div id="test-history" style="background:var(--card2);border-radius:10px;padding:12px;"></div>
     </div>
@@ -364,7 +382,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 <div class="page" id="page-database">
   <div class="pg-head">
     <div><div class="pg-title">Database Esercizi</div><div class="pg-sub" id="db-count">—</div></div>
-    <button class="btn btn-teal" onclick="openModal('exercise')">+ Aggiungi</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input id="db-search" type="text" placeholder="🔍 Cerca esercizio..." oninput="renderDatabase()" style="padding:8px 12px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);min-width:160px;">
+      <button class="btn btn-teal" onclick="openModal('exercise')">+ Aggiungi</button>
+    </div>
   </div>
   <div id="db-content"></div>
 </div>
@@ -598,11 +619,42 @@ window.openDetail=function(id,silent=false){
   document.getElementById('det-del-btn').onclick=()=>delAthlete(id);
   document.getElementById('btn-edit-athlete')||null;
 
-  // RPE chart
-  const last14sess=sess.slice(0,14).reverse();
-  const rpeLabels=last14sess.map(s=>s.date);
-  const rpeVals=last14sess.map(s=>s.rpe||0);
-  setTimeout(()=>buildChart('det-chart-rpe',rpeLabels,rpeVals,'line','rgba(248,113,113,.8)','RPE'),50);
+  // RPE chart with zone coloring
+  const last21sess=sess.slice(0,21).reverse();
+  const rpeLabels=last21sess.map(s=>s.date);
+  const rpeVals=last21sess.map(s=>s.rpe||0);
+  const avgRpeAll=rpeVals.filter(v=>v>0).length?(rpeVals.filter(v=>v>0).reduce((a,b)=>a+b,0)/rpeVals.filter(v=>v>0).length).toFixed(1):null;
+  const badge=document.getElementById('det-rpe-avg-badge');
+  if(badge&&avgRpeAll){
+    const color=parseFloat(avgRpeAll)>=9?'var(--red)':parseFloat(avgRpeAll)>=7?'var(--amber)':'var(--green)';
+    badge.textContent='Media: '+avgRpeAll;badge.style.color=color;badge.style.background=`rgba(${parseFloat(avgRpeAll)>=9?'248,113,113':parseFloat(avgRpeAll)>=7?'251,191,36':'52,211,153'},.1)`;
+  }
+  setTimeout(()=>{
+    const canvas=document.getElementById('det-chart-rpe');
+    if(!canvas)return;
+    if(canvas._chart)canvas._chart.destroy();
+    canvas._chart=new Chart(canvas,{
+      type:'bar',
+      data:{labels:rpeLabels,datasets:[{
+        label:'RPE',
+        data:rpeVals,
+        backgroundColor:rpeVals.map(v=>v>=9?'rgba(248,113,113,.7)':v>=7?'rgba(251,191,36,.6)':'rgba(52,211,153,.5)'),
+        borderColor:rpeVals.map(v=>v>=9?'rgba(248,113,113,.9)':v>=7?'rgba(251,191,36,.8)':'rgba(52,211,153,.7)'),
+        borderWidth:1,borderRadius:4
+      },{
+        type:'line',label:'Media',
+        data:rpeVals.map(()=>parseFloat(avgRpeAll)||0),
+        borderColor:'rgba(255,255,255,.2)',borderDash:[4,4],borderWidth:1,pointRadius:0
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{ticks:{color:'#4A5568',font:{size:9},maxRotation:0},grid:{display:false}},
+          y:{min:0,max:10,ticks:{color:'#4A5568',font:{size:9}},grid:{color:'rgba(30,42,64,.8)'}}
+        }
+      }
+    });
+  },50);
 
   // Wellness chart
   const cklist=Object.values(checkins[id]||{}).sort((a,b)=>a.ts-b.ts).slice(-14);
@@ -638,6 +690,22 @@ window.openDetail=function(id,silent=false){
       ${ci.note?`<span style="font-size:11px;color:var(--muted);font-style:italic;">"${ci.note.slice(0,40)}"</span>`:''}
     </div>`).join('');
 
+  // Cache data for charts
+  window._testsCache=window._testsCache||{};
+  window._testsCache[id]=tests[id]||{};
+  // Fetch rm_records
+  get(ref(db,`rm_records/${id}`)).then(s=>{
+    window._rmCache=window._rmCache||{};
+    window._rmCache[id]=s.val()||{};
+    // Populate rm-ex-sel
+    const sel=document.getElementById('rm-ex-sel');
+    if(sel){
+      const exNames=[...new Set(Object.values(s.val()||{}).flatMap(er=>Object.values(er).map(r=>r.exName)).filter(Boolean))];
+      sel.innerHTML='<option value="">Seleziona esercizio...</option>'+exNames.map(n=>`<option value="${n}">${n}</option>`).join('');
+      if(exNames.length){sel.value=exNames[0];setTimeout(window.renderRmChart,100);}
+    }
+  });
+
   // Tests
   const atTests=Object.entries(tests[id]||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.ts-a.ts);
   const byName={};atTests.filter(t=>t.category!=='1rm').forEach(t=>{if(!byName[t.name])byName[t.name]=t;});
@@ -661,6 +729,65 @@ window.detTab=function(id,el){
   el.classList.add('active');
   if(id==='checkins'||id==='overview')setTimeout(()=>openDetail(currentAid,true),10);
 };
+window.renderRmChart=function(){
+  const sel=document.getElementById('rm-ex-sel');
+  if(!sel||!currentAid)return;
+  const exName=sel.value;
+  if(!exName)return;
+
+  // Get rm records for this exercise from rm_records
+  const aid=currentAid;
+  // We need to fetch rm_records — use cached version if available
+  const rmSnap=window._rmCache?.[aid]||{};
+  const allRecs=[];
+  Object.values(rmSnap).forEach(exRecs=>{
+    Object.values(exRecs).forEach(r=>{
+      if(r.exName===exName)allRecs.push(r);
+    });
+  });
+  // Also check tests
+  const testRecs=Object.values(window._testsCache?.[aid]||{})
+    .filter(t=>t.name===exName&&t.category==='1rm')
+    .map(t=>({ts:t.ts,date:t.date,value:t.value}));
+
+  const allSorted=[...allRecs,...testRecs].sort((a,b)=>a.ts-b.ts);
+  if(!allSorted.length){return;}
+
+  const labels=allSorted.map(r=>r.date);
+  const vals=allSorted.map(r=>r.value);
+
+  const canvas=document.getElementById('rm-chart');
+  if(!canvas)return;
+  if(canvas._chart)canvas._chart.destroy();
+  canvas._chart=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'1RM '+exName,
+        data:vals,
+        borderColor:'rgba(167,139,250,.9)',
+        backgroundColor:'rgba(167,139,250,.08)',
+        borderWidth:2.5,
+        fill:true,
+        tension:.3,
+        pointRadius:5,
+        pointBackgroundColor:'rgba(167,139,250,.9)',
+        pointBorderColor:'var(--card)',
+        pointBorderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw}kg`}}},
+      scales:{
+        x:{ticks:{color:'#4A5568',font:{size:9},maxRotation:0},grid:{color:'rgba(30,42,64,.8)'}},
+        y:{ticks:{color:'#4A5568',font:{size:9},callback:v=>v+'kg'},grid:{color:'rgba(30,42,64,.8)'},beginAtZero:false}
+      }
+    }
+  });
+};
+
 window.closeDetail=()=>{document.getElementById('detail-panel').classList.remove('open');currentAid=null;};
 window.copyLink=()=>cpClip(window._currentLink||'');
 
@@ -755,6 +882,37 @@ window.renderAnalytics=function(){
   });
   if(alerts.length)html+=`<div class="sec-lbl">Alert recenti</div><div class="alerts">${alerts.slice(0,8).map(a=>`<div class="alert-item ${a.red?'red':''}">⚡ <strong>${a.name}</strong> — ${a.msg} · ${a.date}</div>`).join('')}</div>`;
 
+  // ── ACWR per atleta selezionato
+  if(selAid){
+    const allSess2=Object.values(sessions[selAid]||{}).sort((a,b)=>a.ts-b.ts);
+    if(allSess2.length>=4){
+      const now3=Date.now();
+      const acuteLoad=allSess2.filter(s=>s.ts>now3-7*864e5).reduce((t,s)=>t+(s.rpe?((s.duration||45)*s.rpe):0),0);
+      const chronicLoad=allSess2.filter(s=>s.ts>now3-28*864e5).reduce((t,s)=>t+(s.rpe?((s.duration||45)*s.rpe):0),0)/4;
+      const acwr=chronicLoad>0?(acuteLoad/chronicLoad).toFixed(2):null;
+      const acwrColor=!acwr?'var(--muted)':parseFloat(acwr)<0.8?'var(--blue)':parseFloat(acwr)<=1.3?'var(--green)':parseFloat(acwr)<=1.5?'var(--amber)':'var(--red)';
+      const acwrLabel=!acwr?'Dati insufficienti':parseFloat(acwr)<0.8?'Sottocarico':parseFloat(acwr)<=1.3?'✓ Zona ottimale':parseFloat(acwr)<=1.5?'⚠ Attenzione':'🔴 Rischio infortuni';
+      const weeks4=[3,2,1,0].map(wi=>{
+        const wEnd=now3-wi*7*864e5; const wStart=wEnd-7*864e5;
+        return {label:'Sett -'+wi,load:Math.round(allSess2.filter(s=>s.ts>wStart&&s.ts<=wEnd).reduce((t,s)=>t+(s.rpe?((s.duration||45)*s.rpe):0),0))};
+      }).reverse();
+      const maxLoad=Math.max(...weeks4.map(w=>w.load),1);
+      html+=`<div class="sec-lbl">Carico Acuto:Cronico (ACWR) — ${athletes[selAid]?.name}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="metric"><div class="metric-lbl">Acuto (7gg)</div><div class="metric-val">${Math.round(acuteLoad)}<span style="font-size:11px;color:var(--muted);"> UA</span></div><div class="metric-sub">sRPE · min × RPE</div></div>
+        <div class="metric"><div class="metric-lbl">Cronico (28gg avg)</div><div class="metric-val">${Math.round(chronicLoad)}<span style="font-size:11px;color:var(--muted);"> UA</span></div></div>
+        <div class="metric"><div class="metric-lbl">ACWR</div><div class="metric-val" style="color:${acwrColor};">${acwr||'—'}</div><div class="metric-sub" style="color:${acwrColor};">${acwrLabel}</div></div>
+      </div>
+      <div class="chart-card" style="margin-bottom:16px;">
+        <div class="chart-title">Trend carico settimanale (UA)</div>
+        <div style="display:flex;align-items:flex-end;gap:6px;height:90px;padding:0 4px 0;">
+          ${weeks4.map(w=>{const h=Math.round(w.load/maxLoad*80)||4;return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;"><div style="font-size:11px;color:var(--white);font-weight:600;">${w.load}</div><div style="width:100%;background:linear-gradient(180deg,var(--blue),var(--purple));border-radius:4px 4px 0 0;height:${h}px;"></div><div style="font-size:10px;color:var(--muted);">${w.label}</div></div>`;}).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px;">Zona ottimale: <strong style="color:var(--green);">0.8–1.3</strong> · Sopra 1.5: rischio infortuni ↑</div>
+      </div>`;
+    }
+  }
+
   el.innerHTML=html;
 
   // Build charts after render
@@ -781,17 +939,29 @@ window.renderAnalytics=function(){
 // ── DATABASE
 function renderDatabase(){
   const el=document.getElementById('db-content');if(!el)return;
+  const searchTerm=(document.getElementById('db-search')||{value:''}).value.toLowerCase();
   const cats={};
-  Object.entries(exercises).forEach(([k,e])=>{if(!cats[e.cat])cats[e.cat]=[];cats[e.cat].push({...e,_key:k});});
+  Object.entries(exercises).forEach(([k,e])=>{
+    if(searchTerm&&!e.name.toLowerCase().includes(searchTerm)&&!e.cat.toLowerCase().includes(searchTerm))return;
+    if(!cats[e.cat])cats[e.cat]=[];
+    cats[e.cat].push({...e,_key:k});
+  });
   const count=Object.keys(exercises).length;
-  const dc=document.getElementById('db-count');if(dc)dc.textContent=`${count} esercizi in ${Object.keys(cats).length} categorie`;
+  const dc=document.getElementById('db-count');
+  if(dc)dc.textContent=`${count} esercizi · ${Object.keys(cats).length} categorie`;
+  if(!Object.keys(cats).length){el.innerHTML='<div class="empty">Nessun esercizio trovato.</div>';return;}
   el.innerHTML=Object.entries(cats).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,exs])=>`
-    <div class="db-category">
-      <div class="db-cat-name">${cat} <span style="font-size:10px;color:var(--muted);">(${exs.length})</span></div>
-      <div class="db-items">${exs.sort((a,b)=>a.order-b.order).map(e=>`
-        <div class="db-item">
-          <div class="db-item-name">${e.name}</div>
-          ${!e.default?`<button class="db-del" onclick="delExercise('${e._key}')">✕</button>`:''}
+    <div style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">${cat}</div>
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        <div style="font-size:10px;color:var(--muted);">${exs.length}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:5px;">
+        ${exs.sort((a,b)=>(a.order||0)-(b.order||0)).map(e=>`
+        <div style="background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:8px 10px;display:flex;align-items:center;gap:6px;transition:border-color .15s;" onmouseenter="this.style.borderColor='var(--border2)'" onmouseleave="this.style.borderColor='var(--border)'">
+          <div style="flex:1;font-size:12px;font-weight:500;color:var(--white);line-height:1.3;">${e.name}</div>
+          ${!e.default?`<button onclick="delExercise('${e._key}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px;flex-shrink:0;" title="Elimina">✕</button>`:''}
         </div>`).join('')}
       </div>
     </div>`).join('');
