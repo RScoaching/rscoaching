@@ -96,6 +96,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 .field select option{background:var(--card2);}
 .mactions{display:flex;gap:8px;margin-top:14px;}
 .mactions .btn{flex:1;justify-content:center;}
+.day-check{display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;transition:all .15s;font-size:12px;font-weight:600;color:var(--text);}
+.day-check input{display:none;}
+.day-check:has(input:checked){background:rgba(6,214,160,.12);border-color:var(--teal);color:var(--teal);}
 
 /* TYPE PILLS */
 .type-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
@@ -223,20 +226,63 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 
 <!-- CREATE GROUP MODAL -->
 <div class="overlay" id="modal-group">
-  <div class="modal">
+  <div class="modal" style="max-width:500px;">
     <h3>Crea Gruppo</h3>
+
     <div class="field"><label>Nome gruppo</label>
       <input type="text" id="cg-name" placeholder="Es. Under 15, Prima Squadra...">
     </div>
-    <div class="field"><label>Giorno di gara</label>
-      <select id="cg-gameday">
-        <option value="Domenica">Domenica</option>
-        <option value="Sabato">Sabato</option>
-        <option value="Venerdì">Venerdì</option>
-        <option value="Giovedì">Giovedì</option>
-        <option value="Mercoledì">Mercoledì</option>
+
+    <div class="field"><label>Tipo di sport / categoria</label>
+      <select id="cg-sport">
+        <option value="Calcio">⚽ Calcio</option>
+        <option value="Calcio a 5">⚽ Calcio a 5</option>
+        <option value="Rugby">🏉 Rugby</option>
+        <option value="Basket">🏀 Basket</option>
+        <option value="Pallavolo">🏐 Pallavolo</option>
+        <option value="Atletica">🏃 Atletica</option>
+        <option value="Nuoto">🏊 Nuoto</option>
+        <option value="Tennis">🎾 Tennis</option>
+        <option value="Altro">🏅 Altro sport di squadra</option>
       </select>
     </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field" style="margin-bottom:0"><label>Sedute/settimana con squadra</label>
+        <select id="cg-squad-sessions">
+          <option value="1">1 allenamento</option>
+          <option value="2">2 allenamenti</option>
+          <option value="3" selected>3 allenamenti</option>
+          <option value="4">4 allenamenti</option>
+          <option value="5">5 allenamenti</option>
+          <option value="6">6 allenamenti</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0"><label>Giorno di gara</label>
+        <select id="cg-gameday">
+          <option value="Domenica">Domenica</option>
+          <option value="Sabato">Sabato</option>
+          <option value="Venerdì">Venerdì</option>
+          <option value="Giovedì">Giovedì</option>
+          <option value="Mercoledì">Mercoledì</option>
+          <option value="Nessuno">Nessuna gara fissa</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:12px;">
+      <label>Giorni allenamento extra (individuale / palestra)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Lunedì"> <span>Lun</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Martedì"> <span>Mar</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Mercoledì"> <span>Mer</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Giovedì"> <span>Gio</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Venerdì"> <span>Ven</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Sabato"> <span>Sab</span></label>
+        <label class="day-check"><input type="checkbox" name="cg-extra" value="Domenica"> <span>Dom</span></label>
+      </div>
+    </div>
+
     <div class="mactions">
       <button class="btn btn-outline" onclick="document.getElementById('modal-group').classList.remove('open')">Annulla</button>
       <button class="btn btn-teal" onclick="createGroupFromPlanner()">Crea gruppo →</button>
@@ -292,30 +338,14 @@ const TYPE_COLORS={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo
 const TYPE_LABELS={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprint',plyo:'🦘 Pliometria',rec:'🔄 Recupero',priming:'🎯 Priming',riposo:'😴 Riposo'};
 const MD_TAGS={0:{l:'Gara',c:'dt-gara'},'m1':{l:'G-1',c:'dt-m1'},'m2':{l:'G-2',c:'dt-m2'},'m3':{l:'G-3',c:'dt-m3'},'g1':{l:'G+1',c:'dt-g1'},'g2':{l:'G+2',c:'dt-g2'}};
 
-// ── INIT
+// ── INIT — mostra subito l'app, onValue porta i dati
 function init(){
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='flex';
   goToday();
-
-  // onValue carica subito E aggiorna in realtime — niente await che può bloccarsi
-  onValue(ref(db,'groups'),s=>{
-    groups=s.val()||{};
-    buildGroupSelector();
-    // Mostra app al primo caricamento
-    if(document.getElementById('loading').style.display!=='none'){
-      document.getElementById('loading').style.display='none';
-      document.getElementById('app').style.display='flex';
-    }
-  });
+  onValue(ref(db,'groups'),s=>{groups=s.val()||{};buildGroupSelector();});
   onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};updateStatus();});
   onValue(ref(db,'plans'),s=>{plans=s.val()||{};renderGrid();updateStatus();});
-
-  // Fallback: mostra app dopo 4s anche se Firebase è lento
-  setTimeout(()=>{
-    document.getElementById('loading').style.display='none';
-    document.getElementById('app').style.display='flex';
-  },4000);
-
-  // Mobile close button
   const mq=window.matchMedia('(max-width:800px)');
   const showClose=()=>document.getElementById('sb-close').style.display=mq.matches?'block':'none';
   showClose(); mq.addListener(showClose);
@@ -561,14 +591,21 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 // ── CREA GRUPPO DAL PLANNER
 window.openCreateGroup=function(){
   document.getElementById('cg-name').value='';
+  document.getElementById('cg-sport').value='Calcio';
+  document.getElementById('cg-squad-sessions').value='3';
+  document.getElementById('cg-gameday').value='Domenica';
+  document.querySelectorAll('input[name="cg-extra"]').forEach(c=>c.checked=false);
   document.getElementById('modal-group').classList.add('open');
 };
 window.createGroupFromPlanner=async function(){
   const name=document.getElementById('cg-name').value.trim();
-  const gameDay=document.getElementById('cg-gameday').value;
   if(!name){showToast('⚠ Inserisci il nome del gruppo');return;}
+  const sport=document.getElementById('cg-sport').value;
+  const squadSessions=parseInt(document.getElementById('cg-squad-sessions').value);
+  const gameDay=document.getElementById('cg-gameday').value;
+  const extraDays=[...document.querySelectorAll('input[name="cg-extra"]:checked')].map(c=>c.value);
   const newRef=push(ref(db,'groups'));
-  await set(newRef,{name,gameDay,createdAt:Date.now()});
+  await set(newRef,{name,sport,squadSessions,gameDay,extraDays,createdAt:Date.now()});
   document.getElementById('modal-group').classList.remove('open');
   showToast('✓ Gruppo "'+name+'" creato!');
 };
