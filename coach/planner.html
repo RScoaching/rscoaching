@@ -7,28 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0B0D0F;--sb:#0E1012;--sbb:#1A1D20;--content:#0F1114;
-  --card:#161A1E;--card2:#1C2026;--card3:#232830;
-  --border:#252B32;--border2:#303840;
-  --green:#22C55E;--teal:#22C55E;
-  --orange:#F97316;--blue:#38BDF8;
-  --amber:#EAB308;--red:#EF4444;--purple:#A78BFA;
-  --white:#F8FAFC;--text:#94A3B8;--muted:#475569;
-}
+:root{--bg:#0A0E17;--sb:#070B12;--sbb:#0F1520;--content:#0D1220;--card:#131928;--card2:#1A2235;--border:#1E2A40;--border2:#253048;--blue:#3B82F6;--teal:#06D6A0;--amber:#FBBF24;--red:#F87171;--green:#34D399;--purple:#A78BFA;--orange:#FB923C;--white:#EEF2FF;--muted:#4A5568;--text:#B8C4D8;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
 
 /* SIDEBAR */
-.sidebar{width:240px;background:var(--sb);border-right:1px solid var(--sbb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto;}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--white);}
-.logo span{color:var(--green);}
-.logo-sub{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:3px;margin-top:3px;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;border-radius:8px;margin-bottom:1px;border-left:3px solid transparent;text-decoration:none;transition:all .12s;}
-.nav-item:hover{color:var(--white);background:rgba(255,255,255,.04);}
-.nav-item.active{color:var(--white);background:rgba(34,197,94,.08);border-left-color:var(--green);font-weight:600;}
-.nav-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
-.nav-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--border2);padding:12px 12px 4px;}
+.sidebar{width:230px;background:var(--sb);border-right:1px solid var(--sbb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto;}
 .sb-top{padding:24px 22px 16px;border-bottom:1px solid var(--sbb);display:flex;align-items:center;justify-content:space-between;}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:var(--white);}
 .logo span{color:var(--teal);}
@@ -198,7 +182,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
       </select>
     </div>
     <div class="no-group-msg" id="no-group-msg">
-      Nessun gruppo. <a href="../coach/">Creane uno →</a>
+      Nessun gruppo. <a href="#" onclick="openCreateGroup();return false;">Creane uno →</a>
     </div>
 
     <!-- WEEK NAV -->
@@ -227,6 +211,29 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     <div class="empty-plan"><div style="font-size:32px">📅</div><h3>Pianificazione Settimanale</h3><p>Seleziona un gruppo per iniziare.</p></div>
   </div>
 </div>
+</div>
+
+<!-- CREATE GROUP MODAL -->
+<div class="overlay" id="modal-group">
+  <div class="modal">
+    <h3>Crea Gruppo</h3>
+    <div class="field"><label>Nome gruppo</label>
+      <input type="text" id="cg-name" placeholder="Es. Under 15, Prima Squadra...">
+    </div>
+    <div class="field"><label>Giorno di gara</label>
+      <select id="cg-gameday">
+        <option value="Domenica">Domenica</option>
+        <option value="Sabato">Sabato</option>
+        <option value="Venerdì">Venerdì</option>
+        <option value="Giovedì">Giovedì</option>
+        <option value="Mercoledì">Mercoledì</option>
+      </select>
+    </div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-group').classList.remove('open')">Annulla</button>
+      <button class="btn btn-teal" onclick="createGroupFromPlanner()">Crea gruppo →</button>
+    </div>
+  </div>
 </div>
 
 <!-- SESSION MODAL -->
@@ -310,24 +317,29 @@ function buildGroupSelector(){
     sel.innerHTML='<option value="">Nessun gruppo</option>';
     noGrp.style.display='block';
     document.getElementById('group-wrap').style.opacity='.5';
+    currentGroup=null;
+    renderGrid();
     return;
   }
   noGrp.style.display='none';
   document.getElementById('group-wrap').style.opacity='1';
 
-  // Rebuild options
-  const prev=currentGroup||sel.value;
+  // Usa currentGroup come precedente (non sel.value che potrebbe essere "Caricamento...")
+  const prev=currentGroup;
   sel.innerHTML=ids.map(id=>{
     const g=groups[id];
     return `<option value="${id}">${g.name}${g.gameDay?' · '+g.gameDay:''}</option>`;
   }).join('');
 
-  // Restore or pick first
-  if(prev&&groups[prev]) sel.value=prev;
-  else sel.value=ids[0];
+  // Ripristina selezione o usa il primo
+  const target=(prev&&groups[prev])?prev:ids[0];
+  sel.value=target;
 
-  const newGroup=sel.value;
-  if(newGroup!==currentGroup){currentGroup=newGroup;renderGrid();updateStatus();}
+  if(target!==currentGroup){
+    currentGroup=target;
+    renderGrid();
+    updateStatus();
+  }
 }
 
 window.onGroupChange=function(){
@@ -527,6 +539,21 @@ window.autoSuggest=function(){
 
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+// ── CREA GRUPPO DAL PLANNER
+window.openCreateGroup=function(){
+  document.getElementById('cg-name').value='';
+  document.getElementById('modal-group').classList.add('open');
+};
+window.createGroupFromPlanner=async function(){
+  const name=document.getElementById('cg-name').value.trim();
+  const gameDay=document.getElementById('cg-gameday').value;
+  if(!name){showToast('⚠ Inserisci il nome del gruppo');return;}
+  const newRef=push(ref(db,'groups'));
+  await set(newRef,{name,gameDay,createdAt:Date.now()});
+  document.getElementById('modal-group').classList.remove('open');
+  showToast('✓ Gruppo "'+name+'" creato!');
+};
 </script>
 </body>
 </html>
