@@ -7,15 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0B0D0F;--sb:#0E1012;--sbb:#1A1D20;--content:#0F1114;
-  --card:#161A1E;--card2:#1C2026;--card3:#232830;
-  --border:#252B32;--border2:#303840;
-  --green:#22C55E;--teal:#22C55E;
-  --orange:#F97316;--blue:#38BDF8;
-  --amber:#EAB308;--red:#EF4444;--purple:#A78BFA;
-  --white:#F8FAFC;--text:#94A3B8;--muted:#475569;
-}
+:root{--bg:#0A0E17;--sb:#070B12;--sbb:#0F1520;--content:#0D1220;--card:#131928;--card2:#1A2235;--border:#1E2A40;--border2:#253048;--blue:#3B82F6;--teal:#06D6A0;--amber:#FBBF24;--red:#F87171;--green:#34D399;--purple:#A78BFA;--orange:#FB923C;--white:#EEF2FF;--muted:#4A5568;--text:#B8C4D8;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
 .sidebar{width:220px;background:var(--sb);border-right:1px solid var(--sbb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;box-shadow:4px 0 20px rgba(0,0,0,.4);}
@@ -139,10 +131,6 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     <div><div class="logo">RS<span>.</span>Coaching</div><div class="logo-sub">Preparazione Atletica</div></div>
     <button id="sb-close-p" onclick="document.querySelector('.sidebar').classList.remove('open')" style="display:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.4);font-size:14px;cursor:pointer;padding:5px 8px;border-radius:7px;">✕</button>
   </div>
-  <div class="sb-top">
-    <div class="logo">RS<span>.</span>Coaching</div>
-    <div class="logo-sub">Preparazione Atletica</div>
-  </div>
   <div class="nav-s">
     <div class="nav-lbl">Principale</div>
     <a class="nav-item" href="./">⊞ Dashboard</a>
@@ -152,7 +140,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     <div class="nav-lbl" style="margin-top:10px;">Programmazione</div>
     <a class="nav-item" href="./builder.html">🔨 Program Builder</a>
     <a class="nav-item" href="./planner.html">📅 Planner Sett.</a>
-    <a class="nav-item" class="nav-item active" href="./piani.html">📨 Piani Rapidi</a>
+    <a class="nav-item active" href="./piani.html">📨 Piani Rapidi</a>
     <div class="nav-lbl" style="margin-top:10px;">Risorse</div>
     <a class="nav-item" href="./">🗄 Database Esercizi</a>
     <a class="nav-item" href="./">🧮 Strumenti S&C</a>
@@ -182,8 +170,8 @@ import { getDatabase, ref, set, get, push, onValue, remove, update } from "https
 const cfg={apiKey:"AIzaSyAayWDWvUQqtAfIlm7qA8kMKxJu2-_y7k4",authDomain:"rscoaching-a6c61.firebaseapp.com",databaseURL:"https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rscoaching-a6c61",storageBucket:"rscoaching-a6c61.firebasestorage.app",messagingSenderId:"499942544251",appId:"1:499942544251:web:bd246cc6846b0fad89e3de"};
 const app=initializeApp(cfg);
 const db=getDatabase(app);
-// Auth handled by main coach page
-
+const PIN="raoul2024";
+if(sessionStorage.getItem('ca')!==PIN){const p=prompt("PIN:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#4A5568;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
 let athletes={}, allPlans={}, cachedExercises={};
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
@@ -192,30 +180,43 @@ const TYPES={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',r
 const TCLS={squadra:'sm-squadra',forza:'sm-forza',sprint:'sm-sprint',plyo:'sm-plyo',rec:'sm-rec',priming:'sm-priming',riposo:'sm-riposo'};
 
 async function init(){
-  document.getElementById('loading').style.display='none';
-  document.getElementById('app').style.display='flex';
-  const [aSnap,pSnap,eSnap]=await Promise.all([get(ref(db,'athletes')),get(ref(db,'athlete_plans')),get(ref(db,'exercise_db'))]);
-  cachedExercises=eSnap.val()||{};
-  athletes=aSnap.val()||{};
-  // Flatten all plans: {aid_wk: {aid, wk, plan}}
-  const ap=pSnap.val()||{};
-  const flat={};
-  Object.entries(ap).forEach(([aid,weeks])=>{
-    Object.entries(weeks).forEach(([wk,plan])=>{
-      flat[`${aid}__${wk}`]={aid,wk,plan};
+  try {
+    const [aSnap,pSnap,eSnap]=await Promise.all([
+      get(ref(db,'athletes')),
+      get(ref(db,'athlete_plans')),
+      get(ref(db,'exercise_db'))
+    ]);
+    cachedExercises=eSnap.val()||{};
+    athletes=aSnap.val()||{};
+    // Flatten all plans: {aid_wk: {aid, wk, plan}}
+    const ap=pSnap.val()||{};
+    const flat={};
+    Object.entries(ap).forEach(([aid,weeks])=>{
+      Object.entries(weeks).forEach(([wk,plan])=>{
+        flat[`${aid}__${wk}`]={aid,wk,plan};
+      });
     });
-  });
-  allPlans=flat;
-  onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};});
-  onValue(ref(db,'athlete_plans'),s=>{
-    const ap2=s.val()||{};
-    const flat2={};
-    Object.entries(ap2).forEach(([aid,weeks])=>{
-      Object.entries(weeks).forEach(([wk,plan])=>{flat2[`${aid}__${wk}`]={aid,wk,plan};});
+    allPlans=flat;
+    // Mostra app solo quando i dati sono pronti
+    document.getElementById('loading').style.display='none';
+    document.getElementById('app').style.display='flex';
+    renderPlans(); // render iniziale esplicito
+
+    // Listener realtime
+    onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderPlans();});
+    onValue(ref(db,'athlete_plans'),s=>{
+      const ap2=s.val()||{};
+      const flat2={};
+      Object.entries(ap2).forEach(([aid,weeks])=>{
+        Object.entries(weeks).forEach(([wk,plan])=>{flat2[`${aid}__${wk}`]={aid,wk,plan};});
+      });
+      allPlans=flat2;
+      renderPlans();
     });
-    allPlans=flat2;
-    renderPlans();
-  });
+  } catch(e) {
+    console.error('Errore init piani:',e);
+    document.getElementById('loading').innerHTML='<div style="color:#F87171;font-size:14px;">Errore connessione. Ricarica la pagina.</div>';
+  }
 }
 init();
 
