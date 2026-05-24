@@ -285,20 +285,27 @@ const TYPE_LABELS={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprin
 const MD_TAGS={0:{l:'Gara',c:'dt-gara'},'m1':{l:'G-1',c:'dt-m1'},'m2':{l:'G-2',c:'dt-m2'},'m3':{l:'G-3',c:'dt-m3'},'g1':{l:'G+1',c:'dt-g1'},'g2':{l:'G+2',c:'dt-g2'}};
 
 // ── INIT
-async function init(){
-  document.getElementById('loading').style.display='none';
-  document.getElementById('app').style.display='flex';
+function init(){
   goToday();
 
-  // Load groups with get() first — no timing issues
-  const gSnap=await get(ref(db,'groups'));
-  groups=gSnap.val()||{};
-  buildGroupSelector();
-
-  // Realtime listeners
-  onValue(ref(db,'groups'),s=>{groups=s.val()||{};buildGroupSelector();});
+  // onValue carica subito E aggiorna in realtime — niente await che può bloccarsi
+  onValue(ref(db,'groups'),s=>{
+    groups=s.val()||{};
+    buildGroupSelector();
+    // Mostra app al primo caricamento
+    if(document.getElementById('loading').style.display!=='none'){
+      document.getElementById('loading').style.display='none';
+      document.getElementById('app').style.display='flex';
+    }
+  });
   onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};updateStatus();});
   onValue(ref(db,'plans'),s=>{plans=s.val()||{};renderGrid();updateStatus();});
+
+  // Fallback: mostra app dopo 4s anche se Firebase è lento
+  setTimeout(()=>{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('app').style.display='flex';
+  },4000);
 
   // Mobile close button
   const mq=window.matchMedia('(max-width:800px)');
