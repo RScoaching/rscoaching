@@ -179,17 +179,17 @@ const DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
 const TYPES={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo'};
 const TCLS={squadra:'sm-squadra',forza:'sm-forza',sprint:'sm-sprint',plyo:'sm-plyo',rec:'sm-rec',priming:'sm-priming',riposo:'sm-riposo'};
 
-async function init(){
-  try {
-    const [aSnap,pSnap,eSnap]=await Promise.all([
-      get(ref(db,'athletes')),
-      get(ref(db,'athlete_plans')),
-      get(ref(db,'exercise_db'))
-    ]);
-    cachedExercises=eSnap.val()||{};
-    athletes=aSnap.val()||{};
-    // Flatten all plans: {aid_wk: {aid, wk, plan}}
-    const ap=pSnap.val()||{};
+function init(){
+  // Mostra subito l'app con stato di caricamento interno
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('plans-list').innerHTML='<div class="empty" style="color:var(--muted)">⏳ Caricamento piani...</div>';
+
+  // onValue carica subito e resta in ascolto per aggiornamenti
+  onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};});
+  onValue(ref(db,'exercise_db'),s=>{cachedExercises=s.val()||{};});
+  onValue(ref(db,'athlete_plans'),s=>{
+    const ap=s.val()||{};
     const flat={};
     Object.entries(ap).forEach(([aid,weeks])=>{
       Object.entries(weeks).forEach(([wk,plan])=>{
@@ -197,26 +197,8 @@ async function init(){
       });
     });
     allPlans=flat;
-    // Mostra app solo quando i dati sono pronti
-    document.getElementById('loading').style.display='none';
-    document.getElementById('app').style.display='flex';
-    renderPlans(); // render iniziale esplicito
-
-    // Listener realtime
-    onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderPlans();});
-    onValue(ref(db,'athlete_plans'),s=>{
-      const ap2=s.val()||{};
-      const flat2={};
-      Object.entries(ap2).forEach(([aid,weeks])=>{
-        Object.entries(weeks).forEach(([wk,plan])=>{flat2[`${aid}__${wk}`]={aid,wk,plan};});
-      });
-      allPlans=flat2;
-      renderPlans();
-    });
-  } catch(e) {
-    console.error('Errore init piani:',e);
-    document.getElementById('loading').innerHTML='<div style="color:#F87171;font-size:14px;">Errore connessione. Ricarica la pagina.</div>';
-  }
+    renderPlans();
+  });
 }
 init();
 
