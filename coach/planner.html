@@ -42,6 +42,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 .btn-teal{background:var(--teal);color:#070B12;}.btn-teal:hover{opacity:.88;}
 .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border2);}.btn-outline:hover{border-color:var(--teal);color:var(--teal);}
 .btn-blue{background:rgba(59,130,246,.1);color:var(--blue);border:1px solid rgba(59,130,246,.2);}
+.btn-purple{background:rgba(167,139,250,.12);color:var(--purple);border:1px solid rgba(167,139,250,.25);}
 .btn-sm{padding:5px 10px;font-size:11px;border-radius:7px;}
 .week-nav{display:flex;align-items:center;gap:6px;}
 .week-label{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--white);min-width:180px;text-align:center;}
@@ -201,7 +202,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     </div>
     <button class="btn btn-outline btn-sm" onclick="goToday()">Oggi</button>
     <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
-    <button class="btn btn-teal" onclick="publishPlan()">Pubblica piano →</button>
+    <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia agli atleti</button>
+    <button class="btn btn-teal" onclick="publishPlan()">Pubblica →</button>
   </div>
 
   <!-- STATUS -->
@@ -213,6 +215,22 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
   <!-- WEEK GRID -->
   <div class="week-grid" id="week-grid"></div>
 </div>
+</div>
+
+<!-- INVIA ATLETI MODAL -->
+<div class="overlay" id="modal-send">
+  <div class="modal" style="max-width:420px;">
+    <h3>👥 Invia piano agli atleti</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Il piano della settimana corrente verrà copiato come base per ogni atleta selezionato. Potrai personalizzarlo in "Piani Rapidi".</div>
+    <div id="send-ath-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:14px;">
+      <div style="color:var(--muted);font-size:13px;">Caricamento atleti...</div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;" id="send-warn"></div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-send').classList.remove('open')">Annulla</button>
+      <button class="btn btn-purple" onclick="doSendToAthletes()">Invia piano →</button>
+    </div>
+  </div>
 </div>
 
 <!-- SESSION MODAL -->
@@ -454,6 +472,61 @@ window.autoSuggest=function(){
   ];
   const promises=suggestions.map(s=>push(ref(db,`plans/${wk}/${s.day}`),{...s,ts:Date.now()}));
   Promise.all(promises).then(()=>showToast('✓ Suggerimenti aggiunti!'));
+};
+
+// ── INVIA PIANO AGLI ATLETI
+window.openSendModal=function(){
+  const wk=weekKey();
+  const planData=plans[wk]||{};
+  const sessCnt=Object.entries(planData).filter(([k])=>k!=='_published').reduce((t,[,d])=>t+Object.keys(d||{}).length,0);
+  const warn=document.getElementById('send-warn');
+  if(!sessCnt){warn.textContent='⚠ Nessuna sessione pianificata questa settimana. Aggiungi prima le sessioni nella griglia.';warn.style.color='var(--amber)';}
+  else{warn.textContent=`${sessCnt} sessioni pronte da inviare per la settimana del ${currentMonday?currentMonday.toLocaleDateString('it-IT',{day:'numeric',month:'long'}):'-'}.`;warn.style.color='var(--teal)';}
+
+  const athIds=Object.keys(athletes);
+  const listEl=document.getElementById('send-ath-list');
+  if(!athIds.length){
+    listEl.innerHTML='<div style="color:var(--muted);font-size:13px;">Nessun atleta trovato. Aggiungili prima dalla Dashboard.</div>';
+  } else {
+    listEl.innerHTML=athIds.map(id=>{
+      const a=athletes[id];
+      return `<label style="display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;">
+        <input type="checkbox" name="send-ath" value="${id}" style="width:16px;height:16px;accent-color:var(--purple);">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);">${a.name||id}</div>
+          <div style="font-size:11px;color:var(--muted);">${a.sport||a.role||''}</div>
+        </div>
+      </label>`;
+    }).join('');
+  }
+  document.getElementById('modal-send').classList.add('open');
+};
+
+window.doSendToAthletes=async function(){
+  const checked=[...document.querySelectorAll('input[name="send-ath"]:checked')].map(c=>c.value);
+  if(!checked.length){showToast('⚠ Seleziona almeno un atleta');return;}
+  const wk=weekKey();
+  const planData=plans[wk]||{};
+  const promises=[];
+  checked.forEach(aid=>{
+    // Per ogni giorno prende la prima sessione (se esiste) e la copia come base per l'atleta
+    for(let i=0;i<7;i++){
+      const daySessions=Object.values(planData[String(i)]||{}).filter(s=>s&&s.type);
+      if(daySessions.length){
+        const first=daySessions[0];
+        promises.push(set(ref(db,`athlete_plans/${aid}/${wk}/days/${i}`),{
+          type:first.type,
+          note:first.note||'',
+          detail:first.detail||'',
+          exercises:{},
+          fromPlanner:true
+        }));
+      }
+    }
+  });
+  await Promise.all(promises);
+  document.getElementById('modal-send').classList.remove('open');
+  showToast(`✓ Piano inviato a ${checked.length} atleta${checked.length>1?'i'}! Vai in "Piani Rapidi" per personalizzare.`);
 };
 
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
