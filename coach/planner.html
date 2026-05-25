@@ -9,7 +9,7 @@
 <style>
 :root{--bg:#0A0E17;--sb:#070B12;--sbb:#0F1520;--content:#0D1220;--card:#131928;--card2:#1A2235;--border:#1E2A40;--border2:#253048;--blue:#3B82F6;--teal:#06D6A0;--amber:#FBBF24;--red:#F87171;--green:#34D399;--purple:#A78BFA;--orange:#FB923C;--white:#EEF2FF;--muted:#4A5568;--text:#B8C4D8;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden;}
 
 /* SIDEBAR */
 .sidebar{width:230px;background:var(--sb);border-right:1px solid var(--sbb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto;}
@@ -341,25 +341,23 @@ currentMonthDate=new Date();
 renderCalendar();
 
 // ── CALENDAR
+function localKey(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 function getWeeksInMonth(year,month){
   const weeks=[];
-  const d=new Date(year,month,1);
-  // Find first monday
-  while(d.getDay()!==1) d.setDate(d.getDate()+(d.getDay()===0?1:1));
-  // Actually go back to find the monday of the week containing the 1st
-  const first=new Date(year,month,1);
-  const dow=first.getDay();
-  const monday=new Date(first);
-  monday.setDate(first.getDate()-(dow===0?6:dow-1));
-
-  const d2=new Date(monday);
-  while(d2.getMonth()<=month || (d2.getFullYear()===year && d2.getMonth()<month)){
-    if(d2.getMonth()>month && d2.getFullYear()>=year) break;
-    const wkStart=new Date(d2);
-    const wkEnd=new Date(d2); wkEnd.setDate(wkEnd.getDate()+6);
-    weeks.push({start:new Date(wkStart),end:new Date(wkEnd),key:wkStart.toISOString().slice(0,10)});
-    d2.setDate(d2.getDate()+7);
-    if(weeks.length>8) break;
+  const lastDay=new Date(year,month+1,0); // ultimo giorno del mese
+  const firstDay=new Date(year,month,1);
+  // Giorno della settimana del 1° (1=Lun…7=Dom in ISO)
+  const dow=firstDay.getDay()===0?7:firstDay.getDay();
+  // Lunedì della settimana che contiene il 1°
+  const d=new Date(year,month,2-dow);
+  while(d<=lastDay){
+    const wkEnd=new Date(d); wkEnd.setDate(d.getDate()+6);
+    weeks.push({start:new Date(d),end:wkEnd,key:localKey(d)});
+    d.setDate(d.getDate()+7);
+    if(weeks.length>10) break;
   }
   return weeks;
 }
