@@ -195,6 +195,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .wiz-day-row.off .wiz-day-sub{opacity:.3;}
 .wiz-day-row.off .wiz-type-sel{opacity:.25;pointer-events:none;}
 .wiz-extra-note{font-size:11px;color:var(--muted);padding:8px 6px;margin-top:4px;}
+.cal-month-hdr{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:rgba(255,255,255,.25);padding:14px 8px 4px;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:4px;position:sticky;top:0;background:var(--sb);z-index:1;}
+.cal-year-lbl{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--white);}
+.cur-dot{color:var(--teal);font-size:9px;}
 </style>
 </head>
 <body>
@@ -226,11 +229,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   <!-- CALENDAR PANEL -->
   <div class="cal-panel">
     <div class="cal-head">
-      <div class="cal-month" id="cal-month-lbl">—</div>
+      <div class="cal-year-lbl" id="cal-month-lbl">—</div>
       <div class="cal-nav">
-        <button class="icon-btn" onclick="shiftMonth(-1)">←</button>
-        <button class="icon-btn" onclick="shiftMonth(0)" title="Mese corrente">●</button>
-        <button class="icon-btn" onclick="shiftMonth(1)">→</button>
+        <button class="icon-btn" onclick="shiftMonth(-1)" title="Anno precedente">←</button>
+        <button class="icon-btn" onclick="shiftMonth(0)" title="Anno corrente">●</button>
+        <button class="icon-btn" onclick="shiftMonth(1)" title="Anno successivo">→</button>
       </div>
     </div>
     <div class="weeks-list" id="weeks-list"></div>
@@ -385,10 +388,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 <div id="toast"></div>
 
 <script>
-/* ── STANDALONE CALENDAR (no Firebase, always runs) ── */
+/* ── STANDALONE: CALENDARIO ANNUALE + WIZARD (no Firebase) ── */
 (function(){
+  // ── Utility
   function lk(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-  function weeks(y,m){
+  function weeksInMonth(y,m){
     var r=[],last=new Date(y,m+1,0),first=new Date(y,m,1);
     var dow=first.getDay()===0?7:first.getDay();
     var d=new Date(y,m,2-dow);
@@ -397,43 +401,190 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   }
   function wn(d){var u=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));var dn=u.getUTCDay()||7;u.setUTCDate(u.getUTCDate()+4-dn);var ys=new Date(Date.UTC(u.getUTCFullYear(),0,1));return Math.ceil((((u-ys)/86400000)+1)/7);}
   function fmt(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});}
-  var now=new Date();
-  window._calDate=now;
-  window._calRender=function(date){
-    var y=date.getFullYear(),m=date.getMonth();
-    document.getElementById('cal-month-lbl').textContent=date.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,function(c){return c.toUpperCase();});
-    var ww=weeks(y,m),today=new Date();today.setHours(0,0,0,0);
+  function fmtLong(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+
+  // ── Stato calendario
+  window._calYear=new Date().getFullYear();
+
+  // ── Render anno intero
+  window._calRender=function(){
+    var y=window._calYear;
     var cur=window._selWk||null;
-    document.getElementById('weeks-list').innerHTML=ww.map(function(w){
-      var isCur=w.s<=today&&w.e>=today;
-      var isSel=w.k===cur;
-      var mini='<div class="mini-day"></div>'.repeat(7);
-      /* Firebase data overlay injected by module later */
-      var pill='<span class="wpill wp-empty">Vuota</span>';
-      if(window._plansCache&&window._plansCache[w.k]){
-        var wd=window._plansCache[w.k];
-        var cnt=Object.entries(wd).filter(function(e){return!e[0].startsWith('_');}).reduce(function(t,e){return t+Object.keys(e[1]||{}).length;},0);
-        if(wd._published) pill='<span class="wpill wp-done">✓ Pubblicata</span>';
-        else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sessioni</span>';
-        /* mini days */
-        mini=Array.from({length:7},function(_,i){
-          var fd=Object.values(wd[String(i)]||{});
-          var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
-          return '<div class="mini-day '+cls+'"></div>';
-        }).join('');
-      }
-      return '<div class="week-row'+(isSel?' selected':'')+'" onclick="window._swk(\''+w.k+'\')">'+
-        '<div class="week-row-head">'+
-        '<div class="week-num">W'+wn(w.s)+'</div>'+
-        '<div class="week-dates"><div class="week-date-main">'+fmt(w.s)+' — '+fmt(w.e)+(isCur?' <span style="color:var(--teal);font-size:9px;">●</span>':'')+'</div></div>'+
-        '<div class="week-pills">'+pill+'</div>'+
-        '</div>'+
-        '<div class="week-mini-days">'+mini+'</div>'+
-        '</div>';
-    }).join('')||'<div style="color:var(--muted);padding:12px;font-size:12px;">Nessuna settimana</div>';
+    var today=new Date(); today.setHours(0,0,0,0);
+    document.getElementById('cal-month-lbl').textContent=y;
+    var html='';
+    for(var m=0;m<12;m++){
+      var ww=weeksInMonth(y,m);
+      if(!ww.length) continue;
+      var mName=new Date(y,m,1).toLocaleDateString('it-IT',{month:'long'}).replace(/^\w/,function(c){return c.toUpperCase();});
+      html+='<div class="cal-month-hdr">'+mName+'</div>';
+      html+=ww.map(function(w){
+        var isCur=w.s<=today&&w.e>=today;
+        var isSel=w.k===cur;
+        var mini='<div class="mini-day"></div>'.repeat(7);
+        var pill='<span class="wpill wp-empty">Vuota</span>';
+        if(window._plansCache&&window._plansCache[w.k]){
+          var wd=window._plansCache[w.k];
+          var cnt=Object.entries(wd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
+          var conf=wd._config||{};
+          if(wd._published) pill='<span class="wpill wp-done">✓ Pub</span>';
+          else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
+          if(conf.weekType) pill+='<span class="wpill" style="background:rgba(255,255,255,.05);color:var(--text);">'+conf.weekType+'</span>';
+          mini=Array.from({length:7},function(_,i){
+            var fd=Object.values(wd[String(i)]||{});
+            var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
+            return '<div class="mini-day '+cls+'"></div>';
+          }).join('');
+        }
+        return '<div class="week-row'+(isSel?' selected':'')+'" id="wrow-'+w.k+'" onclick="window._swk(\''+w.k+'\')">'+
+          '<div class="week-row-head">'+
+          '<div class="week-num">W'+wn(w.s)+'</div>'+
+          '<div class="week-dates"><div class="week-date-main">'+fmt(w.s)+' — '+fmt(w.e)+(isCur?' <span class="cur-dot">●</span>':'')+'</div></div>'+
+          '<div class="week-pills">'+pill+'</div>'+
+          '</div>'+
+          '<div class="week-mini-days">'+mini+'</div>'+
+          '</div>';
+      }).join('');
+    }
+    document.getElementById('weeks-list').innerHTML=html;
+    // scroll alla settimana corrente al primo caricamento
+    if(!cur){
+      var el=document.getElementById('wrow-'+lk(new Date(today.getFullYear(),today.getMonth(),today.getDate()-((today.getDay()||7)-1))));
+      if(el) setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'center'});},200);
+    }
   };
-  window._swk=function(k){window._selWk=k;window._calRender(window._calDate);if(window._onWkSelect)window._onWkSelect(k);};
-  window._calRender(now);
+
+  window._swk=function(k){
+    window._selWk=k;
+    window._calRender();
+    if(window.openWeekOrWiz) window.openWeekOrWiz(k);
+  };
+
+  // Navigazione anno
+  window.shiftMonth=function(dir){
+    if(dir===0) window._calYear=new Date().getFullYear();
+    else window._calYear+=dir;
+    window._calRender();
+  };
+
+  window._calRender();
+
+  // ════════════════════════════════════════
+  // WIZARD SETTIMANA (UI pura, no Firebase)
+  // ════════════════════════════════════════
+  var DAYS_FULL=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  var TYPE_OPTS=[
+    {v:'squadra',l:'⚽ Squadra / Tattica'},
+    {v:'forza',  l:'🏋️ Forza'},
+    {v:'sprint', l:'⚡ Sprint / Velocità'},
+    {v:'plyo',   l:'🦘 Pliometria'},
+    {v:'rec',    l:'🔄 Recupero'},
+    {v:'priming',l:'🎯 Priming / Attivazione'},
+    {v:'riposo', l:'😴 Riposo'},
+  ];
+  var WIZ_TPLS={
+    gara_dom:{label:'Gara Domenica',matchIdx:6,days:[
+      {i:0,on:false,type:'rec',    mdLabel:'MD+1',note:'Recupero post-gara'},
+      {i:1,on:true, type:'forza',  mdLabel:'MD+2',note:'Seduta di forza'},
+      {i:2,on:true, type:'sprint', mdLabel:'MD+3',note:'Sprint & velocità'},
+      {i:3,on:false,type:'plyo',   mdLabel:'MD+4',note:'Pliometria (opzionale)'},
+      {i:4,on:true, type:'priming',mdLabel:'MD−2',note:'Attivazione pre-gara'},
+      {i:5,on:false,type:'priming',mdLabel:'MD−1',note:'Priming leggero'},
+      {i:6,on:true, type:'squadra',mdLabel:'GARA', note:'Match day',locked:true},
+    ]},
+    gara_sab:{label:'Gara Sabato',matchIdx:5,days:[
+      {i:0,on:true, type:'forza',  mdLabel:'MD+2',note:'Forza'},
+      {i:1,on:true, type:'sprint', mdLabel:'MD+3',note:'Sprint & velocità'},
+      {i:2,on:false,type:'plyo',   mdLabel:'MD+4',note:'Pliometria (opzionale)'},
+      {i:3,on:true, type:'priming',mdLabel:'MD−2',note:'Attivazione pre-gara'},
+      {i:4,on:true, type:'priming',mdLabel:'MD−1',note:'Priming leggero'},
+      {i:5,on:true, type:'squadra',mdLabel:'GARA', note:'Match day',locked:true},
+      {i:6,on:false,type:'rec',    mdLabel:'MD+1',note:'Recupero post-gara'},
+    ]},
+    no_gara:{label:'Senza Gara',matchIdx:null,days:[
+      {i:0,on:false,type:'rec',    mdLabel:'',note:'Riposo / recupero'},
+      {i:1,on:true, type:'forza',  mdLabel:'',note:'Seduta di forza'},
+      {i:2,on:true, type:'sprint', mdLabel:'',note:'Sprint & velocità'},
+      {i:3,on:false,type:'plyo',   mdLabel:'',note:'Pliometria (opzionale)'},
+      {i:4,on:true, type:'forza',  mdLabel:'',note:'Forza / potenza'},
+      {i:5,on:false,type:'sprint', mdLabel:'',note:'Sprint extra (opzionale)'},
+      {i:6,on:false,type:'riposo', mdLabel:'',note:'Riposo'},
+    ]},
+  };
+
+  var wizWk=null, wizTpl=null, wizDays=[];
+
+  window.openWeekOrWiz=function(wk){
+    var plans=window._plansCache||{};
+    var wData=plans[wk]||{};
+    var hasSessions=Object.keys(wData).some(function(k){return!k.startsWith('_');});
+    if(hasSessions){
+      if(window._openEditor) window._openEditor(wk);
+    } else {
+      wizWk=wk;
+      var mon=new Date(wk+'T00:00:00'), sun=new Date(mon); sun.setDate(mon.getDate()+6);
+      document.getElementById('wiz-wk-label').textContent=fmtLong(mon)+' — '+fmtLong(sun);
+      document.getElementById('wiz-s1').style.display='';
+      document.getElementById('wiz-s2').style.display='none';
+      document.querySelectorAll('.wiz-tpl').forEach(function(el){el.classList.remove('sel');});
+      document.getElementById('wiz-overlay').classList.add('open');
+    }
+  };
+
+  window.wizPick=function(tplKey){
+    wizTpl=tplKey;
+    var tpl=WIZ_TPLS[tplKey];
+    wizDays=tpl.days.map(function(d){return Object.assign({},d);});
+    document.querySelectorAll('.wiz-tpl').forEach(function(el){el.classList.remove('sel');});
+    document.getElementById('wtpl-'+tplKey).classList.add('sel');
+    var mon=new Date(wizWk+'T00:00:00');
+    document.getElementById('wiz-days-list').innerHTML=wizDays.map(function(d,ri){
+      var date=new Date(mon); date.setDate(mon.getDate()+d.i);
+      var ds=date.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+      var isMatch=!!d.locked;
+      var badge=d.mdLabel?'<span style="font-size:9px;font-weight:700;letter-spacing:.5px;color:'+(isMatch?'var(--orange)':'var(--teal)')+';background:'+(isMatch?'rgba(251,113,74,.12)':'rgba(6,214,160,.1)')+';padding:2px 6px;border-radius:4px;text-transform:uppercase;">'+d.mdLabel+'</span>':'';
+      return '<div class="wiz-day-row'+(isMatch?' match-day':'')+(d.on?'':' off')+'" id="wiz-row-'+ri+'">'+
+        '<button class="wiz-tog'+(d.on?' on':'')+'" id="wiz-tog-'+ri+'" onclick="wizToggle('+ri+')" type="button"'+(d.locked?' disabled':'')+' aria-label="toggle"></button>'+
+        '<div class="wiz-day-name">'+DAYS_FULL[d.i]+'</div>'+
+        '<div class="wiz-day-sub">'+ds+' '+badge+'</div>'+
+        '<select class="wiz-type-sel" id="wiz-type-'+ri+'"'+(d.locked?' disabled':'')+'>'+
+          TYPE_OPTS.map(function(o){return '<option value="'+o.v+'"'+(o.v===d.type?' selected':'')+'>'+o.l+'</option>';}).join('')+
+        '</select>'+
+        '</div>';
+    }).join('');
+    document.getElementById('wiz-s2-title').textContent=tpl.label;
+    document.getElementById('wiz-s1').style.display='none';
+    document.getElementById('wiz-s2').style.display='';
+  };
+
+  window.wizToggle=function(ri){
+    wizDays[ri].on=!wizDays[ri].on;
+    document.getElementById('wiz-tog-'+ri).classList.toggle('on',wizDays[ri].on);
+    document.getElementById('wiz-row-'+ri).classList.toggle('off',!wizDays[ri].on);
+  };
+  window.wizBack=function(){document.getElementById('wiz-s1').style.display='';document.getElementById('wiz-s2').style.display='none';};
+  window.closeWiz=function(){document.getElementById('wiz-overlay').classList.remove('open');};
+
+  window.wizApply=function(){
+    if(!wizWk||!wizTpl) return;
+    var active=wizDays.filter(function(d){return d.on;});
+    if(!active.length){alert('Attiva almeno un giorno');return;}
+    var names={squadra:'Sessione Squadra',forza:'Forza',sprint:'Sprint / Velocità',plyo:'Pliometria',rec:'Recupero',priming:'Priming / Attivazione',riposo:'Riposo'};
+    var writes={},t=Date.now();
+    active.forEach(function(d){
+      var ri=wizDays.indexOf(d);
+      var tp=(document.getElementById('wiz-type-'+ri)||{}).value||d.type;
+      writes['plans/'+wizWk+'/'+d.i+'/sess_'+(t+d.i)+'_'+d.i]={type:tp,name:names[tp]||tp,note:d.note||'',detail:'',createdAt:t};
+    });
+    var wkMap={gara_dom:'gara',gara_sab:'gara',no_gara:'accumulo'};
+    writes['plans/'+wizWk+'/_config']={weekType:wkMap[wizTpl]||'',template:wizTpl};
+    if(window._firebaseApply){
+      window._firebaseApply(writes,wizWk);
+    } else {
+      alert('Firebase non ancora pronto — ricarica la pagina (Cmd+Shift+R)');
+    }
+    closeWiz();
+  };
 })();
 </script>
 
@@ -818,168 +969,22 @@ window.removeAssigned=async function(aid){
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 
-// ─────────────────────────────────────────
-// WEEK WIZARD
-// ─────────────────────────────────────────
-const TYPE_OPTS=[
-  {v:'squadra', l:'⚽ Squadra/Tattica'},
-  {v:'forza',   l:'🏋️ Forza'},
-  {v:'sprint',  l:'⚡ Sprint / Velocità'},
-  {v:'plyo',    l:'🦘 Pliometria'},
-  {v:'rec',     l:'🔄 Recupero'},
-  {v:'priming', l:'🎯 Priming / Attivazione'},
-  {v:'riposo',  l:'😴 Riposo'},
-];
-
-const WIZ_TPLS={
-  gara_dom:{
-    label:'Gara Domenica', matchIdx:6,
-    days:[
-      {i:0,on:false,type:'rec',     mdLabel:'MD+1',  note:'Recupero post-gara'},
-      {i:1,on:true, type:'forza',   mdLabel:'MD+2',  note:'Seduta di forza'},
-      {i:2,on:true, type:'sprint',  mdLabel:'MD+3',  note:'Sprint & velocità'},
-      {i:3,on:false,type:'plyo',    mdLabel:'MD+4',  note:'Pliometria (opzionale)'},
-      {i:4,on:true, type:'priming', mdLabel:'MD−2',  note:'Attivazione pre-gara'},
-      {i:5,on:false,type:'priming', mdLabel:'MD−1',  note:'Priming leggero (opzionale)'},
-      {i:6,on:true, type:'squadra', mdLabel:'GARA',  note:'Match day', locked:true},
-    ]
-  },
-  gara_sab:{
-    label:'Gara Sabato', matchIdx:5,
-    days:[
-      {i:0,on:true, type:'forza',   mdLabel:'MD+2',  note:'Forza (dopo domenica riposo)'},
-      {i:1,on:true, type:'sprint',  mdLabel:'MD+3',  note:'Sprint & velocità'},
-      {i:2,on:false,type:'plyo',    mdLabel:'MD+4',  note:'Pliometria (opzionale)'},
-      {i:3,on:true, type:'priming', mdLabel:'MD−2',  note:'Attivazione pre-gara'},
-      {i:4,on:true, type:'priming', mdLabel:'MD−1',  note:'Priming leggero'},
-      {i:5,on:true, type:'squadra', mdLabel:'GARA',  note:'Match day', locked:true},
-      {i:6,on:false,type:'rec',     mdLabel:'MD+1',  note:'Recupero post-gara (opzionale)'},
-    ]
-  },
-  no_gara:{
-    label:'Senza Gara', matchIdx:null,
-    days:[
-      {i:0,on:false,type:'rec',     mdLabel:'',  note:'Riposo / recupero'},
-      {i:1,on:true, type:'forza',   mdLabel:'',  note:'Seduta di forza'},
-      {i:2,on:true, type:'sprint',  mdLabel:'',  note:'Sprint & velocità'},
-      {i:3,on:false,type:'plyo',    mdLabel:'',  note:'Pliometria (opzionale)'},
-      {i:4,on:true, type:'forza',   mdLabel:'',  note:'Forza / potenza'},
-      {i:5,on:false,type:'sprint',  mdLabel:'',  note:'Sprint extra (opzionale)'},
-      {i:6,on:false,type:'riposo',  mdLabel:'',  note:'Riposo'},
-    ]
-  }
-};
-
-const DAYS_FULL=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-
-let wizWk=null, wizTpl=null, wizDays=[];
-
-// Apri wizard per una settimana (se non ha già sessioni, mostra wizard; altrimenti apri editor diretto)
-window.openWeekOrWiz=function(wk){
-  const wData=plans[wk]||{};
-  const hasSessions=Object.keys(wData).some(k=>!k.startsWith('_'));
-  currentWk=wk;
-  window._selWk=wk;
-  window._calRender(window._calDate);
-  if(hasSessions){
-    renderEditor();
-  } else {
-    wizWk=wk;
-    const mon=new Date(wk+'T00:00:00');
-    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
-    const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});
-    document.getElementById('wiz-wk-label').textContent=`${fmt(mon)} — ${fmt(sun)}`;
-    // reset step
-    document.getElementById('wiz-s1').style.display='';
-    document.getElementById('wiz-s2').style.display='none';
-    document.querySelectorAll('.wiz-tpl').forEach(el=>el.classList.remove('sel'));
-    document.getElementById('wiz-overlay').classList.add('open');
-  }
-};
-
-window.wizPick=function(tplKey){
-  wizTpl=tplKey;
-  const tpl=WIZ_TPLS[tplKey];
-  // deep copy days
-  wizDays=tpl.days.map(d=>({...d}));
-  document.querySelectorAll('.wiz-tpl').forEach(el=>el.classList.remove('sel'));
-  document.getElementById('wtpl-'+tplKey).classList.add('sel');
-
-  // build day rows
-  const mon=new Date(wizWk+'T00:00:00');
-  const typeOpts=TYPE_OPTS.map(o=>`<option value="${o.v}">${o.l}</option>`).join('');
-
-  document.getElementById('wiz-days-list').innerHTML=wizDays.map((d,ri)=>{
-    const date=new Date(mon); date.setDate(mon.getDate()+d.i);
-    const dateStr=date.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
-    const isMatch=d.locked;
-    const mdBadge=d.mdLabel?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${isMatch?'var(--orange)':'var(--teal)'};background:${isMatch?'rgba(251,113,74,.12)':'rgba(6,214,160,.1)'};padding:2px 6px;border-radius:4px;">${d.mdLabel}</span>`:'';
-    return `<div class="wiz-day-row${isMatch?' match-day':''}${d.on?'':' off'}" id="wiz-row-${ri}">
-      <button class="wiz-tog${d.on?' on':''}" id="wiz-tog-${ri}" onclick="wizToggle(${ri})" ${d.locked?'disabled':''}></button>
-      <div class="wiz-day-name">${DAYS_FULL[d.i]}</div>
-      <div class="wiz-day-sub">${dateStr} ${mdBadge}</div>
-      <select class="wiz-type-sel" id="wiz-type-${ri}" ${d.locked?'disabled':''}>
-        ${TYPE_OPTS.map(o=>`<option value="${o.v}"${o.v===d.type?' selected':''}>${o.l}</option>`).join('')}
-      </select>
-    </div>`;
-  }).join('');
-
-  document.getElementById('wiz-s2-title').textContent=tpl.label;
-  document.getElementById('wiz-s1').style.display='none';
-  document.getElementById('wiz-s2').style.display='';
-};
-
-window.wizToggle=function(ri){
-  wizDays[ri].on=!wizDays[ri].on;
-  const tog=document.getElementById('wiz-tog-'+ri);
-  const row=document.getElementById('wiz-row-'+ri);
-  tog.classList.toggle('on', wizDays[ri].on);
-  row.classList.toggle('off', !wizDays[ri].on);
-};
-
-window.wizBack=function(){
-  document.getElementById('wiz-s1').style.display='';
-  document.getElementById('wiz-s2').style.display='none';
-};
-
-window.closeWiz=function(){
-  document.getElementById('wiz-overlay').classList.remove('open');
-};
-
-window.wizApply=async function(){
-  if(!wizWk||!wizTpl) return;
-  const activeDays=wizDays.filter(d=>d.on);
-  if(!activeDays.length){showToast('⚠ Attiva almeno un giorno');return;}
-
-  const TYPE_NAMES_MAP={
-    squadra:'Sessione Squadra',forza:'Forza',sprint:'Sprint / Velocità',
-    plyo:'Pliometria',rec:'Recupero',priming:'Priming / Attivazione',riposo:'Riposo'
-  };
-
-  const writes={};
-  activeDays.forEach(d=>{
-    const typeNow=document.getElementById('wiz-type-'+wizDays.indexOf(d))?.value||d.type;
-    const sessKey='sess_'+(Date.now()+d.i)+'_'+d.i;
-    writes[`plans/${wizWk}/${d.i}/${sessKey}`]={
-      type:typeNow,
-      name:TYPE_NAMES_MAP[typeNow]||typeNow,
-      note:d.note||'',
-      detail:'',
-      createdAt:Date.now()
-    };
-  });
-  // salva tipo settimana come config
-  const wkTypeMap={gara_dom:'gara',gara_sab:'gara',no_gara:'accumulo'};
-  writes[`plans/${wizWk}/_config`]={weekType:wkTypeMap[wizTpl]||'',template:wizTpl};
-
+// ── Bridge: editor e Firebase write richiamati dallo standalone wizard
+window._openEditor=function(wk){currentWk=wk;window._selWk=wk;window._calRender();renderEditor();};
+window._firebaseApply=async function(writes,wk){
   try{
-    const ps=Object.entries(writes).map(([path,val])=>set(ref(db,path),val));
-    await Promise.all(ps);
-    closeWiz();
+    await Promise.all(Object.entries(writes).map(([p,v])=>set(ref(db,p),v)));
+    currentWk=wk;
     renderEditor();
     showToast('✓ Piano applicato — ora aggiungi i dettagli!');
-  }catch(e){showToast('❌ Errore: '+e.message);}
+  }catch(e){showToast('❌ '+e.message);}
 };
+
+// ── Ridefinisci _swk con _openEditor disponibile
+window._swk=function(k){window._selWk=k;window._calRender();window.openWeekOrWiz(k);};
+window._onWkSelect=function(wk){window.openWeekOrWiz(wk);};
+
+/* wizard gestito dallo standalone script */
 </script>
 </body>
 </html>
