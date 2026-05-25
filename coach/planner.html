@@ -161,6 +161,21 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--card);border:1px solid var(--teal);color:var(--teal);padding:10px 18px;border-radius:50px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .3s;z-index:9999;white-space:nowrap;}
 #toast.show{transform:translateX(-50%) translateY(0);}
 
+/* ── EXERCISE EDITOR ── */
+.ex-section{border-top:1px solid var(--border);margin-top:14px;padding-top:12px;}
+.ex-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ex-section-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.ex-hdr{display:grid;grid-template-columns:1fr 46px 46px 90px 24px;gap:4px;padding:0 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
+.ex-hdr span{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);}
+.ex-row{display:grid;grid-template-columns:1fr 46px 46px 90px 24px;gap:4px;margin-bottom:4px;align-items:center;}
+.ex-inp{background:var(--card2);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);padding:6px 8px;outline:none;width:100%;}
+.ex-inp:focus{border-color:var(--teal);}
+.ex-inp::placeholder{color:var(--muted);font-size:11px;}
+.ex-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:0;line-height:1;transition:color .15s;}
+.ex-del:hover{color:var(--red);}
+.ex-empty{font-size:11px;color:var(--muted);padding:8px 4px;text-align:center;border:1px dashed var(--border);border-radius:8px;}
+.modal-wide{max-width:640px !important;}
+
 @media(max-width:900px){
   .cal-panel{width:280px;}
   .sidebar{display:none;}
@@ -300,7 +315,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
 <!-- SESSION MODAL -->
 <div class="overlay" id="modal">
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3 id="modal-title">Aggiungi sessione</h3>
     <div class="type-pills" id="type-pills">
       <button class="type-pill" onclick="selType('squadra',this)">⚽ Squadra</button>
@@ -314,10 +329,18 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     <div class="field"><label>Titolo / Note</label>
       <input type="text" id="m-note" placeholder="Es. 45min · possessi + prevenzione">
     </div>
-    <div class="field"><label>Dettagli (opzionale)</label>
-      <textarea id="m-detail" style="min-height:70px;resize:vertical;" placeholder="Es. 3×10min possessi · Nordic 3×6 · Calf 3×12"></textarea>
+    <!-- EXERCISE EDITOR -->
+    <div class="ex-section">
+      <div class="ex-section-head">
+        <span class="ex-section-lbl">💪 Esercizi</span>
+        <button class="btn btn-outline btn-sm" onclick="addEx()" type="button">+ Aggiungi esercizio</button>
+      </div>
+      <div class="ex-hdr">
+        <span>Esercizio</span><span style="text-align:center;">Serie</span><span style="text-align:center;">Rip</span><span>Carico / Note</span><span></span>
+      </div>
+      <div id="m-ex-list"></div>
     </div>
-    <div class="mactions">
+    <div class="mactions" style="margin-top:14px;">
       <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
       <button class="btn btn-red btn-sm" id="m-del-btn" style="display:none;" onclick="delCurrentSess()">🗑 Elimina</button>
       <button class="btn btn-teal" onclick="saveSession()">Salva →</button>
@@ -669,10 +692,13 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       }
       var sess=Object.entries(pd[String(i)]||{}).map(function(kv){return Object.assign({},kv[1],{_k:kv[0]});}).sort(function(a,b){return(a.ts||0)-(b.ts||0);});
       var sh=sess.map(function(s){
+        var exCount=s.exercises?Object.keys(s.exercises).length:0;
+        var exBadge=exCount?'<div style="font-size:9px;color:var(--muted);margin-top:2px;">💪 '+exCount+' esercizi</div>':'';
         return '<div class="sess-chip '+(TC[s.type]||'sc-squadra')+'" onclick="openEdit('+i+',\''+s._k+'\')">'
           +'<button class="sc-del" onclick="event.stopPropagation();_delSessR('+i+',\''+s._k+'\')">✕</button>'
           +'<div class="sc-type">'+(TL[s.type]||s.type)+'</div>'
           +'<div class="sc-name">'+(s.note||'—')+'</div>'
+          +exBadge
           +'</div>';
       }).join('');
       return '<div class="day-col'+(isT?' day-today':'')+'"><div class="day-head">'
@@ -696,26 +722,26 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window.openAdd=function(di){
     _eDay=di; _eKey=null; window._selSessType=null;
     document.getElementById('m-note').value='';
-    document.getElementById('m-detail').value='';
     document.getElementById('m-del-btn').style.display='none';
     document.getElementById('modal-title').textContent=DN_F[di]+' — Aggiungi sessione';
     document.querySelectorAll('.type-pill').forEach(function(p){p.className='type-pill';});
+    window._loadExData(null);
     document.getElementById('modal').classList.add('open');
   };
 
   window.openEdit=function(di,key){
-    var pd=(window._plansCache||{})[ _eWk]||{};
+    var pd=(window._plansCache||{})[_eWk]||{};
     var s=(pd[String(di)]||{})[key];
     if(!s) return;
     _eDay=di; _eKey=key; window._selSessType=s.type;
     document.getElementById('m-note').value=s.note||'';
-    document.getElementById('m-detail').value=s.detail||'';
     document.getElementById('m-del-btn').style.display='inline-flex';
     document.getElementById('modal-title').textContent=DN_F[di]+' — Modifica';
     document.querySelectorAll('.type-pill').forEach(function(p){
       p.className='type-pill';
       if(p.getAttribute('onclick')&&p.getAttribute('onclick').indexOf("'"+s.type+"'")>=0) p.className='type-pill tp-sel-'+s.type;
     });
+    window._loadExData(s.exercises||null);
     document.getElementById('modal').classList.add('open');
   };
 
@@ -729,9 +755,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(!window._selSessType){_toastS('⚠ Seleziona un tipo di seduta');return;}
     if(_eDay===null) return;
     var note=document.getElementById('m-note').value.trim();
-    var detail=document.getElementById('m-detail').value.trim();
     var key=_eKey||('sess_'+Date.now()+'_'+_eDay);
-    var data={type:window._selSessType,note:note||null,detail:detail||null,ts:Date.now()};
+    var exData=window._getExData();
+    var data={type:window._selSessType,note:note||null,ts:Date.now()};
+    if(exData) data.exercises=exData;
     await fetch(DB_URL+'/plans/'+_eWk+'/'+_eDay+'/'+key+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     await _restRefresh(_eWk);
     window.closeModal();
@@ -750,9 +777,129 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   window.renderGrid=function(){if(_eWk) _restGrid(_eWk);};
-  window.publishPlan=function(){_toastS('⚠ Pubblica: ricarica pagina con Firebase attivo (Cmd+Shift+R)');};
-  window.openSendModal=function(){_toastS('⚠ Assegnazione atleti: ricarica pagina con Firebase attivo');};
+
+  // ── PUBBLICA via REST ──
+  window.publishPlan=async function(){
+    if(!_eWk) return;
+    var pd=(window._plansCache||{})[_eWk]||{};
+    var cnt=Object.entries(pd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
+    if(!cnt){_toastS('⚠ Aggiungi almeno una sessione prima di pubblicare');return;}
+    var ts=Date.now();
+    await fetch(DB_URL+'/plans/'+_eWk+'/_published.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(ts)});
+    if(!window._plansCache[_eWk]) window._plansCache[_eWk]={};
+    window._plansCache[_eWk]._published=ts;
+    var st=document.getElementById('ed-status');
+    if(st){st.textContent='✓ Pubblicata il '+new Date(ts).toLocaleDateString('it-IT');st.style.color='var(--teal)';}
+    window._calRender();
+    _toastS('✓ Settimana pubblicata!');
+  };
+
+  // ── ASSEGNA ATLETI via REST ──
+  window.openSendModal=async function(){
+    if(!_eWk){_toastS('⚠ Seleziona prima una settimana');return;}
+    var r=await fetch(DB_URL+'/athletes.json');
+    var aths=r.ok?(await r.json())||{}:{};
+    window._restAths=aths;
+    var wData=(window._plansCache||{})[_eWk]||{};
+    var assigned=wData._athletes||{};
+    var athIds=Object.keys(aths);
+    var mon=new Date(_eWk+'T00:00:00');
+    function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+    document.getElementById('send-desc').textContent='Settimana del '+fm(mon)+'. Il piano viene copiato come base per ogni atleta.';
+    var listEl=document.getElementById('send-ath-list');
+    if(!athIds.length){
+      listEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">Nessun atleta trovato.</div>';
+    } else {
+      listEl.innerHTML=athIds.map(function(id){
+        var a=aths[id],isA=!!assigned[id];
+        return '<label class="ath-send-item"><input type="checkbox" name="send-ath" value="'+id+'" '+(isA?'checked':'')+'>'
+          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--white);">'+(a.name||id)+'</div>'
+          +'<div style="font-size:11px;color:var(--muted);">'+(a.sport||a.role||a.position||'')+'</div></div>'
+          +(isA?'<span style="font-size:10px;color:var(--teal);">già assegnato</span>':'')
+          +'</label>';
+      }).join('');
+    }
+    document.getElementById('modal-send').classList.add('open');
+  };
+
+  window.doSend=async function(){
+    var checked=[...document.querySelectorAll('input[name="send-ath"]:checked')].map(function(c){return c.value;});
+    if(!checked.length){_toastS('⚠ Seleziona almeno un atleta');return;}
+    var planData=(window._plansCache||{})[_eWk]||{};
+    var ps=[];
+    var athMap={};checked.forEach(function(aid){athMap[aid]=true;});
+    ps.push(fetch(DB_URL+'/plans/'+_eWk+'/_athletes.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(athMap)}));
+    checked.forEach(function(aid){
+      for(var i=0;i<7;i++){
+        var ss=Object.values(planData[String(i)]||{}).filter(function(s){return s&&s.type;});
+        if(ss.length){
+          var f=ss[0];
+          ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+i+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:f.type,note:f.note||'',detail:f.detail||'',exercises:f.exercises||{},fromPlanner:true})}));
+        }
+      }
+    });
+    await Promise.all(ps);
+    document.getElementById('modal-send').classList.remove('open');
+    _restRefresh(_eWk);
+    _toastS('✓ Piano inviato a '+checked.length+' atleta'+(checked.length>1?'i':'')+'!');
+  };
+
   window.autoSuggest=function(){_toastS('⚠ Suggerimenti: ricarica pagina con Firebase attivo');};
+
+  // ════════════════════════════════
+  // EXERCISE EDITOR (condiviso)
+  // ════════════════════════════════
+  var _exRows=[], _exCnt=0;
+
+  window.addEx=function(){
+    var id=_exCnt++;
+    _exRows.push({id:id,name:'',sets:'',reps:'',carico:''});
+    _renderExList();
+  };
+  window.removeEx=function(id){
+    _exRows=_exRows.filter(function(r){return r.id!==id;});
+    _renderExList();
+  };
+  window._exUp=function(id,field,val){
+    _exRows.forEach(function(r){if(r.id===id)r[field]=val;});
+  };
+  function _esc(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+  function _renderExList(){
+    var el=document.getElementById('m-ex-list');
+    if(!el) return;
+    if(!_exRows.length){
+      el.innerHTML='<div class="ex-empty">Nessun esercizio — clicca "+ Aggiungi esercizio"</div>';
+      return;
+    }
+    el.innerHTML=_exRows.map(function(r){
+      return '<div class="ex-row" id="exr-'+r.id+'">'
+        +'<input class="ex-inp" placeholder="Esercizio (es. Squat, Hip Thrust...)" value="'+_esc(r.name)+'" oninput="_exUp('+r.id+',\'name\',this.value)">'
+        +'<input class="ex-inp" placeholder="3" value="'+_esc(r.sets)+'" oninput="_exUp('+r.id+',\'sets\',this.value)" title="Serie" style="text-align:center;">'
+        +'<input class="ex-inp" placeholder="8" value="'+_esc(r.reps)+'" oninput="_exUp('+r.id+',\'reps\',this.value)" title="Ripetizioni" style="text-align:center;">'
+        +'<input class="ex-inp" placeholder="80% / RPE 7 / 60kg" value="'+_esc(r.carico)+'" oninput="_exUp('+r.id+',\'carico\',this.value)" title="Carico / Note">'
+        +'<button class="ex-del" onclick="removeEx('+r.id+')" type="button" title="Rimuovi">✕</button>'
+        +'</div>';
+    }).join('');
+  }
+  window._loadExData=function(exercises){
+    _exRows=[]; _exCnt=0;
+    if(exercises){
+      var entries=Array.isArray(exercises)?exercises:Object.values(exercises);
+      entries.forEach(function(ex){
+        if(ex&&(ex.name||ex.sets||ex.reps)) _exRows.push({id:_exCnt++,name:ex.name||'',sets:ex.sets||'',reps:ex.reps||'',carico:ex.carico||ex.load||''});
+      });
+    }
+    _renderExList();
+  };
+  window._getExData=function(){
+    var out={};
+    _exRows.forEach(function(r,i){
+      if(r.name||r.sets||r.reps) out[String(i)]={name:r.name||'',sets:r.sets||'',reps:r.reps||'',carico:r.carico||''};
+    });
+    return Object.keys(out).length?out:null;
+  };
+  // init vuoto
+  _renderExList();
 
   function _toastS(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
 
@@ -948,12 +1095,16 @@ function renderGrid(){
       .map(([k,v])=>({...v,_key:k}))
       .sort((a,b)=>(a.ts||0)-(b.ts||0));
 
-    const sessHtml=daySessions.map(s=>`
-      <div class="sess-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" onclick="openEdit(${i},'${s._key}')">
+    const sessHtml=daySessions.map(s=>{
+      const exCount=s.exercises?Object.keys(s.exercises).length:0;
+      const exBadge=exCount?`<div style="font-size:9px;color:var(--muted);margin-top:2px;">💪 ${exCount} esercizi</div>`:'';
+      return `<div class="sess-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" onclick="openEdit(${i},'${s._key}')">
         <button class="sc-del" onclick="event.stopPropagation();delSess(${i},'${s._key}')">✕</button>
         <div class="sc-type">${TYPE_LABELS[s.type]||s.type}</div>
         <div class="sc-name">${s.note||'—'}</div>
-      </div>`).join('');
+        ${exBadge}
+      </div>`;
+    }).join('');
 
     return `<div class="day-col${isToday?' day-today':''}">
       <div class="day-head">
@@ -982,10 +1133,10 @@ window.saveConfig=function(){
 window.openAdd=function(dayIdx){
   editingDay=dayIdx; editingKey=null; currentType=null; window._selSessType=null;
   document.getElementById('m-note').value='';
-  document.getElementById('m-detail').value='';
   document.getElementById('m-del-btn').style.display='none';
   document.getElementById('modal-title').textContent=`${DAYS[dayIdx]} — Aggiungi sessione`;
   document.querySelectorAll('.type-pill').forEach(p=>p.className='type-pill');
+  if(window._loadExData) window._loadExData(null);
   document.getElementById('modal').classList.add('open');
 };
 
@@ -995,13 +1146,13 @@ window.openEdit=function(dayIdx,key){
   if(!s) return;
   currentType=s.type; window._selSessType=s.type;
   document.getElementById('m-note').value=s.note||'';
-  document.getElementById('m-detail').value=s.detail||'';
   document.getElementById('m-del-btn').style.display='inline-flex';
   document.getElementById('modal-title').textContent=`${DAYS[dayIdx]} — Modifica`;
   document.querySelectorAll('.type-pill').forEach(p=>{
     p.className='type-pill';
     if(p.getAttribute('onclick')?.includes("'"+s.type+"'")) p.className='type-pill tp-sel-'+s.type;
   });
+  if(window._loadExData) window._loadExData(s.exercises||null);
   document.getElementById('modal').classList.add('open');
 };
 
@@ -1017,12 +1168,14 @@ window.saveSession=async function(){
   const _type=currentType||window._selSessType;
   if(editingDay===null) return;
   const note=document.getElementById('m-note').value.trim();
-  const detail=document.getElementById('m-detail').value.trim();
+  const exData=window._getExData?window._getExData():null;
+  const sessData={type:_type,note:note||null,ts:Date.now()};
+  if(exData) sessData.exercises=exData;
   const path=`plans/${currentWk}/${editingDay}`;
   if(editingKey){
-    await update(ref(db,`${path}/${editingKey}`),{type:_type,note:note||null,detail:detail||null});
+    await set(ref(db,`${path}/${editingKey}`),sessData);
   } else {
-    await push(ref(db,path),{type:_type,note:note||null,detail:detail||null,ts:Date.now()});
+    await push(ref(db,path),sessData);
   }
   closeModal(); showToast('✓ Sessione salvata!');
 };
