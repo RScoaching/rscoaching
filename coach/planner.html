@@ -310,6 +310,59 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
 <div id="toast"></div>
 
+<script>
+/* ── STANDALONE CALENDAR (no Firebase, always runs) ── */
+(function(){
+  function lk(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function weeks(y,m){
+    var r=[],last=new Date(y,m+1,0),first=new Date(y,m,1);
+    var dow=first.getDay()===0?7:first.getDay();
+    var d=new Date(y,m,2-dow);
+    while(d<=last){var e=new Date(d);e.setDate(d.getDate()+6);r.push({s:new Date(d),e:e,k:lk(d)});d.setDate(d.getDate()+7);if(r.length>10)break;}
+    return r;
+  }
+  function wn(d){var u=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));var dn=u.getUTCDay()||7;u.setUTCDate(u.getUTCDate()+4-dn);var ys=new Date(Date.UTC(u.getUTCFullYear(),0,1));return Math.ceil((((u-ys)/86400000)+1)/7);}
+  function fmt(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});}
+  var now=new Date();
+  window._calDate=now;
+  window._calRender=function(date){
+    var y=date.getFullYear(),m=date.getMonth();
+    document.getElementById('cal-month-lbl').textContent=date.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,function(c){return c.toUpperCase();});
+    var ww=weeks(y,m),today=new Date();today.setHours(0,0,0,0);
+    var cur=window._selWk||null;
+    document.getElementById('weeks-list').innerHTML=ww.map(function(w){
+      var isCur=w.s<=today&&w.e>=today;
+      var isSel=w.k===cur;
+      var mini='<div class="mini-day"></div>'.repeat(7);
+      /* Firebase data overlay injected by module later */
+      var pill='<span class="wpill wp-empty">Vuota</span>';
+      if(window._plansCache&&window._plansCache[w.k]){
+        var wd=window._plansCache[w.k];
+        var cnt=Object.entries(wd).filter(function(e){return!e[0].startsWith('_');}).reduce(function(t,e){return t+Object.keys(e[1]||{}).length;},0);
+        if(wd._published) pill='<span class="wpill wp-done">✓ Pubblicata</span>';
+        else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sessioni</span>';
+        /* mini days */
+        mini=Array.from({length:7},function(_,i){
+          var fd=Object.values(wd[String(i)]||{});
+          var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
+          return '<div class="mini-day '+cls+'"></div>';
+        }).join('');
+      }
+      return '<div class="week-row'+(isSel?' selected':'')+'" onclick="window._swk(\''+w.k+'\')">'+
+        '<div class="week-row-head">'+
+        '<div class="week-num">W'+wn(w.s)+'</div>'+
+        '<div class="week-dates"><div class="week-date-main">'+fmt(w.s)+' — '+fmt(w.e)+(isCur?' <span style="color:var(--teal);font-size:9px;">●</span>':'')+'</div></div>'+
+        '<div class="week-pills">'+pill+'</div>'+
+        '</div>'+
+        '<div class="week-mini-days">'+mini+'</div>'+
+        '</div>';
+    }).join('')||'<div style="color:var(--muted);padding:12px;font-size:12px;">Nessuna settimana</div>';
+  };
+  window._swk=function(k){window._selWk=k;window._calRender(window._calDate);if(window._onWkSelect)window._onWkSelect(k);};
+  window._calRender(now);
+})();
+</script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -333,17 +386,18 @@ const TYPE_LABELS={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprin
 const WK_TYPE_COLORS={accumulo:'rgba(59,130,246,.1)',intensificazione:'rgba(248,113,113,.08)',scarico:'rgba(52,211,153,.08)',picco:'rgba(167,139,250,.1)',gara:'rgba(251,113,74,.1)'};
 
 // ── FIREBASE LISTENERS
-onValue(ref(db,'plans'),s=>{plans=s.val()||{};renderCalendar();if(currentWk)renderEditor();});
+onValue(ref(db,'plans'),s=>{
+  plans=s.val()||{};
+  window._plansCache=plans;           // share with standalone renderer
+  window._calRender(window._calDate); // refresh calendar with Firebase data
+  if(currentWk)renderEditor();
+});
 onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();});
 
-// Go to today's month on load
+// Wire week-selection from standalone script into module
+window._onWkSelect=function(wk){currentWk=wk;renderEditor();};
+window._swk=function(k){window._selWk=k;window._calRender(window._calDate);if(currentWk!==k){currentWk=k;renderEditor();}};
 currentMonthDate=new Date();
-// Messaggio temporaneo mentre il calendario carica
-document.getElementById('weeks-list').innerHTML='<div style="color:#06D6A0;padding:12px;font-size:13px;font-weight:600;">⏳ JS OK — caricamento...</div>';
-setTimeout(function(){
-  try{renderCalendar();}
-  catch(e){document.getElementById('weeks-list').innerHTML='<div style="color:var(--red);padding:12px;font-size:12px;">⚠ Errore JS: '+e.message+'</div>';}
-},50);
 
 // ── CALENDAR
 function localKey(d){
@@ -427,13 +481,15 @@ function renderCalendar(){
 window.shiftMonth=function(dir){
   if(dir===0){currentMonthDate=new Date();}
   else{currentMonthDate=new Date(currentMonthDate.getFullYear(),currentMonthDate.getMonth()+dir,1);}
-  renderCalendar();
+  window._calDate=currentMonthDate;
+  window._calRender(currentMonthDate);
 };
 
 // ── SELECT WEEK → OPEN EDITOR
 window.selectWeek=function(wk){
   currentWk=wk;
-  renderCalendar();
+  window._selWk=wk;
+  window._calRender(window._calDate);
   renderEditor();
 };
 
