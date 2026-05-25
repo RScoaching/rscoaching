@@ -247,7 +247,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       <div class="ed-empty-sub">Seleziona una settimana dal pannello a sinistra per iniziare a pianificare</div>
     </div>
 
-    <div id="ed-content" style="display:none;flex:1;display:none;flex-direction:column;overflow:hidden;">
+    <div id="ed-content" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
       <div class="ed-head">
         <div class="ed-title" id="ed-title">—</div>
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
@@ -565,6 +565,18 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window.wizBack=function(){document.getElementById('wiz-s1').style.display='';document.getElementById('wiz-s2').style.display='none';};
   window.closeWiz=function(){document.getElementById('wiz-overlay').classList.remove('open');};
 
+  // Fallback REST API (usato se il modulo Firebase non carica)
+  var DB_URL='https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+  window._restApply=async function(writes){
+    var ps=Object.entries(writes).map(function(kv){
+      return fetch(DB_URL+'/'+kv[0]+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(kv[1])});
+    });
+    await Promise.all(ps);
+    // ricarica i dati dopo il salvataggio
+    var r=await fetch(DB_URL+'/plans.json');
+    if(r.ok){window._plansCache=await r.json();window._calRender();}
+  };
+
   window.wizApply=function(){
     if(!wizWk||!wizTpl) return;
     var active=wizDays.filter(function(d){return d.on;});
@@ -578,13 +590,179 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     });
     var wkMap={gara_dom:'gara',gara_sab:'gara',no_gara:'accumulo'};
     writes['plans/'+wizWk+'/_config']={weekType:wkMap[wizTpl]||'',template:wizTpl};
+    closeWiz();
     if(window._firebaseApply){
+      // modulo Firebase disponibile → salva + apri editor
       window._firebaseApply(writes,wizWk);
     } else {
-      alert('Firebase non ancora pronto — ricarica la pagina (Cmd+Shift+R)');
+      // fallback REST API → salva, poi apri editor se possibile
+      window._restApply(writes).then(function(){
+        var toast=document.getElementById('toast');
+        if(toast){toast.textContent='✓ Piano salvato!';toast.classList.add('show');setTimeout(function(){toast.classList.remove('show');},3000);}
+        if(window._openEditor) window._openEditor(wizWk);
+        else {
+          // Firebase module not loaded - reload to get editor
+          setTimeout(function(){window.location.reload();},1500);
+        }
+      }).catch(function(e){alert('Errore salvataggio: '+e.message);});
     }
-    closeWiz();
   };
+
+  // ════════════════════════════════════════════════════════
+  // STANDALONE EDITOR — fallback completo (senza Firebase SDK)
+  // Il modulo sovrascriverà tutte queste funzioni se carica
+  // ════════════════════════════════════════════════════════
+  var DN_F=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  var DN_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  var TC={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo'};
+  var TL={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprint',plyo:'🦘 Pliometria',rec:'🔄 Recupero',priming:'🎯 Priming',riposo:'😴 Riposo'};
+
+  var _eWk=null,_eDay=null,_eKey=null;
+  window._selSessType=null;
+
+  function _restRefresh(wk){
+    return fetch(DB_URL+'/plans/'+wk+'.json')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(wd){
+        if(!window._plansCache) window._plansCache={};
+        window._plansCache[wk]=wd||{};
+        if(_eWk===wk) _restGrid(wk);
+        window._calRender();
+      });
+  }
+
+  function _restEditorOpen(wk){
+    _eWk=wk;
+    document.getElementById('ed-empty').style.display='none';
+    var ec=document.getElementById('ed-content');
+    ec.style.display='flex'; ec.style.flexDirection='column';
+    var mon=new Date(wk+'T00:00:00'),sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+    document.getElementById('ed-title').textContent=fm(mon)+' — '+fm(sun).split(' ').slice(0,2).join(' ');
+    var conf=((window._plansCache||{})[wk]||{})._config||{};
+    var gd=document.getElementById('sel-gameday');
+    var wt=document.getElementById('sel-wktype');
+    if(gd) gd.value=(conf.gameDay!=null)?conf.gameDay:6;
+    if(wt) wt.value=conf.weekType||'';
+    var st=document.getElementById('ed-status');
+    if(st){st.textContent='Bozza';st.style.color='var(--amber)';}
+    _restGrid(wk);
+  }
+
+  function _restGrid(wk){
+    var pd=(window._plansCache||{})[wk]||{};
+    var gd=parseInt((document.getElementById('sel-gameday')||{}).value||'6');
+    var mon=new Date(wk+'T00:00:00'),today=new Date();today.setHours(0,0,0,0);
+    var grid=document.getElementById('week-grid');
+    if(!grid) return;
+    grid.innerHTML=DN_F.map(function(dn,i){
+      var d=new Date(mon);d.setDate(d.getDate()+i);
+      var isT=d.getTime()===today.getTime();
+      var diff=i-gd,tag='';
+      if(gd>=0){
+        if(diff===0) tag='<span class="day-tag dt-gara">Gara</span>';
+        else if(diff===-1) tag='<span class="day-tag dt-m1">G-1</span>';
+        else if(diff===-2) tag='<span class="day-tag dt-m2">G-2</span>';
+        else if(diff===-3) tag='<span class="day-tag dt-m3">G-3</span>';
+        else if(diff===1) tag='<span class="day-tag dt-g1">G+1</span>';
+        else if(diff===2) tag='<span class="day-tag dt-g2">G+2</span>';
+      }
+      var sess=Object.entries(pd[String(i)]||{}).map(function(kv){return Object.assign({},kv[1],{_k:kv[0]});}).sort(function(a,b){return(a.ts||0)-(b.ts||0);});
+      var sh=sess.map(function(s){
+        return '<div class="sess-chip '+(TC[s.type]||'sc-squadra')+'" onclick="openEdit('+i+',\''+s._k+'\')">'
+          +'<button class="sc-del" onclick="event.stopPropagation();_delSessR('+i+',\''+s._k+'\')">✕</button>'
+          +'<div class="sc-type">'+(TL[s.type]||s.type)+'</div>'
+          +'<div class="sc-name">'+(s.note||'—')+'</div>'
+          +'</div>';
+      }).join('');
+      return '<div class="day-col'+(isT?' day-today':'')+'"><div class="day-head">'
+        +'<div class="day-name">'+DN_S[i]+'</div>'
+        +'<div class="day-date">'+d.getDate()+'</div>'
+        +'<div class="day-month">'+d.toLocaleDateString('it-IT',{month:'short'})+'</div>'
+        +tag+'</div>'
+        +'<div class="day-body">'+sh+'<button class="add-sess-btn" onclick="openAdd('+i+')">+ Aggiungi</button></div>'
+        +'</div>';
+    }).join('');
+  }
+
+  window._delSessR=async function(di,key){
+    if(!confirm('Eliminare questa sessione?')) return;
+    await fetch(DB_URL+'/plans/'+_eWk+'/'+di+'/'+key+'.json',{method:'DELETE'});
+    _restRefresh(_eWk);
+    _toastS('✓ Sessione eliminata');
+  };
+
+  // Funzioni del modale (il modulo le sovrascriverà se carica)
+  window.openAdd=function(di){
+    _eDay=di; _eKey=null; window._selSessType=null;
+    document.getElementById('m-note').value='';
+    document.getElementById('m-detail').value='';
+    document.getElementById('m-del-btn').style.display='none';
+    document.getElementById('modal-title').textContent=DN_F[di]+' — Aggiungi sessione';
+    document.querySelectorAll('.type-pill').forEach(function(p){p.className='type-pill';});
+    document.getElementById('modal').classList.add('open');
+  };
+
+  window.openEdit=function(di,key){
+    var pd=(window._plansCache||{})[ _eWk]||{};
+    var s=(pd[String(di)]||{})[key];
+    if(!s) return;
+    _eDay=di; _eKey=key; window._selSessType=s.type;
+    document.getElementById('m-note').value=s.note||'';
+    document.getElementById('m-detail').value=s.detail||'';
+    document.getElementById('m-del-btn').style.display='inline-flex';
+    document.getElementById('modal-title').textContent=DN_F[di]+' — Modifica';
+    document.querySelectorAll('.type-pill').forEach(function(p){
+      p.className='type-pill';
+      if(p.getAttribute('onclick')&&p.getAttribute('onclick').indexOf("'"+s.type+"'")>=0) p.className='type-pill tp-sel-'+s.type;
+    });
+    document.getElementById('modal').classList.add('open');
+  };
+
+  window.selType=function(type,el){
+    window._selSessType=type;
+    document.querySelectorAll('.type-pill').forEach(function(p){p.className='type-pill';});
+    el.className='type-pill tp-sel-'+type;
+  };
+
+  window.saveSession=async function(){
+    if(!window._selSessType){_toastS('⚠ Seleziona un tipo di seduta');return;}
+    if(_eDay===null) return;
+    var note=document.getElementById('m-note').value.trim();
+    var detail=document.getElementById('m-detail').value.trim();
+    var key=_eKey||('sess_'+Date.now()+'_'+_eDay);
+    var data={type:window._selSessType,note:note||null,detail:detail||null,ts:Date.now()};
+    await fetch(DB_URL+'/plans/'+_eWk+'/'+_eDay+'/'+key+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    await _restRefresh(_eWk);
+    window.closeModal();
+    _toastS('✓ Sessione salvata!');
+  };
+
+  window.delCurrentSess=function(){if(_eKey) window._delSessR(_eDay,_eKey);window.closeModal();};
+  window.closeModal=function(){document.getElementById('modal').classList.remove('open');};
+
+  window.saveConfig=async function(){
+    if(!_eWk) return;
+    var gd=parseInt(document.getElementById('sel-gameday').value);
+    var wt=document.getElementById('sel-wktype').value;
+    await fetch(DB_URL+'/plans/'+_eWk+'/_config.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({gameDay:gd,weekType:wt})});
+    _restGrid(_eWk);
+  };
+
+  window.renderGrid=function(){if(_eWk) _restGrid(_eWk);};
+  window.publishPlan=function(){_toastS('⚠ Pubblica: ricarica pagina con Firebase attivo (Cmd+Shift+R)');};
+  window.openSendModal=function(){_toastS('⚠ Assegnazione atleti: ricarica pagina con Firebase attivo');};
+  window.autoSuggest=function(){_toastS('⚠ Suggerimenti: ricarica pagina con Firebase attivo');};
+
+  function _toastS(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
+
+  // _openEditor standalone (il modulo Firebase sovrascriverà se carica)
+  window._openEditor=function(wk){
+    window._selWk=wk;
+    window._calRender();
+    _restEditorOpen(wk);
+  };
+
 })();
 </script>
 
@@ -703,19 +881,20 @@ function renderCalendar(){
   }).join('');
 }
 
+// Navigazione per ANNO (sovrascrive la versione standalone — uguale logica)
 window.shiftMonth=function(dir){
-  if(dir===0){currentMonthDate=new Date();}
-  else{currentMonthDate=new Date(currentMonthDate.getFullYear(),currentMonthDate.getMonth()+dir,1);}
-  window._calDate=currentMonthDate;
-  window._calRender(currentMonthDate);
+  if(dir===0) window._calYear=new Date().getFullYear();
+  else window._calYear+=dir;
+  window._calRender();
 };
 
-// ── SELECT WEEK → OPEN EDITOR
+// ── SELECT WEEK → wizard (se vuota) o editor (se ha sessioni)
 window.selectWeek=function(wk){
   currentWk=wk;
   window._selWk=wk;
-  window._calRender(window._calDate);
-  renderEditor();
+  window._calRender();
+  if(window.openWeekOrWiz) window.openWeekOrWiz(wk);
+  else renderEditor();
 };
 
 function renderEditor(){
@@ -801,7 +980,7 @@ window.saveConfig=function(){
 
 // ── SESSION MODAL
 window.openAdd=function(dayIdx){
-  editingDay=dayIdx; editingKey=null; currentType=null;
+  editingDay=dayIdx; editingKey=null; currentType=null; window._selSessType=null;
   document.getElementById('m-note').value='';
   document.getElementById('m-detail').value='';
   document.getElementById('m-del-btn').style.display='none';
@@ -814,7 +993,7 @@ window.openEdit=function(dayIdx,key){
   editingDay=dayIdx; editingKey=key;
   const s=plans[currentWk]?.[String(dayIdx)]?.[key];
   if(!s) return;
-  currentType=s.type;
+  currentType=s.type; window._selSessType=s.type;
   document.getElementById('m-note').value=s.note||'';
   document.getElementById('m-detail').value=s.detail||'';
   document.getElementById('m-del-btn').style.display='inline-flex';
@@ -828,20 +1007,22 @@ window.openEdit=function(dayIdx,key){
 
 window.selType=function(type,el){
   currentType=type;
+  window._selSessType=type;   // sync con il fallback standalone
   document.querySelectorAll('.type-pill').forEach(p=>p.className='type-pill');
   el.className='type-pill tp-sel-'+type;
 };
 
 window.saveSession=async function(){
-  if(!currentType){showToast('⚠ Seleziona un tipo di seduta');return;}
+  if(!currentType&&!window._selSessType){showToast('⚠ Seleziona un tipo di seduta');return;}
+  const _type=currentType||window._selSessType;
   if(editingDay===null) return;
   const note=document.getElementById('m-note').value.trim();
   const detail=document.getElementById('m-detail').value.trim();
   const path=`plans/${currentWk}/${editingDay}`;
   if(editingKey){
-    await update(ref(db,`${path}/${editingKey}`),{type:currentType,note:note||null,detail:detail||null});
+    await update(ref(db,`${path}/${editingKey}`),{type:_type,note:note||null,detail:detail||null});
   } else {
-    await push(ref(db,path),{type:currentType,note:note||null,detail:detail||null,ts:Date.now()});
+    await push(ref(db,path),{type:_type,note:note||null,detail:detail||null,ts:Date.now()});
   }
   closeModal(); showToast('✓ Sessione salvata!');
 };
@@ -984,7 +1165,8 @@ window._firebaseApply=async function(writes,wk){
 window._swk=function(k){window._selWk=k;window._calRender();window.openWeekOrWiz(k);};
 window._onWkSelect=function(wk){window.openWeekOrWiz(wk);};
 
-/* wizard gestito dallo standalone script */
+// Esponi renderGrid globalmente (usato da onchange nella UI)
+window.renderGrid=renderGrid;
 </script>
 </body>
 </html>
