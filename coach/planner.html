@@ -749,6 +749,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     window._selSessType=type;
     document.querySelectorAll('.type-pill').forEach(function(p){p.className='type-pill';});
     el.className='type-pill tp-sel-'+type;
+    // Aggiorna suggerimenti esercizi per il nuovo tipo
+    if(window._renderExList) window._renderExList();
+    else if(typeof _renderExList==='function') _renderExList();
   };
 
   window.saveSession=async function(){
@@ -847,6 +850,72 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window.autoSuggest=function(){_toastS('⚠ Suggerimenti: ricarica pagina con Firebase attivo');};
 
   // ════════════════════════════════
+  // EXERCISE DATABASE (dal DB Firebase)
+  // ════════════════════════════════
+  var _exDb={};       // {categoria:[nomi,...]}
+  var _exDbLoaded=false;
+  var _exDbPromise=null;
+
+  // Mappa tipo-sessione → categorie nel DB
+  var EX_CAT_MAP={
+    forza:   ['forza','strength','pesi','power','potenza','squat','hip','deadlift'],
+    plyo:    ['plyo','pliometria','plyometric','salti','balzi','drop'],
+    sprint:  ['sprint','speed','velocità','atletica','accelerazione'],
+    priming: ['priming','activation','attivazione','warm-up','riscaldamento','mobilità'],
+    rec:     ['recovery','recupero','stretching','flessibilità','foam'],
+    conditioning:['conditioning','metabolic','metabolico','cardio','circuito','amrap','emom'],
+    squadra: ['squadra','campo','team','tecnica','possesso','tattica']
+  };
+
+  function _loadExDb(){
+    if(_exDbLoaded) return Promise.resolve();
+    if(_exDbPromise) return _exDbPromise;
+    _exDbPromise=fetch(DB_URL+'/exercises.json')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(data){
+        _exDbLoaded=true;
+        if(!data) return;
+        // Supporta sia {key:{name,category}} sia {categoria:[...]}
+        Object.entries(data).forEach(function(kv){
+          var k=kv[0], v=kv[1];
+          if(typeof v==='string'){
+            // formato diretto: categoria → nome
+            if(!_exDb[k]) _exDb[k]=[];
+            _exDb[k].push(v);
+          } else if(Array.isArray(v)){
+            // formato {categoria:[nomi]}
+            _exDb[k]=(v||[]).filter(Boolean);
+          } else if(v&&typeof v==='object'){
+            // formato {key:{name,category,...}}
+            var name=(v.name||v.nome||'').trim();
+            var cat=((v.category||v.categoria||v.type||v.tipo||'altro')+'').toLowerCase().trim();
+            if(name){
+              if(!_exDb[cat]) _exDb[cat]=[];
+              if(_exDb[cat].indexOf(name)<0) _exDb[cat].push(name);
+            }
+          }
+        });
+      })
+      .catch(function(){_exDbLoaded=true;});
+    return _exDbPromise;
+  }
+
+  // Ottieni lista filtrata per tipo sessione corrente
+  function _getExSuggestions(){
+    var st=(window._selSessType||'').toLowerCase();
+    var cats=EX_CAT_MAP[st]||[];
+    var all=[];
+    Object.entries(_exDb).forEach(function(kv){
+      var cat=kv[0].toLowerCase(), names=kv[1];
+      var match=!st||cats.some(function(c){return cat.includes(c)||c.includes(cat);});
+      if(match) all=all.concat(names||[]);
+    });
+    // Remove duplicates & sort
+    var seen={};
+    return all.filter(function(n){if(seen[n])return false;seen[n]=true;return true;}).sort();
+  }
+
+  // ════════════════════════════════
   // EXERCISE EDITOR (condiviso)
   // ════════════════════════════════
   var _exRows=[], _exCnt=0;
@@ -854,7 +923,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window.addEx=function(){
     var id=_exCnt++;
     _exRows.push({id:id,name:'',sets:'',reps:'',carico:''});
-    _renderExList();
+    // Carica DB se non ancora fatto, poi render
+    _loadExDb().then(function(){ _renderExList(); });
   };
   window.removeEx=function(id){
     _exRows=_exRows.filter(function(r){return r.id!==id;});
@@ -864,16 +934,34 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     _exRows.forEach(function(r){if(r.id===id)r[field]=val;});
   };
   function _esc(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
   function _renderExList(){
     var el=document.getElementById('m-ex-list');
     if(!el) return;
+
+    // Costruisci datalist con suggerimenti per tipo sessione
+    var sugg=_getExSuggestions();
+    var dlId='ex-dl-'+(window._selSessType||'all');
+    var dlHtml=sugg.length
+      ? '<datalist id="'+dlId+'">'+sugg.map(function(n){return '<option value="'+_esc(n)+'">'; }).join('')+'</datalist>'
+      : '';
+
+    // Label categorie attive
+    var catLabel='';
+    if(sugg.length){
+      var ST=window._selSessType;
+      var catNames={forza:'💪 Forza',plyo:'🦘 Pliometria',sprint:'⚡ Sprint',priming:'🎯 Priming',rec:'🔄 Recupero',conditioning:'🔥 Conditioning',squadra:'⚽ Squadra'};
+      catLabel='<div style="font-size:10px;color:var(--teal);font-weight:600;margin-bottom:6px;letter-spacing:.5px;">'+
+        '📚 '+(sugg.length)+' esercizi — '+(catNames[ST]||'Tutti i tipi')+'</div>';
+    }
+
     if(!_exRows.length){
-      el.innerHTML='<div class="ex-empty">Nessun esercizio — clicca "+ Aggiungi esercizio"</div>';
+      el.innerHTML=dlHtml+catLabel+'<div class="ex-empty">Nessun esercizio — clicca "+ Aggiungi esercizio"</div>';
       return;
     }
-    el.innerHTML=_exRows.map(function(r){
+    el.innerHTML=dlHtml+catLabel+_exRows.map(function(r){
       return '<div class="ex-row" id="exr-'+r.id+'">'
-        +'<input class="ex-inp" placeholder="Esercizio (es. Squat, Hip Thrust...)" value="'+_esc(r.name)+'" oninput="_exUp('+r.id+',\'name\',this.value)">'
+        +'<input class="ex-inp" list="'+dlId+'" placeholder="Cerca o digita esercizio..." value="'+_esc(r.name)+'" oninput="_exUp('+r.id+',\'name\',this.value)">'
         +'<input class="ex-inp" placeholder="3" value="'+_esc(r.sets)+'" oninput="_exUp('+r.id+',\'sets\',this.value)" title="Serie" style="text-align:center;">'
         +'<input class="ex-inp" placeholder="8" value="'+_esc(r.reps)+'" oninput="_exUp('+r.id+',\'reps\',this.value)" title="Ripetizioni" style="text-align:center;">'
         +'<input class="ex-inp" placeholder="80% / RPE 7 / 60kg" value="'+_esc(r.carico)+'" oninput="_exUp('+r.id+',\'carico\',this.value)" title="Carico / Note">'
@@ -889,7 +977,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
         if(ex&&(ex.name||ex.sets||ex.reps)) _exRows.push({id:_exCnt++,name:ex.name||'',sets:ex.sets||'',reps:ex.reps||'',carico:ex.carico||ex.load||''});
       });
     }
-    _renderExList();
+    _loadExDb().then(function(){ _renderExList(); });
   };
   window._getExData=function(){
     var out={};
@@ -898,7 +986,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     });
     return Object.keys(out).length?out:null;
   };
-  // init vuoto
+  // Esponi globalmente per accesso dal modulo Firebase
+  window._renderExList=_renderExList;
+  // Pre-carica il DB in background; init lista vuota
+  _loadExDb();
   _renderExList();
 
   function _toastS(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
@@ -1161,6 +1252,8 @@ window.selType=function(type,el){
   window._selSessType=type;   // sync con il fallback standalone
   document.querySelectorAll('.type-pill').forEach(p=>p.className='type-pill');
   el.className='type-pill tp-sel-'+type;
+  // Aggiorna datalist suggerimenti esercizi
+  if(typeof _renderExList==='function') _renderExList();
 };
 
 window.saveSession=async function(){
