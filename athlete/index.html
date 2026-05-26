@@ -269,6 +269,12 @@ select option{background:var(--card2);}
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(40px);background:var(--card2);border:1px solid rgba(255,104,48,.3);color:var(--orange);padding:10px 20px;border-radius:50px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.6);transition:transform .4s cubic-bezier(.34,1.56,.64,1);z-index:9999;white-space:nowrap;opacity:0;}
 .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
 .empty{text-align:center;padding:28px;color:var(--muted);font-size:13px;line-height:1.5;}
+
+/* DAY NAVIGATION */
+.wd-day.nav-day{cursor:pointer;}
+.wd-day.future-day{opacity:.28;pointer-events:none;}
+.wd-dot.wd-sel{border-color:var(--orange) !important;box-shadow:0 0 0 2px rgba(255,104,48,.22);}
+.day-ctx-lbl{font-size:11px;font-weight:700;color:var(--orange);padding:6px 18px 0;text-transform:uppercase;letter-spacing:.8px;}
 </style>
 </head>
 <body>
@@ -321,7 +327,8 @@ select option{background:var(--card2);}
       <div class="stat"><div class="stat-val" id="s-streak">0</div><div class="stat-lbl">Streak 🔥</div></div>
     </div>
 
-    <div class="sec-lbl">Allenamento di oggi</div>
+    <div class="sec-lbl" id="oggi-sec-lbl">Allenamento di oggi</div>
+    <div class="day-ctx-lbl" id="day-ctx-lbl" style="display:none"></div>
     <div id="today-content"><div class="no-plan"><div class="np-icon">⏳</div><div class="np-title">Caricamento...</div></div></div>
 
     <div class="sec-lbl" id="wlog-lbl" style="display:none">Ultimi allenamenti</div>
@@ -355,15 +362,10 @@ select option{background:var(--card2);}
       <div class="card-title">Come stai oggi?</div>
 
       <div class="field">
-        <label>Tipo seduta</label>
+        <label>Giorno / Tipo seduta</label>
         <select id="sel-day">
-          <option>Lunedì – Forza neurale</option>
-          <option>Martedì – Recupero attivo</option>
-          <option>Mercoledì – Sprint & Plyo</option>
-          <option>Giovedì – Squadra</option>
-          <option>Venerdì – Forza pesante</option>
-          <option>Sabato – Squadra / Gara</option>
-          <option>Domenica – Riposo</option>
+          <!-- populated dynamically from weekly plan -->
+          <option value="">— Caricamento piano... —</option>
         </select>
       </div>
 
@@ -618,8 +620,15 @@ if(!aid){
     document.getElementById('prof-name-big').textContent=athlete.name;
     document.getElementById('hero-micro').textContent=`Mc #${athlete.micro||1}`;
 
+    // Store globally for day switching
+    window._ath=athlete;
+    window._athRecs={};window._athBest1rm={};
+    const _now=new Date();
+    window._todayIdx=_now.getDay()===0?6:_now.getDay()-1;
+    window._selectedDayIdx=window._todayIdx;
+
     // Greeting based on time
-    const h=new Date().getHours();
+    const h=_now.getHours();
     document.getElementById('hero-greet').textContent=h<12?'Buongiorno':h<18?'Buon pomeriggio':'Buona sera';
 
     renderWeekDots();
@@ -658,7 +667,9 @@ if(!aid){
         const best1rm={};
         Object.entries(recs).forEach(([,exRecs])=>{Object.values(exRecs).forEach(r=>{if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;});});
         window._best1rm=best1rm;
-        loadTodayPlan(athlete,recs,best1rm);
+        window._athRecs=recs;
+        window._athBest1rm=best1rm;
+        loadTodayPlan(athlete,recs,best1rm,window._todayIdx);
         loadWeekPlan(athlete);
       },{onlyOnce:true});
     });
@@ -723,27 +734,56 @@ function renderWorkoutLogs(logs){
 function renderWeekDots(){
   const now=new Date();
   const todayIdx=now.getDay()===0?6:now.getDay()-1;
-  const monday=getMondayOf(now);
+  window._todayIdx=todayIdx;
+  if(window._selectedDayIdx===undefined)window._selectedDayIdx=todayIdx;
+  const monday=getMondayOf(new Date(now));
   const DAYSSHORT=['Lu','Ma','Me','Gi','Ve','Sa','Do'];
   const row=document.getElementById('week-dots-row');
   row.innerHTML=DAYSSHORT.map((d,i)=>{
     const date=new Date(monday);date.setDate(date.getDate()+i);
     const isToday=i===todayIdx;
-    const isPast=i<todayIdx;
-    return `<div class="wd-day">
+    const isFuture=i>todayIdx;
+    const isSel=i===window._selectedDayIdx;
+    const clickAttr=!isFuture?`onclick="selectDay(${i})"`:''
+    return `<div class="wd-day${!isFuture?' nav-day':''}${isFuture?' future-day':''}" ${clickAttr} id="wday-${i}">
       <div class="wd-label">${d}</div>
-      <div class="wd-dot${isToday?' today':''}" id="wdot-${i}">${isToday?'<span style="font-size:12px;color:var(--orange);">●</span>':''}</div>
+      <div class="wd-dot${isToday?' today':''}${isSel?' wd-sel':''}" id="wdot-${i}">${isToday?'<span style="font-size:12px;color:var(--orange);">●</span>':''}</div>
       <div class="wd-num">${date.getDate()}</div>
     </div>`;
   }).join('');
 }
 
+// ── SELECT DAY
+window.selectDay=function(idx){
+  const todayIdx=window._todayIdx;
+  if(idx>todayIdx)return;
+  window._selectedDayIdx=idx;
+  // Update visual
+  document.querySelectorAll('.wd-dot').forEach((dot,i)=>{dot.classList.remove('wd-sel');});
+  const selDot=document.getElementById('wdot-'+idx);
+  if(selDot)selDot.classList.add('wd-sel');
+  // Update label
+  const DNAMES=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  const monday=getMondayOf(new Date());
+  const selDate=new Date(monday);selDate.setDate(selDate.getDate()+idx);
+  const lbl=document.getElementById('oggi-sec-lbl');
+  const ctx=document.getElementById('day-ctx-lbl');
+  if(lbl)lbl.textContent=idx===todayIdx?'Allenamento di oggi':'Allenamento';
+  if(ctx){
+    if(idx===todayIdx){ctx.style.display='none';}
+    else{ctx.textContent=`${DNAMES[idx]} ${selDate.getDate()}/${selDate.getMonth()+1}`;ctx.style.display='block';}
+  }
+  // Reload plan for selected day
+  if(window._ath)loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},idx);
+};
+
 function getMondayOf(d){const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);return new Date(d.setDate(diff));}
 
 // ── TODAY PLAN
-async function loadTodayPlan(athlete,records,best1rm){
+async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   const now=new Date();
-  const dayIdx=now.getDay()===0?6:now.getDay()-1;
+  const todayIdx=now.getDay()===0?6:now.getDay()-1;
+  const dayIdx=(targetDayIdx!==undefined)?targetDayIdx:todayIdx;
   const monday=getMondayOf(new Date());
   const wk=monday.toISOString().slice(0,10);
   const wrap=document.getElementById('today-content');
@@ -789,7 +829,28 @@ async function loadTodayPlan(athlete,records,best1rm){
     </div>`;
   }
 
-  // 1. Programs
+  // ── Priority 1: athlete_plans (assigned by coach via planner)
+  const qpSnap=await get(ref(db,`athlete_plans/${aid}/${wk}`));
+  if(qpSnap.exists()){
+    const qp=qpSnap.val();
+    // Populate check-in sel-day dropdown from this week's plan
+    populateSelDay(qp,todayIdx);
+    const day=qp.days?.[dayIdx];
+    if(day&&day.type){
+      if(day.type==='riposo'){
+        wrap.innerHTML=renderNoPlan('Riposo 😴',dayIdx===todayIdx?'Recupera bene!':'Giorno di riposo programmato.');
+        if(dayIdx===todayIdx)updateWeekDotToday('rest');
+        return;
+      }
+      const exs=Object.values(day.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+      window._quickSessionDay=day;
+      wrap.innerHTML=sessionCard(day.type,DAYS[dayIdx],day.note,exs,day.detail||'',null,null,null,null);
+      if(dayIdx===todayIdx)updateWeekDotToday();
+      return;
+    }
+  }
+
+  // ── Priority 2: Programs (program builder)
   const progSnap=await get(ref(db,'programs'));
   const progs=progSnap.val()||{};
   const myProgs=Object.entries(progs).filter(([,p])=>p.assignedTo&&p.assignedTo[aid]);
@@ -800,40 +861,35 @@ async function loadTodayPlan(athlete,records,best1rm){
     if(wi<0)continue;
     const [,wkData]=weeks[wi];
     const sessions=Object.entries(wkData.sessions||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
-    const todaySessions=sessions.filter(([,s])=>s.dayOfWeek===dayIdx||s.dayOfWeek===null||s.dayOfWeek===undefined);
-    for(const [sid,s] of todaySessions){
+    const daySessions=sessions.filter(([,s])=>s.dayOfWeek===dayIdx||s.dayOfWeek===null||s.dayOfWeek===undefined);
+    for(const [sid,s] of daySessions){
       const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
       let extra='';
       if(s.type==='conditioning')extra=`${s.condType||''}${s.duration?' · '+s.duration:''}\n${s.condContent||''}`;
-      progCards.push(sessionCard(s.type||'pesi',s.name||label||'Sessione',s.notes,exs,extra,progId,wi,sid,`📋 ${prog.name} · Sett. ${wi+1}${wkData.label?' — '+wkData.label:''}`));
+      progCards.push(sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,progId,wi,sid,`📋 ${prog.name} · Sett. ${wi+1}${wkData.label?' — '+wkData.label:''}`));
     }
   }
-  if(progCards.length){wrap.innerHTML=progCards.join('');updateWeekDotToday();return;}
+  if(progCards.length){wrap.innerHTML=progCards.join('');if(dayIdx===todayIdx)updateWeekDotToday();return;}
 
-  // 2. Quick plan
-  const qpSnap=await get(ref(db,`athlete_plans/${aid}/${wk}`));
-  if(qpSnap.exists()){
-    const qp=qpSnap.val();const day=qp.days?.[dayIdx];
-    if(day&&day.type){
-      if(day.type==='riposo'){wrap.innerHTML=renderNoPlan('Riposo 😴','Recupera bene!');updateWeekDotToday('rest');return;}
-      const exs=Object.values(day.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
-      window._quickSessionDay=day;
-      wrap.innerHTML=sessionCard(day.type,DAYS[dayIdx],day.note,exs,day.detail||'',null,null,null,null);
-      updateWeekDotToday();return;
-    }
-  }
-
-  // 3. Group plan
+  // ── Priority 3: Group plan (planner legacy path)
   if(athlete.group){
     const planSnap=await get(ref(db,`plans/${wk}/${athlete.group}/${dayIdx}`));
     if(planSnap.exists()){
       const raw=planSnap.val()||{};
       const daySess=Object.entries(raw).filter(([k])=>k!=='_published').map(([,v])=>v).sort((a,b)=>a.ts-b.ts);
-      if(daySess.length){wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,s.exercises||[],null,null,null,null,null)).join('');updateWeekDotToday();return;}
+      if(daySess.length){
+        window._quickSessionDay={type:daySess[0].type,note:daySess[0].note,exercises:daySess[0].exercises||{}};
+        wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,s.exercises||[],null,null,null,null,null)).join('');
+        if(dayIdx===todayIdx)updateWeekDotToday();
+        return;
+      }
     }
   }
 
-  wrap.innerHTML=renderNoPlan('Nessun piano per oggi','Il tuo preparatore pubblicherà il piano a breve.');
+  const noPlanMsg=dayIdx===todayIdx
+    ?'Il tuo preparatore pubblicherà il piano a breve.'
+    :'Nessun allenamento programmato per questo giorno.';
+  wrap.innerHTML=renderNoPlan('Nessun piano',noPlanMsg);
 }
 
 function updateWeekDotToday(type){
@@ -841,6 +897,22 @@ function updateWeekDotToday(type){
   const dot=document.getElementById(`wdot-${idx}`);if(!dot)return;
   if(type==='rest'){dot.classList.add('rest');dot.innerHTML='🌿';}
   else{dot.classList.add('done');dot.innerHTML='✓';}
+}
+
+// ── POPULATE CHECK-IN SEL-DAY DROPDOWN
+function populateSelDay(qpData,todayIdx){
+  const sel=document.getElementById('sel-day');if(!sel)return;
+  const DNAMES=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  const SL={forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning'};
+  const monday=getMondayOf(new Date());
+  sel.innerHTML=DNAMES.map((d,i)=>{
+    const date=new Date(monday);date.setDate(date.getDate()+i);
+    const day=qpData?.days?.[i];
+    const type=day?.type;
+    const dateStr=`${date.getDate()}/${date.getMonth()+1}`;
+    const label=type&&type!=='riposo'?`${d} ${dateStr} — ${SL[type]||type}`:`${d} ${dateStr}`;
+    return `<option value="${d}"${i===todayIdx?' selected':''}>${label}</option>`;
+  }).join('');
 }
 
 function renderNoPlan(title,sub){
