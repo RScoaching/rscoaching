@@ -127,6 +127,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .ath-chip.assigned{background:rgba(6,214,160,.08);border-color:rgba(6,214,160,.25);color:var(--teal);}
 .ath-chip-del{background:none;border:none;color:rgba(248,113,113,.5);cursor:pointer;font-size:12px;padding:0;line-height:1;}
 .ath-chip-del:hover{color:var(--red);}
+.ath-ind-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;}
+.ath-ind-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.ath-ind-name{font-size:13px;font-weight:700;color:var(--white);}
+.ath-sess-pill{display:inline-flex;align-items:center;gap:3px;background:var(--card3);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600;color:var(--text);margin:2px;}
+.ath-sess-pill button{background:none;border:none;color:rgba(248,113,113,.6);cursor:pointer;padding:0 0 0 3px;font-size:9px;line-height:1;}
 
 /* TYPE PILLS */
 .type-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
@@ -306,6 +311,14 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
         </div>
         <div class="ath-chips" id="assigned-chips">
           <div style="font-size:12px;color:var(--muted);">Nessun atleta assegnato — clicca "Invia agli atleti" per assegnare.</div>
+        </div>
+        <!-- PER-ATHLETE PLANS -->
+        <button id="ath-plans-toggle-btn" onclick="_toggleAthPlans()"
+          style="display:none;margin-top:10px;width:100%;padding:8px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.3px;">
+          📋 Vedi piani individuali ▾
+        </button>
+        <div id="ed-ath-plans" style="display:none;margin-top:8px;">
+          <div id="ath-plans-content" style="font-size:12px;color:var(--muted);padding:4px 0;">Caricamento...</div>
         </div>
       </div>
     </div>
@@ -669,6 +682,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(wt) wt.value=conf.weekType||'';
     var st=document.getElementById('ed-status');
     if(st){st.textContent='Bozza';st.style.color='var(--amber)';}
+    // Show per-athlete toggle, reset to collapsed
+    var tBtn=document.getElementById('ath-plans-toggle-btn');
+    var tEl=document.getElementById('ed-ath-plans');
+    if(tBtn){tBtn.style.display='block';tBtn.textContent='📋 Vedi piani individuali ▾';}
+    if(tEl){tEl.style.display='none';}
     _restGrid(wk);
   }
 
@@ -849,6 +867,118 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   window.autoSuggest=function(){_toastS('⚠ Suggerimenti: ricarica pagina con Firebase attivo');};
+
+  // ════════════════════════════════
+  // PIANI PER ATLETA
+  // ════════════════════════════════
+  var TL_ICO={squadra:'⚽',forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',riposo:'😴',conditioning:'🔥'};
+  var DS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+
+  window._toggleAthPlans=function(){
+    var el=document.getElementById('ed-ath-plans');
+    var btn=document.getElementById('ath-plans-toggle-btn');
+    if(!el||!btn)return;
+    if(el.style.display==='none'){
+      el.style.display='block';
+      btn.textContent='📋 Nascondi piani individuali ▴';
+      _loadAthPlans();
+    } else {
+      el.style.display='none';
+      btn.textContent='📋 Vedi piani individuali ▾';
+    }
+  };
+
+  window._loadAthPlans=async function(){
+    if(!_eWk)return;
+    var el=document.getElementById('ath-plans-content');
+    if(!el)return;
+    el.innerHTML='<div style="font-size:12px;color:var(--muted);">Caricamento piani atleti...</div>';
+    var wData=(window._plansCache||{})[_eWk]||{};
+    var assigned=wData._athletes||{};
+    var aids=Object.keys(assigned);
+    if(!aids.length){el.innerHTML='<div style="font-size:12px;color:var(--muted);">Nessun atleta assegnato a questa settimana.</div>';return;}
+    var aths=window._restAths||{};
+    if(!Object.keys(aths).length){
+      var ar=await fetch(DB_URL+'/athletes.json');
+      aths=ar.ok?(await ar.json())||{};
+      window._restAths=aths;
+    }
+    var cards=await Promise.all(aids.map(async function(aid){
+      var pr=await fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'.json');
+      var plan=pr.ok?await pr.json():null;
+      var athName=(aths[aid]||{}).name||aid;
+      var days=(plan&&plan.days)||{};
+      var pillsHtml=Object.entries(days).sort(function(a,b){return parseInt(a[0])-parseInt(b[0]);}).map(function(kv){
+        var di=kv[0],rawDay=kv[1];
+        if(!rawDay)return'';
+        var sessions=rawDay.type!==undefined?[rawDay]:Object.values(rawDay).filter(function(s){return s&&s.type;});
+        return sessions.filter(function(s){return s.type&&s.type!=='riposo';}).map(function(s){
+          return '<span class="ath-sess-pill">'+(TL_ICO[s.type]||'📋')+' '+DS_S[parseInt(di)]
+            +(s.note?' <em style="font-weight:400;opacity:.7">'+s.note.substring(0,20)+'</em>':'')
+            +'<button onclick="event.stopPropagation();_delAthDay(\''+aid+'\','+di+')" title="Rimuovi giorno">✕</button></span>';
+        }).join('');
+      }).join('');
+      // Build "copia a" options (other assigned athletes)
+      var otherAids=aids.filter(function(a){return a!==aid;});
+      var copyToHtml=otherAids.length
+        ?'<select onchange="if(this.value)_copyAthPlanTo(\''+aid+'\',this.value,this)" style="font-size:10px;background:var(--card3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 6px;"><option value="">Copia a... ▾</option>'
+          +otherAids.map(function(a){return'<option value="'+a+'">'+(aths[a]||{}).name||a+'</option>';}).join('')+'</select>'
+        :'';
+      return '<div class="ath-ind-card">'
+        +'<div class="ath-ind-head">'
+        +'<div class="ath-ind-name">'+athName+'</div>'
+        +'<div style="display:flex;gap:4px;align-items:center;">'
+        +copyToHtml
+        +'<button class="btn btn-teal btn-sm" onclick="_copyBasePlanTo(\''+aid+'\')" style="font-size:10px;padding:4px 9px;">📥 Copia base</button>'
+        +'</div></div>'
+        +(pillsHtml||'<div style="font-size:11px;color:var(--muted);margin-top:4px;">Nessun piano — usa "Copia base" per assegnare il piano corrente.</div>')
+        +'</div>';
+    }));
+    el.innerHTML=cards.join('')||'<div style="font-size:12px;color:var(--muted);">Nessun dato.</div>';
+  };
+
+  // Copia piano base (gruppo) → atleta specifico
+  window._copyBasePlanTo=async function(aid){
+    var planData=(window._plansCache||{})[_eWk]||{};
+    var ps=[];
+    for(var i=0;i<7;i++){
+      var ss=Object.values(planData[String(i)]||{}).filter(function(s){return s&&s.type;});
+      if(ss.length){
+        var sObj={};ss.forEach(function(s,idx){sObj[idx]={type:s.type,note:s.note||'',detail:s.detail||'',exercises:s.exercises||{},fromPlanner:true};});
+        ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+i+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sObj)}));
+      }
+    }
+    ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/meta.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({week:_eWk,ts:Date.now(),assignedBy:'coach'})}));
+    await Promise.all(ps);
+    var name=((window._restAths||{})[aid]||{}).name||aid;
+    _toastS('✓ Piano base copiato a '+name);
+    _loadAthPlans();
+  };
+
+  // Copia piano atleta A → atleta B
+  window._copyAthPlanTo=async function(fromAid,toAid,selEl){
+    var pr=await fetch(DB_URL+'/athlete_plans/'+fromAid+'/'+_eWk+'.json');
+    var plan=pr.ok?await pr.json():null;
+    if(!plan||!plan.days){_toastS('⚠ Nessun piano trovato per questo atleta');if(selEl)selEl.value='';return;}
+    var ps=[fetch(DB_URL+'/athlete_plans/'+toAid+'/'+_eWk+'/meta.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({week:_eWk,ts:Date.now(),assignedBy:'coach',copiedFrom:fromAid})})];
+    Object.entries(plan.days).forEach(function(kv){
+      ps.push(fetch(DB_URL+'/athlete_plans/'+toAid+'/'+_eWk+'/days/'+kv[0]+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(kv[1])}));
+    });
+    await Promise.all(ps);
+    var fromName=((window._restAths||{})[fromAid]||{}).name||fromAid;
+    var toName=((window._restAths||{})[toAid]||{}).name||toAid;
+    _toastS('✓ Piano di '+fromName+' copiato a '+toName);
+    if(selEl)selEl.value='';
+    _loadAthPlans();
+  };
+
+  // Rimuovi un giorno dal piano atleta
+  window._delAthDay=async function(aid,di){
+    if(!confirm('Rimuovere questo giorno dal piano di questo atleta?'))return;
+    await fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+di+'.json',{method:'DELETE'});
+    _toastS('✓ Giorno rimosso');
+    _loadAthPlans();
+  };
 
   // ════════════════════════════════
   // EXERCISE DATABASE (dal DB Firebase)
