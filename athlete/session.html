@@ -1332,13 +1332,20 @@ window.saveSessionCheckin=async function(){
   const pains=[...document.querySelectorAll('.ci-pb.sel')].map(b=>b.textContent);
   const note=(document.getElementById('ci-note').value||'').trim()||null;
   try{
-    await push(ref(db,`checkins/${AID}`),{
-      ts:now.getTime(),
-      date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),
-      fatica:rpe,doms,sonno,pains:pains.length?pains:null,note,
-      fromSession:session.name||session.type||'Sessione',
-      sessType:session.type||null
-    });
+    const _ts=now.getTime();
+    const _date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const _day=session.name||session.type||'Sessione';
+    await Promise.all([
+      push(ref(db,`checkins/${AID}`),{
+        ts:_ts,date:_date,
+        fatica:rpe,doms,sonno,pains:pains.length?pains:null,note,
+        fromSession:_day,sessType:session.type||null
+      }),
+      push(ref(db,`sessions/${AID}`),{
+        ts:_ts,date:_date,
+        rpe,doms,sleep:sonno,note,day:_day
+      })
+    ]);
     document.getElementById('ci-card').innerHTML='<div class="ci-ok"><span style="font-size:30px;">✅</span><span class="ci-ok-txt">Check-in salvato!</span></div>';
     document.getElementById('done-actions').style.display='flex';
   }catch(e){
