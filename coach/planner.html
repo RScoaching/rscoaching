@@ -836,10 +836,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       for(var i=0;i<7;i++){
         var ss=Object.values(planData[String(i)]||{}).filter(function(s){return s&&s.type;});
         if(ss.length){
-          var f=ss[0];
-          ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+i+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:f.type,note:f.note||'',detail:f.detail||'',exercises:f.exercises||{},fromPlanner:true})}));
+          var sessObj={};ss.forEach(function(s,idx){sessObj[idx]={type:s.type,note:s.note||'',detail:s.detail||'',exercises:s.exercises||{},fromPlanner:true};});
+          ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+i+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sessObj)}));
         }
       }
+      ps.push(fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/meta.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({week:_eWk,ts:Date.now(),assignedBy:'coach'})}));
     });
     await Promise.all(ps);
     document.getElementById('modal-send').classList.remove('open');
@@ -1352,22 +1353,22 @@ window.doSend=async function(){
   checked.forEach(aid=>{athMap[aid]=true;});
   promises.push(set(ref(db,`plans/${currentWk}/_athletes`),athMap));
 
-  // Copy plan days to each athlete
+  // Copy plan days to each athlete (all sessions per day, with actual exercises)
   checked.forEach(aid=>{
     for(let i=0;i<7;i++){
       const daySessions=Object.values(planData[String(i)]||{}).filter(s=>s&&s.type);
       if(daySessions.length){
-        const first=daySessions[0];
-        promises.push(set(ref(db,`athlete_plans/${aid}/${currentWk}/days/${i}`),{
-          type:first.type, note:first.note||'', detail:first.detail||'', exercises:{}, fromPlanner:true
-        }));
+        const sessObj={};
+        daySessions.forEach((s,idx)=>{sessObj[idx]={type:s.type,note:s.note||'',detail:s.detail||'',exercises:s.exercises||{},fromPlanner:true};});
+        promises.push(set(ref(db,`athlete_plans/${aid}/${currentWk}/days/${i}`),sessObj));
       }
     }
+    promises.push(set(ref(db,`athlete_plans/${aid}/${currentWk}/meta`),{week:currentWk,ts:Date.now(),assignedBy:'coach'}));
   });
 
   await Promise.all(promises);
   document.getElementById('modal-send').classList.remove('open');
-  showToast(`✓ Piano inviato a ${checked.length} atleta${checked.length>1?'i'}!`);
+  showToast(`✓ Piano inviato a ${checked.length} atleta${checked.length>1?'i':''}!`);
 };
 
 // ── ASSIGNED CHIPS
