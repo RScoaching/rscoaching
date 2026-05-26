@@ -344,7 +344,7 @@ select option{background:var(--card2);}
     <div class="sec-lbl">Programmi assegnati</div>
     <div id="prog-list-athlete"></div>
     <div id="quick-plans-wrap" style="display:none">
-      <div class="sec-lbl">Piani rapidi</div>
+      <div class="sec-lbl">Piano settimanale</div>
       <div id="quick-plans-list" style="padding:0 18px;"></div>
     </div>
     <div class="sec-lbl">Settimana corrente</div>
@@ -835,18 +835,28 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     const qp=qpSnap.val();
     // Populate check-in sel-day dropdown from this week's plan
     populateSelDay(qp,todayIdx);
-    const day=qp.days?.[dayIdx];
-    if(day&&day.type){
-      if(day.type==='riposo'){
-        wrap.innerHTML=renderNoPlan('Riposo 😴',dayIdx===todayIdx?'Recupera bene!':'Giorno di riposo programmato.');
-        if(dayIdx===todayIdx)updateWeekDotToday('rest');
+    const rawDay=qp.days?.[dayIdx];
+    if(rawDay){
+      // Detect old single-session {type,...} vs new multi-session {0:{type,...},1:{...}}
+      const sessions=rawDay.type!==undefined
+        ?[rawDay]
+        :Object.values(rawDay).filter(s=>s&&s.type).sort((a,b)=>(a.order||0)-(b.order||0));
+      if(sessions.length){
+        const first=sessions[0];
+        if(first.type==='riposo'){
+          wrap.innerHTML=renderNoPlan('Riposo 😴',dayIdx===todayIdx?'Recupera bene!':'Giorno di riposo programmato.');
+          if(dayIdx===todayIdx)updateWeekDotToday('rest');
+          return;
+        }
+        window._quickSessionDay=first;
+        wrap.innerHTML=sessions.map((s,si)=>{
+          const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+          const title=sessions.length>1?`${DAYS[dayIdx]} — Sessione ${si+1}`:DAYS[dayIdx];
+          return sessionCard(s.type,title,s.note,exs,s.detail||'',null,null,null,null);
+        }).join('');
+        if(dayIdx===todayIdx)updateWeekDotToday();
         return;
       }
-      const exs=Object.values(day.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
-      window._quickSessionDay=day;
-      wrap.innerHTML=sessionCard(day.type,DAYS[dayIdx],day.note,exs,day.detail||'',null,null,null,null);
-      if(dayIdx===todayIdx)updateWeekDotToday();
-      return;
     }
   }
 
@@ -907,10 +917,17 @@ function populateSelDay(qpData,todayIdx){
   const monday=getMondayOf(new Date());
   sel.innerHTML=DNAMES.map((d,i)=>{
     const date=new Date(monday);date.setDate(date.getDate()+i);
-    const day=qpData?.days?.[i];
-    const type=day?.type;
+    const rawDay=qpData?.days?.[i];
+    let typeLabel=null;
+    if(rawDay){
+      const sessions=rawDay.type!==undefined?[rawDay]:Object.values(rawDay).filter(s=>s&&s.type);
+      const types=sessions.map(s=>s.type).filter(Boolean);
+      if(types.length&&types[0]!=='riposo'){
+        typeLabel=types.map(t=>SL[t]||t).join(' + ');
+      }
+    }
     const dateStr=`${date.getDate()}/${date.getMonth()+1}`;
-    const label=type&&type!=='riposo'?`${d} ${dateStr} — ${SL[type]||type}`:`${d} ${dateStr}`;
+    const label=typeLabel?`${d} ${dateStr} — ${typeLabel}`:`${d} ${dateStr}`;
     return `<option value="${d}"${i===todayIdx?' selected':''}>${label}</option>`;
   }).join('');
 }
@@ -1000,11 +1017,16 @@ function renderQuickPlans(qpData){
   el.innerHTML=plans.map(([wk,plan])=>{
     const d=new Date(wk+'T00:00:00'),end=new Date(d);end.setDate(end.getDate()+6);
     const fmt=dt=>dt.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
-    const dayItems=Object.entries(plan.days||{}).filter(([,v])=>v&&v.type&&v.type!=='riposo').map(([di,day])=>{
-      const color=SESS_COLORS[day.type]||'var(--muted)';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);"><div style="min-width:30px;font-size:11px;font-weight:700;color:var(--muted);">${DS[parseInt(di)]}</div><div style="flex:1;font-size:12px;font-weight:600;color:${color};">${SESS_LABELS[day.type]||day.type}</div><div style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${day.note||''}</div></div>`;
+    const dayItems=Object.entries(plan.days||{}).map(([di,rawDay])=>{
+      if(!rawDay)return'';
+      const daySess=rawDay.type!==undefined?[rawDay]:Object.values(rawDay).filter(s=>s&&s.type);
+      if(!daySess.length||daySess[0].type==='riposo')return'';
+      const types=daySess.map(s=>s.type);
+      const color=SESS_COLORS[types[0]]||'var(--muted)';
+      const label=types.map(t=>SESS_LABELS[t]||t).join(' + ');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);"><div style="min-width:30px;font-size:11px;font-weight:700;color:var(--muted);">${DS[parseInt(di)]}</div><div style="flex:1;font-size:12px;font-weight:600;color:${color};">${label}</div><div style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${daySess[0].note||''}</div></div>`;
     }).join('');
-    return `<div class="card" style="padding:12px 16px;margin:0 0 10px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div><div style="font-weight:600;font-size:13px;color:var(--white);">Piano settimana</div><div style="font-size:11px;color:var(--muted);">${fmt(d)} — ${fmt(end)}</div></div><span style="font-size:9px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(255,104,48,.1);color:var(--orange);">Rapido</span></div>${dayItems||'<div style="font-size:12px;color:var(--muted);">Nessuna seduta</div>'}</div>`;
+    return `<div class="card" style="padding:12px 16px;margin:0 0 10px;"><div style="margin-bottom:8px;"><div style="font-weight:600;font-size:13px;color:var(--white);">Piano settimana</div><div style="font-size:11px;color:var(--muted);">${fmt(d)} — ${fmt(end)}</div></div>${dayItems||'<div style="font-size:12px;color:var(--muted);">Nessuna seduta</div>'}</div>`;
   }).join('');
 }
 
