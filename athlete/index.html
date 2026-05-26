@@ -1010,24 +1010,44 @@ window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=
 
 function renderQuickPlans(qpData){
   const wrap=document.getElementById('quick-plans-wrap'),el=document.getElementById('quick-plans-list');if(!wrap||!el)return;
-  const plans=Object.entries(qpData||{}).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,4);
-  if(!plans.length){wrap.style.display='none';return;}
+  const allEntries=Object.entries(qpData||{}).sort((a,b)=>b[0].localeCompare(a[0]));
+  if(!allEntries.length){wrap.style.display='none';return;}
   wrap.style.display='block';
   const DS=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  el.innerHTML=plans.map(([wk,plan])=>{
+  const thisMonday=getMondayOf(new Date()).toISOString().slice(0,10);
+  const currentPlans=allEntries.filter(([wk])=>wk>=thisMonday);
+  const pastPlans=allEntries.filter(([wk])=>wk<thisMonday);
+
+  function buildWeekCard([wk,plan],isPast){
     const d=new Date(wk+'T00:00:00'),end=new Date(d);end.setDate(end.getDate()+6);
     const fmt=dt=>dt.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
-    const dayItems=Object.entries(plan.days||{}).map(([di,rawDay])=>{
+    const dayItems=Object.entries(plan.days||{}).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([di,rawDay])=>{
       if(!rawDay)return'';
       const daySess=rawDay.type!==undefined?[rawDay]:Object.values(rawDay).filter(s=>s&&s.type);
       if(!daySess.length||daySess[0].type==='riposo')return'';
       const types=daySess.map(s=>s.type);
       const color=SESS_COLORS[types[0]]||'var(--muted)';
       const label=types.map(t=>SESS_LABELS[t]||t).join(' + ');
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);"><div style="min-width:30px;font-size:11px;font-weight:700;color:var(--muted);">${DS[parseInt(di)]}</div><div style="flex:1;font-size:12px;font-weight:600;color:${color};">${label}</div><div style="font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${daySess[0].note||''}</div></div>`;
+      // Calculate actual date for this day
+      const dayDate=new Date(d);dayDate.setDate(dayDate.getDate()+parseInt(di));
+      const dateStr=dayDate.getDate()+'/'+(dayDate.getMonth()+1);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);"><div style="min-width:52px;font-size:10px;font-weight:700;color:var(--muted);">${DS[parseInt(di)]} <span style="color:var(--border2);font-weight:500;">${dateStr}</span></div><div style="flex:1;font-size:12px;font-weight:600;color:${color};">${label}</div><div style="font-size:10px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${daySess[0].note||''}</div></div>`;
     }).join('');
-    return `<div class="card" style="padding:12px 16px;margin:0 0 10px;"><div style="margin-bottom:8px;"><div style="font-weight:600;font-size:13px;color:var(--white);">Piano settimana</div><div style="font-size:11px;color:var(--muted);">${fmt(d)} — ${fmt(end)}</div></div>${dayItems||'<div style="font-size:12px;color:var(--muted);">Nessuna seduta</div>'}</div>`;
-  }).join('');
+    const opacity=isPast?'opacity:.7;':'';
+    return `<div class="card" style="padding:12px 16px;margin:0 0 10px;${opacity}"><div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;"><div><div style="font-weight:600;font-size:13px;color:var(--white);">Piano settimana${isPast?' <span style="font-size:9px;color:var(--muted);font-weight:500;">(passata)</span>':''}</div><div style="font-size:11px;color:var(--muted);">${fmt(d)} — ${fmt(end)}</div></div></div>${dayItems||'<div style="font-size:12px;color:var(--muted);">Nessuna seduta</div>'}</div>`;
+  }
+
+  let html=currentPlans.map(e=>buildWeekCard(e,false)).join('');
+  if(pastPlans.length){
+    const pid='qp-past-'+Date.now();
+    html+=`<div style="margin-top:4px;">
+      <button onclick="const el=document.getElementById('${pid}');const op=el.style.display==='none';el.style.display=op?'block':'none';this.textContent=op?'▴ Settimane passate (${pastPlans.length})':'▾ Settimane passate (${pastPlans.length})';"
+        style="background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;padding:6px 18px;letter-spacing:.5px;">
+        ▾ Settimane passate (${pastPlans.length})</button>
+      <div id="${pid}" style="display:none;">${pastPlans.slice(0,8).map(e=>buildWeekCard(e,true)).join('')}</div>
+    </div>`;
+  }
+  el.innerHTML=html;
 }
 
 // ── CHARTS
