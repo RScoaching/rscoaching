@@ -251,9 +251,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     <div class="cal-head">
       <div class="cal-year-lbl" id="cal-month-lbl">—</div>
       <div class="cal-nav">
-        <button class="icon-btn" onclick="shiftMonth(-1)" title="Anno precedente">←</button>
-        <button class="icon-btn" onclick="shiftMonth(0)" title="Anno corrente">●</button>
-        <button class="icon-btn" onclick="shiftMonth(1)" title="Anno successivo">→</button>
+        <button class="icon-btn" onclick="shiftMonth(-1)" title="Mese precedente">←</button>
+        <button class="icon-btn" onclick="shiftMonth(0)" title="Oggi">●</button>
+        <button class="icon-btn" onclick="shiftMonth(1)" title="Mese successivo">→</button>
       </div>
     </div>
     <div class="weeks-list" id="weeks-list"></div>
@@ -276,7 +276,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       </div>
 
       <div class="ed-config">
-        <div class="cfg-item">
+        <div class="cfg-item cfg-item-group">
           <div class="cfg-lbl">Giorno Gara</div>
           <select class="cfg-sel" id="sel-gameday" onchange="saveConfig();renderGrid()">
             <option value="6">Domenica</option>
@@ -287,7 +287,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
             <option value="-1">Nessuna gara</option>
           </select>
         </div>
-        <div class="cfg-item">
+        <div class="cfg-item cfg-item-group">
           <div class="cfg-lbl">Tipo settimana</div>
           <select class="cfg-sel" id="sel-wktype" onchange="saveConfig()">
             <option value="">— Nessuno —</option>
@@ -296,6 +296,12 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
             <option value="scarico">Scarico</option>
             <option value="picco">Picco</option>
             <option value="gara">Settimana di gara</option>
+          </select>
+        </div>
+        <div class="cfg-item">
+          <div class="cfg-lbl">Atleta</div>
+          <select class="cfg-sel" id="ath-mode-sel" onchange="switchAthMode(this.value)" style="min-width:120px;">
+            <option value="">👥 Gruppo</option>
           </select>
         </div>
         <div id="ed-status" style="margin-left:auto;font-size:11px;color:var(--muted);"></div>
@@ -441,51 +447,48 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   // ── Stato calendario
   window._calYear=new Date().getFullYear();
+  window._calMonth=new Date().getMonth();
 
-  // ── Render anno intero
+  // ── Render mese corrente
   window._calRender=function(){
-    var y=window._calYear;
+    var y=window._calYear, m=window._calMonth;
+    var mName=new Date(y,m,1).toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,function(c){return c.toUpperCase();});
+    document.getElementById('cal-month-lbl').textContent=mName;
     var cur=window._selWk||null;
     var today=new Date(); today.setHours(0,0,0,0);
-    document.getElementById('cal-month-lbl').textContent=y;
-    var html='';
-    for(var m=0;m<12;m++){
-      var ww=weeksInMonth(y,m);
-      if(!ww.length) continue;
-      var mName=new Date(y,m,1).toLocaleDateString('it-IT',{month:'long'}).replace(/^\w/,function(c){return c.toUpperCase();});
-      html+='<div class="cal-month-hdr">'+mName+'</div>';
-      html+=ww.map(function(w){
-        var isCur=w.s<=today&&w.e>=today;
-        var isSel=w.k===cur;
-        var mini='<div class="mini-day"></div>'.repeat(7);
-        var pill='<span class="wpill wp-empty">Vuota</span>';
-        if(window._plansCache&&window._plansCache[w.k]){
-          var wd=window._plansCache[w.k];
-          var cnt=Object.entries(wd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
-          var conf=wd._config||{};
-          if(wd._published) pill='<span class="wpill wp-done">✓ Pub</span>';
-          else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
-          if(conf.weekType) pill+='<span class="wpill" style="background:rgba(255,255,255,.05);color:var(--text);">'+conf.weekType+'</span>';
-          mini=Array.from({length:7},function(_,i){
-            var fd=Object.values(wd[String(i)]||{});
-            var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
-            return '<div class="mini-day '+cls+'"></div>';
-          }).join('');
-        }
-        return '<div class="week-row'+(isSel?' selected':'')+'" id="wrow-'+w.k+'" onclick="window._swk(\''+w.k+'\')">'+
-          '<div class="week-row-head">'+
-          '<div class="week-num">W'+wn(w.s)+'</div>'+
-          '<div class="week-dates"><div class="week-date-main">'+fmt(w.s)+' — '+fmt(w.e)+(isCur?' <span class="cur-dot">●</span>':'')+'</div></div>'+
-          '<div class="week-pills">'+pill+'</div>'+
-          '</div>'+
-          '<div class="week-mini-days">'+mini+'</div>'+
-          '</div>';
-      }).join('');
-    }
+    var ww=weeksInMonth(y,m);
+    var html=ww.map(function(w){
+      var isCur=w.s<=today&&w.e>=today;
+      var isSel=w.k===cur;
+      var mini='<div class="mini-day"></div>'.repeat(7);
+      var pill='<span class="wpill wp-empty">Vuota</span>';
+      if(window._plansCache&&window._plansCache[w.k]){
+        var wd=window._plansCache[w.k];
+        var cnt=Object.entries(wd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
+        var conf=wd._config||{};
+        if(wd._published) pill='<span class="wpill wp-done">✓ Pub</span>';
+        else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
+        if(conf.weekType) pill+='<span class="wpill" style="background:rgba(255,255,255,.05);color:var(--text);">'+conf.weekType+'</span>';
+        mini=Array.from({length:7},function(_,i){
+          var fd=Object.values(wd[String(i)]||{});
+          var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
+          return '<div class="mini-day '+cls+'"></div>';
+        }).join('');
+      }
+      return '<div class="week-row'+(isSel?' selected':'')+'" id="wrow-'+w.k+'" onclick="window._swk(\''+w.k+'\')">'+
+        '<div class="week-row-head">'+
+        '<div class="week-num">W'+wn(w.s)+'</div>'+
+        '<div class="week-dates"><div class="week-date-main">'+fmt(w.s)+' — '+fmt(w.e)+(isCur?' <span class="cur-dot">●</span>':'')+'</div></div>'+
+        '<div class="week-pills">'+pill+'</div>'+
+        '</div>'+
+        '<div class="week-mini-days">'+mini+'</div>'+
+        '</div>';
+    }).join('');
     document.getElementById('weeks-list').innerHTML=html;
     // scroll alla settimana corrente al primo caricamento
     if(!cur){
-      var el=document.getElementById('wrow-'+lk(new Date(today.getFullYear(),today.getMonth(),today.getDate()-((today.getDay()||7)-1))));
+      var mon=new Date(today);mon.setDate(today.getDate()-((today.getDay()||7)-1));
+      var el=document.getElementById('wrow-'+lk(mon));
       if(el) setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'center'});},200);
     }
   };
@@ -496,10 +499,16 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(window.openWeekOrWiz) window.openWeekOrWiz(k);
   };
 
-  // Navigazione anno
+  // Navigazione mese
   window.shiftMonth=function(dir){
-    if(dir===0) window._calYear=new Date().getFullYear();
-    else window._calYear+=dir;
+    if(dir===0){
+      window._calYear=new Date().getFullYear();
+      window._calMonth=new Date().getMonth();
+    } else {
+      window._calMonth+=dir;
+      if(window._calMonth<0){window._calMonth=11;window._calYear--;}
+      if(window._calMonth>11){window._calMonth=0;window._calYear++;}
+    }
     window._calRender();
   };
 
@@ -603,6 +612,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   // Fallback REST API (usato se il modulo Firebase non carica)
   var DB_URL='https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+  window._DB_URL=DB_URL;
   window._restApply=async function(writes){
     var ps=Object.entries(writes).map(function(kv){
       return fetch(DB_URL+'/'+kv[0]+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(kv[1])});
@@ -655,8 +665,18 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   var _eWk=null,_eDay=null,_eKey=null;
   window._selSessType=null;
+  window._athModeAid=null;
+  window._athPlanCache={};
 
   function _restRefresh(wk){
+    if(window._athModeAid){
+      return fetch(DB_URL+'/athlete_plans/'+window._athModeAid+'/'+wk+'/days.json')
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(days){
+          window._athPlanCache[window._athModeAid+'_'+wk]=days||{};
+          if(_eWk===wk) _restGrid(wk);
+        });
+    }
     return fetch(DB_URL+'/plans/'+wk+'.json')
       .then(function(r){return r.ok?r.json():null;})
       .then(function(wd){
@@ -669,6 +689,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   function _restEditorOpen(wk){
     _eWk=wk;
+    // Reset athlete mode to group on new week open
+    window._athModeAid=null;
+    var mSel=document.getElementById('ath-mode-sel');
+    if(mSel) mSel.value='';
+    document.querySelectorAll('.cfg-item-group').forEach(function(el){el.style.display='flex';});
     document.getElementById('ed-empty').style.display='none';
     var ec=document.getElementById('ed-content');
     ec.style.display='flex'; ec.style.flexDirection='column';
@@ -688,10 +713,14 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(tBtn){tBtn.style.display='block';tBtn.textContent='📋 Vedi piani individuali ▾';}
     if(tEl){tEl.style.display='none';}
     _restGrid(wk);
+    // Populate athlete selector
+    if(window._populateAthSel) window._populateAthSel(wk);
   }
 
   function _restGrid(wk){
-    var pd=(window._plansCache||{})[wk]||{};
+    var pd=window._athModeAid
+      ?(window._athPlanCache||{})[window._athModeAid+'_'+wk]||{}
+      :(window._plansCache||{})[wk]||{};
     var gd=parseInt((document.getElementById('sel-gameday')||{}).value||'6');
     var mon=new Date(wk+'T00:00:00'),today=new Date();today.setHours(0,0,0,0);
     var grid=document.getElementById('week-grid');
@@ -731,7 +760,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   window._delSessR=async function(di,key){
     if(!confirm('Eliminare questa sessione?')) return;
-    await fetch(DB_URL+'/plans/'+_eWk+'/'+di+'/'+key+'.json',{method:'DELETE'});
+    var delPath=window._athModeAid
+      ?DB_URL+'/athlete_plans/'+window._athModeAid+'/'+_eWk+'/days/'+di+'/'+key+'.json'
+      :DB_URL+'/plans/'+_eWk+'/'+di+'/'+key+'.json';
+    await fetch(delPath,{method:'DELETE'});
     _restRefresh(_eWk);
     _toastS('✓ Sessione eliminata');
   };
@@ -748,7 +780,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   window.openEdit=function(di,key){
-    var pd=(window._plansCache||{})[_eWk]||{};
+    var pd=window._athModeAid
+      ?(window._athPlanCache||{})[window._athModeAid+'_'+_eWk]||{}
+      :(window._plansCache||{})[_eWk]||{};
     var s=(pd[String(di)]||{})[key];
     if(!s) return;
     _eDay=di; _eKey=key; window._selSessType=s.type;
@@ -780,7 +814,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     var exData=window._getExData();
     var data={type:window._selSessType,note:note||null,ts:Date.now()};
     if(exData) data.exercises=exData;
-    await fetch(DB_URL+'/plans/'+_eWk+'/'+_eDay+'/'+key+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    var basePath=window._athModeAid
+      ?DB_URL+'/athlete_plans/'+window._athModeAid+'/'+_eWk+'/days/'+_eDay+'/'+key+'.json'
+      :DB_URL+'/plans/'+_eWk+'/'+_eDay+'/'+key+'.json';
+    await fetch(basePath,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     await _restRefresh(_eWk);
     window.closeModal();
     _toastS('✓ Sessione salvata!');
@@ -867,6 +904,45 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   window.autoSuggest=function(){_toastS('⚠ Suggerimenti: ricarica pagina con Firebase attivo');};
+
+  // ── MODALITÀ ATLETA ──
+  window.switchAthMode=function(aid){
+    window._athModeAid=aid||null;
+    var cfgGroups=document.querySelectorAll('.cfg-item-group');
+    cfgGroups.forEach(function(el){el.style.display=aid?'none':'flex';});
+    var st=document.getElementById('ed-status');
+    if(st){
+      if(aid){
+        var aths=window._restAths||{};
+        st.textContent='🎯 Piano di '+((aths[aid]||{}).name||aid);
+        st.style.color='var(--amber)';
+      } else {
+        st.textContent='Bozza';
+        st.style.color='var(--amber)';
+      }
+    }
+    _restRefresh(_eWk);
+  };
+
+  window._populateAthSel=async function(wk){
+    var sel=document.getElementById('ath-mode-sel');
+    if(!sel) return;
+    // Fetch all athletes via REST
+    var aths=window._restAths||{};
+    if(!Object.keys(aths).length){
+      var ar=await fetch(DB_URL+'/athletes.json');
+      aths=ar.ok?(await ar.json())||{}:{};
+      window._restAths=aths;
+    }
+    // Rebuild options (keep first "Gruppo" option)
+    while(sel.options.length>1) sel.remove(1);
+    Object.entries(aths).forEach(function(kv){
+      var opt=document.createElement('option');
+      opt.value=kv[0];
+      opt.textContent=(kv[1]||{}).name||kv[0];
+      sel.appendChild(opt);
+    });
+  };
 
   // ════════════════════════════════
   // PIANI PER ATLETA
@@ -1250,10 +1326,18 @@ function renderCalendar(){
   }).join('');
 }
 
-// Navigazione per ANNO (sovrascrive la versione standalone — uguale logica)
+// Navigazione per MESE (sovrascrive la versione standalone)
 window.shiftMonth=function(dir){
-  if(dir===0) window._calYear=new Date().getFullYear();
-  else window._calYear+=dir;
+  if(dir===0){
+    window._calYear=new Date().getFullYear();
+    window._calMonth=new Date().getMonth();
+    currentMonthDate=new Date();
+  } else {
+    window._calMonth=(window._calMonth||0)+dir;
+    if(window._calMonth<0){window._calMonth=11;window._calYear--;}
+    if(window._calMonth>11){window._calMonth=0;window._calYear++;}
+    currentMonthDate=new Date(window._calYear,window._calMonth,1);
+  }
   window._calRender();
 };
 
@@ -1268,6 +1352,12 @@ window.selectWeek=function(wk){
 
 function renderEditor(){
   if(!currentWk){return;}
+  // Reset athlete mode when opening new week
+  window._athModeAid=null;
+  const mSel=document.getElementById('ath-mode-sel');
+  if(mSel) mSel.value='';
+  document.querySelectorAll('.cfg-item-group').forEach(el=>el.style.display='flex');
+
   document.getElementById('ed-empty').style.display='none';
   const edContent=document.getElementById('ed-content');
   edContent.style.display='flex';
@@ -1289,12 +1379,16 @@ function renderEditor(){
 
   renderGrid();
   renderAssignedChips();
+  // Populate athlete selector with all athletes
+  if(window._populateAthSel) window._populateAthSel(currentWk);
 }
 
 function renderGrid(){
   if(!currentWk) return;
   const gameDay=parseInt(document.getElementById('sel-gameday')?.value??'6');
-  const planData=plans[currentWk]||{};
+  const planData=window._athModeAid
+    ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
+    :plans[currentWk]||{};
   const monday=new Date(currentWk+'T00:00:00');
   const today=new Date(); today.setHours(0,0,0,0);
 
@@ -1364,7 +1458,10 @@ window.openAdd=function(dayIdx){
 
 window.openEdit=function(dayIdx,key){
   editingDay=dayIdx; editingKey=key;
-  const s=plans[currentWk]?.[String(dayIdx)]?.[key];
+  const planData=window._athModeAid
+    ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
+    :plans[currentWk]||{};
+  const s=planData[String(dayIdx)]?.[key];
   if(!s) return;
   currentType=s.type; window._selSessType=s.type;
   document.getElementById('m-note').value=s.note||'';
@@ -1395,11 +1492,23 @@ window.saveSession=async function(){
   const exData=window._getExData?window._getExData():null;
   const sessData={type:_type,note:note||null,ts:Date.now()};
   if(exData) sessData.exercises=exData;
-  const path=`plans/${currentWk}/${editingDay}`;
-  if(editingKey){
-    await set(ref(db,`${path}/${editingKey}`),sessData);
+  if(window._athModeAid){
+    // Athlete mode: save via REST to athlete_plans
+    const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+    const key=editingKey||('sess_'+Date.now()+'_'+editingDay);
+    const athPath=`/athlete_plans/${window._athModeAid}/${currentWk}/days/${editingDay}/${key}.json`;
+    await fetch(_dbUrl+athPath,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sessData)});
+    // Refresh athlete cache
+    const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days.json`);
+    if(r.ok) window._athPlanCache[window._athModeAid+'_'+currentWk]=await r.json()||{};
+    renderGrid();
   } else {
-    await push(ref(db,path),sessData);
+    const path=`plans/${currentWk}/${editingDay}`;
+    if(editingKey){
+      await set(ref(db,`${path}/${editingKey}`),sessData);
+    } else {
+      await push(ref(db,path),sessData);
+    }
   }
   closeModal(); showToast('✓ Sessione salvata!');
 };
@@ -1408,7 +1517,15 @@ window.delCurrentSess=function(){if(editingKey)delSess(editingDay,editingKey);cl
 
 window.delSess=async function(dayIdx,key){
   if(!confirm('Eliminare questa sessione?')) return;
-  await remove(ref(db,`plans/${currentWk}/${dayIdx}/${key}`));
+  if(window._athModeAid){
+    const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+    await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days/${dayIdx}/${key}.json`,{method:'DELETE'});
+    const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days.json`);
+    if(r.ok) window._athPlanCache[window._athModeAid+'_'+currentWk]=await r.json()||{};
+    renderGrid();
+  } else {
+    await remove(ref(db,`plans/${currentWk}/${dayIdx}/${key}`));
+  }
   showToast('✓ Eliminata');
 };
 
@@ -1523,6 +1640,50 @@ function renderAssignedChips(){
 window.removeAssigned=async function(aid){
   await remove(ref(db,`plans/${currentWk}/_athletes/${aid}`));
   showToast('Atleta rimosso dalla settimana');
+};
+
+// ── MODALITÀ ATLETA (Firebase version — sovrascrive standalone)
+window.switchAthMode=function(aid){
+  window._athModeAid=aid||null;
+  const cfgGroups=document.querySelectorAll('.cfg-item-group');
+  cfgGroups.forEach(el=>el.style.display=aid?'none':'flex');
+  const st=document.getElementById('ed-status');
+  if(st){
+    if(aid){
+      const name=(athletes[aid]||{}).name||aid;
+      st.textContent='🎯 Piano di '+name;
+      st.style.color='var(--amber)';
+    } else {
+      const pub=plans[currentWk]?._published;
+      st.textContent=pub?`✓ Pubblicata il ${new Date(pub).toLocaleDateString('it-IT')}`:'Bozza';
+      st.style.color=pub?'var(--teal)':'var(--amber)';
+    }
+  }
+  if(aid){
+    // Fetch athlete plan via REST and refresh grid
+    const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+    fetch(_dbUrl+`/athlete_plans/${aid}/${currentWk}/days.json`)
+      .then(r=>r.ok?r.json():null)
+      .then(days=>{
+        window._athPlanCache[aid+'_'+currentWk]=days||{};
+        renderGrid();
+      });
+  } else {
+    renderGrid();
+  }
+};
+
+window._populateAthSel=function(wk){
+  const sel=document.getElementById('ath-mode-sel');
+  if(!sel) return;
+  // Rebuild options using Firebase athletes data
+  while(sel.options.length>1) sel.remove(1);
+  Object.entries(athletes||{}).forEach(([id,a])=>{
+    const opt=document.createElement('option');
+    opt.value=id;
+    opt.textContent=(a||{}).name||id;
+    sel.appendChild(opt);
+  });
 };
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
