@@ -372,7 +372,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   <div class="modal" style="max-width:420px;">
     <h3>👥 Invia agli atleti</h3>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;" id="send-desc">Il piano viene copiato come base per ogni atleta. Potrai personalizzarlo in "Piani Rapidi".</div>
-    <div id="send-ath-list" style="max-height:280px;overflow-y:auto;margin-bottom:10px;"></div>
+    <div id="send-ath-list" style="max-height:260px;overflow-y:auto;margin-bottom:10px;"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px;cursor:pointer;">
+      <input type="checkbox" id="send-overwrite" style="width:14px;height:14px;">
+      Sovrascrivi piani personalizzati degli atleti
+    </label>
     <div class="mactions">
       <button class="btn btn-outline" onclick="document.getElementById('modal-send').classList.remove('open')">Annulla</button>
       <button class="btn btn-purple" onclick="doSend()">Invia piano →</button>
@@ -1532,21 +1536,31 @@ window.delSess=async function(dayIdx,key){
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
 
 // ── AUTO SUGGEST
-window.autoSuggest=function(){
+window.autoSuggest=async function(){
   if(!currentWk){showToast('⚠ Seleziona prima una settimana');return;}
   const gameDay=parseInt(document.getElementById('sel-gameday')?.value??'6');
-  if(gameDay<0){showToast('⚠ Imposta il giorno gara per usare i suggerimenti');return;}
+  if(isNaN(gameDay)||gameDay<0){showToast('⚠ Imposta il giorno gara per usare i suggerimenti');return;}
+  // Check if week already has sessions and warn
+  const existing=plans[currentWk]||{};
+  const hasSessions=Object.entries(existing).some(([k,v])=>k!=='_athletes'&&typeof v==='object'&&Object.keys(v).length>0);
+  if(hasSessions&&!confirm('Questa settimana ha già delle sessioni. Sovrascrivere con la settimana tipo?')){return;}
   const suggestions=[
-    {day:(gameDay+1)%7,type:'rec',note:'Recupero attivo 25min · Bike Z1 + prevenzione'},
-    {day:(gameDay+2)%7,type:'forza',note:'Forza neurale · Squat + Hip Thrust 4×4-5 @82%'},
+    {day:(gameDay+1)%7,type:'rec',   note:'Recupero attivo 25min · Bike Z1 + prevenzione'},
+    {day:(gameDay+2)%7,type:'forza', note:'Forza neurale · Squat + Hip Thrust 4×4-5 @82%'},
     {day:(gameDay+3)%7,type:'squadra',note:'Allenamento squadra'},
     {day:(gameDay-3+7)%7,type:'forza',note:'Forza potenza · Complex + Jump Squat'},
     {day:(gameDay-2+7)%7,type:'sprint',note:'Vmax 3-4 lanciati 20m · Pliometria low vol'},
     {day:(gameDay-1+7)%7,type:'priming',note:'Priming 12min · Jump Squat 2×3 + strides'},
     {day:gameDay,type:'squadra',note:'Gara'},
   ];
-  const promises=suggestions.map(s=>push(ref(db,`plans/${currentWk}/${s.day}`),{...s,ts:Date.now()}));
-  Promise.all(promises).then(()=>showToast('✓ Settimana tipo creata!'));
+  // Clear affected days first, then write with deterministic keys (no push duplicates)
+  const affectedDays=new Set(suggestions.map(s=>s.day));
+  const clearOps=[];
+  for(const d of affectedDays){clearOps.push(remove(ref(db,`plans/${currentWk}/${d}`)));}
+  await Promise.all(clearOps);
+  const writeOps=suggestions.map((s,i)=>set(ref(db,`plans/${currentWk}/${s.day}/sess_auto_${i}`),{...s,ts:Date.now(),detail:'',exercises:{}}));
+  await Promise.all(writeOps);
+  showToast('✓ Settimana tipo creata!');
 };
 
 // ── PUBLISH
@@ -1560,7 +1574,7 @@ window.publishPlan=async function(){
 };
 
 // ── SEND TO ATHLETES
-window.openSendModal=function(){
+window.openSendModal=async function(){
   if(!currentWk){showToast('⚠ Seleziona prima una settimana');return;}
   const athIds=Object.keys(athletes);
   const wData=plans[currentWk]||{};
@@ -1569,6 +1583,13 @@ window.openSendModal=function(){
   const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});
   document.getElementById('send-desc').textContent=`Settimana del ${fmt(monday)}. Il piano viene copiato come base per ogni atleta selezionato.`;
 
+  // Check which athletes already have individual plans for this week
+  const hasIndividual={};
+  await Promise.all(athIds.map(async id=>{
+    const snap=await get(ref(db,`athlete_plans/${id}/${currentWk}/meta`));
+    if(snap.exists())hasIndividual[id]=true;
+  }));
+
   const listEl=document.getElementById('send-ath-list');
   if(!athIds.length){
     listEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">Nessun atleta trovato.</div>';
@@ -1576,22 +1597,25 @@ window.openSendModal=function(){
     listEl.innerHTML=athIds.map(id=>{
       const a=athletes[id];
       const isAssigned=assigned[id];
+      const hasCustom=hasIndividual[id];
       return `<label class="ath-send-item">
         <input type="checkbox" name="send-ath" value="${id}" ${isAssigned?'checked':''}>
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:600;color:var(--white);">${a.name||id}</div>
           <div style="font-size:11px;color:var(--muted);">${a.sport||a.role||a.position||''}</div>
         </div>
-        ${isAssigned?'<span style="font-size:10px;color:var(--teal);">già assegnato</span>':''}
+        ${hasCustom?'<span style="font-size:10px;color:var(--amber);">⚠ piano personalizzato</span>':isAssigned?'<span style="font-size:10px;color:var(--teal);">già assegnato</span>':''}
       </label>`;
     }).join('');
   }
+  const ow=document.getElementById('send-overwrite');if(ow)ow.checked=false;
   document.getElementById('modal-send').classList.add('open');
 };
 
 window.doSend=async function(){
   const checked=[...document.querySelectorAll('input[name="send-ath"]:checked')].map(c=>c.value);
   if(!checked.length){showToast('⚠ Seleziona almeno un atleta');return;}
+  const overwrite=document.getElementById('send-overwrite')?.checked||false;
   const planData=plans[currentWk]||{};
   const promises=[];
 
@@ -1600,8 +1624,14 @@ window.doSend=async function(){
   checked.forEach(aid=>{athMap[aid]=true;});
   promises.push(set(ref(db,`plans/${currentWk}/_athletes`),athMap));
 
-  // Copy plan days to each athlete (all sessions per day, with actual exercises)
-  checked.forEach(aid=>{
+  // Copy plan days to each athlete (skip those with individual plans unless overwrite checked)
+  const skipped=[];
+  await Promise.all(checked.map(async aid=>{
+    // Check if athlete already has a personalised plan
+    if(!overwrite){
+      const snap=await get(ref(db,`athlete_plans/${aid}/${currentWk}/meta`));
+      if(snap.exists()){skipped.push(aid);return;}
+    }
     for(let i=0;i<7;i++){
       const daySessions=Object.values(planData[String(i)]||{}).filter(s=>s&&s.type);
       if(daySessions.length){
@@ -1611,11 +1641,15 @@ window.doSend=async function(){
       }
     }
     promises.push(set(ref(db,`athlete_plans/${aid}/${currentWk}/meta`),{week:currentWk,ts:Date.now(),assignedBy:'coach'}));
-  });
+  }));
 
   await Promise.all(promises);
   document.getElementById('modal-send').classList.remove('open');
-  showToast(`✓ Piano inviato a ${checked.length} atleta${checked.length>1?'i':''}!`);
+  const sent=checked.length-skipped.length;
+  const msg=skipped.length
+    ?`✓ Piano inviato a ${sent} atleta${sent>1?'i':''}. ${skipped.length} saltato${skipped.length>1?'i':''} (piano personalizzato).`
+    :`✓ Piano inviato a ${sent} atleta${sent>1?'i':''}!`;
+  showToast(msg);
 };
 
 // ── ASSIGNED CHIPS
