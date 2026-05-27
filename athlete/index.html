@@ -325,6 +325,7 @@ select option{background:var(--card2);}
       <div class="stat"><div class="stat-val" id="s-sess">0</div><div class="stat-lbl">Sessioni</div></div>
       <div class="stat"><div class="stat-val" id="s-rpe">—</div><div class="stat-lbl">RPE medio</div></div>
       <div class="stat"><div class="stat-val" id="s-streak">0</div><div class="stat-lbl">Streak 🔥</div></div>
+      <div class="stat"><div class="stat-val" id="dash-acwr" style="color:var(--muted);">—</div><div class="stat-lbl">ACWR</div></div>
     </div>
 
     <div class="sec-lbl" id="oggi-sec-lbl">Allenamento di oggi</div>
@@ -527,6 +528,7 @@ select option{background:var(--card2);}
     <div id="prof-strumenti" style="display:none">
       <div class="tool-card">
         <div class="tool-title"><div class="tool-icon" style="background:rgba(168,85,247,.1);">💪</div>Calcolo 1RM — Epley</div>
+        <div style="margin-bottom:8px;"><div class="bc-field-lbl">Esercizio (opzionale — per salvare)</div><input type="text" id="t-exname" placeholder="es. Squat, Bench Press..." autocomplete="off"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div><div class="bc-field-lbl">Peso (kg)</div><input type="number" id="t-peso" placeholder="100" inputmode="decimal"></div>
           <div><div class="bc-field-lbl">Reps</div><input type="number" id="t-reps" placeholder="5" inputmode="decimal"></div>
@@ -642,10 +644,12 @@ if(!aid){
     onValue(ref(db,`sessions/${aid}`),sessSnap=>{
       const sessData=sessSnap.val()||{};
       const sessList=Object.entries(sessData).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.ts-a.ts);
+      window._sessListCache=sessList;
       renderRpeChart(sessList);
       renderHistory(sessList);
       renderAverages(sessList);
       renderStreak(sessList);
+      computeAndShowACWR(sessList);
     });
 
     // Check-ins
@@ -943,20 +947,35 @@ async function loadWeekPlan(athlete){
   const wrap=document.getElementById('week-list');
   const progSnap=await get(ref(db,'programs'));
   renderPrograms(progSnap.val()||{});
+  // Load all athlete-specific plans (sent by coach)
   const qpSnap=await get(ref(db,`athlete_plans/${aid}`));
-  renderQuickPlans(qpSnap.val()||{});
-  if(!athlete.group){wrap.innerHTML='<div class="empty">Nessun gruppo assegnato.</div>';return;}
-  const planSnap=await get(ref(db,`plans/${wk}/${athlete.group}`));
-  const planData=planSnap.val()||{};
+  const allAthPlans=qpSnap.val()||{};
+  renderQuickPlans(allAthPlans);
+  // Show current week's plan (athlete-specific, fallback to group plan)
+  const athWeekSnap=await get(ref(db,`athlete_plans/${aid}/${wk}/days`));
+  let planData=athWeekSnap.val()||null;
+  // Fallback: try group plan
+  if(!planData&&athlete.group){
+    const gSnap=await get(ref(db,`plans/${wk}/${athlete.group}`));
+    planData=gSnap.val()||null;
+  }
+  if(!planData){wrap.innerHTML='<div class="empty">Nessun piano per questa settimana.</div>';return;}
   wrap.innerHTML=DAYS.map((d,i)=>{
     const date=new Date(monday);date.setDate(date.getDate()+i);
-    const daySess=Object.values(planData[i]||{}).sort((a,b)=>a.ts-b.ts);
+    const dayRaw=planData[String(i)]||{};
+    // Support both {type,note,...} and {key:{type,note,...}} formats
+    const daySess=dayRaw.type!==undefined?[dayRaw]:Object.values(dayRaw).filter(s=>s&&s.type).sort((a,b)=>(a.ts||0)-(b.ts||0));
     const isToday=i===dayIdx,isPast=i<dayIdx;
-    const types=daySess.length?daySess.map(s=>SESS_LABELS[s.type]||s.type).join(' + '):'—';
-    const color=daySess.length?SESS_COLORS[daySess[0].type]||'var(--muted)':'var(--muted)';
+    const types=daySess.length?daySess.map(s=>SESS_LABELS[s.type]||s.type).join(' + '):'Riposo';
+    const color=daySess.length?SESS_COLORS[daySess[0].type]||'var(--muted)':'var(--border2)';
+    const dayNote=daySess[0]?.note||'';
     return `<div class="wd-card${isToday?' today':''}${isPast?' past':''}">
       <div class="wd-date-box"><div class="wd-date-d">${date.getDate()}</div><div class="wd-date-w">${d.slice(0,3)}</div></div>
-      <div class="wd-info"><div class="wd-type-name" style="color:${color}">${types}</div>${daySess[0]?.note?`<div class="wd-note-txt">${daySess[0].note.slice(0,55)}</div>`:''}</div>
+      <div class="wd-info">
+        <div class="wd-type-name" style="color:${color}">${types}</div>
+        ${dayNote?`<div class="wd-note-txt">${dayNote.slice(0,55)}</div>`:''}
+        <div style="font-size:10px;color:var(--muted);">${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}</div>
+      </div>
       ${isToday?'<div class="wd-today-badge">OGGI</div>':''}
     </div>`;
   }).join('');
@@ -1281,11 +1300,41 @@ window.saveBodyComp=async()=>{
   showToast('✓ Misurazione salvata!');
 };
 
+// ── PRE-FILL CHECK-IN from last saved session
+function prefillCheckin(){
+  const last=(window._sessListCache||[])[0];
+  if(!last)return;
+  // Only pre-fill if the last session is from today or yesterday (still relevant)
+  const daysDiff=(Date.now()-last.ts)/86400000;
+  if(daysDiff>2)return;
+  const fields=[
+    {id:'rpe', val:last.rpe||5, color:'var(--orange)'},
+    {id:'doms',val:last.doms||3, color:'var(--amber)'},
+    {id:'sleep',val:last.sleep||7,color:'var(--blue)'},
+    {id:'str', val:last.stress||3,color:'var(--purple)'},
+    {id:'mot', val:last.motivazione||7,color:'var(--green)'},
+  ];
+  fields.forEach(({id,val,color})=>{
+    const numEl=document.getElementById(id+'-val');
+    const fillEl=document.getElementById(id+'-fill');
+    const thumbEl=document.getElementById(id+'-thumb');
+    const rangeEl=document.querySelector(`#page-checkin input[oninput*="slide('${id}'"]`);
+    const pct=((val-1)/9)*100;
+    if(numEl)numEl.textContent=val;
+    if(fillEl)fillEl.style.width=pct+'%';
+    if(thumbEl)thumbEl.style.left=pct+'%';
+    if(rangeEl)rangeEl.value=val;
+  });
+  // Note too
+  if(last.note){const el=document.getElementById('txt-note');if(el&&!el.value)el.value=last.note;}
+}
+
 // ── NAV
 window.bnSwitch=(page,btn)=>{
   ['oggi','piano','checkin','profilo'].forEach(p=>{const el=document.getElementById('page-'+p);if(el)el.style.display=p===page?'block':'none';});
   document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  if(page==='checkin')prefillCheckin();
 };
 
 window.profTab=(tab,btn)=>{
@@ -1306,7 +1355,7 @@ window.slide=(id,val,color)=>{
 window.togglePain=btn=>btn.classList.toggle('sel');
 
 // ── TOOLS
-window.calc1rm=()=>{
+window.calc1rm=async()=>{
   const p=parseFloat(document.getElementById('t-peso').value);
   const r=parseFloat(document.getElementById('t-reps').value);
   if(!p||!r){showToast('⚠ Compila i campi');return;}
@@ -1314,6 +1363,21 @@ window.calc1rm=()=>{
   document.getElementById('t-1rm-res').textContent=rm+'kg';
   const pcts=[50,60,70,75,80,85,90,95];
   document.getElementById('t-1rm-sub').innerHTML=pcts.map(pct=>`<span style="font-size:11px;margin-right:8px;color:var(--muted);">${pct}%: <strong style="color:var(--white);">${Math.round(rm*pct/100/2.5)*2.5}kg</strong></span>`).join('');
+  // Auto-save if exercise name provided
+  const exName=(document.getElementById('t-exname')?.value||'').trim();
+  if(exName){
+    try{
+      const now=new Date();
+      const date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+      // Find or create exercise key
+      const exSnap=await get(ref(db,`rm_exercises/${aid}`));
+      const exMap=exSnap.val()||{};
+      let exKey=Object.entries(exMap).find(([,v])=>v.name?.toLowerCase()===exName.toLowerCase())?.[0];
+      if(!exKey){const r2=await push(ref(db,`rm_exercises/${aid}`),{name:exName,order:999,custom:true});exKey=r2.key;}
+      await push(ref(db,`rm_records/${aid}/${exKey}`),{ts:now.getTime(),date,value:rm,type:'stimato',peso:p,reps:r,exName});
+      showToast(`✓ 1RM ${rm}kg salvato per ${exName}`);
+    }catch(e){console.error(e);showToast(`✓ 1RM ${rm}kg calcolato`);}
+  }
 };
 
 window.calcHR=()=>{
@@ -1349,25 +1413,76 @@ window.calcDaniels=()=>{
   if(!dist||!timeStr){showToast('⚠ Compila i campi');return;}
   const parts=timeStr.split(':');const totalMin=parseInt(parts[0]||0)+parseInt(parts[1]||0)/60;
   if(!totalMin){showToast('⚠ Formato mm:ss');return;}
-  const paceMin=totalMin/dist;
-  const vo2=(-4.6+0.182258*(dist/totalMin*1000/60)+0.000104*(dist/totalMin*1000/60)**2)*100/(-0.2+0.8298*(1-Math.exp(-0.012778*totalMin)));
-  const vo2r=Math.round(Math.min(vo2,90));
-  const DZones=[{l:'E (Easy)',f:.59,c:'#22C55E'},{l:'M (Maratona)',f:.75,c:'#6366F1'},{l:'T (Threshold)',f:.83,c:'#F59E0B'},{l:'I (Interval)',f:.92,c:'#FF6830'},{l:'R (Ripetute)',f:1.05,c:'#EF4444'}];
+  // Race velocity in m/min (correct unit for Daniels formula)
+  const vRace=dist*1000/totalMin; // m/min
+  const paceMin=totalMin/dist; // min/km at race pace
+  // Daniels VO2 at race pace (v in m/min)
+  const pctVO2=(-4.6+0.182258*vRace+0.000104*vRace*vRace)*100/(-0.2+0.8298*(1-Math.exp(-0.012778*totalMin)));
+  const vo2r=Math.round(Math.min(pctVO2,100));
+  // Zones defined as [low, high] velocity fractions of race velocity (Jack Daniels VDOT)
+  // Easy: 59–74% VO2 → ~74–79% vRace; Marathon: ~82–85%; T: ~86–89%; I: ~97–100%; R: ~105–110%
+  const DZones=[
+    {l:'E (Easy)',   lo:0.74,hi:0.79,c:'#22C55E'},
+    {l:'M (Maratona)',lo:0.82,hi:0.85,c:'#6366F1'},
+    {l:'T (Threshold)',lo:0.86,hi:0.89,c:'#F59E0B'},
+    {l:'I (Interval)', lo:0.97,hi:1.00,c:'#FF6830'},
+    {l:'R (Ripetute)', lo:1.05,hi:1.10,c:'#EF4444'}
+  ];
   const fmtPace=m=>{const mi=Math.floor(m);const se=Math.round((m-mi)*60);return `${mi}:${se.toString().padStart(2,'0')}`};
-  document.getElementById('t-dnl-res').innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">VO2max stimato: <strong style="color:var(--white);">${vo2r} ml/kg/min</strong></div>`+DZones.map(z=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;"><span style="color:${z.c};font-weight:600;">${z.l}</span><span style="font-family:'Bebas Neue',sans-serif;font-size:17px;color:${z.c};">${fmtPace(paceMin/z.f)} /km</span></div>`).join('');
+  document.getElementById('t-dnl-res').innerHTML=
+    `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">VO2max stimato: <strong style="color:var(--white);">${vo2r} ml/kg/min</strong> &nbsp;|&nbsp; Passo gara: <strong style="color:var(--white);">${fmtPace(paceMin)} /km</strong></div>`+
+    DZones.map(z=>{
+      const pLo=fmtPace(paceMin/z.hi); // lo fraction → slower pace
+      const pHi=fmtPace(paceMin/z.lo); // hi fraction → faster pace
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+        <span style="color:${z.c};font-weight:600;">${z.l}</span>
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${z.c};">${pLo} – ${pHi} /km</span>
+      </div>`;
+    }).join('');
 };
+
+function _showACWRResult(ratio){
+  const color=ratio<0.8?'var(--blue)':ratio<=1.3?'var(--green)':ratio<=1.5?'var(--amber)':'var(--red)';
+  const label=ratio<0.8?'Sottoallenato':ratio<=1.3?'Zona ottimale':ratio<=1.5?'Attenzione — Rischio ↑':'Pericolo overtraining';
+  const resEl=document.getElementById('t-acwr-res');
+  const subEl=document.getElementById('t-acwr-sub');
+  if(resEl){resEl.textContent=ratio.toFixed(2);resEl.style.color=color;}
+  if(subEl){subEl.textContent=label;subEl.style.color=color;}
+  // Update dashboard ACWR badge if present
+  const dash=document.getElementById('dash-acwr');
+  if(dash){dash.textContent=ratio.toFixed(2);dash.style.color=color;}
+}
+
+// Auto-compute ACWR from session history and pre-fill inputs
+function computeAndShowACWR(sessList){
+  const now=Date.now();
+  const day7=now-7*86400000;
+  const day28=now-28*86400000;
+  const recent=sessList.filter(s=>s.ts&&s.ts>=day28&&s.rpe>0);
+  if(!recent.length)return;
+  // Acute = sum of RPE in last 7 days
+  const acute=recent.filter(s=>s.ts>=day7).reduce((a,s)=>a+(s.rpe||0),0);
+  // Chronic = average weekly RPE sum over 28 days (4 weeks)
+  const weekSums=[0,0,0,0];
+  recent.forEach(s=>{
+    const daysAgo=Math.floor((now-s.ts)/86400000);
+    const weekIdx=Math.min(3,Math.floor(daysAgo/7));
+    weekSums[weekIdx]+=(s.rpe||0);
+  });
+  const chronic=weekSums.reduce((a,b)=>a+b,0)/4;
+  if(!chronic)return;
+  const acEl=document.getElementById('t-acute');
+  const chEl=document.getElementById('t-chronic');
+  if(acEl&&!acEl._edited){acEl.value=Math.round(acute*10)/10;acEl.addEventListener('input',()=>acEl._edited=true,{once:true});}
+  if(chEl&&!chEl._edited){chEl.value=Math.round(chronic*10)/10;chEl.addEventListener('input',()=>chEl._edited=true,{once:true});}
+  _showACWRResult(acute/chronic);
+}
 
 window.calcACWR=()=>{
   const ac=parseFloat(document.getElementById('t-acute').value);
   const ch=parseFloat(document.getElementById('t-chronic').value);
   if(!ac||!ch){showToast('⚠ Compila i campi');return;}
-  const ratio=ac/ch;
-  const color=ratio<0.8?'var(--blue)':ratio<=1.3?'var(--green)':ratio<=1.5?'var(--amber)':'var(--red)';
-  const label=ratio<0.8?'Sottoallenato':ratio<=1.3?'Zona ottimale':ratio<=1.5?'Attenzione — Rischio ↑':'Pericolo overtraining';
-  document.getElementById('t-acwr-res').textContent=ratio.toFixed(2);
-  document.getElementById('t-acwr-res').style.color=color;
-  document.getElementById('t-acwr-sub').textContent=label;
-  document.getElementById('t-acwr-sub').style.color=color;
+  _showACWRResult(ac/ch);
 };
 
 // ── QUICK SESSION (no program)
