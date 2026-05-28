@@ -659,8 +659,23 @@ if(!aid){
       renderReadiness(ciList);
     });
 
-    // 1RM
+    // 1RM — seed default exercises if athlete has none yet
+    const _seedDefaultExercises=async()=>{
+      const DEFAULT_EX=[
+        'Squat','Panca Piana','Stacco da Terra','Hip Thrust','Affondi',
+        'Military Press','Trazioni','Rematore Bilanciere','Leg Press','Romanian Deadlift'
+      ];
+      const batch={};
+      DEFAULT_EX.forEach((name,i)=>{batch[`ex_default_${i}`]={name,order:i,custom:false};});
+      await set(ref(db,`rm_exercises/${aid}`),batch);
+    };
     onValue(ref(db,`rm_exercises/${aid}`),exSnap=>{
+      // If no exercises exist yet, seed defaults (runs once)
+      if(!exSnap.exists()&&!window._rmSeeded){
+        window._rmSeeded=true;
+        _seedDefaultExercises();
+        return; // listener will re-fire after write
+      }
       onValue(ref(db,`rm_records/${aid}`),recSnap=>{
         const exs=exSnap.val()||{};
         const recs=recSnap.val()||{};
@@ -1240,17 +1255,20 @@ window.saveCheckinMain=async()=>{
   const stress=+document.getElementById('str-val').textContent;
   const motivazione=+document.getElementById('mot-val').textContent;
 
-  // Save to checkins (full metrics)
-  await push(ref(db,`checkins/${aid}`),{
-    ts:now.getTime(),date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),
-    fatica:rpe,sonno,stress,motivazione,doms,pains,
-    note:document.getElementById('txt-note').value.trim()||null
+  // Use date key so same-day re-save overwrites instead of duplicating
+  const dateKey=now.toISOString().slice(0,10);
+  const noteVal=document.getElementById('txt-note').value.trim()||null;
+  const dateStr=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  // Save to checkins (full metrics) — overwrite today's entry if exists
+  await set(ref(db,`checkins/${aid}/${dateKey}`),{
+    ts:now.getTime(),date:dateStr,
+    fatica:rpe,sonno,stress,motivazione,doms,pains,note:noteVal
   });
-  // Also save to sessions for RPE chart compat
-  await push(ref(db,`sessions/${aid}`),{
-    ts:now.getTime(),date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),
+  // Also save to sessions for RPE chart compat — same date key
+  await set(ref(db,`sessions/${aid}/${dateKey}`),{
+    ts:now.getTime(),date:dateStr,
     day:document.getElementById('sel-day').value,
-    rpe,doms,sleep:sonno,note:document.getElementById('txt-note').value.trim()||null
+    rpe,doms,sleep:sonno,note:noteVal
   });
 
   document.getElementById('txt-note').value='';
