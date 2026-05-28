@@ -459,7 +459,7 @@ const db=getDatabase(app);
 const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("🔐 PIN preparatore:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#50506A;font-family:Inter,sans-serif;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
-let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={};
+let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={};
 const BASE=(()=>{const p=window.location.pathname;const base=p.replace(/\/coach\/.*$/,'').replace(/^\/+/,'');return window.location.origin+'/'+(base?base+'/':'')+'athlete/?id=';})();
 let currentAid=null;
 const LV_L={1:'Principiante',2:'Intermedio',3:'Avanzato'};
@@ -484,6 +484,7 @@ onValue(ref(db,'tests'),s=>{tests=s.val()||{};});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();});
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
+onValue(ref(db,'session_logs'),s=>{sessionLogs=s.val()||{};});
 
 function renderAll(){
   renderDashboard();
@@ -620,7 +621,7 @@ window.openAthlete=function(aid,silent){
     </div>
     <div id="det-overview">${renderDetOverview(aid,a,aSess,aCi)}</div>
     <div id="det-tests" style="display:none;">${renderDetTests(aid)}</div>
-    <div id="det-sessions" style="display:none;">${renderDetSessions(aSess)}</div>
+    <div id="det-sessions" style="display:none;">${renderDetSessions(aid,aSess)}</div>
     <div id="det-checkin" style="display:none;">${renderDetCheckin(aCi)}</div>
     <div id="det-load" style="display:none;">${renderDetLoad(aid,aSess)}</div>`;
   if(!silent){panel.scrollIntoView({behavior:'smooth',block:'start'});pg('athletes',document.querySelectorAll('.nav-item')[1]);}
@@ -649,9 +650,57 @@ function renderDetTests(aid){
   return `<div class="test-grid">${all.map(n=>{const r=t[n]||{};return `<div class="test-card" onclick="openModal('test','${aid}','${n}')"><div class="test-name">${n}</div><div class="test-val">${r.val||'—'}</div><div class="test-date">${r.date||'Aggiungi'}</div></div>`;}).join('')}</div>`;
 }
 
-function renderDetSessions(aSess){
-  if(!aSess.length)return '<div class="empty">Nessuna seduta.</div>';
-  return aSess.slice(0,20).map(s=>`<div class="sess-item"><div class="sess-date">${s.date||'—'}</div><div class="sess-body"><div class="sess-day">${s.day||'—'}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${s.rpe?`<span class="pill ${s.rpe>=9?'p-red':s.rpe>=7?'p-warn':'p-ok'}">RPE ${s.rpe}</span>`:''}${s.doms?`<span class="pill p-gray">DOMS ${s.doms}</span>`:''}${s.sleep?`<span class="pill p-blue">💤 ${s.sleep}</span>`:''}${s.note?`<span style="font-size:11px;color:var(--muted);">"${s.note.slice(0,50)}"</span>`:''}</div></div></div>`).join('');
+function renderDetSessions(aid,aSess){
+  // Merge check-in sessions + workout logs
+  const wLogs=Object.values(sessionLogs[aid]||{}).sort((a,b)=>b.ts-a.ts);
+  if(!aSess.length&&!wLogs.length)return '<div class="empty">Nessuna seduta.</div>';
+
+  // Build a unified timeline keyed by date string
+  const byDate={};
+  aSess.forEach(s=>{const k=s.date||String(s.ts);if(!byDate[k])byDate[k]={date:s.date,ts:s.ts};byDate[k].ci=s;});
+  wLogs.forEach(l=>{const k=l.date||String(l.ts);if(!byDate[k])byDate[k]={date:l.date,ts:l.ts};byDate[k].wlog=l;});
+  const merged=Object.values(byDate).sort((a,b)=>b.ts-a.ts).slice(0,25);
+
+  return merged.map(({date,ci,wlog})=>{
+    const rpe=ci?.rpe||wlog?.avgRpe||0;
+    const rpeCls=rpe>=9?'p-red':rpe>=7?'p-warn':'p-ok';
+    let pills='';
+    if(rpe>0)pills+=`<span class="pill ${rpeCls}">RPE ${rpe}</span>`;
+    if(ci?.doms)pills+=`<span class="pill p-gray">DOMS ${ci.doms}</span>`;
+    if(ci?.sleep)pills+=`<span class="pill p-blue">💤 ${ci.sleep}</span>`;
+    if(wlog?.duration)pills+=`<span class="pill p-purple">⏱ ${wlog.duration}'</span>`;
+    if(wlog?.totalSets)pills+=`<span class="pill p-orange">${wlog.totalSets} set</span>`;
+    if(wlog?.newPRs?.length)pills+=`<span class="pill p-gold">🏆 ${wlog.newPRs.length} PR</span>`;
+    // Build exercise details from wlog
+    let exHtml='';
+    if(wlog?.exercises){
+      const exList=Object.values(wlog.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+      if(exList.length){
+        exHtml=`<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">`
+          +exList.map(ex=>{
+            const sets=ex.sets||'';const reps=ex.reps||'';const kg=ex.kg?`${ex.kg}kg`:'';
+            const pct=ex.pct?`@${ex.pct}%`:'';const rpeEx=ex.rpe?`RPE${ex.rpe}`:'';
+            const detail=[sets&&reps?`${sets}×${reps}`:'',kg,pct,rpeEx].filter(Boolean).join(' ');
+            return `<div style="font-size:11px;color:var(--text);padding:2px 0;">
+              <span style="color:var(--white);font-weight:600;">${ex.name||'—'}</span>
+              ${detail?`<span style="color:var(--muted);"> · ${detail}</span>`:''}
+              ${ex.actualKg?`<span style="color:var(--green);"> → ${ex.actualKg}kg fatto</span>`:''}
+            </div>`;
+          }).join('')
+          +'</div>';
+      }
+    }
+    const note=ci?.note||wlog?.note||'';
+    return `<div class="sess-item">
+      <div class="sess-date">${date||'—'}</div>
+      <div class="sess-body">
+        <div class="sess-day">${ci?.day||wlog?.type||'—'}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${pills}</div>
+        ${note?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">"${note.slice(0,80)}"</div>`:''}
+        ${exHtml}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderDetCheckin(aCi){
@@ -661,6 +710,22 @@ function renderDetCheckin(aCi){
 
 function renderDetLoad(aid,aSess){
   if(aSess.length<2)return '<div class="empty">Servono almeno 2 sedute per visualizzare il carico.</div>';
+  // ACWR calculation
+  const now=Date.now();
+  const recent28=aSess.filter(s=>s.ts&&s.ts>now-28*864e5&&s.rpe>0);
+  const acute=recent28.filter(s=>s.ts>now-7*864e5).reduce((a,s)=>a+(s.rpe||0),0);
+  const weekBuckets=[0,0,0,0];
+  recent28.forEach(s=>{const wIdx=Math.min(3,Math.floor((now-s.ts)/864e5/7));weekBuckets[wIdx]+=(s.rpe||0);});
+  const chronic=weekBuckets.reduce((a,b)=>a+b,0)/4;
+  const acwr=chronic>0?acute/chronic:0;
+  const acwrColor=acwr<0.8?'var(--blue)':acwr<=1.3?'var(--green)':acwr<=1.5?'var(--amber)':'var(--red)';
+  const acwrLabel=acwr<0.8?'Sottoallenato':acwr<=1.3?'Ottimale':acwr<=1.5?'⚠ Attenzione':'🔴 Overtraining';
+  const acwrHtml=chronic>0?`<div style="display:flex;align-items:center;gap:14px;padding:10px 14px;background:var(--card2);border-radius:10px;margin-bottom:10px;">
+    <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;">ACWR</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:${acwrColor};">${acwr.toFixed(2)}</div></div>
+    <div style="flex:1;"><div style="font-size:13px;font-weight:600;color:${acwrColor};">${acwrLabel}</div>
+    <div style="font-size:11px;color:var(--muted);">Acuto ${Math.round(acute)} · Cronico ${chronic.toFixed(1)}/sett</div></div>
+  </div>`:'';
   const wkLoad={};
   aSess.forEach(s=>{const d=new Date(s.ts);const mon=new Date(d);mon.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));const wk=mon.toISOString().slice(0,10);if(!wkLoad[wk])wkLoad[wk]=0;wkLoad[wk]+=(s.rpe||5);});
   const wks=Object.keys(wkLoad).sort().slice(-8);
@@ -671,7 +736,7 @@ function renderDetLoad(aid,aSess){
     c._chart=new Chart(c,{type:'bar',data:{labels:wks.map(w=>w.slice(5)),datasets:[{data:vals,backgroundColor:'rgba(255,104,48,.55)',borderRadius:5,borderSkipped:false}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#50506A',font:{size:9}}},y:{ticks:{color:'#50506A',font:{size:9}},grid:{color:'rgba(39,39,58,.5)'}}}}});
   },100);
-  return `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`;
+  return acwrHtml+`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`;
 }
 
 window.detTab=function(id,el){
