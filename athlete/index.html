@@ -162,7 +162,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 
 /* BOTTOM NAV */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,19,.97);border-top:1px solid var(--border);display:flex;z-index:20;padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(12px);}
-.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;cursor:pointer;transition:all .15s;border:none;background:none;gap:3px;}
+.bn-item{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;cursor:pointer;transition:all .15s;border:none;background:none;gap:3px;}
 .bn-icon{font-size:18px;line-height:1;}
 .bn-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);}
 .bn-item.active .bn-label{color:var(--orange);}
@@ -275,6 +275,25 @@ select option{background:var(--card2);}
 .wd-day.future-day{opacity:.28;pointer-events:none;}
 .wd-dot.wd-sel{border-color:var(--orange) !important;box-shadow:0 0 0 2px rgba(255,104,48,.22);}
 .day-ctx-lbl{font-size:11px;font-weight:700;color:var(--orange);padding:6px 18px 0;text-transform:uppercase;letter-spacing:.8px;}
+
+/* CHAT */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 120px);}
+.chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px 18px;padding-bottom:8px;}
+.chat-msg{display:flex;flex-direction:column;max-width:78%;}
+.chat-msg.coach{align-self:flex-start;}
+.chat-msg.athlete{align-self:flex-end;}
+.chat-bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.5;word-break:break-word;}
+.chat-msg.coach .chat-bubble{background:var(--card2);border:1px solid var(--border);color:var(--white);border-bottom-left-radius:4px;}
+.chat-msg.athlete .chat-bubble{background:linear-gradient(135deg,#FF6830,#FF3D00);color:#fff;border-bottom-right-radius:4px;}
+.chat-time{font-size:9px;color:var(--muted);margin-top:3px;}
+.chat-msg.athlete .chat-time{text-align:right;}
+.chat-sender{font-size:10px;font-weight:700;color:var(--orange);margin-bottom:3px;}
+.chat-input-wrap{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);background:rgba(14,14,19,.97);}
+.chat-input{flex:1;padding:10px 14px;background:var(--card2);border:1px solid var(--border);border-radius:50px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);}
+.chat-input:focus{outline:none;border-color:var(--orange);}
+.chat-send-btn{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#FF6830,#FF3D00);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 12px rgba(255,104,48,.3);}
+.chat-send-btn:active{transform:scale(.92);}
+.bn-badge{position:absolute;top:6px;right:8px;background:var(--red);color:#fff;font-size:8px;font-weight:800;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -582,12 +601,30 @@ select option{background:var(--card2);}
     </div>
   </div>
 
+  <!-- ═══ PAGE: CHAT ═══ -->
+  <div id="page-chat" style="display:none">
+    <div class="hero">
+      <div class="hero-greet">Messaggi</div>
+      <div class="hero-name" style="font-size:30px;">Chat</div>
+    </div>
+    <div class="chat-wrap">
+      <div id="chat-messages" class="chat-messages">
+        <div class="empty" style="margin-top:40px;">Nessun messaggio ancora.<br>Scrivi al tuo coach!</div>
+      </div>
+      <div class="chat-input-wrap">
+        <input class="chat-input" id="chat-input" type="text" placeholder="Scrivi un messaggio..." onkeydown="if(event.key==='Enter')sendChatMsg()">
+        <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
+      </div>
+    </div>
+  </div>
+
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
     <button class="bn-item active" onclick="bnSwitch('oggi',this)"><div class="bn-icon">🏠</div><div class="bn-label">Oggi</div></button>
     <button class="bn-item" onclick="bnSwitch('piano',this)"><div class="bn-icon">📅</div><div class="bn-label">Piano</div></button>
     <button class="bn-item" onclick="bnSwitch('checkin',this)"><div class="bn-icon">✍️</div><div class="bn-label">Check-in</div></button>
     <button class="bn-item" onclick="bnSwitch('profilo',this)"><div class="bn-icon">👤</div><div class="bn-label">Profilo</div></button>
+    <button class="bn-item" id="bn-chat" onclick="bnSwitch('chat',this)"><div class="bn-icon">💬</div><div id="chat-badge" class="bn-badge" style="display:none">0</div><div class="bn-label">Chat</div></button>
   </nav>
 </div>
 
@@ -595,7 +632,7 @@ select option{background:var(--card2);}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, set, get, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, set, get, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const cfg={apiKey:"AIzaSyAayWDWvUQqtAfIlm7qA8kMKxJu2-_y7k4",authDomain:"rscoaching-a6c61.firebaseapp.com",databaseURL:"https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rscoaching-a6c61",storageBucket:"rscoaching-a6c61.firebasestorage.app",messagingSenderId:"499942544251",appId:"1:499942544251:web:bd246cc6846b0fad89e3de"};
 const app=initializeApp(cfg);
@@ -695,6 +732,22 @@ if(!aid){
 
     onValue(ref(db,`body_comp/${aid}`),bcSnap=>{
       renderBodyComp(Object.values(bcSnap.val()||{}).sort((a,b)=>b.ts-a.ts));
+    });
+
+    // ── CHAT LISTENER
+    onValue(ref(db,`chat/${aid}/messages`),msgSnap=>{
+      window._chatMsgs=Object.entries(msgSnap.val()||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>a.ts-b.ts);
+      const unread=window._chatMsgs.filter(m=>m.from==='coach'&&!m.read).length;
+      const badge=document.getElementById('chat-badge');
+      if(badge){
+        if(unread>0){badge.textContent=unread>9?'9+':String(unread);badge.style.display='flex';}
+        else{badge.style.display='none';}
+      }
+      const chatPage=document.getElementById('page-chat');
+      if(chatPage&&chatPage.style.display!=='none'){
+        renderChat();
+        markChatRead();
+      }
     });
   });
 }
@@ -1349,16 +1402,62 @@ function prefillCheckin(){
 
 // ── NAV
 window.bnSwitch=(page,btn)=>{
-  ['oggi','piano','checkin','profilo'].forEach(p=>{const el=document.getElementById('page-'+p);if(el)el.style.display=p===page?'block':'none';});
+  ['oggi','piano','checkin','profilo','chat'].forEach(p=>{const el=document.getElementById('page-'+p);if(el)el.style.display=p===page?'block':'none';});
   document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(page==='checkin')prefillCheckin();
+  if(page==='chat'){renderChat();markChatRead();}
 };
 
 window.profTab=(tab,btn)=>{
   ['storico','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
   document.querySelectorAll('.prof-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+};
+
+// ── CHAT RENDER
+function renderChat(){
+  const msgs=window._chatMsgs||[];
+  const el=document.getElementById('chat-messages');
+  if(!el)return;
+  if(!msgs.length){
+    el.innerHTML='<div class="empty" style="margin-top:40px;">Nessun messaggio ancora.<br>Scrivi al tuo coach! 👋</div>';
+    return;
+  }
+  el.innerHTML=msgs.map(m=>{
+    const d=new Date(m.ts);
+    const timeStr=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' · '+d.toLocaleDateString('it-IT',{day:'2-digit',month:'short'});
+    const who=m.from==='coach'?'coach':'athlete';
+    const sender=m.from==='coach'?`<div class="chat-sender">${m.fromName||'Coach'}</div>`:'';
+    return `<div class="chat-msg ${who}">
+      ${sender}
+      <div class="chat-bubble">${(m.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      <div class="chat-time">${timeStr}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+// ── MARK COACH MESSAGES AS READ
+async function markChatRead(){
+  const msgs=window._chatMsgs||[];
+  const unread=msgs.filter(m=>m.from==='coach'&&!m.read);
+  if(!unread.length)return;
+  const updates={};
+  unread.forEach(m=>{updates[`chat/${aid}/messages/${m._key}/read`]=true;});
+  try{await update(ref(db),updates);}catch(e){console.error('markRead',e);}
+}
+
+// ── SEND ATHLETE CHAT MESSAGE
+window.sendChatMsg=async()=>{
+  const input=document.getElementById('chat-input');
+  const text=(input?.value||'').trim();
+  if(!text)return;
+  input.value='';
+  const name=window._ath?.name||'Atleta';
+  try{
+    await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),text,from:'athlete',fromName:name,read:false});
+  }catch(e){console.error('sendChat',e);showToast('⚠ Errore invio messaggio');}
 };
 
 // ── SLIDERS
