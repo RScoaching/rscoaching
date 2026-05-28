@@ -172,7 +172,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .ex-section-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
 .ex-hdr{display:grid;grid-template-columns:1fr 46px 46px 90px 24px;gap:4px;padding:0 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px;}
 .ex-hdr span{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);}
-.ex-row{display:grid;grid-template-columns:1fr 46px 46px 90px 24px;gap:4px;margin-bottom:4px;align-items:center;}
+.ex-row{display:grid;grid-template-columns:1fr 46px 46px 90px 24px;gap:4px;margin-bottom:2px;align-items:center;}
+.ex-row-detail{display:grid;grid-template-columns:70px 1fr;gap:4px;margin-bottom:6px;padding-left:2px;}
+.ex-inp-sm{background:var(--card2);border:1px solid var(--border);border-radius:6px;font-family:'Outfit',sans-serif;font-size:11px;color:var(--white);padding:4px 7px;outline:none;width:100%;}
+.ex-inp-sm:focus{border-color:var(--teal);}
+.ex-inp-sm::placeholder{color:var(--muted);font-size:10px;}
 .ex-inp{background:var(--card2);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);padding:6px 8px;outline:none;width:100%;}
 .ex-inp:focus{border-color:var(--teal);}
 .ex-inp::placeholder{color:var(--muted);font-size:11px;}
@@ -272,6 +276,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
         <div class="ed-title" id="ed-title">—</div>
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
         <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia agli atleti</button>
+        <button class="btn btn-outline btn-sm" onclick="exportPlannerPDF()">📄 PDF</button>
+        <button class="btn btn-outline btn-sm" onclick="exportPlannerWA()">📋 WhatsApp</button>
         <button class="btn btn-teal btn-sm" onclick="publishPlan()">✓ Pubblica</button>
       </div>
 
@@ -692,7 +698,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   }
 
   function _restEditorOpen(wk){
-    _eWk=wk;
+    _eWk=wk; window._currentPlanWk=wk;
     // Reset athlete mode to group on new week open
     window._athModeAid=null;
     var mSel=document.getElementById('ath-mode-sel');
@@ -854,6 +860,132 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(st){st.textContent='✓ Pubblicata il '+new Date(ts).toLocaleDateString('it-IT');st.style.color='var(--teal)';}
     window._calRender();
     _toastS('✓ Settimana pubblicata!');
+  };
+
+  // ── ESPORTA PDF ──
+  window.exportPlannerPDF=function(){
+    var wk=window._currentPlanWk||_eWk;
+    if(!wk){_toastS('⚠ Seleziona prima una settimana');return;}
+    var pd=(window._plansCache||{})[wk]||(window.plans||{})[wk]||{};
+    var conf=pd._config||{};
+    var DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+    var DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+    var TYPE_NAME={squadra:'Sessione Squadra',forza:'Forza',sprint:'Sprint / Velocità',plyo:'Pliometria',rec:'Recupero',priming:'Priming / Attivazione',riposo:'Riposo',conditioning:'Condizionamento'};
+    var TYPE_COLOR={squadra:'#3B82F6',forza:'#A78BFA',sprint:'#F87171',plyo:'#FBBF24',rec:'#34D399',priming:'rgba(255,255,255,.6)',riposo:'#4A5568',conditioning:'#FB923C'};
+    var mon=new Date(wk+'T00:00:00');
+    var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+    function fmDate(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});}
+    var weekLabel='Settimana dal '+fm(mon)+' al '+fm(sun);
+    if(conf.weekType) weekLabel+=' — '+conf.weekType;
+
+    var dayBlocks='';
+    for(var di=0;di<7;di++){
+      var daySessions=Object.values(pd[String(di)]||{}).filter(function(s){return s&&s.type&&s.type!=='riposo';});
+      var hasRiposo=Object.values(pd[String(di)]||{}).some(function(s){return s&&s.type==='riposo';});
+      var dayDate=new Date(mon);dayDate.setDate(mon.getDate()+di);
+      var isGameDay=conf.gameDay!=null&&String(conf.gameDay)===String(di);
+
+      var sessHtml='';
+      if(daySessions.length===0&&!hasRiposo){
+        sessHtml='<div class="rest-day">— riposo / non pianificato</div>';
+      } else if(hasRiposo){
+        sessHtml='<div class="rest-day">😴 Riposo</div>';
+      }
+      daySessions.forEach(function(s){
+        var col=TYPE_COLOR[s.type]||'#6B7280';
+        var exs=s.exercises?Object.values(s.exercises).filter(function(e){return e&&e.name;}):{};
+        var exHtml='';
+        if(Array.isArray(exs)?exs.length:Object.keys(exs).length){
+          var exArr=Array.isArray(exs)?exs:Object.values(exs);
+          exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>Serie</th><th>Rip.</th><th>Carico</th><th>Rec</th><th>Cue</th></tr></thead><tbody>';
+          exArr.forEach(function(e){
+            if(!e.name)return;
+            exHtml+='<tr><td class="ex-name">'+e.name+'</td><td class="num">'+(e.sets||'—')+'</td><td class="num">'+(e.reps||'—')+'</td><td class="num">'+(e.carico||e.load||'—')+'</td><td class="num">'+(e.rest||'')+'</td><td class="note-cell">'+(e.cue||e.notes||e.note||'')+'</td></tr>';
+          });
+          exHtml+='</tbody></table>';
+        }
+        var note=s.note?'<div class="sess-note">📝 '+s.note+'</div>':'';
+        sessHtml+='<div class="sess-block"><div class="sess-type-badge" style="border-left:4px solid '+col+';">'+(TYPE_NAME[s.type]||s.type)+'</div>'+note+exHtml+'</div>';
+      });
+      if(isGameDay) sessHtml='<div class="game-day-badge">🏟 GIORNO GARA</div>'+sessHtml;
+
+      dayBlocks+='<div class="day-block"><div class="day-header"><span class="day-name">'+DAYS[di]+'</span><span class="day-date">'+fmDate(dayDate)+'</span></div><div class="day-body">'+sessHtml+'</div></div>';
+    }
+
+    var html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Piano — '+wk+'</title><style>'
+      +'@page{size:A4 landscape;margin:12mm 10mm}'
+      +'body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a2e;margin:0;background:#fff}'
+      +'.pdf-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #06D6A0;padding-bottom:6px;margin-bottom:10px}'
+      +'.pdf-logo{font-size:18px;font-weight:900;letter-spacing:3px;color:#070B12}.pdf-logo span{color:#06D6A0}'
+      +'.pdf-week{font-size:11px;font-weight:700;color:#333}'
+      +'.pdf-sub{font-size:8px;color:#666}'
+      +'.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}'
+      +'.day-block{background:#f8f9fc;border-radius:5px;border:1px solid #e2e8f0;overflow:hidden}'
+      +'.day-header{background:#0A0E17;color:#fff;padding:5px 7px;display:flex;justify-content:space-between;align-items:center}'
+      +'.day-name{font-weight:700;font-size:9px;letter-spacing:.5px;text-transform:uppercase}'
+      +'.day-date{font-size:8px;opacity:.7}'
+      +'.day-body{padding:5px}'
+      +'.sess-block{margin-bottom:5px}'
+      +'.sess-type-badge{font-weight:700;font-size:8px;text-transform:uppercase;letter-spacing:.5px;padding:3px 5px;margin-bottom:3px;background:#fff;border-radius:3px}'
+      +'.sess-note{font-size:7.5px;color:#555;margin-bottom:3px;font-style:italic}'
+      +'.ex-table{width:100%;border-collapse:collapse;margin-top:2px}'
+      +'.ex-table th{background:#e2e8f0;font-size:7px;font-weight:700;text-transform:uppercase;padding:2px 3px;text-align:left;letter-spacing:.3px}'
+      +'.ex-table td{border-top:1px solid #f1f5f9;padding:2px 3px;font-size:7.5px}'
+      +'.ex-name{font-weight:600;color:#1e293b}'
+      +'.num{text-align:center;color:#4a5568;white-space:nowrap}'
+      +'.note-cell{color:#64748b;font-size:7px}'
+      +'.rest-day{color:#94a3b8;font-size:8px;font-style:italic;padding:4px}'
+      +'.game-day-badge{background:#FF6B35;color:#fff;font-size:8px;font-weight:700;padding:3px 6px;border-radius:3px;margin-bottom:4px;text-align:center}'
+      +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
+      +'</style></head><body>'
+      +'<div class="pdf-header"><div><div class="pdf-logo">RS<span>C</span></div><div class="pdf-sub">RS Coaching · Strength & Conditioning</div></div>'
+      +'<div><div class="pdf-week">'+weekLabel+'</div><div class="pdf-sub">Esportato il '+new Date().toLocaleDateString('it-IT')+'</div></div></div>'
+      +'<div class="week-grid">'+dayBlocks+'</div>'
+      +'</body></html>';
+
+    var pw=window.open('','_blank','width=1200,height=800');
+    pw.document.write(html);
+    pw.document.close();
+    pw.focus();
+    setTimeout(function(){pw.print();},600);
+  };
+
+  // ── ESPORTA WHATSAPP ──
+  window.exportPlannerWA=function(){
+    var wk=window._currentPlanWk||_eWk;
+    if(!wk){_toastS('⚠ Seleziona prima una settimana');return;}
+    var pd=(window._plansCache||{})[wk]||(window.plans||{})[wk]||{};
+    var DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+    var TYPE_EMOJI={squadra:'⚽',forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',riposo:'😴',conditioning:'🔥'};
+    var mon=new Date(wk+'T00:00:00');
+    function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+    var txt='*📅 Piano Settimana ' + fm(mon)+'*\n';
+    var conf=pd._config||{};
+    if(conf.weekType) txt+='_'+conf.weekType+'_\n';
+    txt+='\n';
+    for(var di=0;di<7;di++){
+      var daySessions=Object.values(pd[String(di)]||{}).filter(function(s){return s&&s.type;});
+      if(!daySessions.length) continue;
+      var dayDate=new Date(mon);dayDate.setDate(mon.getDate()+di);
+      txt+='*'+DAYS[di]+' '+dayDate.getDate()+'*\n';
+      daySessions.forEach(function(s){
+        if(s.type==='riposo'){txt+='😴 Riposo\n';return;}
+        txt+=(TYPE_EMOJI[s.type]||'▸')+' '+(s.type.charAt(0).toUpperCase()+s.type.slice(1))+(s.note?' — '+s.note:'')+'\n';
+        var exs=s.exercises?Object.values(s.exercises).filter(function(e){return e&&e.name;}):{};
+        var exArr=Array.isArray(exs)?exs:Object.values(exs);
+        exArr.forEach(function(e){
+          var line='  • '+e.name;
+          if(e.sets||e.reps) line+=' '+( e.sets||'?')+'×'+(e.reps||'?');
+          if(e.carico) line+=' @'+e.carico;
+          if(e.rest) line+=' | rec '+e.rest;
+          txt+=line+'\n';
+          if(e.cue) txt+='    💡 '+e.cue+'\n';
+        });
+      });
+      txt+='\n';
+    }
+    navigator.clipboard.writeText(txt).then(function(){_toastS('✓ Copiato per WhatsApp!');}).catch(function(){_toastS('⚠ Copia manuale necessaria');});
   };
 
   // ── ASSEGNA ATLETI via REST ──
@@ -1078,7 +1210,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     priming:      ['priming','mobilita'],
     rec:          ['recupero','mobilita'],
     conditioning: ['condizionamento','resistenza'],
-    squadra:      [] // vuoto = mostra tutto
+    riposo:       [],    // mostra tutto
+    squadra:      []     // mostra tutto
+    // tipo non in mappa → mostra tutto
   };
 
   // Label leggibili per categoria
@@ -1089,16 +1223,85 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     priming:'🎯 Priming', mobilita:'🧘 Mobilità', recupero:'🔄 Recupero', altro:'📦 Altro'
   };
 
+  // ── FALLBACK ESERCIZI (sempre disponibili senza Firebase)
+  var FALLBACK_EX=[
+    // FORZA
+    {name:'Squat',cat:'forza'},{name:'Back Squat',cat:'forza'},{name:'Front Squat',cat:'forza'},
+    {name:'Box Squat',cat:'forza'},{name:'Stacco da Terra',cat:'forza'},{name:'Romanian Deadlift',cat:'forza'},
+    {name:'Sumo Deadlift',cat:'forza'},{name:'Hip Thrust',cat:'forza'},{name:'Glute Bridge',cat:'forza'},
+    {name:'Affondi',cat:'forza'},{name:'Affondi Cammino',cat:'forza'},{name:'Bulgarian Split Squat',cat:'forza'},
+    {name:'Step Up',cat:'forza'},{name:'Leg Press',cat:'forza'},{name:'Hack Squat',cat:'forza'},
+    {name:'Nordic Curl',cat:'forza'},{name:'Leg Curl',cat:'forza'},{name:'Good Morning',cat:'forza'},
+    {name:'Panca Piana',cat:'forza'},{name:'Panca Inclinata',cat:'forza'},{name:'Panca Declinata',cat:'forza'},
+    {name:'Military Press',cat:'forza'},{name:'Push Press',cat:'forza'},{name:'Lento Avanti Manubri',cat:'forza'},
+    {name:'Trazioni',cat:'forza'},{name:'Lat Machine',cat:'forza'},{name:'Rematore Bilanciere',cat:'forza'},
+    {name:'Cable Row',cat:'forza'},{name:'Chest Supported Row',cat:'forza'},{name:'Dips',cat:'forza'},
+    {name:'Curl Bilanciere',cat:'forza'},{name:'Curl Manubri',cat:'forza'},{name:'Tricep Pushdown',cat:'forza'},
+    {name:'Face Pull',cat:'forza'},{name:'Alzate Laterali',cat:'forza'},{name:'Calf Raises',cat:'forza'},
+    // OLIMPICO
+    {name:'Power Clean',cat:'olimpico'},{name:'Hang Power Clean',cat:'olimpico'},
+    {name:'Power Snatch',cat:'olimpico'},{name:'Hang Power Snatch',cat:'olimpico'},
+    {name:'Push Jerk',cat:'olimpico'},{name:'Split Jerk',cat:'olimpico'},
+    {name:'Clean Pull',cat:'olimpico'},{name:'Snatch Pull',cat:'olimpico'},
+    // PLIOMETRIA
+    {name:'Box Jump',cat:'pliometria'},{name:'Depth Jump',cat:'pliometria'},
+    {name:'Hurdle Jump',cat:'pliometria'},{name:'Broad Jump',cat:'pliometria'},
+    {name:'Single Leg Box Jump',cat:'pliometria'},{name:'Drop Jump',cat:'pliometria'},
+    {name:'Bounding',cat:'pliometria'},{name:'Ankle Hop',cat:'pliometria'},
+    {name:'Medicine Ball Chest Pass',cat:'pliometria'},{name:'Med Ball Slam',cat:'pliometria'},
+    // VELOCITÀ PREPARATORIA
+    {name:'Skipping A',cat:'velocita_prep'},{name:'Skipping B',cat:'velocita_prep'},
+    {name:'Corsa Calciata',cat:'velocita_prep'},{name:'Carioca',cat:'velocita_prep'},
+    {name:'Passo Strisciato',cat:'velocita_prep'},{name:'A-Skip',cat:'velocita_prep'},
+    {name:'B-Skip',cat:'velocita_prep'},{name:'Galloping',cat:'velocita_prep'},
+    {name:'Corsa Laterale',cat:'velocita_prep'},{name:'Sprint Tecnico 20m',cat:'velocita_prep'},
+    // VELOCITÀ SPRINT
+    {name:'Sprint 10m',cat:'velocita_sprint'},{name:'Sprint 20m',cat:'velocita_sprint'},
+    {name:'Sprint 30m',cat:'velocita_sprint'},{name:'Accelerazione 5m',cat:'velocita_sprint'},
+    {name:'Fly 20m',cat:'velocita_sprint'},{name:'Sprint 40m',cat:'velocita_sprint'},
+    {name:'Sprint con Resistenza 20m',cat:'velocita_sprint'},{name:'Sprint in Salita 30m',cat:'velocita_sprint'},
+    // CONDIZIONAMENTO
+    {name:'Circuit Training 4 Stazioni',cat:'condizionamento'},{name:'Tabata',cat:'condizionamento'},
+    {name:'Small-Sided Game 2v2',cat:'condizionamento'},{name:'Small-Sided Game 3v3',cat:'condizionamento'},
+    {name:'Small-Sided Game 4v4',cat:'condizionamento'},{name:'Rondo 4+2',cat:'condizionamento'},
+    // RESISTENZA
+    {name:'Corsa Continua',cat:'resistenza'},{name:'Fartlek',cat:'resistenza'},
+    {name:'Intermittenti 15-15',cat:'resistenza'},{name:'Intermittenti 20-20',cat:'resistenza'},
+    {name:'Intermittenti 30-30',cat:'resistenza'},{name:'Corsa Progressiva',cat:'resistenza'},
+    {name:'Interval 1000m',cat:'resistenza'},{name:'Interval 2000m',cat:'resistenza'},
+    // PRIMING
+    {name:'Hip Activation Circuit',cat:'priming'},{name:'Glute Activation Band',cat:'priming'},
+    {name:'Dynamic Stretching',cat:'priming'},{name:'CNS Ramp Up',cat:'priming'},
+    {name:'Reactive Sprint 5m',cat:'priming'},{name:'Ballistic Warm-Up',cat:'priming'},
+    // MOBILITÀ
+    {name:"World's Greatest Stretch",cat:'mobilita'},{name:'Hip 90/90',cat:'mobilita'},
+    {name:'Ankle Mobility',cat:'mobilita'},{name:'T-Spine Rotation',cat:'mobilita'},
+    {name:'Foam Rolling Quadricipiti',cat:'mobilita'},{name:'Foam Rolling IT Band',cat:'mobilita'},
+    // RECUPERO
+    {name:'Cammino Defaticante',cat:'recupero'},{name:'Nuoto Defaticante',cat:'recupero'},
+    {name:'Stretching Statico',cat:'recupero'},{name:'Yoga Atletico',cat:'recupero'},
+    {name:'Ice Bath',cat:'recupero'},{name:'Doccia Fredda Contrasto',cat:'recupero'}
+  ];
+
+  function _seedFallback(){
+    FALLBACK_EX.forEach(function(ex){
+      var cat=ex.cat||'altro';
+      if(!_exDb[cat])_exDb[cat]=[];
+      if(_exDb[cat].indexOf(ex.name)<0)_exDb[cat].push(ex.name);
+    });
+  }
+
   function _loadExDb(){
     if(_exDbLoaded) return Promise.resolve();
     if(_exDbPromise) return _exDbPromise;
-    // Legge exercise_db (stesso path del builder)
+    // Carica subito il fallback hardcoded
+    _seedFallback();
+    // Poi tenta di arricchire con Firebase
     _exDbPromise=fetch(DB_URL+'/exercise_db.json')
       .then(function(r){return r.ok?r.json():null;})
       .then(function(data){
         _exDbLoaded=true;
         if(!data) return;
-        // Formato: {key:{name,category,order,...}}
         Object.values(data).forEach(function(v){
           if(!v||typeof v!=='object') return;
           var name=(v.name||v.nome||'').trim();
@@ -1108,8 +1311,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
             if(_exDb[cat].indexOf(name)<0) _exDb[cat].push(name);
           }
         });
-        // Ordina ogni categoria alfabeticamente
         Object.keys(_exDb).forEach(function(c){ _exDb[c].sort(); });
+        _renderExList();// aggiorna dopo merge Firebase
       })
       .catch(function(){_exDbLoaded=true;});
     return _exDbPromise;
@@ -1138,7 +1341,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   window.addEx=function(){
     var id=_exCnt++;
-    _exRows.push({id:id,name:'',sets:'',reps:'',carico:''});
+    _exRows.push({id:id,name:'',sets:'',reps:'',carico:'',rest:'',cue:''});
     // Carica DB se non ancora fatto, poi render
     _loadExDb().then(function(){ _renderExList(); });
   };
@@ -1181,8 +1384,12 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
         +'<input class="ex-inp" list="'+dlId+'" placeholder="Cerca o digita esercizio..." value="'+_esc(r.name)+'" oninput="_exUp('+r.id+',\'name\',this.value)">'
         +'<input class="ex-inp" placeholder="3" value="'+_esc(r.sets)+'" oninput="_exUp('+r.id+',\'sets\',this.value)" title="Serie" style="text-align:center;">'
         +'<input class="ex-inp" placeholder="8" value="'+_esc(r.reps)+'" oninput="_exUp('+r.id+',\'reps\',this.value)" title="Ripetizioni" style="text-align:center;">'
-        +'<input class="ex-inp" placeholder="80% / RPE 7 / 60kg" value="'+_esc(r.carico)+'" oninput="_exUp('+r.id+',\'carico\',this.value)" title="Carico / Note">'
+        +'<input class="ex-inp" placeholder="80% / RPE 7" value="'+_esc(r.carico)+'" oninput="_exUp('+r.id+',\'carico\',this.value)" title="Carico (es. 80% / RPE 7 / 60kg)">'
         +'<button class="ex-del" onclick="removeEx('+r.id+')" type="button" title="Rimuovi">✕</button>'
+        +'</div>'
+        +'<div class="ex-row-detail">'
+        +'<input class="ex-inp-sm" placeholder="⏱ Rec (es. 2\')" value="'+_esc(r.rest)+'" oninput="_exUp('+r.id+',\'rest\',this.value)" title="Recupero">'
+        +'<input class="ex-inp-sm" placeholder="💡 Cue / nota coaching..." value="'+_esc(r.cue)+'" oninput="_exUp('+r.id+',\'cue\',this.value)" title="Coaching cue">'
         +'</div>';
     }).join('');
   }
@@ -1191,7 +1398,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(exercises){
       var entries=Array.isArray(exercises)?exercises:Object.values(exercises);
       entries.forEach(function(ex){
-        if(ex&&(ex.name||ex.sets||ex.reps)) _exRows.push({id:_exCnt++,name:ex.name||'',sets:ex.sets||'',reps:ex.reps||'',carico:ex.carico||ex.load||''});
+        if(ex&&(ex.name||ex.sets||ex.reps)) _exRows.push({id:_exCnt++,name:ex.name||'',sets:ex.sets||'',reps:ex.reps||'',carico:ex.carico||ex.load||'',rest:ex.rest||'',cue:ex.cue||ex.notes||''});
       });
     }
     _loadExDb().then(function(){ _renderExList(); });
@@ -1199,7 +1406,12 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window._getExData=function(){
     var out={};
     _exRows.forEach(function(r,i){
-      if(r.name||r.sets||r.reps) out[String(i)]={name:r.name||'',sets:r.sets||'',reps:r.reps||'',carico:r.carico||''};
+      if(r.name||r.sets||r.reps){
+        var entry={name:r.name||'',sets:r.sets||'',reps:r.reps||'',carico:r.carico||''};
+        if(r.rest) entry.rest=r.rest;
+        if(r.cue) entry.cue=r.cue;
+        out[String(i)]=entry;
+      }
     });
     return Object.keys(out).length?out:null;
   };
@@ -1354,6 +1566,7 @@ window.shiftMonth=function(dir){
 // ── SELECT WEEK → wizard (se vuota) o editor (se ha sessioni)
 window.selectWeek=function(wk){
   currentWk=wk;
+  window._currentPlanWk=wk;
   window._selWk=wk;
   window._calRender();
   if(window.openWeekOrWiz) window.openWeekOrWiz(wk);
@@ -1548,7 +1761,7 @@ window.autoSuggest=async function(){
   if(isNaN(gameDay)||gameDay<0){showToast('⚠ Imposta il giorno gara per usare i suggerimenti');return;}
   // Check if week already has sessions and warn
   const existing=plans[currentWk]||{};
-  const hasSessions=Object.entries(existing).some(([k,v])=>k!=='_athletes'&&typeof v==='object'&&Object.keys(v).length>0);
+  const hasSessions=Object.entries(existing).some(([k,v])=>!k.startsWith('_')&&typeof v==='object'&&Object.keys(v).length>0);
   if(hasSessions&&!confirm('Questa settimana ha già delle sessioni. Sovrascrivere con la settimana tipo?')){return;}
   const suggestions=[
     {day:(gameDay+1)%7,type:'rec',   note:'Recupero attivo 25min · Bike Z1 + prevenzione'},
@@ -1729,7 +1942,7 @@ window._populateAthSel=function(wk){
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 
 // ── Bridge: editor e Firebase write richiamati dallo standalone wizard
-window._openEditor=function(wk){currentWk=wk;window._selWk=wk;window._calRender();renderEditor();};
+window._openEditor=function(wk){currentWk=wk;window._currentPlanWk=wk;window._selWk=wk;window._calRender();renderEditor();};
 window._firebaseApply=async function(writes,wk){
   try{
     await Promise.all(Object.entries(writes).map(([p,v])=>set(ref(db,p),v)));
