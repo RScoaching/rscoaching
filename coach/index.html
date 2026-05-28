@@ -459,7 +459,7 @@ const db=getDatabase(app);
 const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("🔐 PIN preparatore:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#50506A;font-family:Inter,sans-serif;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
-let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={};
+let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={},chatData={};
 const BASE=(()=>{const p=window.location.pathname;const base=p.replace(/\/coach\/.*$/,'').replace(/^\/+/,'');return window.location.origin+'/'+(base?base+'/':'')+'athlete/?id=';})();
 let currentAid=null;
 const LV_L={1:'Principiante',2:'Intermedio',3:'Avanzato'};
@@ -485,6 +485,15 @@ onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();});
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
 onValue(ref(db,'session_logs'),s=>{sessionLogs=s.val()||{};});
+onValue(ref(db,'chat'),s=>{
+  chatData=s.val()||{};
+  renderAthletes(); // aggiorna badge messaggi non letti
+  // Se pannello atleta aperto e tab chat visibile, aggiorna
+  if(currentAid){
+    const chatEl=document.getElementById('det-chat');
+    if(chatEl&&chatEl.style.display!=='none') renderDetChat(currentAid);
+  }
+});
 
 function renderAll(){
   renderDashboard();
@@ -574,13 +583,27 @@ function renderAthletes(){
     const last=aSess[0];const rpe=last?.rpe||0;
     const dotCls=rpe>=9?'rd-red':rpe>=7?'rd-amber':rpe>0?'rd-green':'rd-gray';
     const hasCI=checkins[id]&&Object.values(checkins[id]).some(c=>c.date===todayStr);
+    // ACWR badge
+    const now2=Date.now();
+    const recentS=aSess.filter(s=>s.ts&&s.rpe>0);
+    const acute7=recentS.filter(s=>s.ts>now2-7*864e5).reduce((a,s)=>a+(s.rpe||0),0);
+    const wb=[0,0,0,0];recentS.filter(s=>s.ts>now2-28*864e5).forEach(s=>{wb[Math.min(3,Math.floor((now2-s.ts)/864e5/7))]+=(s.rpe||0);});
+    const chronic=wb.reduce((a,b)=>a+b,0)/4;
+    const acwr=chronic>0?acute7/chronic:0;
+    const acwrBg=acwr<0.8?'rgba(59,130,246,.15)':acwr<=1.3?'rgba(34,197,94,.15)':acwr<=1.5?'rgba(245,158,11,.15)':'rgba(239,68,68,.15)';
+    const acwrColor=acwr<0.8?'var(--blue)':acwr<=1.3?'var(--green)':acwr<=1.5?'var(--amber)':'var(--red)';
+    const acwrBadge=chronic>0?`<span style="font-size:9px;padding:2px 7px;border-radius:5px;background:${acwrBg};color:${acwrColor};font-weight:700;">ACWR ${acwr.toFixed(2)}</span>`:'';
+    // Unread chat messages (da atleta, non letti da coach)
+    const unread=Object.values(chatData[id]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length;
+    const chatBadge=unread>0?`<span style="background:var(--orange);color:#000;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700;">💬 ${unread}</span>`:'';
     return `<div class="ath-row" onclick="openAthlete('${id}')">
       <div class="ath-av">${ini(a.name)}</div>
       <div style="flex:1;min-width:0;">
         <div class="ath-name">${a.name} <span class="lv ${LV_C[lv]}">${LV_L[lv]}</span></div>
         <div class="ath-meta">${a.role||'—'} · ${a.team||'—'}${grp?' · '+grp:''}${a.injuries?` · <span style="color:var(--red)">⚠ ${a.injuries}</span>`:''}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:140px;">
+        ${acwrBadge}${chatBadge}
         ${rpe>0?`<span class="pill ${rpe>=9?'p-red':rpe>=7?'p-warn':'p-ok'}" style="font-size:9px;">RPE ${rpe}</span>`:''}
         ${hasCI?'<span class="pill p-green" style="font-size:9px;">✓ CI</span>':''}
         <div class="readiness-dot ${dotCls}"></div>
@@ -618,12 +641,14 @@ window.openAthlete=function(aid,silent){
       <div class="tab" onclick="detTab('sessions',this)">Sedute</div>
       <div class="tab" onclick="detTab('checkin',this)">Check-in</div>
       <div class="tab" onclick="detTab('load',this)">Carico</div>
+      <div class="tab" id="tab-chat-${aid}" onclick="detTab('chat',this)">💬 Chat${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length>0?` <span style="background:var(--orange);color:#000;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;">${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length}</span>`:''}</div>
     </div>
     <div id="det-overview">${renderDetOverview(aid,a,aSess,aCi)}</div>
     <div id="det-tests" style="display:none;">${renderDetTests(aid)}</div>
     <div id="det-sessions" style="display:none;">${renderDetSessions(aid,aSess)}</div>
     <div id="det-checkin" style="display:none;">${renderDetCheckin(aCi)}</div>
-    <div id="det-load" style="display:none;">${renderDetLoad(aid,aSess)}</div>`;
+    <div id="det-load" style="display:none;">${renderDetLoad(aid,aSess)}</div>
+    <div id="det-chat" style="display:none;">${renderDetChat(aid)}</div>`;
   if(!silent){panel.scrollIntoView({behavior:'smooth',block:'start'});pg('athletes',document.querySelectorAll('.nav-item')[1]);}
 };
 
@@ -740,9 +765,22 @@ function renderDetLoad(aid,aSess){
 }
 
 window.detTab=function(id,el){
-  ['overview','tests','sessions','checkin','load'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=t===id?'block':'none';});
+  ['overview','tests','sessions','checkin','load','chat'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=t===id?'block':'none';});
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   if(el)el.classList.add('active');
+  // Quando si apre la chat, marca messaggi atleta come letti
+  if(id==='chat'&&currentAid){
+    const msgs=chatData[currentAid]?.messages||{};
+    const unreadKeys=Object.entries(msgs).filter(([,m])=>m.from==='athlete'&&!m.read).map(([k])=>k);
+    unreadKeys.forEach(k=>update(ref(db,`chat/${currentAid}/messages/${k}`),{read:true}));
+    renderDetChat(currentAid);
+  }
+  // Quando si apre Sedute, ricarica session_logs per questo atleta se necessario
+  if(id==='sessions'&&currentAid&&!sessionLogs[currentAid]){
+    get(ref(db,`session_logs/${currentAid}`)).then(s=>{
+      if(s.val()){sessionLogs[currentAid]=s.val();const el=document.getElementById('det-sessions');if(el)el.innerHTML=renderDetSessions(currentAid,Object.values(sessions[currentAid]||{}).sort((a,b)=>b.ts-a.ts));}
+    });
+  }
   if(id==='overview'&&currentAid){
     setTimeout(()=>{
       const canvas=document.getElementById('det-rpe-canvas');if(!canvas)return;
@@ -753,6 +791,47 @@ window.detTab=function(id,el){
       }});
     },100);
   }
+};
+
+// ── CHAT
+function renderDetChat(aid){
+  const msgs=Object.values(chatData[aid]?.messages||{}).sort((a,b)=>a.ts-b.ts);
+  const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});};
+  const msgsHtml=msgs.length?msgs.map(m=>{
+    const isCoach=m.from==='coach';
+    return `<div style="display:flex;justify-content:${isCoach?'flex-end':'flex-start'};margin-bottom:8px;">
+      <div style="max-width:72%;padding:8px 12px;border-radius:${isCoach?'14px 14px 4px 14px':'14px 14px 14px 4px'};background:${isCoach?'rgba(255,104,48,.18)':'var(--card2)'};border:1px solid ${isCoach?'rgba(255,104,48,.3)':'var(--border)'};">
+        <div style="font-size:13px;color:var(--white);line-height:1.4;">${m.text}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:3px;text-align:right;">${fmtTime(m.ts)}${isCoach?m.read?' ✓✓':' ✓':''}</div>
+      </div>
+    </div>`;
+  }).join(''):'<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Nessun messaggio ancora.</div>';
+  return `<div style="display:flex;flex-direction:column;height:360px;">
+    <div id="chat-msgs-${aid}" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;">${msgsHtml}</div>
+    <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
+      <input type="text" id="chat-inp-${aid}" placeholder="Scrivi un messaggio per ${athletes[aid]?.name||'atleta'}..."
+        style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:8px 14px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);outline:none;"
+        onkeydown="if(event.key==='Enter')sendCoachChat('${aid}')"
+        style="width:100%;">
+      <button onclick="sendCoachChat('${aid}')"
+        style="background:rgba(255,104,48,.15);border:1px solid rgba(255,104,48,.3);color:var(--orange);border-radius:20px;padding:8px 14px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.5px;">
+        INVIA
+      </button>
+    </div>
+  </div>`;
+}
+
+window.sendCoachChat=async function(aid){
+  const inp=document.getElementById(`chat-inp-${aid}`);
+  const text=(inp?.value||'').trim();
+  if(!text)return;
+  inp.value='';
+  const ts=Date.now();
+  const coachName='Raoul (Coach)';
+  await push(ref(db,`chat/${aid}/messages`),{ts,text,from:'coach',fromName:coachName,read:false});
+  // Scroll to bottom
+  const msgsEl=document.getElementById(`chat-msgs-${aid}`);
+  if(msgsEl)setTimeout(()=>{msgsEl.scrollTop=msgsEl.scrollHeight;},100);
 };
 
 // ── GROUPS
