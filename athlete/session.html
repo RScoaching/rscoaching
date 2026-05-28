@@ -661,7 +661,7 @@ body{font-family:'Inter',sans-serif;color:var(--text);padding-bottom:100px;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, get, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, get, push, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const cfg={apiKey:"AIzaSyAayWDWvUQqtAfIlm7qA8kMKxJu2-_y7k4",authDomain:"rscoaching-a6c61.firebaseapp.com",databaseURL:"https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rscoaching-a6c61",storageBucket:"rscoaching-a6c61.firebasestorage.app",messagingSenderId:"499942544251",appId:"1:499942544251:web:bd246cc6846b0fad89e3de"};
 const app=initializeApp(cfg);
@@ -1335,13 +1335,15 @@ window.saveSessionCheckin=async function(){
     const _ts=now.getTime();
     const _date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
     const _day=session.name||session.type||'Sessione';
+    // Use date key (YYYY-MM-DD) so same-day re-save overwrites instead of duplicating
+    const _dateKey=now.toISOString().slice(0,10);
     await Promise.all([
-      push(ref(db,`checkins/${AID}`),{
+      set(ref(db,`checkins/${AID}/${_dateKey}`),{
         ts:_ts,date:_date,
         fatica:rpe,doms,sonno,pains:pains.length?pains:null,note,
         fromSession:_day,sessType:session.type||null
       }),
-      push(ref(db,`sessions/${AID}`),{
+      set(ref(db,`sessions/${AID}/${_dateKey}`),{
         ts:_ts,date:_date,
         rpe,doms,sleep:sonno,note,day:_day
       })
