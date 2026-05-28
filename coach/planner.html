@@ -1061,67 +1061,72 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   // ════════════════════════════════
-  // EXERCISE DATABASE (dal DB Firebase)
+  // EXERCISE DATABASE (dal DB Firebase — exercise_db)
   // ════════════════════════════════
   var _exDb={};       // {categoria:[nomi,...]}
   var _exDbLoaded=false;
   var _exDbPromise=null;
 
-  // Mappa tipo-sessione → categorie nel DB
+  // Mappa tipo-sessione → categorie ESATTE nel DB
+  // forza: solo forza/olimpico/pliometria; NO sprint, NO resistenza
+  // sprint: preparatoria + sprint veri (separati dal tipo di lavoro)
+  // condizionamento: circuiti + lavori di resistenza
   var EX_CAT_MAP={
-    forza:   ['forza','strength','pesi','power','potenza','squat','hip','deadlift'],
-    plyo:    ['plyo','pliometria','plyometric','salti','balzi','drop'],
-    sprint:  ['sprint','speed','velocità','atletica','accelerazione'],
-    priming: ['priming','activation','attivazione','warm-up','riscaldamento','mobilità'],
-    rec:     ['recovery','recupero','stretching','flessibilità','foam'],
-    conditioning:['conditioning','metabolic','metabolico','cardio','circuito','amrap','emom'],
-    squadra: ['squadra','campo','team','tecnica','possesso','tattica']
+    forza:        ['forza','olimpico','pliometria'],
+    plyo:         ['pliometria','olimpico'],
+    sprint:       ['velocita_sprint','velocita_prep'],
+    priming:      ['priming','mobilita'],
+    rec:          ['recupero','mobilita'],
+    conditioning: ['condizionamento','resistenza'],
+    squadra:      [] // vuoto = mostra tutto
+  };
+
+  // Label leggibili per categoria
+  var CAT_LABEL={
+    forza:'💪 Forza', olimpico:'🏋️ Olimpico', pliometria:'🦘 Pliometria',
+    velocita_prep:'🏃 Velocità preparatoria', velocita_sprint:'⚡ Sprint',
+    condizionamento:'🔥 Conditioning', resistenza:'🫀 Resistenza/Endurance',
+    priming:'🎯 Priming', mobilita:'🧘 Mobilità', recupero:'🔄 Recupero', altro:'📦 Altro'
   };
 
   function _loadExDb(){
     if(_exDbLoaded) return Promise.resolve();
     if(_exDbPromise) return _exDbPromise;
-    _exDbPromise=fetch(DB_URL+'/exercises.json')
+    // Legge exercise_db (stesso path del builder)
+    _exDbPromise=fetch(DB_URL+'/exercise_db.json')
       .then(function(r){return r.ok?r.json():null;})
       .then(function(data){
         _exDbLoaded=true;
         if(!data) return;
-        // Supporta sia {key:{name,category}} sia {categoria:[...]}
-        Object.entries(data).forEach(function(kv){
-          var k=kv[0], v=kv[1];
-          if(typeof v==='string'){
-            // formato diretto: categoria → nome
-            if(!_exDb[k]) _exDb[k]=[];
-            _exDb[k].push(v);
-          } else if(Array.isArray(v)){
-            // formato {categoria:[nomi]}
-            _exDb[k]=(v||[]).filter(Boolean);
-          } else if(v&&typeof v==='object'){
-            // formato {key:{name,category,...}}
-            var name=(v.name||v.nome||'').trim();
-            var cat=((v.category||v.categoria||v.type||v.tipo||'altro')+'').toLowerCase().trim();
-            if(name){
-              if(!_exDb[cat]) _exDb[cat]=[];
-              if(_exDb[cat].indexOf(name)<0) _exDb[cat].push(name);
-            }
+        // Formato: {key:{name,category,order,...}}
+        Object.values(data).forEach(function(v){
+          if(!v||typeof v!=='object') return;
+          var name=(v.name||v.nome||'').trim();
+          var cat=((v.category||v.categoria||'altro')+'').toLowerCase().trim();
+          if(name){
+            if(!_exDb[cat]) _exDb[cat]=[];
+            if(_exDb[cat].indexOf(name)<0) _exDb[cat].push(name);
           }
         });
+        // Ordina ogni categoria alfabeticamente
+        Object.keys(_exDb).forEach(function(c){ _exDb[c].sort(); });
       })
       .catch(function(){_exDbLoaded=true;});
     return _exDbPromise;
   }
 
-  // Ottieni lista filtrata per tipo sessione corrente
+  // Ottieni lista filtrata per tipo sessione corrente — matching ESATTO
   function _getExSuggestions(){
     var st=(window._selSessType||'').toLowerCase();
-    var cats=EX_CAT_MAP[st]||[];
+    var cats=EX_CAT_MAP[st];
+    // Se categoria vuota o tipo non trovato → mostra tutto
+    if(!cats||!cats.length){
+      var all=[];
+      Object.values(_exDb).forEach(function(names){ all=all.concat(names||[]); });
+      var seen={};return all.filter(function(n){if(seen[n])return false;seen[n]=true;return true;}).sort();
+    }
     var all=[];
-    Object.entries(_exDb).forEach(function(kv){
-      var cat=kv[0].toLowerCase(), names=kv[1];
-      var match=!st||cats.some(function(c){return cat.includes(c)||c.includes(cat);});
-      if(match) all=all.concat(names||[]);
-    });
-    // Remove duplicates & sort
+    cats.forEach(function(cat){ if(_exDb[cat]) all=all.concat(_exDb[cat]); });
     var seen={};
     return all.filter(function(n){if(seen[n])return false;seen[n]=true;return true;}).sort();
   }
@@ -1161,9 +1166,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     var catLabel='';
     if(sugg.length){
       var ST=window._selSessType;
-      var catNames={forza:'💪 Forza',plyo:'🦘 Pliometria',sprint:'⚡ Sprint',priming:'🎯 Priming',rec:'🔄 Recupero',conditioning:'🔥 Conditioning',squadra:'⚽ Squadra'};
+      var stLabel={forza:'Forza + Olimpico',plyo:'Pliometria',sprint:'Velocità preparatoria + Sprint',
+        priming:'Priming + Mobilità',rec:'Recupero',conditioning:'Conditioning + Resistenza',squadra:'Tutti'};
       catLabel='<div style="font-size:10px;color:var(--teal);font-weight:600;margin-bottom:6px;letter-spacing:.5px;">'+
-        '📚 '+(sugg.length)+' esercizi — '+(catNames[ST]||'Tutti i tipi')+'</div>';
+        '📚 '+(sugg.length)+' esercizi — '+(stLabel[ST]||'Tutti i tipi')+'</div>';
     }
 
     if(!_exRows.length){
