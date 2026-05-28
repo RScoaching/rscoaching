@@ -861,7 +861,11 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   const wrap=document.getElementById('today-content');
 
   function exListHtml(exercises){
-    if(!exercises||!exercises.length)return '';
+    // normalize: accept both arrays and Firebase objects {0:{...},1:{...}}
+    if(!exercises)return '';
+    const arr=Array.isArray(exercises)?exercises:Object.values(exercises);
+    if(!arr.length)return '';
+    exercises=arr;
     return `<div class="sess-exercises">
       <div class="sess-ex-lbl">Esercizi</div>
       ${exercises.map(ex=>{
@@ -871,7 +875,8 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
         return `<div class="ex-row">
           <div class="ex-left">
             <div class="ex-name-t">${ex.name||'—'}</div>
-            <div class="ex-params">${ex.sets||3}×${ex.reps||'—'}${pct>0?` @${pct}%`:''}${ex.rpe?` · RPE ${ex.rpe}`:''}</div>
+            <div class="ex-params">${ex.sets||3}×${ex.reps||'—'}${pct>0?` @${pct}%`:ex.carico?` · ${ex.carico}`:''}${ex.rpe?` · RPE ${ex.rpe}`:''}</div>
+            ${ex.rest?`<div class="ex-cue">⏱ Rec ${ex.rest}</div>`:''}
             ${ex.cue?`<div class="ex-cue">💡 ${ex.cue}</div>`:''}
           </div>
           ${kgSug>0?`<div style="text-align:right;"><div class="ex-kg-disp">${kgSug}</div><div class="ex-kg-lbl">kg</div></div>`:''}
@@ -961,7 +966,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       const daySess=Object.entries(raw).filter(([k])=>k!=='_published').map(([,v])=>v).sort((a,b)=>a.ts-b.ts);
       if(daySess.length){
         window._quickSessionDay={type:daySess[0].type,note:daySess[0].note,exercises:daySess[0].exercises||{}};
-        wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,s.exercises||[],null,null,null,null,null)).join('');
+        wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,Object.values(s.exercises||{}),null,null,null,null,null)).join('');
         if(dayIdx===todayIdx)updateWeekDotToday();
         return;
       }
