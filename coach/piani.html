@@ -266,9 +266,20 @@ function renderAthleteWeek({aid,plan,key},monday){
 }
 
 // ── MODAL: NEW PLAN
-window.openNewPlan=function(){
+window.openNewPlan=async function(){
   try{
-  const athIds=Object.keys(athletes);
+  // Force-load athletes if not yet populated (first click before Firebase responds)
+  if(!Object.keys(athletes).length){
+    const snap=await get(ref(db,'athletes'));
+    athletes=snap.val()||{};
+  }
+  // Clear stale selections from previous opens
+  npSelected.clear();
+
+  const athIds=Object.keys(athletes).filter(id=>athletes[id]);
+  // Pre-select all athletes by default
+  athIds.forEach(id=>npSelected.add(id));
+
   const mb=document.getElementById('modal-body');
   mb.innerHTML=`<h3>Nuovo piano rapido</h3>
     <div class="grid2">
@@ -279,8 +290,8 @@ window.openNewPlan=function(){
       </select></div>
     </div>
     <div class="field"><label>Seleziona atleti</label>
-      <div id="np-athletes">${athIds.length?athIds.filter(id=>athletes[id]).map(id=>`
-        <div class="athlete-chip" id="npc-${id}" onclick="toggleNpAth('${id}')">
+      <div id="np-athletes">${athIds.length?athIds.map(id=>`
+        <div class="athlete-chip sel" id="npc-${id}" onclick="toggleNpAth('${id}')">
           <div class="ac-av">${ini(athletes[id]?.name||id)}</div>
           <span style="font-size:13px;font-weight:600;color:var(--white);flex:1;">${athletes[id]?.name||id}</span>
           <span class="ac-ck">✓</span>
