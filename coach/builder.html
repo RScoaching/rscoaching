@@ -553,13 +553,13 @@ window.openModal=function(type,...args){
   } else if(type==='add-ex'||type==='edit-ex'){
     const [wid,sid,eid]=args;
     const e=eid&&p?.weeks?.[wid]?.sessions?.[sid]?.exercises?.[eid]||{};
-    const exOpts=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>`<option value="${ex.name}"${e.name===ex.name?' selected':''}>${ex.name}</option>`).join('');
+    const exNames=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>ex.name);
     mb.innerHTML=`<h3>${eid?'Modifica esercizio':'Aggiungi esercizio'}</h3>
-      <div class="field"><label>Esercizio</label><select id="m-ename">
-        <option value="">Seleziona dal database...</option>${exOpts}
-        <option value="__custom">✏ Nome personalizzato</option>
-      </select></div>
-      <div class="field" id="custom-name-field" style="display:none;"><label>Nome personalizzato</label><input id="m-ecustom" value="${e.name||''}" placeholder="Es. Box Jump pesante"></div>
+      <div class="field"><label>Esercizio</label>
+        <input type="text" id="m-ename" list="bld-ex-dl" value="${(e.name||'').replace(/"/g,'&quot;')}" placeholder="Digita o cerca dal database..." autocomplete="off"
+          style="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
+        <datalist id="bld-ex-dl">${exNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+      </div>
       <div class="grid4">
         <div class="field"><label>Serie</label><input type="number" id="m-sets" value="${e.sets||3}" min="1" max="20" placeholder="3"></div>
         <div class="field"><label>Reps / Dur.</label><input id="m-reps" value="${e.reps||''}" placeholder="5 / 30&quot;"></div>
@@ -581,14 +581,6 @@ window.openModal=function(type,...args){
         <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
         <button class="btn btn-teal" onclick="saveEx('${wid}','${sid}','${eid||''}')">${eid?'Salva →':'Aggiungi →'}</button>
       </div>`;
-    document.getElementById('m-ename').addEventListener('change',function(){
-      document.getElementById('custom-name-field').style.display=this.value==='__custom'?'block':'none';
-    });
-    if(e.name&&!Object.values(exercises).find(ex=>ex.name===e.name)){
-      document.getElementById('m-ename').value='__custom';
-      document.getElementById('custom-name-field').style.display='block';
-      document.getElementById('m-ecustom').value=e.name;
-    }
 
   } else if(type==='add-complex'){
     const [wid,sid]=args;
@@ -738,9 +730,8 @@ window.saveSess=async function(wid,sid){
 };
 
 window.saveEx=async function(wid,sid,eid){
-  const selVal=document.getElementById('m-ename').value;
-  const name=selVal==='__custom'?document.getElementById('m-ecustom').value.trim():selVal;
-  if(!name){alert('Seleziona o scrivi un esercizio');return;}
+  const name=(document.getElementById('m-ename')?.value||'').trim();
+  if(!name){alert('Inserisci il nome dell\'esercizio');return;}
   const exPath=`programs/${currentProgId}/weeks/${wid}/sessions/${sid}/exercises`;
   const data={name,sets:+document.getElementById('m-sets').value||3,reps:document.getElementById('m-reps').value,pct:document.getElementById('m-pct').value||null,rpe:document.getElementById('m-rpe').value||null,rest:document.getElementById('m-rest').value||null,intensity:document.getElementById('m-intensity').value||null,cue:document.getElementById('m-cue').value.trim()||null};
   if(eid){await update(ref(db,`${exPath}/${eid}`),data);}
