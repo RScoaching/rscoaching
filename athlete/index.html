@@ -1429,10 +1429,11 @@ function renderChat(){
     const timeStr=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+' · '+d.toLocaleDateString('it-IT',{day:'2-digit',month:'short'});
     const who=m.from==='coach'?'coach':'athlete';
     const sender=m.from==='coach'?`<div class="chat-sender">${m.fromName||'Coach'}</div>`:'';
+    const status=m.from==='athlete'?(m._pending?'<span style="opacity:.5;margin-left:4px;font-size:9px;">⏳</span>':'<span style="margin-left:4px;font-size:9px;opacity:.6;">✓</span>'):'';
     return `<div class="chat-msg ${who}">
       ${sender}
       <div class="chat-bubble">${(m.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-      <div class="chat-time">${timeStr}</div>
+      <div class="chat-time">${timeStr}${status}</div>
     </div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
@@ -1448,16 +1449,29 @@ async function markChatRead(){
   try{await update(ref(db),updates);}catch(e){console.error('markRead',e);}
 }
 
-// ── SEND ATHLETE CHAT MESSAGE
+// ── SEND ATHLETE CHAT MESSAGE (con UI ottimistica)
 window.sendChatMsg=async()=>{
   const input=document.getElementById('chat-input');
   const text=(input?.value||'').trim();
   if(!text)return;
   input.value='';
   const name=window._ath?.name||'Atleta';
+  const ts=Date.now();
+  const tmpKey='_tmp_'+ts;
+  // Mostra subito il messaggio senza aspettare Firebase
+  if(!window._chatMsgs)window._chatMsgs=[];
+  window._chatMsgs.push({ts,text,from:'athlete',fromName:name,read:false,_key:tmpKey,_pending:true});
+  renderChat();
   try{
-    await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),text,from:'athlete',fromName:name,read:false});
-  }catch(e){console.error('sendChat',e);showToast('⚠ Errore invio messaggio');}
+    await push(ref(db,`chat/${aid}/messages`),{ts,text,from:'athlete',fromName:name,read:false});
+    // onValue si ri-attiverà con i dati reali — rimuovi tmp per sicurezza
+    window._chatMsgs=window._chatMsgs.filter(m=>m._key!==tmpKey);
+  }catch(e){
+    console.error('sendChat',e);
+    window._chatMsgs=window._chatMsgs.filter(m=>m._key!==tmpKey);
+    renderChat();
+    showToast('⚠ Errore invio messaggio');
+  }
 };
 
 // ── SLIDERS
