@@ -49,6 +49,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 .btn-red{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);}
 .btn-blue{background:rgba(59,130,246,.1);color:var(--blue);border:1px solid rgba(59,130,246,.2);}
 .btn-sm{padding:5px 10px;font-size:11px;border-radius:7px;}
+.btn-amber{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2);}
+.exdb-cat-btn.active{background:rgba(6,214,160,.15);border-color:var(--teal);color:var(--teal);}
+.exdb-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.exdb-name{font-size:13px;font-weight:600;color:var(--white);}
+.exdb-cat-badge{font-size:10px;padding:2px 8px;border-radius:6px;background:var(--card2);color:var(--muted);margin-left:8px;}
 
 /* PROGRAM LIST */
 .prog-item{padding:12px 18px;cursor:pointer;transition:all .15s;border-bottom:1px solid var(--border);border-left:3px solid transparent;}
@@ -189,7 +194,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     <a class="nav-item" href="./planner.html">📅 Planner Sett.</a>
     <a class="nav-item" href="./piani.html">📨 Piani Rapidi</a>
     <div class="nav-lbl" style="margin-top:10px;">Risorse</div>
-    <a class="nav-item" href="./">🗄 Database Esercizi</a>
+    <a class="nav-item" id="nav-exdb" onclick="showExDb()" style="cursor:pointer;">🗄 Database Esercizi</a>
     <a class="nav-item" href="./">🧮 Strumenti S&C</a>
     <a class="nav-item" href="/coach/hybrid.html">🏃 Hybrid Training</a>
     <div class="nav-lbl" style="margin-top:10px;">Storico</div>
@@ -210,6 +215,31 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 
   <!-- RIGHT: program editor -->
   <div class="right-panel">
+    <!-- DATABASE ESERCIZI PANEL -->
+    <div id="rp-exdb" style="display:none;" class="rp-inner">
+      <div class="rp-head">
+        <div><div class="rp-title">Database Esercizi</div><div class="rp-sub" id="exdb-count">Caricamento...</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="openAddExDbModal()">+ Aggiungi</button>
+          <button class="btn btn-teal btn-sm" onclick="seedExerciseDb(true)">↻ Inizializza DB standard</button>
+        </div>
+      </div>
+      <!-- filtro per categoria -->
+      <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+        <button class="btn btn-sm btn-outline exdb-cat-btn active" onclick="filterExDb('')" data-cat="">Tutti</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('forza')" data-cat="forza">💪 Forza</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('olimpico')" data-cat="olimpico">🏋️ Olimpico</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('pliometria')" data-cat="pliometria">🦘 Pliometria</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('velocita_prep')" data-cat="velocita_prep">🏃 Vel. preparatoria</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('velocita_sprint')" data-cat="velocita_sprint">⚡ Sprint</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('resistenza')" data-cat="resistenza">🫀 Resistenza</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('condizionamento')" data-cat="condizionamento">🔥 Conditioning</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('priming')" data-cat="priming">🎯 Priming</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('mobilita')" data-cat="mobilita">🧘 Mobilità</button>
+        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('recupero')" data-cat="recupero">🔄 Recupero</button>
+      </div>
+      <div id="exdb-list" style="padding:18px;"></div>
+    </div>
     <div id="rp-empty" class="rp-inner">
       <div class="empty-state" style="padding-top:80px;">
         <div class="empty-icon">🔨</div>
@@ -284,6 +314,148 @@ const SESS_TYPES={
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
 
+// ── EXERCISE DB SEED DATA
+const EXERCISE_SEED=[
+  // FORZA
+  {name:'Squat',category:'forza',order:1},{name:'Front Squat',category:'forza',order:2},
+  {name:'Box Squat',category:'forza',order:3},{name:'Goblet Squat',category:'forza',order:4},
+  {name:'Panca Piana',category:'forza',order:5},{name:'Panca Inclinata',category:'forza',order:6},
+  {name:'Stacco da Terra',category:'forza',order:7},{name:'Romanian Deadlift',category:'forza',order:8},
+  {name:'Hip Thrust',category:'forza',order:9},{name:'Affondi',category:'forza',order:10},
+  {name:'Split Squat',category:'forza',order:11},{name:'Bulgarian Split Squat',category:'forza',order:12},
+  {name:'Leg Press',category:'forza',order:13},{name:'Military Press',category:'forza',order:14},
+  {name:'Rematore Bilanciere',category:'forza',order:15},{name:'Trazioni',category:'forza',order:16},
+  {name:'Dip',category:'forza',order:17},{name:'Nordic Curl',category:'forza',order:18},
+  {name:'Good Morning',category:'forza',order:19},{name:'Step Up',category:'forza',order:20},
+  // PLIOMETRIA
+  {name:'Box Jump',category:'pliometria',order:30},{name:'Depth Jump',category:'pliometria',order:31},
+  {name:'Salto in Lungo',category:'pliometria',order:32},{name:'Salto in Alto',category:'pliometria',order:33},
+  {name:'Balzi Orizzontali',category:'pliometria',order:34},{name:'Broad Jump',category:'pliometria',order:35},
+  {name:'Hurdle Jump',category:'pliometria',order:36},{name:'Hop Unilaterale',category:'pliometria',order:37},
+  {name:'Salto con la Corda',category:'pliometria',order:38},{name:'Drop Jump',category:'pliometria',order:39},
+  // OLIMPICO
+  {name:'Clean',category:'olimpico',order:50},{name:'Power Clean',category:'olimpico',order:51},
+  {name:'Hang Clean',category:'olimpico',order:52},{name:'Snatch',category:'olimpico',order:53},
+  {name:'Power Snatch',category:'olimpico',order:54},{name:'Push Press',category:'olimpico',order:55},
+  {name:'Push Jerk',category:'olimpico',order:56},{name:'Clean & Jerk',category:'olimpico',order:57},
+  // VELOCITA PREPARATORIA
+  {name:'Skip A',category:'velocita_prep',order:70},{name:'Skip B',category:'velocita_prep',order:71},
+  {name:'Skip C',category:'velocita_prep',order:72},{name:'Marcia A',category:'velocita_prep',order:73},
+  {name:'Marcia B',category:'velocita_prep',order:74},{name:'Carioca',category:'velocita_prep',order:75},
+  {name:'Calciata Glutei',category:'velocita_prep',order:76},{name:'Corsa Calciata',category:'velocita_prep',order:77},
+  {name:'Butt Kicks',category:'velocita_prep',order:78},{name:'Corsa Laterale',category:'velocita_prep',order:79},
+  {name:'Scivolamento Laterale',category:'velocita_prep',order:80},
+  // VELOCITA SPRINT
+  {name:'Sprint 20m',category:'velocita_sprint',order:90},{name:'Sprint 30m',category:'velocita_sprint',order:91},
+  {name:'Sprint 40m',category:'velocita_sprint',order:92},{name:'Sprint 60m',category:'velocita_sprint',order:93},
+  {name:'Accelerazione 0-10m',category:'velocita_sprint',order:94},{name:'Accelerazione 0-30m',category:'velocita_sprint',order:95},
+  {name:'Volante 20m',category:'velocita_sprint',order:96},{name:'Flying Sprint 20m',category:'velocita_sprint',order:97},
+  {name:'Partenza da Fermo',category:'velocita_sprint',order:98},{name:'Sprint in Curva',category:'velocita_sprint',order:99},
+  // RESISTENZA
+  {name:'Intermittente 10-10',category:'resistenza',order:110},{name:'Intermittente 15-15',category:'resistenza',order:111},
+  {name:'Intermittente 20-20',category:'resistenza',order:112},{name:'Intermittente 30-30',category:'resistenza',order:113},
+  {name:'Ripetute 100m',category:'resistenza',order:114},{name:'Ripetute 200m',category:'resistenza',order:115},
+  {name:'Ripetute 400m',category:'resistenza',order:116},{name:'Ripetute 800m',category:'resistenza',order:117},
+  {name:'Fartlek',category:'resistenza',order:118},{name:'Corsa Continua',category:'resistenza',order:119},
+  {name:'Corsa Progressiva',category:'resistenza',order:120},{name:'Corsa Aerobica',category:'resistenza',order:121},
+  {name:'Cooper Test',category:'resistenza',order:122},{name:'Yoyo Test',category:'resistenza',order:123},
+  {name:'30-15 IFT',category:'resistenza',order:124},
+  // CONDIZIONAMENTO
+  {name:'Circuito',category:'condizionamento',order:130},{name:'AMRAP',category:'condizionamento',order:131},
+  {name:'EMOM',category:'condizionamento',order:132},{name:'Tabata',category:'condizionamento',order:133},
+  {name:'Complex Barbell',category:'condizionamento',order:134},{name:'Farmer Carry',category:'condizionamento',order:135},
+  {name:'Sled Push',category:'condizionamento',order:136},{name:'Sled Pull',category:'condizionamento',order:137},
+  {name:'Kettlebell Swing',category:'condizionamento',order:138},{name:'Burpees',category:'condizionamento',order:139},
+  // PRIMING
+  {name:'CMJ',category:'priming',order:150},{name:'Drop Jump Reattivo',category:'priming',order:151},
+  {name:'Contrasto Pliometrico',category:'priming',order:152},{name:'Attivazione Neuromuscolare',category:'priming',order:153},
+  {name:'Probing',category:'priming',order:154},
+  // MOBILITA
+  {name:'Stretching Dinamico',category:'mobilita',order:160},{name:'Foam Rolling',category:'mobilita',order:161},
+  {name:'Mobilità Anca',category:'mobilita',order:162},{name:'Mobilità Spalle',category:'mobilita',order:163},
+  {name:'Mobilità Caviglia',category:'mobilita',order:164},{name:'Cat-Cow',category:'mobilita',order:165},
+  // RECUPERO
+  {name:'Corsa Blanda',category:'recupero',order:170},{name:'Camminata',category:'recupero',order:171},
+  {name:'Nuoto Rigenerativo',category:'recupero',order:172},{name:'Bici Leggera',category:'recupero',order:173},
+  {name:'Stretching Statico',category:'recupero',order:174},
+];
+
+const CAT_LABEL={
+  forza:'💪 Forza',olimpico:'🏋️ Olimpico',pliometria:'🦘 Pliometria',
+  velocita_prep:'🏃 Vel. preparatoria',velocita_sprint:'⚡ Sprint',
+  resistenza:'🫀 Resistenza',condizionamento:'🔥 Conditioning',
+  priming:'🎯 Priming',mobilita:'🧘 Mobilità',recupero:'🔄 Recupero',altro:'📦 Altro'
+};
+
+window.seedExerciseDb=async function(force=false){
+  const count=Object.keys(exercises).length;
+  if(!force&&count>=10){showToast('DB già inizializzato ('+count+' esercizi)');return;}
+  if(!confirm('Inizializzare il database con '+EXERCISE_SEED.length+' esercizi standard?\n'+(count>0?'ATTENZIONE: sovrascriverà gli esercizi esistenti.':'')))return;
+  const batch={};
+  EXERCISE_SEED.forEach((e,i)=>{batch['seed_'+i.toString().padStart(3,'0')]={...e,custom:false};});
+  await set(ref(db,'exercise_db'),batch);
+  showToast('✓ Database inizializzato — '+EXERCISE_SEED.length+' esercizi');
+};
+
+let _exDbFilter='';
+window.filterExDb=function(cat){
+  _exDbFilter=cat;
+  document.querySelectorAll('.exdb-cat-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.cat===cat);
+  });
+  renderExDb();
+};
+
+window.showExDb=function(){
+  ['rp-empty','rp-editor'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+  document.getElementById('rp-exdb').style.display='block';
+  document.getElementById('nav-exdb').classList.add('active');
+  renderExDb();
+};
+
+window.showProgView=function(){
+  document.getElementById('rp-exdb').style.display='none';
+  document.getElementById('nav-exdb').classList.remove('active');
+  if(currentProgId){document.getElementById('rp-empty').style.display='none';document.getElementById('rp-editor').style.display='block';}
+  else{document.getElementById('rp-empty').style.display='block';document.getElementById('rp-editor').style.display='none';}
+};
+
+function renderExDb(){
+  const el=document.getElementById('exdb-list');if(!el)return;
+  const all=Object.entries(exercises);
+  const filtered=_exDbFilter?all.filter(([,e])=>e.category===_exDbFilter):all;
+  filtered.sort((a,b)=>(a[1].order||999)-(b[1].order||999)||(a[1].name||'').localeCompare(b[1].name||''));
+  // Count per category
+  const total=all.length;
+  document.getElementById('exdb-count').textContent=total+' esercizi totali'+(filtered.length!==total?' · '+filtered.length+' filtrati':'');
+  if(!filtered.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:40px;">Nessun esercizio in questa categoria.<br><br><button class="btn btn-teal" onclick="openAddExDbModal()">+ Aggiungi il primo</button></div>';return;}
+  // Raggruppamento per categoria
+  const byCat={};
+  filtered.forEach(([k,e])=>{
+    const c=e.category||'altro';
+    if(!byCat[c])byCat[c]=[];
+    byCat[c].push({k,e});
+  });
+  el.innerHTML=Object.entries(byCat).map(([cat,items])=>`
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--teal);margin-bottom:8px;">${CAT_LABEL[cat]||cat} <span style="color:var(--muted);font-weight:400;">(${items.length})</span></div>
+      ${items.map(({k,e})=>`<div class="exdb-card">
+        <div><span class="exdb-name">${e.name}</span>${e.custom?'<span class="exdb-cat-badge">personalizzato</span>':''}</div>
+        <button onclick="deleteExFromDb('${k}')" style="background:rgba(248,113,113,.08);color:var(--red);border:1px solid rgba(248,113,113,.15);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer;">🗑</button>
+      </div>`).join('')}
+    </div>`).join('');
+}
+
+window.deleteExFromDb=async function(key){
+  if(!confirm('Rimuovere questo esercizio dal database?'))return;
+  await remove(ref(db,'exercise_db/'+key));
+  showToast('✓ Esercizio rimosso');
+};
+
+window.openAddExDbModal=function(){
+  openModal('add-ex-db');
+};
+
 async function init(){
   document.getElementById('loading').style.display='none';
   document.getElementById('app').style.display='flex';
@@ -295,12 +467,20 @@ async function init(){
   programs=pSnap.val()||{};
   athletes=aSnap.val()||{};
   exercises=eSnap.val()||{};
+  // Auto-seed se DB vuoto
+  if(Object.keys(exercises).length===0){
+    const batch={};
+    EXERCISE_SEED.forEach((e,i)=>{batch['seed_'+i.toString().padStart(3,'0')]={...e,custom:false};});
+    await set(ref(db,'exercise_db'),batch);
+    exercises=batch;
+    showToast('✓ Database esercizi inizializzato!');
+  }
   // Restore last opened program
   const _lastProg=localStorage.getItem('rsc_last_prog');
   if(_lastProg&&programs[_lastProg])setTimeout(()=>selectProg(_lastProg),0);
   onValue(ref(db,'programs'),s=>{programs=s.val()||{};renderProgList();if(currentProgId)renderEditor();});
   onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};});
-  onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};});
+  onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};if(document.getElementById('rp-exdb')?.style.display!=='none')renderExDb();});
 }
 init();
 
@@ -329,6 +509,8 @@ function renderProgList(){
 window.selectProg=function(id){
   currentProgId=id; currentWeekIdx=0;
   localStorage.setItem('rsc_last_prog',id);
+  // Se ero nella vista DB, torno alla vista programma
+  if(document.getElementById('rp-exdb')?.style.display!=='none') showProgView();
   renderProgList();
   renderEditor();
 };
@@ -495,6 +677,29 @@ window.openModal=function(type,...args){
   const mb=document.getElementById('modal-body');
   const progId=currentProgId;
   const p=programs[progId];
+
+  if(type==='add-ex-db'){
+    mb.innerHTML=`<h3>Aggiungi esercizio al database</h3>
+      <div class="field"><label>Nome esercizio</label><input type="text" id="add-ex-name" placeholder="es. Snatch Equilibrio" autocomplete="off" style="width:100%;"></div>
+      <div class="field"><label>Categoria</label>
+        <select id="add-ex-cat" style="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
+          <option value="forza">💪 Forza</option>
+          <option value="olimpico">🏋️ Olimpico</option>
+          <option value="pliometria">🦘 Pliometria</option>
+          <option value="velocita_prep">🏃 Velocità preparatoria</option>
+          <option value="velocita_sprint">⚡ Sprint</option>
+          <option value="resistenza">🫀 Resistenza</option>
+          <option value="condizionamento">🔥 Conditioning</option>
+          <option value="priming">🎯 Priming</option>
+          <option value="mobilita">🧘 Mobilità</option>
+          <option value="recupero">🔄 Recupero</option>
+        </select>
+      </div>
+      <div class="mactions"><button class="btn btn-teal" onclick="saveExToDb()">Aggiungi al database</button></div>`;
+    document.getElementById('modal').classList.add('open');
+    setTimeout(()=>document.getElementById('add-ex-name')?.focus(),100);
+    return;
+  }
 
   if(type==='new-prog'||type==='edit-prog'){
     const isEdit=type==='edit-prog';
@@ -727,6 +932,20 @@ window.saveSess=async function(wid,sid){
     dayOfWeek:dayVal!==''?parseInt(dayVal):null
   });
   closeModal();showToast('✓ Sessione aggiornata!');
+};
+
+window.saveExToDb=async function(){
+  const name=(document.getElementById('add-ex-name')?.value||'').trim();
+  const cat=(document.getElementById('add-ex-cat')?.value||'altro');
+  if(!name){showToast('⚠ Inserisci il nome');return;}
+  const existing=Object.values(exercises).find(e=>e.name?.toLowerCase()===name.toLowerCase());
+  if(existing){showToast('⚠ Esercizio già presente');return;}
+  const order=Object.values(exercises).filter(e=>e.category===cat).length*1+100;
+  await push(ref(db,'exercise_db'),{name,category:cat,order,custom:true});
+  showToast('✓ "'+name+'" aggiunto alla categoria '+cat);
+  document.getElementById('modal').classList.remove('open');
+  _exDbFilter=cat; // mostra la categoria appena aggiunta
+  filterExDb(cat);
 };
 
 window.saveEx=async function(wid,sid,eid){
