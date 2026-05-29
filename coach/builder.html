@@ -711,6 +711,7 @@ function renderWeekContent(){
       </div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-outline btn-sm" onclick="openModal('edit-week','${currentWid}')">✏ Modifica</button>
+        <button class="btn btn-outline btn-sm" onclick="copyWeek('${currentWid}')" title="Duplica settimana">⎘ Copia</button>
         <button class="btn btn-red btn-sm" onclick="deleteWeek('${currentWid}')">🗑 Sett.</button>
       </div>
     </div>
@@ -1155,6 +1156,23 @@ window.deleteWeek=async function(wid){
   if(currentWeekIdx>0)currentWeekIdx--;
   showToast('✓ Settimana eliminata');
 };
+window.copyWeek=async function(wid){
+  const p=programs[currentProgId]; if(!p){showToast('⚠ Nessun programma');return;}
+  const srcWk=p.weeks?.[wid]; if(!srcWk){showToast('⚠ Settimana non trovata');return;}
+  const allWks=Object.values(p.weeks||{});
+  const newOrder=(allWks.length>0?Math.max(...allWks.map(w=>w.order||0)):0)+1;
+  const newWkRef=push(ref(db,`programs/${currentProgId}/weeks`));
+  const newWk={label:(srcWk.label?srcWk.label+' (copia)':'Copia'),notes:srcWk.notes||'',order:newOrder,sessions:{}};
+  // Deep-copy sessions
+  const srcSessions=Object.values(srcWk.sessions||{});
+  await set(newWkRef,newWk);
+  for(const s of srcSessions){
+    const newSRef=push(ref(db,`programs/${currentProgId}/weeks/${newWkRef.key}/sessions`));
+    const {_key:_k,...sData}=s; // strip local key
+    await set(newSRef,{...sData,order:(s.order||0)});
+  }
+  showToast('✓ Settimana duplicata');
+};
 window.deleteSession=async function(wid,sid){
   if(!confirm('Eliminare questa sessione?'))return;
   await remove(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`));
@@ -1205,94 +1223,134 @@ ${s.condContent||''}
 window.exportBuilderPDF=function(){
   const p=programs[currentProgId]; if(!p){showToast('⚠ Nessun programma selezionato');return;}
   const DAYS=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  const TYPE_COLOR={strength:'#A78BFA',power:'#F87171',speed:'#FBBF24',conditioning:'#FB923C',mobility:'#34D399',technique:'#3B82F6',recovery:'#6B7280'};
+  const TYPE_COLOR={strength:'#7C3AED',power:'#DC2626',speed:'#D97706',conditioning:'#EA580C',mobility:'#059669',technique:'#2563EB',recovery:'#64748B'};
+  const TYPE_IT={strength:'Forza',power:'Potenza',speed:'Velocità',conditioning:'Conditioning',mobility:'Mobilità',technique:'Tecnica',recovery:'Recupero'};
+  const WEEK_TYPE_BG={accumulo:'#1E40AF',intensificazione:'#6D28D9',deload:'#065F46',competizione:'#991B1B',introduzione:'#374151',picco:'#92400E',restituzione:'#065F46'};
+
   const allWeeks=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
   const athleteNames=Object.entries(p.athletes||{}).map(([aid])=>{
     const a=athletes[aid]; return a?a.name:aid;
   }).filter(Boolean);
 
+  // Periodization timeline
+  const periodBar=allWeeks.map(([,wk],wi)=>{
+    const wt=(wk.label||'').toLowerCase();
+    const colEntry=Object.entries(WEEK_TYPE_BG).find(([k])=>wt.includes(k));
+    const bg=colEntry?colEntry[1]:'#334155';
+    return (wi>0?'<span style="color:rgba(255,255,255,.3);font-size:8px;margin:0 1px">›</span>':'')
+      +'<span style="background:'+bg+';color:#fff;font-size:7px;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap">W'+(wi+1)+(wk.label?' · '+wk.label.substring(0,10):'')+' </span>';
+  }).join('');
+
   // Build weeks HTML
   let weeksHtml='';
   allWeeks.forEach(([,wk],wi)=>{
     const sessions=Object.values(wk.sessions||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+    const multiCol=sessions.length>=2;
+    const wt=(wk.label||'').toLowerCase();
+    const wtEntry=Object.entries(WEEK_TYPE_BG).find(([k])=>wt.includes(k));
+    const wkHdrBg=wtEntry?wtEntry[1]:'#1E293B';
     let sessHtml='';
     sessions.forEach(s=>{
       const dayLbl=s.dayOfWeek!=null?DAYS[s.dayOfWeek]:'';
       const col=TYPE_COLOR[s.type]||'#6B7280';
       let exHtml='';
       if(s.type==='conditioning'){
-        exHtml='<div class="cond-block">'+(s.condType||'')+(s.duration?' · '+s.duration:'')+(s.condContent?'<br><span class="cond-content">'+s.condContent+'</span>':'')+'</div>';
+        exHtml='<div class="cond-block"><strong>'+(s.condType||'Conditioning')+'</strong>'+(s.duration?' · '+s.duration:'')+(s.condContent?'<br><em>'+s.condContent+'</em>':'')+'</div>';
       } else {
         const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0)).filter(e=>e&&e.name);
         if(exs.length){
           let rows=''; let lastComplex='';
           exs.forEach(e=>{
-            const complexMark=e.complexGroup?'<span class="complex-badge">'+(e.complexLabel||'A')+(e.complexSet||'')+'</span> ':'';
             if(e.complexGroup&&e.complexLabel!==lastComplex){
-              rows+='<tr class="complex-sep"><td colspan="6" class="complex-header">Complesso '+( e.complexLabel||'A')+'</td></tr>';
-              lastComplex=e.complexLabel;
+              rows+='<tr class="cx-sep"><td colspan="6"><span class="cx-hdr">Complesso '+(e.complexLabel||'A')+'</span></td></tr>';
+              lastComplex=e.complexLabel||'';
             }
             const pct=e.pct?'@'+e.pct+'%':'';
             const rpe=e.rpe?'RPE '+e.rpe:'';
-            const load=[pct,rpe].filter(Boolean).join(' · ');
-            const rest=e.rest||'';
-            const cue=e.cue||'';
-            rows+='<tr><td class="ex-name">'+complexMark+e.name+'</td><td class="num">'+(e.sets||'—')+'</td><td class="num">'+(e.reps||'—')+'</td><td class="num">'+(load||'—')+'</td><td class="num">'+rest+'</td><td class="note-cell">'+cue+'</td></tr>';
+            const load=[pct,rpe].filter(Boolean).join(' ');
+            const cxBadge=e.complexGroup?'<span class="cx-badge">'+(e.complexLabel||'A')+'</span> ':'';
+            rows+='<tr><td class="ex-name">'+cxBadge+e.name+'</td><td class="num">'+(e.sets||'—')+'</td><td class="num">'+(e.reps||'—')+'</td><td class="num">'+(load||'—')+'</td><td class="num">'+(e.rest||'')+'</td><td class="note-cell">'+(e.cue||'')+'</td></tr>';
           });
-          exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>Serie</th><th>Rip.</th><th>Carico</th><th>Rec</th><th>Cue</th></tr></thead><tbody>'+rows+'</tbody></table>';
+          exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th><th>Note</th></tr></thead><tbody>'+rows+'</tbody></table>';
         }
       }
-      sessHtml+='<div class="sess-card"><div class="sess-header" style="border-left:4px solid '+col+';">'
-        +'<span class="sess-name">'+(s.name||s.type)+'</span>'
-        +(dayLbl?'<span class="sess-day">'+dayLbl+'</span>':'')
-        +(s.notes?'<span class="sess-note-inline">'+s.notes+'</span>':'')
-        +'</div>'+exHtml+'</div>';
+      sessHtml+='<div class="sess-card">'
+        +'<div class="sess-hdr" style="background:'+col+';">'
+        +'<span class="sess-nm">'+(s.name||(TYPE_IT[s.type]||s.type))+'</span>'
+        +(dayLbl?'<span class="sess-day-chip">'+dayLbl+'</span>':'')
+        +'</div>'
+        +(s.notes?'<div class="sess-note-row">'+s.notes+'</div>':'')
+        +exHtml+'</div>';
     });
-    if(!sessions.length) sessHtml='<div class="no-sess">Nessuna sessione</div>';
-    weeksHtml+='<div class="week-block"><div class="week-header"><span class="wk-num">SETTIMANA '+(wi+1)+'</span>'
+    if(!sessions.length) sessHtml='<div class="no-sess">Nessuna sessione pianificata</div>';
+    weeksHtml+='<div class="week-block">'
+      +'<div class="week-hdr" style="background:'+wkHdrBg+';">'
+      +'<span class="wk-num">W'+(wi+1)+'</span>'
       +(wk.label?'<span class="wk-label">'+wk.label+'</span>':'')
+      +'<span class="wk-count">'+sessions.length+' sess.</span>'
       +(wk.notes?'<span class="wk-notes">'+wk.notes+'</span>':'')
-      +'</div><div class="sessions-wrap">'+sessHtml+'</div></div>';
+      +'</div><div class="sessions-wrap'+(multiCol?' multi':'')+'">'+sessHtml+'</div></div>';
   });
 
   const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+p.name+'</title><style>'
-    +'@page{size:A4 portrait;margin:12mm 10mm}'
-    +'body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a2e;margin:0;background:#fff}'
-    +'.pdf-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #06D6A0;padding-bottom:6px;margin-bottom:10px}'
-    +'.pdf-logo{font-size:18px;font-weight:900;letter-spacing:3px;color:#070B12}.pdf-logo span{color:#06D6A0}'
-    +'.pdf-title{font-size:14px;font-weight:900;color:#0A0E17;letter-spacing:.5px}'
-    +'.pdf-meta{font-size:8px;color:#666;margin-top:2px}'
-    +'.week-block{border:1px solid #e2e8f0;border-radius:6px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid}'
-    +'.week-header{background:#0A0E17;color:#fff;padding:7px 10px;display:flex;align-items:center;gap:10px}'
-    +'.wk-num{font-weight:900;font-size:10px;letter-spacing:1px;color:#06D6A0}'
-    +'.wk-label{font-size:9px;font-weight:700;color:#EEF2FF}'
-    +'.wk-notes{font-size:8px;color:rgba(255,255,255,.5);font-style:italic;flex:1}'
-    +'.sessions-wrap{padding:6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}'
-    +'.sess-card{background:#f8f9fc;border-radius:4px;border:1px solid #e2e8f0;overflow:hidden}'
-    +'.sess-header{padding:5px 7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#fff}'
-    +'.sess-name{font-weight:700;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#1e293b;flex:1}'
-    +'.sess-day{font-size:7.5px;background:#e2e8f0;padding:1px 5px;border-radius:3px;color:#475569}'
-    +'.sess-note-inline{font-size:7px;color:#64748b;font-style:italic;width:100%}'
+    +'@page{size:A4 portrait;margin:11mm 10mm}*{box-sizing:border-box}'
+    +'body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:9px;color:#1a1a2e;margin:0;background:#fff}'
+    +'.cover{background:linear-gradient(130deg,#070B12 55%,#0D1B35);color:#fff;border-radius:7px;padding:14px 16px;margin-bottom:10px}'
+    +'.cover-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}'
+    +'.logo-m{font-size:14px;font-weight:900;letter-spacing:3px;color:#fff}'
+    +'.logo-m span{color:#06D6A0}'
+    +'.logo-s{font-size:7px;color:rgba(255,255,255,.4);letter-spacing:.5px;text-transform:uppercase;margin-top:2px}'
+    +'.export-dt{font-size:7px;color:rgba(255,255,255,.35);text-align:right;line-height:1.5}'
+    +'.prog-name{font-size:22px;font-weight:900;letter-spacing:.3px;line-height:1.1;margin-bottom:8px}'
+    +'.prog-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px}'
+    +'.meta-item{font-size:8px;color:rgba(255,255,255,.65)}'
+    +'.meta-item strong{color:#06D6A0}'
+    +'.ath-row{font-size:8px;color:rgba(255,255,255,.5);margin-top:3px}'
+    +'.period-row{display:flex;align-items:center;gap:2px;margin-top:10px;flex-wrap:wrap}'
+    +'.period-lbl{font-size:7px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.5px;margin-right:4px}'
+    +'.week-block{border:1px solid #e2e8f0;border-radius:5px;margin-bottom:8px;overflow:hidden;page-break-inside:avoid}'
+    +'.week-hdr{color:#fff;padding:6px 10px;display:flex;align-items:center;gap:8px}'
+    +'.wk-num{font-weight:900;font-size:10px;letter-spacing:1px;color:#06D6A0;min-width:28px}'
+    +'.wk-label{font-size:8.5px;font-weight:700;color:#fff;letter-spacing:.3px}'
+    +'.wk-count{font-size:7.5px;background:rgba(255,255,255,.15);padding:1px 7px;border-radius:3px;color:rgba(255,255,255,.8);margin-left:auto}'
+    +'.wk-notes{font-size:7.5px;color:rgba(255,255,255,.45);font-style:italic;margin-left:4px}'
+    +'.sessions-wrap{padding:6px;display:grid;grid-template-columns:1fr;gap:5px;background:#fafafa}'
+    +'.sessions-wrap.multi{grid-template-columns:repeat(2,1fr)}'
+    +'.sess-card{background:#fff;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden}'
+    +'.sess-hdr{padding:4px 8px;display:flex;align-items:center;gap:6px}'
+    +'.sess-nm{font-weight:700;font-size:8px;color:#fff;text-transform:uppercase;letter-spacing:.5px;flex:1}'
+    +'.sess-day-chip{font-size:7px;background:rgba(255,255,255,.25);color:#fff;padding:1px 5px;border-radius:2px;font-weight:600}'
+    +'.sess-note-row{font-size:7px;color:#64748b;font-style:italic;padding:3px 7px;background:#fafafa;border-bottom:1px solid #f1f5f9}'
     +'.ex-table{width:100%;border-collapse:collapse}'
-    +'.ex-table th{background:#e2e8f0;font-size:7px;font-weight:700;text-transform:uppercase;padding:2px 4px;text-align:left;letter-spacing:.3px}'
-    +'.ex-table td{border-top:1px solid #f1f5f9;padding:2px 4px;font-size:7.5px;vertical-align:top}'
-    +'.ex-name{font-weight:600;color:#1e293b;max-width:120px}'
-    +'.num{text-align:center;color:#4a5568;white-space:nowrap}'
-    +'.note-cell{color:#64748b;font-size:7px;max-width:80px}'
-    +'.complex-sep td{background:#f1f5f9;padding:0}'
-    +'.complex-header{font-size:7px;font-weight:700;color:#7c3aed;padding:2px 4px!important;letter-spacing:.5px;text-transform:uppercase}'
-    +'.complex-badge{display:inline-block;background:#ede9fe;color:#7c3aed;font-size:6px;font-weight:700;padding:0 3px;border-radius:2px;margin-right:2px}'
-    +'.cond-block{padding:5px 7px;font-size:8px;color:#374151}'
-    +'.cond-content{color:#6b7280;font-style:italic}'
+    +'.ex-table th{background:#f1f5f9;font-size:6.5px;font-weight:700;text-transform:uppercase;padding:2px 4px;text-align:left;color:#94a3b8;letter-spacing:.3px}'
+    +'.ex-table td{border-top:1px solid #f8fafc;padding:2.5px 4px;font-size:7.5px;vertical-align:top}'
+    +'.ex-name{font-weight:600;color:#1e293b}'
+    +'.num{text-align:center;color:#475569;white-space:nowrap}'
+    +'.note-cell{color:#94a3b8;font-size:7px}'
+    +'.cx-sep td{background:#f5f0ff;padding:0}'
+    +'.cx-hdr{font-size:7px;font-weight:700;color:#7c3aed;padding:2px 4px;letter-spacing:.5px;text-transform:uppercase;display:block}'
+    +'.cx-badge{display:inline-block;background:#ede9fe;color:#7c3aed;font-size:6px;font-weight:700;padding:0 3px;border-radius:2px;margin-right:2px}'
+    +'.cond-block{padding:6px 8px;font-size:8px;color:#374151}'
     +'.no-sess{color:#94a3b8;font-size:8px;font-style:italic;padding:8px}'
+    +'.pdf-footer{margin-top:8px;padding-top:5px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7px;color:#94a3b8}'
     +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}'
     +'</style></head><body>'
-    +'<div class="pdf-header">'
-    +'<div><div class="pdf-logo">RS<span>C</span></div><div class="pdf-meta">RS Coaching · Strength & Conditioning</div></div>'
-    +'<div style="text-align:right"><div class="pdf-title">'+p.name+'</div>'
-    +'<div class="pdf-meta">'+(p.sport?p.sport+' · ':'')+allWeeks.length+' settimane'+(athleteNames.length?' · '+athleteNames.join(', '):'')+'<br>Esportato il '+new Date().toLocaleDateString('it-IT')+'</div></div>'
+    +'<div class="cover">'
+    +'<div class="cover-top">'
+    +'<div><div class="logo-m">RS<span>C</span></div><div class="logo-s">Strength &amp; Conditioning</div></div>'
+    +'<div class="export-dt">Esportato il<br>'+new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</div>'
+    +'</div>'
+    +'<div class="prog-name">'+p.name+'</div>'
+    +'<div class="prog-meta">'
+    +(p.sport?'<span class="meta-item"><strong>Sport:</strong> '+p.sport+'</span>':'')
+    +'<span class="meta-item"><strong>Settimane:</strong> '+allWeeks.length+'</span>'
+    +(p.phase?'<span class="meta-item"><strong>Fase:</strong> '+p.phase+'</span>':'')
+    +'</div>'
+    +(athleteNames.length?'<div class="ath-row">👤 '+athleteNames.join(' · ')+'</div>':'')
+    +(allWeeks.length?'<div class="period-row"><span class="period-lbl">Piano:</span>'+periodBar+'</div>':'')
     +'</div>'
     +weeksHtml
+    +'<div class="pdf-footer"><span>RS Coaching · Strength &amp; Conditioning · '+p.name+'</span><span>'+allWeeks.length+' settimane · '+new Date().getFullYear()+'</span></div>'
     +'</body></html>';
 
   const pw=window.open('','_blank','width=900,height=1100');
