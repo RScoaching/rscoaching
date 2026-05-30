@@ -299,20 +299,75 @@ let programs={}, athletes={}, exercises={};
 let currentProgId=null, currentWeekIdx=0;
 
 // CONSTANTS
-const SPORT_TYPES={
-  calcio:{label:'Calcio',cls:'sport-calcio'},
-  hybrid:{label:'Hybrid Training',cls:'sport-hybrid'},
-  forza:{label:'Solo Forza',cls:'sport-forza'},
-  corsa:{label:'Corsa / Endurance',cls:'sport-corsa'},
-  conditioning:{label:'Conditioning',cls:'sport-conditioning'}
+// ── PROG_TYPES: definisce sessioni disponibili + categorie esercizi visibili
+const PROG_TYPES={
+  sc:{
+    label:'S&C Sport', icon:'⚡', cls:'sport-calcio',
+    desc:'Forza · Sprint · Conditioning · tutto incluso',
+    // Tutti i tipi sessione
+    sessions:['pesi','sprint','conditioning','recupero'],
+    // Tutte le categorie DB
+    cats:['forza','olimpico','pliometria','velocita_sprint','velocita_prep','condizionamento','resistenza','priming','mobilita','recupero']
+  },
+  hybrid:{
+    label:'Hybrid Training', icon:'🔀', cls:'sport-hybrid',
+    desc:'Pesi + Corsa · senza drills tecnici di campo',
+    sessions:['pesi','conditioning','sprint','recupero'],
+    cats:['forza','olimpico','pliometria','condizionamento','resistenza','mobilita','recupero']
+  },
+  pesi:{
+    label:'Solo Pesi', icon:'🏋️', cls:'sport-forza',
+    desc:'Solo sala pesi · nessun lavoro cardio/sprint',
+    sessions:['pesi','recupero'],
+    cats:['forza','olimpico','pliometria','mobilita','recupero']
+  },
+  corsa:{
+    label:'Solo Corsa', icon:'🏃', cls:'sport-corsa',
+    desc:'Running · sprint · endurance · nessun peso',
+    sessions:['sprint','conditioning','recupero'],
+    cats:['velocita_sprint','velocita_prep','resistenza','condizionamento','mobilita','recupero']
+  }
 };
+// Mantieni alias per compatibilità con dati salvati precedentemente
+const SPORT_TYPES=PROG_TYPES;
+
 const SESS_TYPES={
-  pesi:{label:'Pesi',icon:'🏋️',cls:'si-pesi'},
-  campo:{label:'Campo',icon:'⚽',cls:'si-campo'},
-  sprint:{label:'Sprint / Velocità',icon:'⚡',cls:'si-sprint'},
-  conditioning:{label:'Conditioning',icon:'🔥',cls:'si-conditioning'},
-  recupero:{label:'Recupero',icon:'🔄',cls:'si-recupero'}
+  pesi:        {label:'Pesi',             icon:'🏋️', cls:'si-pesi'},
+  sprint:      {label:'Sprint / Velocità',icon:'⚡',  cls:'si-sprint'},
+  conditioning:{label:'Conditioning',     icon:'🔥',  cls:'si-conditioning'},
+  recupero:    {label:'Recupero / Riposo',icon:'🔄',  cls:'si-recupero'}
 };
+
+// Restituisce categorie DB filtrate per progType × sessType
+function _getBldExCats(progType, sessType){
+  const pt=PROG_TYPES[progType]||PROG_TYPES.sc;
+  const allowed=new Set(pt.cats);
+  // Ulteriore filtro per tipo sessione
+  const sessCatMap={
+    pesi:        ['forza','olimpico','pliometria','mobilita'],
+    sprint:      ['velocita_sprint','velocita_prep','priming'],
+    conditioning:['condizionamento','resistenza','olimpico','pliometria'],
+    recupero:    ['recupero','mobilita']
+  };
+  const sessCats=sessCatMap[sessType]||null;
+  if(!sessCats) return pt.cats; // nessun filtro extra
+  return sessCats.filter(c=>allowed.has(c));
+}
+
+function _getBldExNames(progType, sessType){
+  const cats=new Set(_getBldExCats(progType, sessType));
+  const db=window.EXERCISES_DB||[];
+  const seen=new Set();
+  const names=[];
+  db.forEach(function(e){
+    if(cats.has(e.cat) && !seen.has(e.name)){seen.add(e.name);names.push(e.name);}
+  });
+  // Merge eventuali nomi Firebase non nel DB
+  Object.values(exercises).forEach(function(e){
+    if(!seen.has(e.name)){seen.add(e.name);names.push(e.name);}
+  });
+  return names.sort(function(a,b){return a.localeCompare(b,'it');});
+}
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
 
@@ -646,13 +701,13 @@ function renderProgList(){
   }
   document.getElementById('prog-list').innerHTML=ids.sort((a,b)=>(programs[b].createdAt||0)-(programs[a].createdAt||0)).map(id=>{
     const p=programs[id];
-    const sp=SPORT_TYPES[p.sport]||SPORT_TYPES.calcio;
+    const sp=PROG_TYPES[p.sport]||PROG_TYPES.sc;
     const wks=p.weeks?Object.keys(p.weeks).length:0;
     const assigned=p.assignedTo?Object.keys(p.assignedTo).length:0;
     return `<div class="prog-item${id===currentProgId?' active':''}" onclick="selectProg('${id}')">
       <div class="prog-name">${p.name}</div>
       <div class="prog-meta">${wks} settiman${wks===1?'a':'e'} · ${assigned} atleti assegnati</div>
-      <span class="prog-sport ${sp.cls}">${sp.label}</span>
+      <span class="prog-sport ${sp.cls}">${sp.icon} ${sp.label}</span>
     </div>`;
   }).join('');
 }
@@ -672,11 +727,11 @@ function renderEditor(){
   const p=programs[currentProgId]; if(!p)return;
   document.getElementById('rp-empty').style.display='none';
   document.getElementById('rp-editor').style.display='block';
-  const sp=SPORT_TYPES[p.sport]||SPORT_TYPES.calcio;
+  const sp=PROG_TYPES[p.sport]||PROG_TYPES.sc;
   const wks=p.weeks?Object.keys(p.weeks).length:0;
   const assigned=p.assignedTo?Object.keys(p.assignedTo).filter(id=>athletes[id]).map(id=>athletes[id].name).join(', '):'Nessun atleta';
   document.getElementById('ed-prog-name').textContent=p.name;
-  document.getElementById('ed-prog-meta').textContent=`${sp.label} · ${wks} settiman${wks===1?'a':'e'} · Atleti: ${assigned}`;
+  document.getElementById('ed-prog-meta').textContent=`${sp.icon} ${sp.label} · ${wks} settiman${wks===1?'a':'e'} · Atleti: ${assigned}`;
   renderWeekTabs();
   renderWeekContent();
 }
@@ -718,7 +773,10 @@ function renderWeekContent(){
     </div>
     <div class="sessions-grid" id="sessions-grid">${sessions.map(([sid,s])=>renderSessionCard(currentWid,sid,s)).join('')}</div>
     <div class="add-row">
-      ${Object.entries(SESS_TYPES).map(([t,st])=>`<button class="btn btn-outline btn-sm" onclick="addSession('${currentWid}','${t}')"><span>${st.icon}</span>${st.label}</button>`).join('')}
+      ${(()=>{
+        const pt=PROG_TYPES[programs[currentProgId]?.sport]||PROG_TYPES.sc;
+        return pt.sessions.map(t=>{const st=SESS_TYPES[t];return st?`<button class="btn btn-outline btn-sm" onclick="addSession('${currentWid}','${t}')">${st.icon} ${st.label}</button>`:''}).join('');
+      })()}
     </div>`;
 }
 
@@ -857,15 +915,26 @@ window.openModal=function(type,...args){
   if(type==='new-prog'||type==='edit-prog'){
     const isEdit=type==='edit-prog';
     const prog=isEdit?p:{};
+    const curType=prog.sport||'sc';
     mb.innerHTML=`<h3>${isEdit?'Modifica programma':'Nuovo programma'}</h3>
-      <div class="field"><label>Nome programma</label><input id="m-name" value="${prog.name||''}" placeholder="Es. Pre-Season Calcio · 6 settimane"></div>
-      <div class="grid2">
-        <div class="field"><label>Sport / Tipo</label><select id="m-sport">
-          ${Object.entries(SPORT_TYPES).map(([k,v])=>`<option value="${k}"${(prog.sport||'calcio')===k?' selected':''}>${v.label}</option>`).join('')}
-        </select></div>
-        <div class="field"><label>Durata (settimane)</label><input type="number" id="m-dur" value="${prog.duration||4}" min="1" max="32"></div>
+      <div class="field"><label>Nome programma</label><input id="m-name" value="${prog.name||''}" placeholder="Es. Pre-Season · 6 settimane"></div>
+      <div class="field"><label>Tipo programma</label>
+        <div id="prog-type-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+          ${Object.entries(PROG_TYPES).map(([k,v])=>`
+            <div class="prog-type-card${k===curType?' selected':''}" data-pt="${k}" onclick="selectProgType('${k}')"
+              style="cursor:pointer;border:2px solid ${k===curType?'var(--teal)':'var(--border)'};border-radius:10px;padding:10px 12px;background:${k===curType?'rgba(6,214,160,.08)':'var(--card2)'};transition:.15s;">
+              <div style="font-size:18px;margin-bottom:4px;">${v.icon}</div>
+              <div style="font-size:12px;font-weight:700;color:var(--white);">${v.label}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:3px;">${v.desc}</div>
+              <div style="font-size:9px;color:var(--teal);margin-top:5px;font-weight:600;">${v.sessions.map(s=>SESS_TYPES[s]?.icon+' '+SESS_TYPES[s]?.label).join(' · ')}</div>
+            </div>`).join('')}
+        </div>
+        <input type="hidden" id="m-sport" value="${curType}">
       </div>
-      <div class="field"><label>Obiettivo / Note</label><textarea id="m-notes" placeholder="Es. Preparazione atletica pre-stagione · focus forza + velocità">${prog.notes||''}</textarea></div>
+      <div class="grid2" style="margin-top:8px;">
+        <div class="field"><label>Durata (settimane)</label><input type="number" id="m-dur" value="${prog.duration||4}" min="1" max="32"></div>
+        <div class="field"><label>Note</label><input id="m-notes" value="${prog.notes||''}" placeholder="Obiettivo / note..."></div>
+      </div>
       <div class="mactions">
         <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
         <button class="btn btn-teal" onclick="saveProgram('${isEdit?progId:''}')">${isEdit?'Salva modifiche →':'Crea programma →'}</button>
@@ -895,7 +964,7 @@ window.openModal=function(type,...args){
       <div class="grid2">
         <div class="field"><label>Nome sessione</label><input id="m-sname" value="${s.name||''}" placeholder="Es. Sessione A — Forza"></div>
         <div class="field"><label>Tipo</label><select id="m-stype">
-          ${Object.entries(SESS_TYPES).map(([k,v])=>`<option value="${k}"${s.type===k?' selected':''}>${v.label}</option>`).join('')}
+          ${(()=>{const pt=PROG_TYPES[programs[currentProgId]?.sport]||PROG_TYPES.sc;return pt.sessions.map(k=>{const v=SESS_TYPES[k];return v?`<option value="${k}"${s.type===k?' selected':''}>${v.icon} ${v.label}</option>`:''}).join('');})()}
         </select></div>
       </div>
       <div class="field"><label>Giorno della settimana</label><select id="m-sday">
@@ -911,12 +980,16 @@ window.openModal=function(type,...args){
   } else if(type==='add-ex'||type==='edit-ex'){
     const [wid,sid,eid]=args;
     const e=eid&&p?.weeks?.[wid]?.sessions?.[sid]?.exercises?.[eid]||{};
-    // Merge exercises_db.js (fonte unica) con Firebase exercises
-    const _dbNames=(window.EXERCISES_DB||[]).map(ex=>ex.name);
-    const _fbNames=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>ex.name);
-    const _seen=new Set(_dbNames);
-    const exNames=[..._dbNames,..._fbNames.filter(n=>!_seen.has(n))].sort((a,b)=>a.localeCompare(b,'it'));
+    // Filtra esercizi per progType × sessType
+    const _progType=programs[currentProgId]?.sport||'sc';
+    const _sessType=p?.weeks?.[wid]?.sessions?.[sid]?.type||'pesi';
+    const exNames=_getBldExNames(_progType, _sessType);
+    const _ptLabel=(PROG_TYPES[_progType]?.label||'S&C');
+    const _stLabel=(SESS_TYPES[_sessType]?.label||_sessType);
     mb.innerHTML=`<h3>${eid?'Modifica esercizio':'Aggiungi esercizio'}</h3>
+      <div style="font-size:10px;color:var(--teal);font-weight:600;margin-bottom:10px;letter-spacing:.4px;">
+        📚 ${exNames.length} esercizi — ${_ptLabel} · ${_stLabel}
+      </div>
       <div class="field"><label>Esercizio</label>
         <input type="text" id="m-ename" list="bld-ex-dl" value="${(e.name||'').replace(/"/g,'&quot;')}" placeholder="Digita o cerca dal database..." autocomplete="off"
           style="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
@@ -946,9 +1019,9 @@ window.openModal=function(type,...args){
 
   } else if(type==='add-complex'){
     const [wid,sid]=args;
-    const _allCx=[...(window.EXERCISES_DB||[]).map(ex=>ex.name),...Object.values(exercises).map(ex=>ex.name)];
-    const _seenCx=new Set();
-    const exOpts=[..._allCx.filter(n=>{if(_seenCx.has(n))return false;_seenCx.add(n);return true;})].sort((a,b)=>a.localeCompare(b,'it')).map(n=>`<option value="${n}">${n}</option>`).join('');
+    const _ptCx=programs[currentProgId]?.sport||'sc';
+    const _stCx=p?.weeks?.[wid]?.sessions?.[args[1]]?.type||'pesi';
+    const exOpts=_getBldExNames(_ptCx,_stCx).map(n=>`<option value="${n}">${n}</option>`).join('');
     mb.innerHTML=`<h3>Aggiungi Complex / Superset</h3>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Es. A1 Squat pesante + A2 CMJ esplosivo. L'atleta alterna i due esercizi per ogni round.</div>
       ${[1,2].map(n=>`
@@ -1026,6 +1099,15 @@ window.openModal=function(type,...args){
 };
 
 // ── SAVE FUNCTIONS
+window.selectProgType=function(key){
+  document.querySelectorAll('.prog-type-card').forEach(function(el){
+    const sel=el.dataset.pt===key;
+    el.style.border='2px solid '+(sel?'var(--teal)':'var(--border)');
+    el.style.background=sel?'rgba(6,214,160,.08)':'var(--card2)';
+  });
+  document.getElementById('m-sport').value=key;
+};
+
 window.saveProgram=async function(editId){
   const name=document.getElementById('m-name').value.trim();
   if(!name){alert('Inserisci il nome');return;}
