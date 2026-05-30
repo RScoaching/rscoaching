@@ -911,7 +911,11 @@ window.openModal=function(type,...args){
   } else if(type==='add-ex'||type==='edit-ex'){
     const [wid,sid,eid]=args;
     const e=eid&&p?.weeks?.[wid]?.sessions?.[sid]?.exercises?.[eid]||{};
-    const exNames=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>ex.name);
+    // Merge exercises_db.js (fonte unica) con Firebase exercises
+    const _dbNames=(window.EXERCISES_DB||[]).map(ex=>ex.name);
+    const _fbNames=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>ex.name);
+    const _seen=new Set(_dbNames);
+    const exNames=[..._dbNames,..._fbNames.filter(n=>!_seen.has(n))].sort((a,b)=>a.localeCompare(b,'it'));
     mb.innerHTML=`<h3>${eid?'Modifica esercizio':'Aggiungi esercizio'}</h3>
       <div class="field"><label>Esercizio</label>
         <input type="text" id="m-ename" list="bld-ex-dl" value="${(e.name||'').replace(/"/g,'&quot;')}" placeholder="Digita o cerca dal database..." autocomplete="off"
@@ -942,7 +946,9 @@ window.openModal=function(type,...args){
 
   } else if(type==='add-complex'){
     const [wid,sid]=args;
-    const exOpts=Object.values(exercises).sort((a,b)=>(a.order||0)-(b.order||0)).map(ex=>`<option value="${ex.name}">${ex.name}</option>`).join('');
+    const _allCx=[...(window.EXERCISES_DB||[]).map(ex=>ex.name),...Object.values(exercises).map(ex=>ex.name)];
+    const _seenCx=new Set();
+    const exOpts=[..._allCx.filter(n=>{if(_seenCx.has(n))return false;_seenCx.add(n);return true;})].sort((a,b)=>a.localeCompare(b,'it')).map(n=>`<option value="${n}">${n}</option>`).join('');
     mb.innerHTML=`<h3>Aggiungi Complex / Superset</h3>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Es. A1 Squat pesante + A2 CMJ esplosivo. L'atleta alterna i due esercizi per ogni round.</div>
       ${[1,2].map(n=>`
