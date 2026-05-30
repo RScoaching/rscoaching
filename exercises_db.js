@@ -393,10 +393,6 @@ var _db = [
   {name:'Single Arm Farmer Carry',                 cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=hCiQDHTBi_A'},
   {name:'Waiter Carry',                            cat:'condizionamento', group:'Conditioning', url:null},
   {name:'Zercher Carry',                           cat:'condizionamento', group:'Conditioning', url:null},
-  {name:'Small-Sided Game 2v2',                    cat:'condizionamento', group:'Conditioning', url:null},
-  {name:'Small-Sided Game 3v3',                    cat:'condizionamento', group:'Conditioning', url:null},
-  {name:'Small-Sided Game 4v4',                    cat:'condizionamento', group:'Conditioning', url:null},
-  {name:'Rondo 4+2',                               cat:'condizionamento', group:'Conditioning', url:null},
 
   // ─── RESISTENZA / ENDURANCE ──────────────────────────────────
   {name:'Corsa Continua',                          cat:'resistenza', group:'Endurance', url:null},
