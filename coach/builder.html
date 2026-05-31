@@ -194,7 +194,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
     <a class="nav-item" href="./planner.html">📅 Planner Sett.</a>
     <a class="nav-item" href="./piani.html">📨 Piani Rapidi</a>
     <div class="nav-lbl" style="margin-top:10px;">Risorse</div>
-    <a class="nav-item" id="nav-exdb" onclick="showExDb()" style="cursor:pointer;">🗄 Database Esercizi</a>
+    <a class="nav-item" href="./index.html#database" onclick="sessionStorage.setItem('goto','database')">🗄 Database Esercizi</a>
     <a class="nav-item" href="./">🧮 Strumenti S&C</a>
     <a class="nav-item" href="/coach/hybrid.html">🏃 Hybrid Training</a>
     <div class="nav-lbl" style="margin-top:10px;">Storico</div>
@@ -216,30 +216,6 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
   <!-- RIGHT: program editor -->
   <div class="right-panel">
     <!-- DATABASE ESERCIZI PANEL -->
-    <div id="rp-exdb" style="display:none;" class="rp-inner">
-      <div class="rp-head">
-        <div><div class="rp-title">Database Esercizi</div><div class="rp-sub" id="exdb-count">Caricamento...</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" onclick="openAddExDbModal()">+ Aggiungi</button>
-          <button class="btn btn-teal btn-sm" onclick="seedExerciseDb(true)">↻ Inizializza DB standard</button>
-        </div>
-      </div>
-      <!-- filtro per categoria -->
-      <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
-        <button class="btn btn-sm btn-outline exdb-cat-btn active" onclick="filterExDb('')" data-cat="">Tutti</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('forza')" data-cat="forza">💪 Forza</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('olimpico')" data-cat="olimpico">🏋️ Olimpico</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('pliometria')" data-cat="pliometria">🦘 Pliometria</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('velocita_prep')" data-cat="velocita_prep">🏃 Vel. preparatoria</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('velocita_sprint')" data-cat="velocita_sprint">⚡ Sprint</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('resistenza')" data-cat="resistenza">🫀 Resistenza</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('condizionamento')" data-cat="condizionamento">🔥 Conditioning</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('priming')" data-cat="priming">🎯 Priming</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('mobilita')" data-cat="mobilita">🧘 Mobilità</button>
-        <button class="btn btn-sm btn-outline exdb-cat-btn" onclick="filterExDb('recupero')" data-cat="recupero">🔄 Recupero</button>
-      </div>
-      <div id="exdb-list" style="padding:18px;"></div>
-    </div>
     <div id="rp-empty" class="rp-inner">
       <div class="empty-state" style="padding-top:80px;">
         <div class="empty-icon">🔨</div>
@@ -362,17 +338,13 @@ function _getBldExNames(progType, sessType){
   db.forEach(function(e){
     if(cats.has(e.cat) && !seen.has(e.name)){seen.add(e.name);names.push(e.name);}
   });
-  // Merge eventuali nomi Firebase non nel DB
-  Object.values(exercises).forEach(function(e){
-    if(!seen.has(e.name)){seen.add(e.name);names.push(e.name);}
-  });
   return names.sort(function(a,b){return a.localeCompare(b,'it');});
 }
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
 
-// ── EXERCISE DB SEED DATA (140+ esercizi — S&C Football + Upper Body + Bodybuilding)
-const EXERCISE_SEED=[
+// EXERCISE_SEED rimosso — si usa exercises_db.js (window.EXERCISES_DB)
+const EXERCISE_SEED_REMOVED=[
   // ═══ FORZA — LOWER BODY (fondamentali S&C football)
   {name:'Squat',category:'forza',order:1},
   {name:'Back Squat',category:'forza',order:2},
@@ -594,17 +566,8 @@ const CAT_LABEL={
   priming:'🎯 Priming',mobilita:'🧘 Mobilità',recupero:'🔄 Recupero',altro:'📦 Altro'
 };
 
-window.seedExerciseDb=async function(force=false){
-  const count=Object.keys(exercises).length;
-  if(!force&&count>=10){showToast('DB già inizializzato ('+count+' esercizi)');return;}
-  if(!confirm('Inizializzare il database con '+EXERCISE_SEED.length+' esercizi standard?\n'+(count>0?'ATTENZIONE: sovrascriverà gli esercizi esistenti.':'')))return;
-  const batch={};
-  EXERCISE_SEED.forEach((e,i)=>{batch['seed_'+i.toString().padStart(3,'0')]={...e,custom:false};});
-  await set(ref(db,'exercise_db'),batch);
-  showToast('✓ Database inizializzato — '+EXERCISE_SEED.length+' esercizi');
-};
-
 let _exDbFilter='';
+let _exDbSearch='';
 window.filterExDb=function(cat){
   _exDbFilter=cat;
   document.querySelectorAll('.exdb-cat-btn').forEach(b=>{
@@ -612,8 +575,15 @@ window.filterExDb=function(cat){
   });
   renderExDb();
 };
+window.filterExDbSearch=function(q){
+  _exDbSearch=q.toLowerCase().trim();
+  renderExDb();
+};
 
-window.showExDb=function(){
+window.showExDb=function(){ // rimossa — Database Esercizi ora è in coach/index.html
+  window.location.href='./index.html';sessionStorage.setItem('goto','database');
+};
+window._showExDb_LEGACY=function(){
   ['rp-empty','rp-editor'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.getElementById('rp-exdb').style.display='block';
   document.getElementById('nav-exdb').classList.add('active');
@@ -629,29 +599,103 @@ window.showProgView=function(){
 
 function renderExDb(){
   const el=document.getElementById('exdb-list');if(!el)return;
-  const all=Object.entries(exercises);
-  const filtered=_exDbFilter?all.filter(([,e])=>e.category===_exDbFilter):all;
-  filtered.sort((a,b)=>(a[1].order||999)-(b[1].order||999)||(a[1].name||'').localeCompare(b[1].name||''));
-  // Count per category
-  const total=all.length;
-  document.getElementById('exdb-count').textContent=total+' esercizi totali'+(filtered.length!==total?' · '+filtered.length+' filtrati':'');
-  if(!filtered.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:40px;">Nessun esercizio in questa categoria.<br><br><button class="btn btn-teal" onclick="openAddExDbModal()">+ Aggiungi il primo</button></div>';return;}
-  // Raggruppamento per categoria
-  const byCat={};
-  filtered.forEach(([k,e])=>{
-    const c=e.category||'altro';
-    if(!byCat[c])byCat[c]=[];
-    byCat[c].push({k,e});
+
+  // Merge: exercises_db.js (static, 404 ex) + Firebase custom overrides
+  const OLD_CATS=new Set(['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro']);
+  const staticMap={};
+  (window.EXERCISES_DB||[]).forEach(e=>{
+    staticMap[e.name.toLowerCase().trim()]={name:e.name,cat:e.cat,group:e.group,url:e.url||null,src:'static'};
   });
-  el.innerHTML=Object.entries(byCat).map(([cat,items])=>`
+  // Firebase entries: skip legacy seeded entries (default:true or old category names)
+  Object.entries(exercises).forEach(([k,e])=>{
+    if(!e||!e.name)return;
+    if(e.default||OLD_CATS.has(e.cat))return; // skip old legacy seeds
+    const key=e.name.toLowerCase().trim();
+    if(staticMap[key]){
+      // Override url if firebase has one
+      if(e.url||e.video)staticMap[key].url=e.url||e.video;
+      staticMap[key].fbKey=k;
+    } else {
+      // Truly custom exercise added by coach
+      staticMap[key]={name:e.name,cat:e.cat||'altro',group:e.group||'',url:e.url||e.video||null,src:'firebase',fbKey:k,custom:true};
+    }
+  });
+
+  const catMap={'forza':'forza','pliometria':'pliometria','pliomet ria':'pliometria','olimpico':'olimpico','velocita_prep':'velocita_prep','velocita_sprint':'velocita_sprint','resistenza':'resistenza','condizionamento':'condizionamento','priming':'priming','mobilita':'mobilita','recupero':'recupero'};
+  let all=Object.values(staticMap);
+  let filtered=_exDbFilter?all.filter(e=>(e.cat||'')===_exDbFilter):all;
+  if(_exDbSearch)filtered=filtered.filter(e=>(e.name||'').toLowerCase().includes(_exDbSearch));
+  filtered.sort((a,b)=>(a.name||'').localeCompare(b.name||'','it'));
+
+  document.getElementById('exdb-count').textContent=all.length+' esercizi totali'+(filtered.length!==all.length?' · '+filtered.length+' filtrati':'');
+  if(!filtered.length){el.innerHTML='<div style="color:var(--muted);text-align:center;padding:40px;">Nessun esercizio in questa categoria.</div>';return;}
+
+  // Raggruppamento per group (sottocategoria)
+  const byGroup={};
+  filtered.forEach(e=>{
+    const g=e.group||e.cat||'Altro';
+    if(!byGroup[g])byGroup[g]=[];
+    byGroup[g].push(e);
+  });
+
+  const ytIcon=`<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>`;
+
+  el.innerHTML=Object.entries(byGroup).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([grp,items])=>`
     <div style="margin-bottom:20px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--teal);margin-bottom:8px;">${CAT_LABEL[cat]||cat} <span style="color:var(--muted);font-weight:400;">(${items.length})</span></div>
-      ${items.map(({k,e})=>`<div class="exdb-card">
-        <div><span class="exdb-name">${e.name}</span>${e.custom?'<span class="exdb-cat-badge">personalizzato</span>':''}</div>
-        <button onclick="deleteExFromDb('${k}')" style="background:rgba(248,113,113,.08);color:var(--red);border:1px solid rgba(248,113,113,.15);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer;">🗑</button>
-      </div>`).join('')}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--teal);margin-bottom:8px;">${grp} <span style="color:var(--muted);font-weight:400;">(${items.length})</span></div>
+      ${items.map(e=>{
+        const hasUrl=!!e.url;
+        const nameEsc=e.name.replace(/'/g,"\\'");
+        const urlEsc=(e.url||'').replace(/'/g,"\\'");
+        return `<div class="exdb-card" style="cursor:pointer;" onclick="openExDbDetail('${nameEsc}','${urlEsc}','${e.fbKey||''}','${e.cat||''}')">
+          <div style="flex:1;min-width:0;">
+            <span class="exdb-name">${e.name}</span>
+            ${e.custom?'<span class="exdb-cat-badge">custom</span>':''}
+            ${hasUrl?`<span style="color:#ff4e45;margin-left:8px;vertical-align:middle;" title="${e.url}">${ytIcon}</span>`:'<span style="color:var(--muted);font-size:11px;margin-left:8px;">no video</span>'}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${hasUrl?`<a href="${e.url}" target="_blank" onclick="event.stopPropagation()" style="color:#ff4e45;font-size:11px;text-decoration:none;white-space:nowrap;">${ytIcon} Guarda</a>`:''}
+            ${e.fbKey?`<button onclick="event.stopPropagation();deleteExFromDb('${e.fbKey}')" style="background:rgba(248,113,113,.08);color:var(--red);border:1px solid rgba(248,113,113,.15);border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer;">🗑</button>`:''}
+          </div>
+        </div>`;
+      }).join('')}
     </div>`).join('');
 }
+
+window.openExDbDetail=function(name,url,fbKey,cat){
+  // Open a small inline modal to view/edit the YouTube link
+  document.getElementById('exdb-detail-name').textContent=name;
+  document.getElementById('exdb-detail-url').value=url||'';
+  document.getElementById('exdb-detail-fbkey').value=fbKey||'';
+  document.getElementById('exdb-detail-name-hidden').value=name;
+  document.getElementById('exdb-detail-cat').value=cat||'forza';
+  // Show preview
+  _updateExDbPreview(url);
+  openModal('exdb-detail');
+};
+
+window._updateExDbPreview=function(url){
+  const box=document.getElementById('exdb-detail-preview');
+  if(!box)return;
+  if(url&&url.includes('youtu')){
+    const id=url.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/)?.[1];
+    box.innerHTML=id?`<iframe width="100%" height="160" src="https://www.youtube.com/embed/${id}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>`:'<div style="color:var(--muted);font-size:12px;">URL non valido</div>';
+  } else {
+    box.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px;">Nessun video impostato</div>';
+  }
+};
+
+window.saveExDbDetail=async function(){
+  const name=document.getElementById('exdb-detail-name-hidden').value;
+  const url=document.getElementById('exdb-detail-url').value.trim();
+  const fbKey=document.getElementById('exdb-detail-fbkey').value;
+  const cat=document.getElementById('exdb-detail-cat').value;
+  // Save to Firebase exercise_db (creates or updates entry)
+  const key=fbKey||'ex_'+name.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,30)+'_'+Date.now();
+  await set(ref(db,'exercise_db/'+key),{name,category:cat,url:url||null,custom:false});
+  showToast('✓ Link salvato');
+  closeModal('exdb-detail');
+};
 
 window.deleteExFromDb=async function(key){
   if(!confirm('Rimuovere questo esercizio dal database?'))return;
@@ -659,35 +703,20 @@ window.deleteExFromDb=async function(key){
   showToast('✓ Esercizio rimosso');
 };
 
-window.openAddExDbModal=function(){
-  openModal('add-ex-db');
-};
-
 async function init(){
   document.getElementById('loading').style.display='none';
   document.getElementById('app').style.display='flex';
-  const [pSnap,aSnap,eSnap]=await Promise.all([
+  const [pSnap,aSnap]=await Promise.all([
     get(ref(db,'programs')),
-    get(ref(db,'athletes')),
-    get(ref(db,'exercise_db'))
+    get(ref(db,'athletes'))
   ]);
   programs=pSnap.val()||{};
   athletes=aSnap.val()||{};
-  exercises=eSnap.val()||{};
-  // Auto-seed se DB vuoto
-  if(Object.keys(exercises).length===0){
-    const batch={};
-    EXERCISE_SEED.forEach((e,i)=>{batch['seed_'+i.toString().padStart(3,'0')]={...e,custom:false};});
-    await set(ref(db,'exercise_db'),batch);
-    exercises=batch;
-    showToast('✓ Database esercizi inizializzato!');
-  }
   // Restore last opened program
   const _lastProg=localStorage.getItem('rsc_last_prog');
   if(_lastProg&&programs[_lastProg])setTimeout(()=>selectProg(_lastProg),0);
   onValue(ref(db,'programs'),s=>{programs=s.val()||{};renderProgList();if(currentProgId)renderEditor();});
   onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};});
-  onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};if(document.getElementById('rp-exdb')?.style.display!=='none')renderExDb();});
 }
 init();
 
@@ -909,6 +938,26 @@ window.openModal=function(type,...args){
       <div class="mactions"><button class="btn btn-teal" onclick="saveExToDb()">Aggiungi al database</button></div>`;
     document.getElementById('modal').classList.add('open');
     setTimeout(()=>document.getElementById('add-ex-name')?.focus(),100);
+    return;
+  }
+
+  if(type==='exdb-detail'){
+    const catOpts=['forza','olimpico','pliometria','velocita_prep','velocita_sprint','resistenza','condizionamento','priming','mobilita','recupero'].map(c=>`<option value="${c}">${CAT_LABEL[c]||c}</option>`).join('');
+    mb.innerHTML=`<h3 id="exdb-detail-name" style="margin-bottom:12px;">Esercizio</h3>
+      <input type="hidden" id="exdb-detail-name-hidden">
+      <input type="hidden" id="exdb-detail-fbkey">
+      <div id="exdb-detail-preview" style="margin-bottom:14px;min-height:40px;"></div>
+      <div class="field"><label>Link YouTube</label>
+        <input type="url" id="exdb-detail-url" placeholder="https://www.youtube.com/watch?v=..." style="width:100%;" oninput="_updateExDbPreview(this.value)">
+      </div>
+      <div class="field"><label>Categoria</label>
+        <select id="exdb-detail-cat" style="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">${catOpts}</select>
+      </div>
+      <div class="mactions" style="display:flex;gap:8px;">
+        <button class="btn btn-teal" onclick="saveExDbDetail()">💾 Salva link</button>
+        <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
+      </div>`;
+    document.getElementById('modal').classList.add('open');
     return;
   }
 
