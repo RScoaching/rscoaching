@@ -7,40 +7,40 @@ window.SIDEBAR_HTML = `
   </div>
   <div class="nav-s">
     <div class="nav-lbl">Principale</div>
-    <a class="nav-item" href="/coach/" data-page="dashboard">
+    <a class="nav-item" href="./index.html" data-page="dashboard">
       <span class="nav-icon">⊞</span><span>Dashboard</span>
     </a>
-    <a class="nav-item" href="/coach/" data-page="athletes">
+    <a class="nav-item" href="./index.html?goto=athletes" data-page="athletes">
       <span class="nav-icon">◎</span><span>Atleti</span>
     </a>
-    <a class="nav-item" href="/coach/" data-page="groups">
+    <a class="nav-item" href="./index.html?goto=groups" data-page="groups">
       <span class="nav-icon">◈</span><span>Gruppi</span>
     </a>
-    <a class="nav-item" href="/coach/" data-page="analytics">
+    <a class="nav-item" href="./index.html?goto=analytics" data-page="analytics">
       <span class="nav-icon">📊</span><span>Analytics</span>
     </a>
 
     <div class="nav-lbl" style="margin-top:12px;">Programmazione</div>
-    <a class="nav-item" href="/coach/builder.html" data-page="builder">
+    <a class="nav-item" href="./builder.html" data-page="builder">
       <span class="nav-icon">🔨</span><span>Program Builder</span>
     </a>
-    <a class="nav-item" href="/coach/planner.html" data-page="planner">
+    <a class="nav-item" href="./planner.html" data-page="planner">
       <span class="nav-icon">📅</span><span>Planner Settimanale</span>
     </a>
-    <a class="nav-item" href="/coach/piani.html" data-page="piani">
+    <a class="nav-item" href="./piani.html" data-page="piani">
       <span class="nav-icon">📨</span><span>Piani Rapidi</span>
     </a>
 
     <div class="nav-lbl" style="margin-top:12px;">Database</div>
-    <a class="nav-item" href="/coach/?goto=database" data-page="database">
+    <a class="nav-item" href="./index.html?goto=database" data-page="database">
       <span class="nav-icon">🗄</span><span>Esercizi</span>
     </a>
-    <a class="nav-item" href="/coach/" data-page="tools">
+    <a class="nav-item" href="./index.html?goto=tools" data-page="tools">
       <span class="nav-icon">🧮</span><span>Strumenti S&amp;C</span>
     </a>
 
-    <div class="nav-lbl" style="margin-top:12px;">Sedute</div>
-    <a class="nav-item" href="/coach/" data-page="sessions">
+    <div class="nav-lbl" style="margin-top:12px;">Storico</div>
+    <a class="nav-item" href="./index.html?goto=sessions" data-page="sessions">
       <span class="nav-icon">≡</span><span>Tutte le sedute</span>
     </a>
   </div>
