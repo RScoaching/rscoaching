@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="../exercises_db.js"></script>
 <style>
 :root{
   --bg:#0E0E13;--sb:#09090F;--sbb:#111119;--content:#0E0E13;--card:#15151F;--card2:#1D1D2B;--card3:#232334;
@@ -156,9 +157,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .db-cat-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
 .db-cat-name::after{content:'';flex:1;height:1px;background:var(--border);}
 .db-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:6px;}
-.db-item{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;}
-.db-item-name{font-size:12px;font-weight:500;color:var(--white);}
-.db-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;}
+.db-item{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:6px;justify-content:space-between;}
+.db-item-name{font-size:12px;font-weight:500;color:var(--white);flex:1;min-width:0;}
+.db-video-link{font-size:10px;font-weight:600;color:var(--orange);text-decoration:none;white-space:nowrap;padding:2px 6px;border-radius:5px;background:rgba(255,104,48,.12);}
+.db-video-link:hover{background:rgba(255,104,48,.25);}
+.db-no-video{font-size:10px;color:var(--muted);opacity:.4;}
+.db-item-actions{display:flex;gap:3px;align-items:center;}
+.db-edit{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px;}
+.db-edit:hover{color:var(--orange);}
+.db-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px;}
 .db-del:hover{color:var(--red);}
 
 .tool-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px;}
@@ -389,6 +396,21 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
     <div><div class="pg-title">Database Esercizi</div><div class="pg-sub" id="db-count">—</div></div>
     <button class="btn btn-orange" onclick="openModal('addExercise')">+ Esercizio</button>
   </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <input type="text" placeholder="🔍 Cerca esercizio..." oninput="dbSearch(this.value)" style="flex:1;min-width:180px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--white);font-size:13px;">
+    <select onchange="dbFilter(this.value)" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
+      <option value="">Tutte le categorie</option>
+      <option value="forza">💪 Forza</option>
+      <option value="pliometria">⚡ Pliometria</option>
+      <option value="velocita_sprint">🏃 Velocità/Sprint</option>
+      <option value="olimpico">🏋️ Olimpico</option>
+      <option value="resistenza">🫀 Resistenza</option>
+      <option value="condizionamento">🔥 Condizionamento</option>
+      <option value="priming">🔄 Priming</option>
+      <option value="mobilita">🤸 Mobilità</option>
+      <option value="recupero">🧊 Recupero</option>
+    </select>
+  </div>
   <div id="db-content"></div>
 </div>
 
@@ -510,14 +532,9 @@ const LV_C={1:'lv-1',2:'lv-2',3:'lv-3'};
 document.getElementById('loading').style.display='none';
 document.getElementById('app').style.display='flex';
 document.getElementById('dash-date').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-
-// Exercise DB init
-get(ref(db,'exercise_db_version')).then(s=>{
-  if((s.val()||0)<3){
-    const obj={};DEFAULT_EXERCISES.forEach((e,i)=>obj[`ex${i}`]={...e,order:i,default:true});
-    set(ref(db,'exercise_db'),obj);set(ref(db,'exercise_db_version'),3);
-  }
-});
+// Auto-navigate se arrivo da un'altra pagina con goto impostato
+const _goto=sessionStorage.getItem('goto');
+if(_goto){sessionStorage.removeItem('goto');setTimeout(()=>{const navEl=document.querySelector(`.nav-item[onclick*="${_goto}"]`);pg(_goto,navEl);},100);}
 
 onValue(ref(db,'athletes'),s=>{
   athletes=s.val()||{};
@@ -529,7 +546,7 @@ onValue(ref(db,'athletes'),s=>{
 onValue(ref(db,'sessions'),s=>{sessions=s.val()||{};renderAll();});
 onValue(ref(db,'groups'),s=>{groups=s.val()||{};renderAll();});
 onValue(ref(db,'tests'),s=>{tests=s.val()||{};});
-onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();});
+onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom overrides only
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
 onValue(ref(db,'session_logs'),s=>{sessionLogs=s.val()||{};});
@@ -1069,17 +1086,58 @@ function renderAnalytics(){
 }
 
 // ── DATABASE
+let _dbSearch='', _dbFilter='';
 function renderDB(){
   const el=document.getElementById('db-content');
-  const bycat={};
-  Object.entries(exercises).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).forEach(([id,ex])=>{
-    if(!bycat[ex.cat])bycat[ex.cat]=[];bycat[ex.cat].push({...ex,id});
+
+  // ── Merge: exercises_db.js (base) + Firebase custom overrides
+  const OLD_CATS_D=new Set(['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro']);
+  const merged={};
+  (window.EXERCISES_DB||[]).forEach(e=>{
+    const key=e.name.toLowerCase().trim();
+    merged[key]={name:e.name,cat:e.cat,group:e.group||'',url:e.url||null,src:'static'};
   });
-  document.getElementById('db-count').textContent=`${Object.keys(exercises).length} esercizi`;
-  el.innerHTML=Object.entries(bycat).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,items])=>`
-    <div class="db-category"><div class="db-cat-name">${cat}</div>
-    <div class="db-items">${items.map(ex=>`<div class="db-item"><div class="db-item-name">${ex.name}</div>${!ex.default?`<button class="db-del" onclick="delExercise('${ex.id}')">✕</button>`:''}</div>`).join('')}</div></div>`).join('')||'<div class="empty">Database vuoto.</div>';
+  Object.entries(exercises).forEach(([fbKey,e])=>{
+    if(!e||!e.name)return;
+    if(e.default||OLD_CATS_D.has(e.cat))return; // ignora vecchie voci legacy
+    const key=(e.name||'').toLowerCase().trim();
+    if(merged[key]){
+      if(e.url||e.video)merged[key].url=e.url||e.video;
+      merged[key].fbKey=fbKey;merged[key].custom=true;
+    } else {
+      merged[key]={name:e.name,cat:e.cat||'altro',group:e.group||'',url:e.url||e.video||null,src:'firebase',fbKey:fbKey,custom:true};
+    }
+  });
+
+  let all=Object.values(merged);
+  if(_dbFilter)all=all.filter(e=>e.cat===_dbFilter);
+  if(_dbSearch)all=all.filter(e=>e.name.toLowerCase().includes(_dbSearch));
+  all.sort((a,b)=>a.name.localeCompare(b.name,'it'));
+
+  document.getElementById('db-count').textContent=`${all.length} esercizi`;
+
+  // Group by cat
+  const bycat={};
+  all.forEach(ex=>{const c=ex.cat||'altro';if(!bycat[c])bycat[c]=[];bycat[c].push(ex);});
+
+  const CAT_LABEL={'forza':'💪 Forza','pliometria':'⚡ Pliometria','velocita_sprint':'🏃 Velocità/Sprint','olimpico':'🏋️ Olimpico','resistenza':'🫀 Resistenza','condizionamento':'🔥 Condizionamento','priming':'🔄 Priming','mobilita':'🤸 Mobilità','recupero':'🧊 Recupero','altro':'📋 Altro',
+    'Squat':'🦵 Squat','Hinge':'🔱 Hinge','Unilaterale':'🦶 Unilaterale','Potenza':'⚡ Potenza','Pliometria':'⚡ Pliometria','Spinta':'💪 Spinta','Tirata':'🤜 Tirata','Core':'🔩 Core','Conditioning':'🔥 Conditioning'};
+
+  el.innerHTML=Object.entries(bycat).sort((a,b)=>a[0].localeCompare(b[0],'it')).map(([cat,items])=>`
+    <div class="db-category">
+      <div class="db-cat-name">${CAT_LABEL[cat]||cat} <span style="font-size:10px;opacity:.5;">(${items.length})</span></div>
+      <div class="db-items">${items.map(ex=>`<div class="db-item">
+        <div class="db-item-name">${ex.name}</div>
+        ${ex.url?`<a href="${ex.url}" target="_blank" class="db-video-link" title="${ex.url}">▶ video</a>`:'<span class="db-no-video">—</span>'}
+        <div class="db-item-actions">
+          <button class="db-edit" onclick='openModal("editExercise",${JSON.stringify(ex)})' title="Modifica">✏️</button>
+          ${ex.custom?`<button class="db-del" onclick="delExercise('${ex.fbKey}')" title="Rimuovi">✕</button>`:''}
+        </div>
+      </div>`).join('')}</div>
+    </div>`).join('')||'<div class="empty">Database vuoto.</div>';
 }
+window.dbSearch=function(v){_dbSearch=v.toLowerCase();renderDB();}
+window.dbFilter=function(v){_dbFilter=v;renderDB();}
 
 // ── ALL SESSIONS
 function renderAllSessions(){
@@ -1128,7 +1186,19 @@ window.openModal=function(type,...args){
   } else if(type==='addExercise'){
     mb.innerHTML=`<h3>Nuovo Esercizio</h3>
       <div class="grid2"><div class="field"><label>Nome esercizio</label><input id="m-exname" placeholder="Es. Trap Bar Jump"></div><div class="field"><label>Categoria</label><select id="m-excat">${['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro'].map(c=>`<option>${c}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Link video (YouTube, ecc.)</label><input id="m-exvideo" placeholder="https://youtube.com/..."></div>
       <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveNewExercise()">Aggiungi →</button></div>`;
+  } else if(type==='editExercise'){
+    const [ex]=args; // ex is the full merged object
+    const fbKey=ex.fbKey||null;
+    const CATS=['forza','pliometria','velocita_sprint','olimpico','resistenza','condizionamento','priming','mobilita','recupero','altro','Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning'];
+    mb.innerHTML=`<h3>Modifica Esercizio</h3>
+      <div style="margin-bottom:10px;font-size:11px;color:var(--muted);">Sorgente: ${ex.src==='static'?'📚 database statico':'⭐ custom Firebase'}</div>
+      <div class="grid2"><div class="field"><label>Nome esercizio</label><input id="m-exname" value="${ex.name||''}" ${ex.src==='static'?'readonly style="opacity:.6;"':''}></div><div class="field"><label>Categoria</label><select id="m-excat" ${ex.src==='static'?'disabled style="opacity:.6;"':''}>${CATS.map(c=>`<option value="${c}"${ex.cat===c?' selected':''}>${c}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Link video (YouTube, ecc.)</label><input id="m-exvideo" value="${ex.url||''}" placeholder="https://youtube.com/..."></div>
+      ${ex.url?`<div style="margin:4px 0 10px;"><a href="${ex.url}" target="_blank" style="color:var(--orange);font-size:11px;word-break:break-all;">▶ Apri link attuale</a></div>`:''}
+      <div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Modificare il link video sovrascrive solo il link in Firebase (il resto rimane uguale)</div>
+      <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick='saveEditExercise(${JSON.stringify({fbKey,name:ex.name,cat:ex.cat,src:ex.src})})'>Salva →</button></div>`;
   }
   document.getElementById('modal-overlay').classList.add('open');
 };
@@ -1156,8 +1226,20 @@ window.saveTest=async function(aid,tName){
 };
 window.saveNewExercise=async function(){
   const name=document.getElementById('m-exname').value.trim();if(!name){showToast('⚠ Inserisci nome');return;}
-  await push(ref(db,'exercise_db'),{name,cat:document.getElementById('m-excat').value,order:Object.keys(exercises).length});
+  const video=document.getElementById('m-exvideo').value.trim()||null;
+  await push(ref(db,'exercise_db'),{name,cat:document.getElementById('m-excat').value,order:Object.keys(exercises).length,...(video?{video}:{})});
   closeModal();showToast('✓ Esercizio aggiunto!');
+};
+window.saveEditExercise=async function(exMeta){
+  const url=document.getElementById('m-exvideo').value.trim()||null;
+  if(exMeta.fbKey){
+    // Already in Firebase — just update url
+    await update(ref(db,`exercise_db/${exMeta.fbKey}`),{url});
+  } else {
+    // Static exercise — create a Firebase override with just the url
+    await push(ref(db,'exercise_db'),{name:exMeta.name,cat:exMeta.cat,url});
+  }
+  closeModal();showToast('✓ Link video salvato!');
 };
 window.delAthlete=async function(aid){
   if(!confirm('Eliminare atleta e tutti i suoi dati?'))return;
@@ -1220,17 +1302,7 @@ window.toggleSidebar=function(){document.getElementById('sidebar').classList.tog
 function ini(n){return n?n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2):'?';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 
-const DEFAULT_EXERCISES=[
-  {name:'Back Squat',cat:'Squat'},{name:'Front Squat',cat:'Squat'},{name:'Goblet Squat',cat:'Squat'},{name:'Box Squat',cat:'Squat'},{name:'Zercher Squat',cat:'Squat'},
-  {name:'Trap Bar Deadlift',cat:'Hinge'},{name:'Romanian Deadlift',cat:'Hinge'},{name:'Hip Thrust bilanciere',cat:'Hinge'},{name:'Good Morning',cat:'Hinge'},{name:'Sumo Deadlift',cat:'Hinge'},
-  {name:'Split Squat Bulgaro',cat:'Unilaterale'},{name:'Step-Up alto',cat:'Unilaterale'},{name:'Lunge avanti',cat:'Unilaterale'},{name:'Lunge retro',cat:'Unilaterale'},{name:'RDL unilaterale',cat:'Unilaterale'},{name:'Skater Squat',cat:'Unilaterale'},
-  {name:'Jump Squat',cat:'Potenza'},{name:'Trap Bar Jump',cat:'Potenza'},{name:'KB Swing',cat:'Potenza'},{name:'Hang Power Clean',cat:'Potenza'},{name:'Push Press',cat:'Potenza'},{name:'Med Ball Slam',cat:'Potenza'},
-  {name:'Drop Jump',cat:'Pliometria'},{name:'Depth Jump',cat:'Pliometria'},{name:'Box Jump',cat:'Pliometria'},{name:'Broad Jump',cat:'Pliometria'},{name:'Single Leg Jump',cat:'Pliometria'},{name:'Lateral Bound',cat:'Pliometria'},{name:'Hurdle Jump',cat:'Pliometria'},
-  {name:'Nordic Hamstring',cat:'Core'},{name:'Pallof Press',cat:'Core'},{name:'Dead Bug',cat:'Core'},{name:'Plank laterale',cat:'Core'},{name:'Copenhagen Plank',cat:'Core'},
-  {name:'Bench Press',cat:'Spinta'},{name:'Push-Up',cat:'Spinta'},{name:'Dip',cat:'Spinta'},{name:'DB Shoulder Press',cat:'Spinta'},
-  {name:'Pull-Up',cat:'Tirata'},{name:'Chin-Up',cat:'Tirata'},{name:'Bent-Over Row',cat:'Tirata'},{name:'Face Pull',cat:'Tirata'},
-  {name:'AMRAP',cat:'Conditioning'},{name:'EMOM',cat:'Conditioning'},{name:'Tabata',cat:'Conditioning'},{name:'Circuit Training',cat:'Conditioning'},
-];
+// DEFAULT_EXERCISES removed — using exercises_db.js (window.EXERCISES_DB) as the single source
 </script>
 </body>
 </html>
