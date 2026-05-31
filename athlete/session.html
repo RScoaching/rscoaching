@@ -802,8 +802,8 @@ function initSets(){
       for(let s=0;s<totalS;s++){
         const h=hist[s]||{};
         const prevK=h.kg!=null&&h.kg!==''?String(h.kg):'';
-        const prevR=h.reps||'';
-        setData[i][s]={kg:prevK,suggested:!!prevK,prevReps:prevR,rpe:null,done:false};
+        const prevR=h.reps!=null?String(h.reps):''; // actual reps from last session
+        setData[i][s]={kg:prevK,suggested:!!prevK,prevReps:prevR,reps:null,rpe:null,done:false};
       }
     } else if(ex._type==='complex'){
       setData[i]={};
@@ -913,13 +913,16 @@ function renderPesi(ex,ei){
       const d=sd[s]||{kg:'',rpe:null,done:false};
       const isCur=s===doneN&&!d.done;
       const isSug=!d.done&&d.suggested&&d.kg;
+      const targetReps=row.reps||ex.reps||'';
+      const actualReps=d.reps!=null?String(d.reps):'';
       return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}">
         <span class="sn${d.done?' d':''}">${s+1}</span>
-        <div style="display:flex;flex-direction:column;align-items:center;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
           <input class="reps-inp" type="text" inputmode="numeric"
-            value="${row.reps||ex.reps||''}" placeholder="—" id="reps-${ei}-${s}"
-            oninput="setReps(${ei},this.value)">
-          ${d.prevReps&&!d.done?`<div class="prev-reps-hint">${d.prevReps}</div>`:''}
+            value="${actualReps}" placeholder="${targetReps||'—'}" id="reps-${ei}-${s}"
+            oninput="setRepsActual(${ei},${s},this.value)">
+          ${targetReps?`<div class="prev-reps-hint" style="color:rgba(255,255,255,.18);">target: ${targetReps}</div>`:''}
+          ${d.prevReps&&!d.done&&!actualReps?`<div class="prev-reps-hint">↑ ${d.prevReps}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:center;">
           <input class="kg-inp${d.done?' d':''}${isSug?' suggested':''}" type="number" inputmode="decimal"
@@ -1234,9 +1237,10 @@ window.setKg=(ei,s,v,el)=>{
   // Remove visual suggestion class immediately without full re-render
   if(el)el.classList.remove('suggested');
 };
-window.setReps=(ei,v)=>{
-  if(exs[ei])exs[ei].reps=v;
-  document.querySelectorAll(`[id^="reps-${ei}-"]`).forEach(inp=>{inp.value=v;});
+// Per-set actual reps (replaces global setReps)
+window.setRepsActual=(ei,s,v)=>{
+  if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
+  setData[ei][s].reps=v;
 };
 window.setRpe=(ei,s,r)=>{if(!setData[ei][s])setData[ei][s]={};setData[ei][s].rpe=r;render();};
 window.toggleDone=function(ei,s){
@@ -1361,6 +1365,7 @@ async function finish(){
         .sort((a,b)=>+a[0]-+b[0])
         .map(([,s])=>({
           kg:s.kg?parseFloat(s.kg):null,
+          reps:s.reps||null,
           rpe:s.rpe||null
         }))
         .filter(s=>s.kg!=null); // only save sets with actual kg
