@@ -127,6 +127,27 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
 .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
 
+/* SET TYPE BADGES */
+.st-badge{display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;padding:2px 5px;border-radius:4px;letter-spacing:.5px;margin-right:4px;flex-shrink:0;}
+.st-w{background:rgba(148,163,184,.15);color:#94a3b8;}
+.st-bo{background:rgba(251,191,36,.15);color:#fbbf24;}
+.st-d{background:rgba(251,113,74,.15);color:#fb7240;}
+.st-f{background:rgba(239,68,68,.15);color:#ef4444;}
+.st-work{background:rgba(6,214,160,.12);color:var(--teal);}
+/* SET ROWS UI */
+.set-rows-table{width:100%;border-collapse:collapse;}
+.set-rows-table th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:4px 6px;text-align:left;}
+.set-rows-table td{padding:3px 4px;vertical-align:middle;}
+.set-rows-table .sr-type{width:90px;}
+.set-rows-table .sr-sets{width:52px;}
+.set-rows-table .sr-reps{width:auto;}
+.set-rows-table .sr-rm{width:26px;}
+.sr-inp{width:100%;padding:5px 7px;background:var(--card2);border:1px solid var(--border);border-radius:7px;font-family:'Outfit',sans-serif;font-size:12px;color:var(--white);}
+.sr-inp:focus{outline:none;border-color:var(--teal);}
+.sr-rm-btn{background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:18px;line-height:1;padding:0 2px;}
+.sr-rm-btn:hover{color:var(--orange);}
+.add-sr-btn{margin-top:6px;font-size:11px;padding:5px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;color:var(--muted);cursor:pointer;width:100%;text-align:left;}
+.add-sr-btn:hover{border-color:var(--teal);color:var(--teal);}
 /* MODAL */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;}
 .overlay.open{display:flex;}
@@ -1015,6 +1036,12 @@ window.openModal=function(type,...args){
   } else if(type==='add-ex'||type==='edit-ex'){
     const [wid,sid,eid]=args;
     const e=eid&&p?.weeks?.[wid]?.sessions?.[sid]?.exercises?.[eid]||{};
+    // Inizializza setRows dallo storico o default
+    if(e.setRows&&Array.isArray(e.setRows)){
+      window._setRows=e.setRows.map(r=>({...r}));
+    } else {
+      window._setRows=[{type:'',sets:e.sets||3,reps:e.reps||''}];
+    }
     // Filtra esercizi per progType × sessType
     const _progType=programs[currentProgId]?.sport||'sc';
     const _sessType=p?.weeks?.[wid]?.sessions?.[sid]?.type||'pesi';
@@ -1030,27 +1057,32 @@ window.openModal=function(type,...args){
           style="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Outfit',sans-serif;font-size:13px;color:var(--white);">
         <datalist id="bld-ex-dl">${exNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('')}</datalist>
       </div>
-      <div class="grid4">
-        <div class="field"><label>Serie</label><input type="number" id="m-sets" value="${e.sets||3}" min="1" max="20" placeholder="3"></div>
-        <div class="field"><label>Reps / Dur.</label><input id="m-reps" value="${e.reps||''}" placeholder="5 / 30&quot;"></div>
+      <div class="field">
+        <label>Set — Tipo · Serie · Reps</label>
+        <div style="background:var(--card2);border:1px solid var(--border);border-radius:9px;overflow:hidden;">
+          <table class="set-rows-table">
+            <thead><tr>
+              <th class="sr-type">Tipo</th>
+              <th class="sr-sets">Serie</th>
+              <th class="sr-reps">Reps / Dur.</th>
+              <th class="sr-rm"></th>
+            </tr></thead>
+            <tbody id="sr-list"></tbody>
+          </table>
+        </div>
+        <button type="button" class="add-sr-btn" onclick="addSetRow()">+ Aggiungi riga set</button>
+      </div>
+      <div class="grid3">
         <div class="field"><label>% 1RM</label><input type="number" id="m-pct" value="${e.pct||''}" placeholder="80" min="0" max="120"></div>
         <div class="field"><label>RPE target</label><input type="number" id="m-rpe" value="${e.rpe||''}" placeholder="8" min="0" max="10"></div>
-      </div>
-      <div class="grid2">
         <div class="field"><label>Recupero</label><input id="m-rest" value="${e.rest||''}" placeholder="2' / 90&quot;"></div>
-        <div class="field"><label>Intensità (campo)</label><select id="m-intensity">
-          <option value="">—</option>
-          <option value="BASSA"${e.intensity==='BASSA'?' selected':''}>BASSA</option>
-          <option value="MEDIA"${e.intensity==='MEDIA'?' selected':''}>MEDIA</option>
-          <option value="ALTA"${e.intensity==='ALTA'?' selected':''}>ALTA</option>
-          <option value="MAX"${e.intensity==='MAX'?' selected':''}>MAX</option>
-        </select></div>
       </div>
       <div class="field"><label>💡 Cue tecnico (visibile all'atleta)</label><input id="m-cue" value="${e.cue||''}" placeholder="Es. Ginocchia fuori, petto alto, respira al top"></div>
       <div class="mactions">
         <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
         <button class="btn btn-teal" onclick="saveEx('${wid}','${sid}','${eid||''}')">${eid?'Salva →':'Aggiungi →'}</button>
       </div>`;
+    renderSetRowsList();
 
   } else if(type==='add-complex'){
     const [wid,sid]=args;
@@ -1224,11 +1256,55 @@ window.saveExToDb=async function(){
   filterExDb(cat);
 };
 
+// ─── SET ROWS MANAGEMENT ────────────────────────────────────────────
+window._setRows=[{type:'',sets:3,reps:''}];
+const ST_LABELS={'':{label:'Working',cls:'st-work'},'W':{label:'W · Warm Up',cls:'st-w'},'BO':{label:'BO · Back Off',cls:'st-bo'},'D':{label:'D · Drop Set',cls:'st-d'},'F':{label:'F · Failure',cls:'st-f'}};
+
+function renderSetRowsList(){
+  const tbody=document.getElementById('sr-list');
+  if(!tbody)return;
+  tbody.innerHTML=window._setRows.map((r,i)=>`
+    <tr>
+      <td class="sr-type">
+        <select class="sr-inp" onchange="window._setRows[${i}].type=this.value;renderSetRowsList()">
+          ${Object.entries(ST_LABELS).map(([v,d])=>`<option value="${v}"${r.type===v?' selected':''}>${d.label}</option>`).join('')}
+        </select>
+      </td>
+      <td class="sr-sets"><input class="sr-inp" type="number" value="${r.sets}" min="1" max="20" style="text-align:center;" oninput="window._setRows[${i}].sets=+this.value"></td>
+      <td class="sr-reps"><input class="sr-inp" type="text" value="${r.reps}" placeholder='8 / "30 / 8-12' oninput="window._setRows[${i}].reps=this.value"></td>
+      <td class="sr-rm"><button class="sr-rm-btn" onclick="removeSetRow(${i})" title="Rimuovi">&times;</button></td>
+    </tr>`).join('');
+}
+window.addSetRow=function(){
+  const last=window._setRows[window._setRows.length-1]||{};
+  window._setRows.push({type:'',sets:last.sets||3,reps:''});
+  renderSetRowsList();
+};
+window.removeSetRow=function(i){
+  if(window._setRows.length<=1)return;
+  window._setRows.splice(i,1);
+  renderSetRowsList();
+};
+// ─────────────────────────────────────────────────────────────────────
+
 window.saveEx=async function(wid,sid,eid){
   const name=(document.getElementById('m-ename')?.value||'').trim();
   if(!name){alert('Inserisci il nome dell\'esercizio');return;}
   const exPath=`programs/${currentProgId}/weeks/${wid}/sessions/${sid}/exercises`;
-  const data={name,sets:+document.getElementById('m-sets').value||3,reps:document.getElementById('m-reps').value,pct:document.getElementById('m-pct').value||null,rpe:document.getElementById('m-rpe').value||null,rest:document.getElementById('m-rest').value||null,intensity:document.getElementById('m-intensity').value||null,cue:document.getElementById('m-cue').value.trim()||null};
+  const rows=window._setRows.filter(r=>r.sets>0);
+  // pick primary working set for backward compat fields
+  const primary=rows.find(r=>r.type==='')||rows[0]||{sets:3,reps:''};
+  const totalSets=rows.reduce((s,r)=>s+r.sets,0);
+  const data={
+    name,
+    setRows:rows.length>1?rows:null,
+    sets:totalSets,
+    reps:rows.length>1?rows.map(r=>`${r.sets}×${r.reps||'—'}${r.type?' ['+r.type+']':''}`).join(' '):primary.reps,
+    pct:document.getElementById('m-pct').value||null,
+    rpe:document.getElementById('m-rpe').value||null,
+    rest:document.getElementById('m-rest').value||null,
+    cue:document.getElementById('m-cue').value.trim()||null
+  };
   if(eid){await update(ref(db,`${exPath}/${eid}`),data);}
   else{const existing=programs[currentProgId]?.weeks?.[wid]?.sessions?.[sid]?.exercises||{};data.order=Object.keys(existing).length;await push(ref(db,exPath),data);}
   closeModal();showToast('✓ Esercizio salvato!');
@@ -1393,7 +1469,17 @@ window.exportBuilderPDF=function(){
             const rpe=e.rpe?'RPE '+e.rpe:'';
             const load=[pct,rpe].filter(Boolean).join(' ');
             const cxBadge=e.complexGroup?'<span class="cx-badge">'+(e.complexLabel||'A')+'</span> ':'';
-            rows+='<tr><td class="ex-name">'+cxBadge+e.name+'</td><td class="num">'+(e.sets||'—')+'</td><td class="num">'+(e.reps||'—')+'</td><td class="num">'+(load||'—')+'</td><td class="num">'+(e.rest||'')+'</td><td class="note-cell">'+(e.cue||'')+'</td></tr>';
+            // Build sets/reps display (support setRows)
+            let setsDisp='',repsDisp='';
+            if(e.setRows&&e.setRows.length){
+              const ST_C={W:'#94a3b8',BO:'#fbbf24',D:'#fb7240',F:'#ef4444'};
+              setsDisp=e.setRows.map(r=>(r.type?'<span style="color:'+(ST_C[r.type]||'#94a3b8')+';font-weight:700;font-size:8px;">['+r.type+'] </span>':'')+r.sets).join('<br>');
+              repsDisp=e.setRows.map(r=>r.reps||'—').join('<br>');
+            } else {
+              setsDisp=e.sets||'—';
+              repsDisp=e.reps||'—';
+            }
+            rows+='<tr><td class="ex-name">'+cxBadge+e.name+'</td><td class="num">'+setsDisp+'</td><td class="num">'+repsDisp+'</td><td class="num">'+(load||'—')+'</td><td class="num">'+(e.rest||'')+'</td><td class="note-cell">'+(e.cue||'')+'</td></tr>';
           });
           exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th><th>Note</th></tr></thead><tbody>'+rows+'</tbody></table>';
         }
