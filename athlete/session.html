@@ -181,6 +181,9 @@ body{font-family:'Inter',sans-serif;color:var(--text);padding-bottom:100px;}
 }
 .kg-inp.d{border-color:var(--green);color:var(--green);background:rgba(74,222,128,.06);}
 .kg-inp::placeholder{color:#4A4A5A;font-size:18px;}
+.kg-inp.suggested{color:rgba(255,255,255,.25);border-color:rgba(255,255,255,.1);}
+.kg-inp.suggested:focus{color:var(--white);border-color:var(--orange);}
+.prev-reps-hint{font-size:9px;color:rgba(255,255,255,.2);text-align:center;margin-top:1px;letter-spacing:.3px;}
 
 /* ── REPS INPUT */
 .reps-inp{
@@ -267,7 +270,7 @@ body{font-family:'Inter',sans-serif;color:var(--text);padding-bottom:100px;}
 }
 .rest-skip:active{transform:scale(.97);}
 
-/* ── COMPLEX */
+/* ── COMPLEX / SUPERSET */
 .cx-hdr{
   background:rgba(255,104,48,.07);border:1px solid rgba(255,104,48,.18);
   border-radius:12px;padding:10px 14px;
@@ -281,6 +284,18 @@ body{font-family:'Inter',sans-serif;color:var(--text);padding-bottom:100px;}
   text-transform:uppercase;letter-spacing:1.2px;
   display:flex;align-items:center;gap:6px;
 }
+/* ── SET TYPE BADGES */
+.st-badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.6px;flex-shrink:0;}
+.st-work{background:rgba(6,214,160,.12);color:#06d6a0;}
+.st-W{background:rgba(148,163,184,.12);color:#94a3b8;}
+.st-BO{background:rgba(251,191,36,.12);color:#fbbf24;}
+.st-D{background:rgba(251,113,74,.15);color:#fb7240;}
+.st-F{background:rgba(239,68,68,.15);color:#ef4444;}
+.st-section{border-top:1px solid var(--border);padding:6px 16px 2px;display:flex;align-items:center;gap:8px;}
+.st-section-lbl{font-size:10px;font-weight:700;letter-spacing:.5px;}
+.set-row.st-alt{background:rgba(255,255,255,.012);}
+.set-row.st-alt .sn{opacity:.5;}
+.set-row.st-alt .reps-inp,.set-row.st-alt .kg-inp{opacity:.8;}
 
 /* ── CAMPO */
 .campo-item{
@@ -677,6 +692,8 @@ const isQuick=p.get('quick')==='1';
 let athlete={}, session={};
 let exs=[], setData={}, best1rm={}, newPRs=[], campoChecked={};
 let cur=0, startTs=Date.now();
+// History: {exName: [{kg, reps}, ...]} from last session containing each exercise
+let _prevKg={};
 let restIv=null, restTotal=0, restLeft=0;
 let condIv=null, condSecs=0, condRunning=false, condRounds=0;
 // Tabata state
@@ -687,9 +704,10 @@ let tabPrepSecs=3;
 async function init(){
   if(!AID){err('ID atleta mancante');return;}
   try{
-    const [aS,rmS]=await Promise.all([
+    const [aS,rmS,logsS]=await Promise.all([
       get(ref(db,`athletes/${AID}`)),
-      get(ref(db,`rm_records/${AID}`))
+      get(ref(db,`rm_records/${AID}`)),
+      get(ref(db,`session_logs/${AID}`))
     ]);
     if(!aS.exists()){err('Atleta non trovato');return;}
     athlete=aS.val();
@@ -698,6 +716,17 @@ async function init(){
         if(r.exName&&(!best1rm[r.exName]||r.value>best1rm[r.exName]))best1rm[r.exName]=r.value;
       });
     });
+    // Build _prevKg: most recent kg/reps per exercise from past sessions
+    _prevKg={};
+    const logs=Object.values(logsS.val()||{}).sort((a,b)=>(b.ts||0)-(a.ts||0));
+    for(const log of logs){
+      if(!log.exerciseData)continue;
+      for(const [exName,setsArr] of Object.entries(log.exerciseData)){
+        if(!_prevKg[exName]&&Array.isArray(setsArr)&&setsArr.length){
+          _prevKg[exName]=setsArr; // [{kg, reps}, ...]
+        }
+      }
+    }
 
     if(isQuick){
       const stored=sessionStorage.getItem(`rsc_quick_${AID}`);
@@ -765,7 +794,17 @@ function initSets(){
   exs.forEach((ex,i)=>{
     if(ex._type==='pesi'){
       setData[i]={};
-      for(let s=0;s<(parseInt(ex.sets)||3);s++)setData[i][s]={kg:'',rpe:null,done:false};
+      // Support setRows: count total sets across all row groups
+      const totalS=ex.setRows&&ex.setRows.length
+        ? ex.setRows.reduce((a,r)=>a+(parseInt(r.sets)||1),0)
+        : (parseInt(ex.sets)||3);
+      const hist=_prevKg[ex.name]||[];
+      for(let s=0;s<totalS;s++){
+        const h=hist[s]||{};
+        const prevK=h.kg!=null&&h.kg!==''?String(h.kg):'';
+        const prevR=h.reps||'';
+        setData[i][s]={kg:prevK,suggested:!!prevK,prevReps:prevR,rpe:null,done:false};
+      }
     } else if(ex._type==='complex'){
       setData[i]={};
       ex.items.forEach((item,ci)=>{
@@ -828,23 +867,87 @@ function renderPesi(ex,ei){
   const rm=best1rm[ex.name]||0;
   const pct=parseFloat(ex.pct)||0;
   const kgSug=kgSugFor(ex);
+  // Build set rows — supports new setRows format + old flat sets/reps
+  const ST_META={
+    '': {label:'Working',cls:'st-work'},
+    'W': {label:'W · Warm Up',cls:'st-W'},
+    'BO':{label:'BO · Back Off',cls:'st-BO'},
+    'D': {label:'D · Drop Set',cls:'st-D'},
+    'F': {label:'F · Failure',cls:'st-F'}
+  };
+  const rows=ex.setRows&&ex.setRows.length
+    ? ex.setRows
+    : [{type:'',sets,reps:ex.reps||''}];
+
+  // Compute flat set index across all row groups
   const sd=setData[ei]||{};
+  const totalSets=rows.reduce((a,r)=>a+(parseInt(r.sets)||1),0);
   const doneN=Object.values(sd).filter(s=>s.done).length;
+
+  // e1RM across all sets
   let e1rm=0;
-  for(let s=0;s<sets;s++){
+  for(let s=0;s<totalSets;s++){
     if(sd[s]?.done&&sd[s]?.kg){
-      const e=Math.round(parseFloat(sd[s].kg)*(1+parseFloat(ex.reps||1)/30));
+      const repsForRow=ex.reps||1; // use primary reps for estimation
+      const e=Math.round(parseFloat(sd[s].kg)*(1+parseFloat(repsForRow)/30));
       if(e>e1rm)e1rm=e;
     }
   }
   const isPR=e1rm>0&&e1rm>(best1rm[ex.name]||0);
-
   const _vidUrl=typeof getExUrl==='function'?getExUrl(ex.name||''):null;
+
+  // Build set rows HTML
+  let setIdx=0;
+  const setsBodyHtml=rows.map(row=>{
+    const nSets=parseInt(row.sets)||1;
+    const st=ST_META[row.type||'']||ST_META[''];
+    const isWorking=!row.type;
+    // Section header for named types
+    const secHdr=`<div class="st-section">
+      <span class="st-badge ${st.cls}">${row.type||'W'}</span>
+      <span class="st-section-lbl" style="color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:1px;">${st.label}</span>
+      ${row.reps?`<span style="margin-left:auto;font-size:11px;color:var(--muted);">Target: <strong style="color:var(--white);">${row.reps}</strong></span>`:''}
+    </div>`;
+    const rowHtml=Array.from({length:nSets},(_,i)=>{
+      const s=setIdx++;
+      const d=sd[s]||{kg:'',rpe:null,done:false};
+      const isCur=s===doneN&&!d.done;
+      const isSug=!d.done&&d.suggested&&d.kg;
+      return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}">
+        <span class="sn${d.done?' d':''}">${s+1}</span>
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <input class="reps-inp" type="text" inputmode="numeric"
+            value="${row.reps||ex.reps||''}" placeholder="—" id="reps-${ei}-${s}"
+            oninput="setReps(${ei},this.value)">
+          ${d.prevReps&&!d.done?`<div class="prev-reps-hint">${d.prevReps}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;">
+          <input class="kg-inp${d.done?' d':''}${isSug?' suggested':''}" type="number" inputmode="decimal"
+            value="${d.kg}" placeholder="${kgSug||'—'}" id="kg-${ei}-${s}"
+            oninput="setKg(${ei},${s},this.value,this)">
+          ${isSug?`<div class="prev-reps-hint">↑ scorsa volta</div>`:''}
+        </div>
+        <div class="rpe-col">
+          <div class="rpe-row">${[6,7,8].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
+          <div class="rpe-row">${[9,10].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
+          <div class="rpe-val${d.rpe?' v'+d.rpe:''}">${d.rpe?'RPE '+d.rpe:'—'}</div>
+        </div>
+        <button class="done-btn${d.done?' d':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':''}</button>
+      </div>`;
+    }).join('');
+    return (rows.length>1?secHdr:'')+rowHtml;
+  }).join('');
+
+  const hasSetRows=rows.length>1;
+  const paramsSummary=hasSetRows
+    ? rows.map(r=>`${r.sets}×${r.reps||'—'}${r.type?' ['+r.type+']':''}`).join(' + ')
+    : `${sets} serie · ${ex.reps||'—'} reps`;
+
   return `<div class="ex-card">
     <div class="ex-card-head">
       <span class="ex-type-pill tp-pesi">🏋️ Pesi</span>
       <div class="ex-card-name">${ex.name}</div>
-      <div class="ex-card-params">${sets} serie · ${ex.reps||'—'} reps${pct>0?` · @${pct}% 1RM`:ex.carico?` · ${ex.carico}`:''}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
+      <div class="ex-card-params">${paramsSummary}${pct>0?` · @${pct}% 1RM`:ex.carico?` · ${ex.carico}`:''}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
       ${ex.cue?`<div class="cue-chip">💡 ${ex.cue}</div>`:''}
       ${_vidUrl?`<a href="${_vidUrl}" target="_blank" class="ex-video-link">▶ VIDEO</a>`:''}
     </div>
@@ -854,29 +957,8 @@ function renderPesi(ex,ei){
     </div>`:''}
     ${pct>0&&rm===0?`<div style="padding:10px 16px;background:rgba(255,209,102,.06);border-bottom:1px solid var(--border);font-size:11px;color:var(--amber);">⚠ Imposta 1RM nel profilo per vedere il carico</div>`:''}
     <div class="sets-wrap">
-      <div class="sets-head">
-        <span>Set</span><span style="text-align:center;">Reps</span>
-        <span>Kg usati</span><span style="text-align:center;">RPE</span><span></span>
-      </div>
-      ${Array.from({length:sets},(_,s)=>{
-        const d=sd[s]||{kg:'',rpe:null,done:false};
-        const isCur=s===doneN&&!d.done;
-        return `<div class="set-row${d.done?' done':isCur?' cur':''}">
-          <span class="sn${d.done?' d':''}">${s+1}</span>
-          <input class="reps-inp" type="text" inputmode="numeric"
-            value="${ex.reps||''}" placeholder="—" id="reps-${ei}-${s}"
-            oninput="setReps(${ei},this.value)">
-          <input class="kg-inp${d.done?' d':''}" type="number" inputmode="decimal"
-            value="${d.kg}" placeholder="${kgSug||'—'}" id="kg-${ei}-${s}"
-            oninput="setKg(${ei},${s},this.value)">
-          <div class="rpe-col">
-            <div class="rpe-row">${[6,7,8].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
-            <div class="rpe-row">${[9,10].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
-            <div class="rpe-val${d.rpe?' v'+d.rpe:''}">${d.rpe?'RPE '+d.rpe:'—'}</div>
-          </div>
-          <button class="done-btn${d.done?' d':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':''}</button>
-        </div>`;
-      }).join('')}
+      <div class="sets-head"><span>Set</span><span style="text-align:center;">Reps</span><span>Kg usati</span><span style="text-align:center;">RPE</span><span></span></div>
+      ${setsBodyHtml}
     </div>
     ${e1rm>0?`<div class="e1rm-wrap">
       <div class="e1rm-chip"><div class="e1rm-lbl">e1RM stimato</div><div class="e1rm-val">${e1rm}kg</div></div>
@@ -889,9 +971,9 @@ function renderPesi(ex,ei){
 function renderComplex(ex,ei){
   const sets=parseInt(ex.items[0]?.sets)||4;
   let html=`<div class="ex-card"><div class="ex-card-head">
-    <span class="ex-type-pill tp-complex">🔁 Complex Method</span>
-    <div class="ex-card-name">Complex · ${sets} round</div>
-    <div class="ex-card-params">Rec ${ex.rest||"3'"} dopo ogni round completato</div>
+    <span class="ex-type-pill tp-complex">🔁 Superset / Complex</span>
+    <div class="ex-card-name">${ex.items.map(it=>it.name).join(' + ')}</div>
+    <div class="ex-card-params">${sets} round · Rec ${ex.rest||"3'"} dopo ogni round</div>
   </div>`;
   ex.items.forEach((item,ci)=>{
     const kgSug=kgSugFor(item);
@@ -1145,21 +1227,40 @@ function updateTabataUI(){
 }
 
 // ── SET ACTIONS
-window.setKg=(ei,s,v)=>{if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};setData[ei][s].kg=v;};
+window.setKg=(ei,s,v,el)=>{
+  if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
+  setData[ei][s].kg=v;
+  setData[ei][s].suggested=false;
+  // Remove visual suggestion class immediately without full re-render
+  if(el)el.classList.remove('suggested');
+};
 window.setReps=(ei,v)=>{
   if(exs[ei])exs[ei].reps=v;
   document.querySelectorAll(`[id^="reps-${ei}-"]`).forEach(inp=>{inp.value=v;});
 };
 window.setRpe=(ei,s,r)=>{if(!setData[ei][s])setData[ei][s]={};setData[ei][s].rpe=r;render();};
 window.toggleDone=function(ei,s){
-  const kg=document.getElementById(`kg-${ei}-${s}`)?.value||'';
+  const inp=document.getElementById(`kg-${ei}-${s}`);
+  const kg=inp?.value||setData[ei]?.[s]?.kg||'';
   if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
-  if(kg)setData[ei][s].kg=kg;
+  if(kg){setData[ei][s].kg=kg;setData[ei][s].suggested=false;}
   setData[ei][s].done=!setData[ei][s].done;
   if(setData[ei][s].done){
     checkPR(exs[ei],ei,s);
     const ex=exs[ei];
     const allDone=Object.values(setData[ei]).every(sd=>sd.done);
+    // ── Auto-fill next set in this session with same kg (overrides historical)
+    const usedKg=setData[ei][s].kg;
+    if(usedKg){
+      const nxtS=s+1;
+      if(setData[ei][nxtS]!==undefined&&!setData[ei][nxtS].done){
+        // Only suggest if user hasn't already typed something different
+        if(!setData[ei][nxtS].kg||setData[ei][nxtS].suggested){
+          setData[ei][nxtS].kg=usedKg;
+          setData[ei][nxtS].suggested=true;
+        }
+      }
+    }
     const restSecs=parseRest(ex.rest);
     if(restSecs>0&&!allDone){
       const tot=parseInt(ex.sets)||3;
@@ -1251,10 +1352,24 @@ async function finish(){
   const now=new Date();
   _sessionStats={dur,totalSets,avgRpe,newPRs,sessName:session.name||'Sessione'};
 
+  // Build exerciseData for history (kg + rpe per set per exercise)
+  const exerciseData={};
+  exs.forEach((ex,i)=>{
+    if(ex._type==='pesi'&&ex.name){
+      const sd2=setData[i]||{};
+      exerciseData[ex.name]=Object.entries(sd2)
+        .sort((a,b)=>+a[0]-+b[0])
+        .map(([,s])=>({
+          kg:s.kg?parseFloat(s.kg):null,
+          rpe:s.rpe||null
+        }))
+        .filter(s=>s.kg!=null); // only save sets with actual kg
+    }
+  });
   await push(ref(db,`session_logs/${AID}`),{
     ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
-    condSecs,condRounds,isQuick,avgRpe,
+    condSecs,condRounds,isQuick,avgRpe,exerciseData,
     date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
   });
 
