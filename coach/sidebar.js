@@ -32,7 +32,7 @@ window.SIDEBAR_HTML = `
     </a>
 
     <div class="nav-lbl" style="margin-top:12px;">Database</div>
-    <a class="nav-item" href="/coach/" data-page="database">
+    <a class="nav-item" href="/coach/?goto=database" data-page="database">
       <span class="nav-icon">🗄</span><span>Esercizi</span>
     </a>
     <a class="nav-item" href="/coach/" data-page="tools">
