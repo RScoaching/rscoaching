@@ -60,6 +60,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .md-rec{background:var(--green);}
 .md-priming{background:rgba(255,255,255,.3);}
 .md-gara{background:var(--orange);}
+.md-z2{background:#22C55E;}
+.md-lungo{background:#0EA5E9;}
+.md-tempo{background:#F59E0B;}
+.md-interval{background:#EF4444;}
 
 /* EDITOR PANEL */
 .editor-panel{flex:1;display:flex;flex-direction:column;background:var(--content);overflow:hidden;}
@@ -120,6 +124,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .sc-rec{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.15);}
 .sc-priming{background:rgba(255,255,255,.05);border-color:var(--border);}
 .sc-riposo{background:transparent;border-color:var(--border);border-style:dashed;}
+.sc-z2{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.2);}
+.sc-lungo{background:rgba(14,165,233,.1);border-color:rgba(14,165,233,.2);}
+.sc-tempo{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.2);}
+.sc-interval{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.2);}
 .add-sess-btn{width:100%;padding:6px;background:transparent;border:1px dashed var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;text-align:center;font-family:'Outfit',sans-serif;}
 .add-sess-btn:hover{border-color:var(--teal);color:var(--teal);}
 
@@ -332,6 +340,15 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
           </select>
           <button class="btn btn-outline btn-sm" onclick="openSaveVersionModal()" title="Salva il piano attuale come versione" style="padding:5px 8px;">💾</button>
         </div>
+        <!-- Filtro sessioni -->
+        <div class="cfg-item" id="sess-filter-item" style="margin-left:8px;">
+          <div class="cfg-lbl">Mostra</div>
+          <select class="cfg-sel" id="sess-filter-sel" onchange="setSessFilter(this.value)">
+            <option value="">🏋️🏃 Tutte</option>
+            <option value="run">🏃 Solo Corsa</option>
+            <option value="gym">🏋️ Solo Palestra</option>
+          </select>
+        </div>
         <div id="ed-status" style="margin-left:auto;font-size:11px;color:var(--muted);"></div>
       </div>
 
@@ -381,6 +398,12 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       <button class="type-pill" onclick="selType('rec',this)">🔄 Recupero</button>
       <button class="type-pill" onclick="selType('priming',this)">🎯 Priming</button>
       <button class="type-pill" onclick="selType('riposo',this)">😴 Riposo</button>
+      <div style="width:100%;height:1px;background:var(--border);margin:4px 0;"></div>
+      <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);align-self:center;">🏃 Corsa</span>
+      <button class="type-pill" onclick="selType('z2',this)">🟢 Z2 Easy</button>
+      <button class="type-pill" onclick="selType('lungo',this)">🔵 Long Run</button>
+      <button class="type-pill" onclick="selType('tempo',this)">🟠 Tempo/Soglia</button>
+      <button class="type-pill" onclick="selType('interval',this)">🔴 Interval</button>
     </div>
     <div class="field"><label>Titolo / Note</label>
       <input type="text" id="m-note" placeholder="Es. 45min · possessi + prevenzione">
@@ -718,7 +741,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   // ════════════════════════════════════════════════════════
   var DN_F=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
   var DN_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  var TC={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo'};
+  var TC={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo',z2:'sc-z2',lungo:'sc-lungo',tempo:'sc-tempo',interval:'sc-interval'};
   var TL={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprint',plyo:'🦘 Pliometria',rec:'🔄 Recupero',priming:'🎯 Priming',riposo:'😴 Riposo'};
 
   var _eWk=null,_eDay=null,_eKey=null;
@@ -892,6 +915,22 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   window.delCurrentSess=function(){if(_eKey) window._delSessR(_eDay,_eKey);window.closeModal();};
   window.closeModal=function(){document.getElementById('modal').classList.remove('open');};
+
+  // ══ FILTRO SESSIONI ══════════════════════════════════════════════════
+  window._sessFilter=''; // '' = tutte, 'run' = solo corsa, 'gym' = solo palestra
+  var RUN_TYPES_SET=new Set(['z2','lungo','tempo','interval','rec','sprint']);
+  var GYM_TYPES_SET=new Set(['forza','plyo','conditioning','priming']);
+  window.setSessFilter=function(v){
+    window._sessFilter=v;
+    var sel=document.getElementById('sess-filter-sel'); if(sel)sel.value=v;
+    if(window._restGrid&&window._currentWk)window._restGrid(window._currentWk);
+  };
+  window._sessMatchesFilter=function(type){
+    if(!window._sessFilter)return true;
+    if(window._sessFilter==='run')return RUN_TYPES_SET.has(type);
+    if(window._sessFilter==='gym')return GYM_TYPES_SET.has(type);
+    return true;
+  };
 
   // ══ VERSIONI SETTIMANA ══════════════════════════════════════════════
   window._currentVersionId=null;
@@ -1172,9 +1211,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     var pd=(window._plansCache||{})[wk]||(window.plans||{})[wk]||{};
     var conf=pd._config||{};
     var DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-    var TYPE_NAME={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo',conditioning:'Conditioning'};
-    var TYPE_COLOR={squadra:'#2563EB',forza:'#7C3AED',sprint:'#DC2626',plyo:'#D97706',rec:'#059669',priming:'#0891B2',riposo:'#64748B',conditioning:'#EA580C'};
-    var TYPE_BG={squadra:'#EFF6FF',forza:'#F5F3FF',sprint:'#FFF1F2',plyo:'#FFFBEB',rec:'#F0FDF4',priming:'#ECFEFF',riposo:'#F8FAFC',conditioning:'#FFF7ED'};
+    var TYPE_NAME={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo',conditioning:'Conditioning',z2:'Z2 Easy',lungo:'Long Run',tempo:'Tempo/Soglia',interval:'Interval'};
+    var TYPE_COLOR={squadra:'#2563EB',forza:'#7C3AED',sprint:'#DC2626',plyo:'#D97706',rec:'#059669',priming:'#0891B2',riposo:'#64748B',conditioning:'#EA580C',z2:'#22C55E',lungo:'#0EA5E9',tempo:'#F59E0B',interval:'#EF4444'};
+    var TYPE_BG={squadra:'#EFF6FF',forza:'#F5F3FF',sprint:'#FFF1F2',plyo:'#FFFBEB',rec:'#F0FDF4',priming:'#ECFEFF',riposo:'#F8FAFC',conditioning:'#FFF7ED',z2:'#F0FDF4',lungo:'#F0F9FF',tempo:'#FFFBEB',interval:'#FFF1F2'};
     var mon=new Date(wk+'T00:00:00');
     var sun=new Date(mon);sun.setDate(mon.getDate()+6);
     var gameDay=conf.gameDay!=null?parseInt(String(conf.gameDay),10):null;
@@ -1298,7 +1337,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(!wk){_toastS('⚠ Seleziona prima una settimana');return;}
     var pd=(window._plansCache||{})[wk]||(window.plans||{})[wk]||{};
     var DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-    var TYPE_EMOJI={squadra:'⚽',forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',riposo:'😴',conditioning:'🔥'};
+    var TYPE_EMOJI={squadra:'⚽',forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',riposo:'😴',conditioning:'🔥',z2:'🟢',lungo:'🔵',tempo:'🟠',interval:'🔴'};
     var mon=new Date(wk+'T00:00:00');
     function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
     var txt='*📅 Piano Settimana ' + fm(mon)+'*\n';
@@ -1738,8 +1777,11 @@ let editingDay=null, editingKey=null, currentType=null;
 
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-const TYPE_COLORS={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo'};
-const TYPE_LABELS={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprint',plyo:'🦘 Pliometria',rec:'🔄 Recupero',priming:'🎯 Priming',riposo:'😴 Riposo'};
+const TYPE_COLORS={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo',z2:'sc-z2',lungo:'sc-lungo',tempo:'sc-tempo',interval:'sc-interval'};
+const TYPE_LABELS={squadra:'⚽ Squadra',forza:'🏋️ Forza',sprint:'⚡ Sprint',plyo:'🦘 Pliometria',rec:'🔄 Recupero',priming:'🎯 Priming',riposo:'😴 Riposo',z2:'🟢 Z2 Easy',lungo:'🔵 Long Run',tempo:'🟠 Tempo/Soglia',interval:'🔴 Interval'};
+// Running session types category filter
+const RUN_TYPES=new Set(['z2','lungo','tempo','interval','rec','sprint']);
+const GYM_TYPES=new Set(['forza','plyo','conditioning','priming']);
 const WK_TYPE_COLORS={accumulo:'rgba(59,130,246,.1)',intensificazione:'rgba(248,113,113,.08)',scarico:'rgba(52,211,153,.08)',picco:'rgba(167,139,250,.1)',gara:'rgba(251,113,74,.1)'};
 
 // ── FIREBASE LISTENERS
@@ -1929,7 +1971,13 @@ function renderGrid(){
       .sort((a,b)=>(a.ts||0)-(b.ts||0));
 
     const hasCopied=!!window._copiedSession;
-    const sessHtml=daySessions.map(s=>{
+    const _sf=window._sessFilter||'';
+    const filteredSessions=_sf?daySessions.filter(s=>{
+      if(_sf==='run')return RUN_TYPES.has(s.type);
+      if(_sf==='gym')return GYM_TYPES.has(s.type);
+      return true;
+    }):daySessions;
+    const sessHtml=filteredSessions.map(s=>{
       const exCount=s.exercises?Object.keys(s.exercises).length:0;
       const exBadge=exCount?`<div style="font-size:9px;color:var(--muted);margin-top:2px;">💪 ${exCount} esercizi</div>`:'';
       return `<div class="sess-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" onclick="openEdit(${i},'${s._key}')">
@@ -2293,6 +2341,13 @@ window._onWkSelect=function(wk){window.openWeekOrWiz(wk);};
 
 // Esponi renderGrid globalmente (usato da onchange nella UI)
 window.renderGrid=renderGrid;
+
+// ── FILTRO SESSIONI: override Firebase setSessFilter per usare renderGrid
+window.setSessFilter=function(v){
+  window._sessFilter=v;
+  const sel=document.getElementById('sess-filter-sel'); if(sel)sel.value=v;
+  renderGrid();
+};
 
 // ── VERSIONI: override Firebase per doSaveVersion, promoteCurrentVersion, deleteCurrentVersion
 window.doSaveVersion=async function(){
