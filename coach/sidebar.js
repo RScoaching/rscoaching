@@ -54,77 +54,77 @@ window.markActiveNav = function(pageId) {
   });
 };
 
-// Shared sidebar CSS — dark soft system
+// Shared sidebar CSS — Slate Dark (Figma/Linear style)
 window.SIDEBAR_CSS = `
 .sidebar{
-  width:224px;
-  background:#13121D;
-  border-right:1px solid rgba(255,255,255,0.07);
+  width:220px;
+  background:#161B25;
+  border-right:1px solid rgba(255,255,255,0.06);
   display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh;
   flex-shrink:0;overflow-y:auto;
   z-index:10;
 }
 .sb-top{
-  padding:24px 20px 18px;
-  border-bottom:1px solid rgba(255,255,255,0.07);
+  padding:22px 18px 16px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
   flex-shrink:0;
 }
 .logo{
   font-family:'Bebas Neue',sans-serif;
-  font-size:26px;letter-spacing:3px;
-  color:#E9E6F0;
+  font-size:24px;letter-spacing:3px;
+  color:#E2E8F0;
 }
 .logo span{color:#FF6830;}
 .logo-sub{
   font-size:9px;
-  color:rgba(233,230,240,.22);
-  letter-spacing:1.5px;
+  color:rgba(226,232,240,.20);
+  letter-spacing:1.8px;
   margin-top:3px;
   text-transform:uppercase;
 }
-.nav-s{padding:12px 10px 0;flex:1;}
+.nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
   font-size:9px;font-weight:700;
   text-transform:uppercase;
-  letter-spacing:1.8px;
-  color:rgba(233,230,240,.20);
-  padding:0 8px 5px;
+  letter-spacing:2px;
+  color:rgba(226,232,240,.18);
+  padding:0 8px 4px;
 }
 .nav-item{
   display:flex;align-items:center;gap:9px;
-  padding:9px 10px;
-  font-size:13px;font-weight:500;
-  color:rgba(233,230,240,.38);
-  cursor:pointer;border-radius:9px;
+  padding:8px 10px;
+  font-size:12.5px;font-weight:500;
+  color:rgba(226,232,240,.40);
+  cursor:pointer;border-radius:8px;
   margin-bottom:1px;
   border-left:2px solid transparent;
   text-decoration:none;
-  transition:all .15s;
+  transition:all .14s;
   letter-spacing:.1px;
 }
 .nav-item:hover{
-  color:rgba(233,230,240,.78);
+  color:rgba(226,232,240,.80);
   background:rgba(255,255,255,.05);
 }
 .nav-item.active{
-  color:#E9E6F0;
-  background:rgba(255,104,48,.10);
-  border-left-color:#FF6830;
+  color:#E2E8F0;
+  background:rgba(99,102,241,.14);
+  border-left-color:#6366F1;
   font-weight:600;
 }
-.nav-icon{font-size:14px;opacity:.65;flex-shrink:0;}
+.nav-icon{font-size:14px;opacity:.6;flex-shrink:0;}
 .nav-item.active .nav-icon{opacity:1;}
 .sb-foot{
-  padding:14px 20px;
-  border-top:1px solid rgba(255,255,255,.07);
+  padding:12px 18px;
+  border-top:1px solid rgba(255,255,255,.06);
   font-size:10px;
-  color:rgba(233,230,240,.20);
+  color:rgba(226,232,240,.20);
   line-height:1.6;
   flex-shrink:0;
 }
 .sb-foot strong{
-  color:rgba(233,230,240,.35);
+  color:rgba(226,232,240,.35);
   display:block;
   font-size:11px;
   font-weight:600;
