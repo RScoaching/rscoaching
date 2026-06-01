@@ -227,6 +227,13 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .cal-month-hdr{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:rgba(255,255,255,.25);padding:14px 8px 4px;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:4px;position:sticky;top:0;background:var(--sb);z-index:1;}
 .cal-year-lbl{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--white);}
 .cur-dot{color:var(--teal);font-size:9px;}
+
+/* ── VERSIONI ── */
+.ver-banner{display:none;align-items:center;gap:10px;padding:8px 20px;background:rgba(251,191,36,.07);border-bottom:1px solid rgba(251,191,36,.18);flex-shrink:0;font-size:12px;color:var(--amber);}
+.ver-banner strong{color:var(--white);}
+.ver-pill{display:inline-flex;align-items:center;gap:4px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.25);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--purple);cursor:pointer;transition:all .15s;}
+.ver-pill:hover{background:rgba(167,139,250,.2);}
+.ver-pill.active-ver{background:rgba(167,139,250,.2);border-color:var(--purple);}
 </style>
 </head>
 <body>
@@ -317,7 +324,24 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
             <option value="">👥 Gruppo</option>
           </select>
         </div>
+        <!-- Versioni -->
+        <div class="cfg-item" id="ver-cfg-item" style="margin-left:8px;">
+          <div class="cfg-lbl">Versione</div>
+          <select class="cfg-sel" id="ver-sel" onchange="switchVersion(this.value)" style="min-width:150px;">
+            <option value="">📋 Piano principale</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="openSaveVersionModal()" title="Salva il piano attuale come versione" style="padding:5px 8px;">💾</button>
+        </div>
         <div id="ed-status" style="margin-left:auto;font-size:11px;color:var(--muted);"></div>
+      </div>
+
+      <!-- Banner versione (visibile solo quando si visualizza una versione) -->
+      <div class="ver-banner" id="ver-banner">
+        <span>👁 Visualizzi: <strong id="ver-banner-name">—</strong></span>
+        <span style="color:var(--muted);font-size:11px;">· Sola lettura</span>
+        <button class="btn btn-teal btn-sm" onclick="promoteCurrentVersion()" style="margin-left:auto;">📌 Promuovi a piano principale</button>
+        <button class="btn btn-red btn-sm" onclick="deleteCurrentVersion()">🗑 Elimina</button>
+        <button class="btn btn-outline btn-sm" onclick="switchVersion('')">✕ Chiudi</button>
       </div>
 
       <div class="week-grid" id="week-grid"></div>
@@ -441,6 +465,22 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- SAVE VERSION MODAL -->
+<div class="overlay" id="overlay-version">
+  <div class="modal" style="max-width:400px;">
+    <h3>💾 Salva versione settimana</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Salva un'istantanea del piano attuale con un nome. Potrai ricaricarla in qualsiasi momento e promuoverla a piano principale.</div>
+    <div class="field"><label>Nome versione</label>
+      <input type="text" id="ver-name-inp" placeholder="Es. Con gara · Piano A · Meteo pioggia" maxlength="60"
+        onkeydown="if(event.key==='Enter')doSaveVersion()">
+    </div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="closeSaveVersionModal()">Annulla</button>
+      <button class="btn btn-teal" onclick="doSaveVersion()">💾 Salva →</button>
+    </div>
   </div>
 </div>
 
@@ -707,6 +747,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   function _restEditorOpen(wk){
     _eWk=wk; window._currentPlanWk=wk;
+    // Reset versione quando si apre una nuova settimana
+    _resetVersion();
     // Reset athlete mode to group on new week open
     window._athModeAid=null;
     var mSel=document.getElementById('ath-mode-sel');
@@ -731,6 +773,8 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     if(tBtn){tBtn.style.display='block';tBtn.textContent='📋 Vedi piani individuali ▾';}
     if(tEl){tEl.style.display='none';}
     _restGrid(wk);
+    // Carica versioni salvate per questa settimana
+    if(window._loadVersions) window._loadVersions(wk);
     // Populate athlete selector
     if(window._populateAthSel) window._populateAthSel(wk);
   }
@@ -791,6 +835,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   // Funzioni del modale (il modulo le sovrascriverà se carica)
   window.openAdd=function(di){
+    if(window._currentVersionId){_toastS('⚠ Modalità sola lettura — torna al piano principale per modificare');return;}
     _eDay=di; _eKey=null; window._selSessType=null;
     document.getElementById('m-note').value='';
     document.getElementById('m-del-btn').style.display='none';
@@ -801,6 +846,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   };
 
   window.openEdit=function(di,key){
+    if(window._currentVersionId){_toastS('⚠ Modalità sola lettura — torna al piano principale per modificare');return;}
     var pd=window._athModeAid
       ?(window._athPlanCache||{})[window._athModeAid+'_'+_eWk]||{}
       :(window._plansCache||{})[_eWk]||{};
@@ -847,67 +893,249 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
   window.delCurrentSess=function(){if(_eKey) window._delSessR(_eDay,_eKey);window.closeModal();};
   window.closeModal=function(){document.getElementById('modal').classList.remove('open');};
 
+  // ══ VERSIONI SETTIMANA ══════════════════════════════════════════════
+  window._currentVersionId=null;
+  window._currentVersionData=null;
+
+  // Reset versione quando si cambia settimana
+  function _resetVersion(){
+    window._currentVersionId=null;
+    window._currentVersionData=null;
+    var sel=document.getElementById('ver-sel');
+    if(sel) sel.value='';
+    var banner=document.getElementById('ver-banner');
+    if(banner) banner.style.display='none';
+  }
+
+  // Carica lista versioni nel selettore
+  window._loadVersions=async function(wk){
+    var sel=document.getElementById('ver-sel');
+    if(!sel) return;
+    // Mantieni solo la prima opzione (Piano principale)
+    while(sel.options.length>1) sel.remove(1);
+    try{
+      var r=await fetch(DB_URL+'/plan_versions/'+wk+'.json');
+      if(!r.ok) return;
+      var vers=await r.json();
+      if(!vers) return;
+      Object.entries(vers)
+        .sort(function(a,b){return (b[1].createdAt||0)-(a[1].createdAt||0);})
+        .forEach(function(kv){
+          var opt=document.createElement('option');
+          opt.value=kv[0];
+          var d=new Date(kv[1].createdAt||0);
+          opt.textContent=kv[1].name+' · '+d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+          sel.appendChild(opt);
+        });
+    }catch(e){}
+  };
+
+  window.openSaveVersionModal=function(){
+    var wk=_eWk||window._currentPlanWk;
+    if(!wk){_toastS('⚠ Nessuna settimana aperta');return;}
+    if(window._currentVersionId){_toastS('⚠ Sei in modalità versione — torna al piano principale prima di salvarne un\'altra');return;}
+    document.getElementById('overlay-version').classList.add('open');
+    document.getElementById('ver-name-inp').value='';
+    setTimeout(function(){document.getElementById('ver-name-inp').focus();},100);
+  };
+
+  window.closeSaveVersionModal=function(){
+    document.getElementById('overlay-version').classList.remove('open');
+  };
+
+  window.doSaveVersion=async function(){
+    var name=(document.getElementById('ver-name-inp').value||'').trim();
+    if(!name){_toastS('⚠ Dai un nome alla versione');return;}
+    var wk=_eWk||window._currentPlanWk;
+    if(!wk){_toastS('⚠ Nessuna settimana');return;}
+    _toastS('⏳ Salvo versione…');
+    try{
+      // Snapshot settimana corrente
+      var r=await fetch(DB_URL+'/plans/'+wk+'.json');
+      var pd=r.ok?await r.json():null;
+      var days={};
+      if(pd){
+        for(var i=0;i<7;i++){
+          var day=pd[String(i)];
+          if(day&&typeof day==='object'){
+            var sessions={};
+            Object.entries(day).forEach(function(kv){if(!kv[0].startsWith('_'))sessions[kv[0]]=kv[1];});
+            if(Object.keys(sessions).length) days[String(i)]=sessions;
+          }
+        }
+      }
+      var vId='v_'+Date.now();
+      var vData={name:name,createdAt:Date.now(),days:days};
+      await fetch(DB_URL+'/plan_versions/'+wk+'/'+vId+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(vData)});
+      window.closeSaveVersionModal();
+      _toastS('✓ Versione "'+name+'" salvata!');
+      window._loadVersions(wk);
+    }catch(e){_toastS('Errore: '+e.message);}
+  };
+
+  window.switchVersion=async function(vId){
+    var wk=_eWk||window._currentPlanWk;
+    if(!wk) return;
+    var banner=document.getElementById('ver-banner');
+    if(!vId){
+      // Torna al piano principale
+      _resetVersion();
+      _restGrid(wk);
+      return;
+    }
+    // Carica la versione
+    _toastS('⏳ Carico versione…');
+    try{
+      var r=await fetch(DB_URL+'/plan_versions/'+wk+'/'+vId+'.json');
+      var vData=r.ok?await r.json():null;
+      if(!vData){_toastS('⚠ Versione non trovata');return;}
+      window._currentVersionId=vId;
+      window._currentVersionData=vData;
+      document.getElementById('ver-banner-name').textContent=vData.name;
+      if(banner) banner.style.display='flex';
+      // Mostra la griglia della versione (sovrascrive _plansCache temporaneamente)
+      var saved=window._plansCache;
+      if(!window._plansCache) window._plansCache={};
+      var savedWk=window._plansCache[wk];
+      window._plansCache[wk]=vData.days||{};
+      _restGrid(wk);
+      if(saved) window._plansCache[wk]=savedWk; else delete window._plansCache[wk];
+      _toastS('📋 Versione "'+vData.name+'" — sola lettura');
+    }catch(e){_toastS('Errore: '+e.message);}
+  };
+
+  window.promoteCurrentVersion=async function(){
+    if(!window._currentVersionId||!window._currentVersionData) return;
+    var wk=_eWk||window._currentPlanWk;
+    if(!wk) return;
+    if(!confirm('Promuovere "'+window._currentVersionData.name+'" a piano principale?\nIl piano attuale verrà sovrascritto.')) return;
+    _toastS('⏳ Promuovo versione…');
+    try{
+      // Cancella piano corrente
+      var r=await fetch(DB_URL+'/plans/'+wk+'.json');
+      var pd=r.ok?await r.json():null;
+      var dels=[];
+      if(pd){
+        for(var i=0;i<7;i++){
+          var day=pd[String(i)];if(!day||typeof day!=='object')continue;
+          Object.keys(day).forEach(function(k){
+            if(!k.startsWith('_'))
+              dels.push(fetch(DB_URL+'/plans/'+wk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
+          });
+        }
+      }
+      await Promise.all(dels);
+      // Scrivi giorni della versione nel piano principale
+      var writes=[];
+      var vDays=window._currentVersionData.days||{};
+      Object.entries(vDays).forEach(function(dkv){
+        var di=dkv[0];var daySess=dkv[1]||{};
+        Object.entries(daySess).forEach(function(skv){
+          writes.push(fetch(DB_URL+'/plans/'+wk+'/'+di+'/'+skv[0]+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(skv[1])}));
+        });
+      });
+      await Promise.all(writes);
+      _toastS('✓ Versione promossa a piano principale!');
+      // Torna al piano principale
+      document.getElementById('ver-sel').value='';
+      _resetVersion();
+      await _restRefresh(wk);
+    }catch(e){_toastS('Errore: '+e.message);}
+  };
+
+  window.deleteCurrentVersion=async function(){
+    if(!window._currentVersionId) return;
+    if(!confirm('Eliminare questa versione?\nNon si può annullare.')) return;
+    var wk=_eWk||window._currentPlanWk;
+    await fetch(DB_URL+'/plan_versions/'+wk+'/'+window._currentVersionId+'.json',{method:'DELETE'});
+    _toastS('✓ Versione eliminata');
+    document.getElementById('ver-sel').value='';
+    _resetVersion();
+    _restGrid(wk);
+    window._loadVersions(wk);
+  };
+  // ════════════════════════════════════════════════════════════════════
+
   // ── COPIA / INCOLLA / SVUOTA SETTIMANA ─────────────────────────────
+  // Legge SEMPRE da Firebase REST direttamente per evitare problemi con _plansCache
   var _copiedWeekData=null;
 
-  window.copyWeekToClipboard=function(){
+  window.copyWeekToClipboard=async function(){
     if(!_eWk){_toastS('⚠ Nessuna settimana aperta');return;}
-    var pd=(window._plansCache||{})[_eWk]||{};
-    // Copia solo le sessioni (giorno 0-6), non _config
-    var copy={};
-    for(var i=0;i<7;i++){
-      var day=pd[String(i)];
-      if(day&&Object.keys(day).length) copy[i]=JSON.parse(JSON.stringify(day));
-    }
-    if(!Object.keys(copy).length){_toastS('⚠ Nessuna sessione da copiare');return;}
-    _copiedWeekData=copy;
-    var pasteBtn=document.getElementById('paste-wk-btn');
-    if(pasteBtn) pasteBtn.style.display='inline-flex';
-    _toastS('✓ Settimana copiata — apri un\'altra settimana e incolla');
+    _toastS('⏳ Copio…');
+    try{
+      var r=await fetch(DB_URL+'/plans/'+_eWk+'.json');
+      var pd=r.ok?await r.json():null;
+      var copy={};
+      if(pd){
+        for(var i=0;i<7;i++){
+          var day=pd[String(i)];
+          if(day&&typeof day==='object'){
+            // filtra solo sessioni (esclude eventuali meta-chiavi)
+            var sessions={};
+            Object.entries(day).forEach(function(kv){if(kv[0]&&!kv[0].startsWith('_'))sessions[kv[0]]=kv[1];});
+            if(Object.keys(sessions).length) copy[i]=sessions;
+          }
+        }
+      }
+      if(!Object.keys(copy).length){_toastS('⚠ Nessuna sessione da copiare');return;}
+      _copiedWeekData=copy;
+      var pasteBtn=document.getElementById('paste-wk-btn');
+      if(pasteBtn) pasteBtn.style.display='inline-flex';
+      _toastS('✓ Settimana copiata — vai all\'altra settimana e incolla');
+    }catch(e){_toastS('Errore copia: '+e.message);}
   };
 
-  window.pasteWeek=function(){
+  window.pasteWeek=async function(){
     if(!_copiedWeekData){_toastS('⚠ Nessuna settimana copiata');return;}
     if(!_eWk){_toastS('⚠ Apri prima la settimana di destinazione');return;}
-    if(!confirm('Incollare le sessioni nella settimana '+_eWk+'? Le sessioni esistenti verranno mantenute (si aggiungono).'))return;
-    var t=Date.now();
-    var writes=[];
-    Object.entries(_copiedWeekData).forEach(function(kv){
-      var di=kv[0]; var daySess=kv[1];
-      Object.values(daySess).forEach(function(s,idx){
-        var newKey='sess_'+(t+idx*10)+'_'+di;
-        var path=DB_URL+'/plans/'+_eWk+'/'+di+'/'+newKey+'.json';
-        var data=Object.assign({},s,{ts:t+idx*10,createdAt:t});
-        delete data._k;
-        writes.push(fetch(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}));
+    if(!confirm('Incollare le sessioni nella settimana '+_eWk+'?\nLe sessioni esistenti vengono mantenute (si aggiungono).'))return;
+    _toastS('⏳ Incollo…');
+    try{
+      var t=Date.now();
+      var writes=[];
+      Object.entries(_copiedWeekData).forEach(function(kv){
+        var di=parseInt(kv[0]); var daySess=kv[1];
+        Object.values(daySess).forEach(function(s,idx){
+          var newKey='sess_'+(t+di*100+idx)+'_'+di;
+          var data={type:s.type||'forza',note:s.note||'',ts:t+di*100+idx,createdAt:t};
+          if(s.exercises) data.exercises=s.exercises;
+          writes.push(fetch(DB_URL+'/plans/'+_eWk+'/'+di+'/'+newKey+'.json',
+            {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}));
+        });
       });
-    });
-    Promise.all(writes).then(function(){
-      _restRefresh(_eWk);
+      await Promise.all(writes);
+      await _restRefresh(_eWk);
       _toastS('✓ Settimana incollata!');
-    }).catch(function(e){_toastS('Errore: '+e.message);});
+    }catch(e){_toastS('Errore incolla: '+e.message);}
   };
 
-  window.clearWeek=function(){
+  window.clearWeek=async function(){
     if(!_eWk){_toastS('⚠ Nessuna settimana aperta');return;}
-    if(!confirm('Svuotare TUTTE le sessioni della settimana '+_eWk+'? Non si può annullare.'))return;
-    var pd=(window._plansCache||{})[_eWk]||{};
-    var dels=[];
-    for(var i=0;i<7;i++){
-      var day=pd[String(i)]; if(!day)continue;
-      Object.keys(day).forEach(function(k){
-        dels.push(fetch(DB_URL+'/plans/'+_eWk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
-      });
-    }
-    if(!dels.length){_toastS('Settimana già vuota');return;}
-    Promise.all(dels).then(function(){
+    if(!confirm('Svuotare TUTTE le sessioni di questa settimana?\nNon si può annullare.'))return;
+    _toastS('⏳ Svuoto…');
+    try{
+      var r=await fetch(DB_URL+'/plans/'+_eWk+'.json');
+      var pd=r.ok?await r.json():null;
+      if(!pd){_toastS('Settimana già vuota');return;}
+      var dels=[];
+      for(var i=0;i<7;i++){
+        var day=pd[String(i)]; if(!day||typeof day!=='object')continue;
+        Object.keys(day).forEach(function(k){
+          if(!k.startsWith('_'))
+            dels.push(fetch(DB_URL+'/plans/'+_eWk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
+        });
+      }
+      if(!dels.length){_toastS('Settimana già vuota');return;}
+      await Promise.all(dels);
+      // Aggiorna cache locale se esiste
       if(window._plansCache&&window._plansCache[_eWk]){
         for(var i=0;i<7;i++) delete window._plansCache[_eWk][String(i)];
       }
       _restGrid(_eWk);
       window._calRender();
-      _toastS('✓ Settimana svuotata');
-    }).catch(function(e){_toastS('Errore: '+e.message);});
+      _toastS('✓ Settimana svuotata!');
+    }catch(e){_toastS('Errore svuota: '+e.message);}
   };
   // ───────────────────────────────────────────────────────────────────
 
@@ -1634,6 +1862,8 @@ window.selectWeek=function(wk){
 
 function renderEditor(){
   if(!currentWk){return;}
+  // Reset versione quando si apre una nuova settimana
+  if(window._resetVersion) window._resetVersion();
   // Reset athlete mode when opening new week
   window._athModeAid=null;
   const mSel=document.getElementById('ath-mode-sel');
@@ -1663,14 +1893,19 @@ function renderEditor(){
   renderAssignedChips();
   // Populate athlete selector with all athletes
   if(window._populateAthSel) window._populateAthSel(currentWk);
+  // Carica versioni salvate per questa settimana
+  if(window._loadVersions) window._loadVersions(currentWk);
 }
 
 function renderGrid(){
   if(!currentWk) return;
   const gameDay=parseInt(document.getElementById('sel-gameday')?.value??'6');
-  const planData=window._athModeAid
-    ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
-    :plans[currentWk]||{};
+  // Se stiamo visualizzando una versione, usa i suoi dati
+  const planData=window._currentVersionId&&window._currentVersionData
+    ?(window._currentVersionData.days||{})
+    :(window._athModeAid
+      ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
+      :plans[currentWk]||{});
   const monday=new Date(currentWk+'T00:00:00');
   const today=new Date(); today.setHours(0,0,0,0);
 
@@ -1732,6 +1967,7 @@ window.saveConfig=function(){
 
 // ── SESSION MODAL
 window.openAdd=function(dayIdx){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura — torna al piano principale per modificare');return;}
   editingDay=dayIdx; editingKey=null; currentType=null; window._selSessType=null;
   document.getElementById('m-note').value='';
   document.getElementById('m-del-btn').style.display='none';
@@ -1742,6 +1978,7 @@ window.openAdd=function(dayIdx){
 };
 
 window.openEdit=function(dayIdx,key){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura — torna al piano principale per modificare');return;}
   editingDay=dayIdx; editingKey=key;
   const planData=window._athModeAid
     ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
@@ -2056,6 +2293,89 @@ window._onWkSelect=function(wk){window.openWeekOrWiz(wk);};
 
 // Esponi renderGrid globalmente (usato da onchange nella UI)
 window.renderGrid=renderGrid;
+
+// ── VERSIONI: override Firebase per doSaveVersion, promoteCurrentVersion, deleteCurrentVersion
+window.doSaveVersion=async function(){
+  const name=(document.getElementById('ver-name-inp').value||'').trim();
+  if(!name){showToast('⚠ Dai un nome alla versione');return;}
+  if(!currentWk){showToast('⚠ Nessuna settimana');return;}
+  showToast('⏳ Salvo versione…');
+  // Snapshot dal piano corrente (plans già caricato via onValue)
+  const wkData=plans[currentWk]||{};
+  const days={};
+  for(let i=0;i<7;i++){
+    const day=wkData[String(i)];
+    if(day&&typeof day==='object'){
+      const sessions={};
+      Object.entries(day).forEach(([k,v])=>{if(!k.startsWith('_'))sessions[k]=v;});
+      if(Object.keys(sessions).length)days[String(i)]=sessions;
+    }
+  }
+  const vId='v_'+Date.now();
+  const vData={name,createdAt:Date.now(),days};
+  await set(ref(db,`plan_versions/${currentWk}/${vId}`),vData);
+  window.closeSaveVersionModal();
+  showToast(`✓ Versione "${name}" salvata!`);
+  if(window._loadVersions) window._loadVersions(currentWk);
+};
+
+window.switchVersion=async function(vId){
+  const wk=currentWk;
+  if(!wk) return;
+  const banner=document.getElementById('ver-banner');
+  if(!vId){
+    // Torna al piano principale
+    window._currentVersionId=null; window._currentVersionData=null;
+    const sel=document.getElementById('ver-sel'); if(sel)sel.value='';
+    if(banner)banner.style.display='none';
+    renderGrid();
+    return;
+  }
+  showToast('⏳ Carico versione…');
+  const snap=await get(ref(db,`plan_versions/${wk}/${vId}`));
+  if(!snap.exists()){showToast('⚠ Versione non trovata');return;}
+  const vData=snap.val();
+  window._currentVersionId=vId;
+  window._currentVersionData=vData;
+  document.getElementById('ver-banner-name').textContent=vData.name;
+  if(banner)banner.style.display='flex';
+  renderGrid(); // renderGrid ora usa _currentVersionData
+  showToast(`📋 Versione "${vData.name}" — sola lettura`);
+};
+
+window.promoteCurrentVersion=async function(){
+  if(!window._currentVersionId||!window._currentVersionData) return;
+  if(!confirm(`Promuovere "${window._currentVersionData.name}" a piano principale?\nIl piano attuale verrà sovrascritto.`)) return;
+  showToast('⏳ Promuovo versione…');
+  // Cancella tutto il piano corrente (tranne _config e _published e _athletes)
+  const wkData=plans[currentWk]||{};
+  const clearOps=[];
+  for(let i=0;i<7;i++){
+    if(wkData[String(i)]) clearOps.push(remove(ref(db,`plans/${currentWk}/${i}`)));
+  }
+  await Promise.all(clearOps);
+  // Scrivi giorni della versione
+  const vDays=window._currentVersionData.days||{};
+  const writeOps=Object.entries(vDays).flatMap(([di,daySess])=>
+    Object.entries(daySess||{}).map(([sk,sv])=>set(ref(db,`plans/${currentWk}/${di}/${sk}`),sv))
+  );
+  await Promise.all(writeOps);
+  showToast('✓ Versione promossa a piano principale!');
+  document.getElementById('ver-sel').value='';
+  if(window._resetVersion) window._resetVersion();
+  renderGrid();
+};
+
+window.deleteCurrentVersion=async function(){
+  if(!window._currentVersionId) return;
+  if(!confirm('Eliminare questa versione?\nNon si può annullare.')) return;
+  await remove(ref(db,`plan_versions/${currentWk}/${window._currentVersionId}`));
+  showToast('✓ Versione eliminata');
+  document.getElementById('ver-sel').value='';
+  if(window._resetVersion) window._resetVersion();
+  renderGrid();
+  if(window._loadVersions) window._loadVersions(currentWk);
+};
 </script>
 </body>
 </html>
