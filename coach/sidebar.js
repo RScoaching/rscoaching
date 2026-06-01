@@ -20,18 +20,15 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon">📊</span><span>Analytics</span>
     </a>
 
-    <div class="nav-lbl" style="margin-top:12px;">Programmazione</div>
+    <div class="nav-lbl" style="margin-top:14px;">Programmazione</div>
     <a class="nav-item" href="./builder.html" data-page="builder">
       <span class="nav-icon">🔨</span><span>Program Builder</span>
     </a>
     <a class="nav-item" href="./planner.html" data-page="planner">
       <span class="nav-icon">📅</span><span>Planner Settimanale</span>
     </a>
-    <a class="nav-item" href="./piani.html" data-page="piani">
-      <span class="nav-icon">📨</span><span>Piani Rapidi</span>
-    </a>
 
-    <div class="nav-lbl" style="margin-top:12px;">Database</div>
+    <div class="nav-lbl" style="margin-top:14px;">Database</div>
     <a class="nav-item" href="./index.html?goto=database" data-page="database">
       <span class="nav-icon">🗄</span><span>Esercizi</span>
     </a>
@@ -39,7 +36,7 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon">🧮</span><span>Strumenti S&amp;C</span>
     </a>
 
-    <div class="nav-lbl" style="margin-top:12px;">Storico</div>
+    <div class="nav-lbl" style="margin-top:14px;">Storico</div>
     <a class="nav-item" href="./index.html?goto=sessions" data-page="sessions">
       <span class="nav-icon">≡</span><span>Tutte le sedute</span>
     </a>
@@ -57,19 +54,78 @@ window.markActiveNav = function(pageId) {
   });
 };
 
-// Shared sidebar CSS
+// Shared sidebar CSS — dark soft system
 window.SIDEBAR_CSS = `
-.sidebar{width:230px;background:var(--sb);border-right:1px solid var(--sbb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;box-shadow:4px 0 20px rgba(0,0,0,.4);overflow-y:auto;}
-.sb-top{padding:24px 22px 16px;border-bottom:1px solid var(--sbb);background:linear-gradient(180deg,#060910,var(--sb));flex-shrink:0;}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:var(--white);}
-.logo span{color:var(--teal);}
-.logo-sub{font-size:10px;color:rgba(255,255,255,.2);letter-spacing:.8px;margin-top:2px;}
-.nav-s{padding:14px 12px 0;flex:1;}
-.nav-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.18);padding:0 8px 6px;}
-.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;font-size:13px;font-weight:500;color:rgba(255,255,255,.4);cursor:pointer;border-radius:8px;margin-bottom:1px;border-left:2px solid transparent;text-decoration:none;transition:all .15s;}
-.nav-item:hover{color:rgba(255,255,255,.78);background:rgba(255,255,255,.04);}
-.nav-item.active{color:var(--white);background:rgba(6,214,160,.08);border-left-color:var(--teal);}
-.nav-icon{font-size:15px;opacity:.7;flex-shrink:0;}
+.sidebar{
+  width:224px;
+  background:#13121D;
+  border-right:1px solid rgba(255,255,255,0.07);
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;
+  flex-shrink:0;overflow-y:auto;
+  z-index:10;
+}
+.sb-top{
+  padding:24px 20px 18px;
+  border-bottom:1px solid rgba(255,255,255,0.07);
+  flex-shrink:0;
+}
+.logo{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:26px;letter-spacing:3px;
+  color:#E9E6F0;
+}
+.logo span{color:#FF6830;}
+.logo-sub{
+  font-size:9px;
+  color:rgba(233,230,240,.22);
+  letter-spacing:1.5px;
+  margin-top:3px;
+  text-transform:uppercase;
+}
+.nav-s{padding:12px 10px 0;flex:1;}
+.nav-lbl{
+  font-size:9px;font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:1.8px;
+  color:rgba(233,230,240,.20);
+  padding:0 8px 5px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 10px;
+  font-size:13px;font-weight:500;
+  color:rgba(233,230,240,.38);
+  cursor:pointer;border-radius:9px;
+  margin-bottom:1px;
+  border-left:2px solid transparent;
+  text-decoration:none;
+  transition:all .15s;
+  letter-spacing:.1px;
+}
+.nav-item:hover{
+  color:rgba(233,230,240,.78);
+  background:rgba(255,255,255,.05);
+}
+.nav-item.active{
+  color:#E9E6F0;
+  background:rgba(255,104,48,.10);
+  border-left-color:#FF6830;
+  font-weight:600;
+}
+.nav-icon{font-size:14px;opacity:.65;flex-shrink:0;}
 .nav-item.active .nav-icon{opacity:1;}
-.sb-foot{padding:14px 22px;border-top:1px solid var(--sbb);font-size:11px;color:rgba(255,255,255,.18);line-height:1.5;flex-shrink:0;}
-.sb-foot strong{color:rgba(255,255,255,.32);display:block;font-size:12px;}`;
+.sb-foot{
+  padding:14px 20px;
+  border-top:1px solid rgba(255,255,255,.07);
+  font-size:10px;
+  color:rgba(233,230,240,.20);
+  line-height:1.6;
+  flex-shrink:0;
+}
+.sb-foot strong{
+  color:rgba(233,230,240,.35);
+  display:block;
+  font-size:11px;
+  font-weight:600;
+}`;
