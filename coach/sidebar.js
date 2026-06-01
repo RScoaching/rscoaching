@@ -1,9 +1,9 @@
-// Shared sidebar HTML — injected into all coach pages
+// RS.Coaching — Shared Sidebar · Premium Glass Design
 window.SIDEBAR_HTML = `
 <div class="sidebar">
   <div class="sb-top">
     <div class="logo">RS<span>.</span>Coaching</div>
-    <div class="logo-sub">Preparazione Atletica</div>
+    <div class="logo-sub">Strength &amp; Conditioning</div>
   </div>
   <div class="nav-s">
     <div class="nav-lbl">Principale</div>
@@ -19,24 +19,21 @@ window.SIDEBAR_HTML = `
     <a class="nav-item" href="./index.html?goto=analytics" data-page="analytics">
       <span class="nav-icon">📊</span><span>Analytics</span>
     </a>
-
-    <div class="nav-lbl" style="margin-top:14px;">Programmazione</div>
+    <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" href="./builder.html" data-page="builder">
       <span class="nav-icon">🔨</span><span>Program Builder</span>
     </a>
     <a class="nav-item" href="./planner.html" data-page="planner">
       <span class="nav-icon">📅</span><span>Planner Settimanale</span>
     </a>
-
-    <div class="nav-lbl" style="margin-top:14px;">Database</div>
+    <div class="nav-lbl">Database</div>
     <a class="nav-item" href="./index.html?goto=database" data-page="database">
       <span class="nav-icon">🗄</span><span>Esercizi</span>
     </a>
     <a class="nav-item" href="./index.html?goto=tools" data-page="tools">
       <span class="nav-icon">🧮</span><span>Strumenti S&amp;C</span>
     </a>
-
-    <div class="nav-lbl" style="margin-top:14px;">Storico</div>
+    <div class="nav-lbl">Storico</div>
     <a class="nav-item" href="./index.html?goto=sessions" data-page="sessions">
       <span class="nav-icon">≡</span><span>Tutte le sedute</span>
     </a>
@@ -46,7 +43,6 @@ window.SIDEBAR_HTML = `
   </div>
 </div>`;
 
-// Mark active nav item based on current page
 window.markActiveNav = function(pageId) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.remove('active');
@@ -54,78 +50,69 @@ window.markActiveNav = function(pageId) {
   });
 };
 
-// Shared sidebar CSS — Slate Dark (Figma/Linear style)
 window.SIDEBAR_CSS = `
 .sidebar{
-  width:220px;
-  background:#161B25;
-  border-right:1px solid rgba(255,255,255,0.06);
+  width:218px;
+  background:rgba(6,6,10,.82);
+  backdrop-filter:blur(28px) saturate(1.8);
+  -webkit-backdrop-filter:blur(28px) saturate(1.8);
+  border-right:1px solid rgba(255,255,255,.06);
   display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh;
-  flex-shrink:0;overflow-y:auto;
-  z-index:10;
+  flex-shrink:0;overflow-y:auto;z-index:10;
 }
 .sb-top{
-  padding:22px 18px 16px;
-  border-bottom:1px solid rgba(255,255,255,0.06);
+  padding:24px 18px 16px;
+  border-bottom:1px solid rgba(255,255,255,.05);
   flex-shrink:0;
 }
 .logo{
   font-family:'Bebas Neue',sans-serif;
-  font-size:24px;letter-spacing:3px;
-  color:#E2E8F0;
+  font-size:26px;letter-spacing:4px;
+  color:#F8FAFF;
+  filter:drop-shadow(0 0 18px rgba(255,104,48,.25));
 }
-.logo span{color:#FF6830;}
+.logo span{
+  background:linear-gradient(135deg,#FF7040,#FF2800);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
 .logo-sub{
-  font-size:9px;
-  color:rgba(226,232,240,.20);
-  letter-spacing:1.8px;
-  margin-top:3px;
-  text-transform:uppercase;
+  font-size:9px;color:rgba(248,250,255,.20);
+  letter-spacing:2px;margin-top:4px;text-transform:uppercase;
 }
 .nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
-  font-size:9px;font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:2px;
-  color:rgba(226,232,240,.18);
-  padding:0 8px 4px;
+  font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:2px;color:rgba(248,250,255,.16);
+  padding:0 8px 4px;margin-top:16px;
 }
 .nav-item{
   display:flex;align-items:center;gap:9px;
-  padding:8px 10px;
-  font-size:12.5px;font-weight:500;
-  color:rgba(226,232,240,.40);
-  cursor:pointer;border-radius:8px;
-  margin-bottom:1px;
+  padding:9px 10px;font-size:12.5px;font-weight:500;
+  color:rgba(248,250,255,.36);
+  cursor:pointer;border-radius:10px;margin-bottom:2px;
   border-left:2px solid transparent;
   text-decoration:none;
-  transition:all .14s;
-  letter-spacing:.1px;
+  transition:all .2s cubic-bezier(.4,0,.2,1);
 }
 .nav-item:hover{
-  color:rgba(226,232,240,.80);
-  background:rgba(255,255,255,.05);
+  color:rgba(248,250,255,.78);
+  background:rgba(255,255,255,.06);
+  transform:translateX(2px);
 }
 .nav-item.active{
-  color:#E2E8F0;
-  background:rgba(99,102,241,.14);
-  border-left-color:#6366F1;
+  color:#fff;
+  background:linear-gradient(90deg,rgba(255,104,48,.18),rgba(255,104,48,.04));
+  border-left-color:#FF6830;
   font-weight:600;
+  box-shadow:inset 0 0 0 1px rgba(255,104,48,.12);
 }
-.nav-icon{font-size:14px;opacity:.6;flex-shrink:0;}
-.nav-item.active .nav-icon{opacity:1;}
+.nav-icon{font-size:14px;opacity:.55;flex-shrink:0;transition:opacity .2s;}
+.nav-item.active .nav-icon,.nav-item:hover .nav-icon{opacity:1;}
 .sb-foot{
   padding:12px 18px;
-  border-top:1px solid rgba(255,255,255,.06);
-  font-size:10px;
-  color:rgba(226,232,240,.20);
-  line-height:1.6;
-  flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,.05);
+  font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;flex-shrink:0;
 }
-.sb-foot strong{
-  color:rgba(226,232,240,.35);
-  display:block;
-  font-size:11px;
-  font-weight:600;
-}`;
+.sb-foot strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}`;
