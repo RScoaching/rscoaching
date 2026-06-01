@@ -280,9 +280,11 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
       <div class="ed-head">
         <div class="ed-title" id="ed-title">—</div>
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
-        <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia agli atleti</button>
+        <button class="btn btn-outline btn-sm" id="copy-wk-btn" onclick="copyWeekToClipboard()" title="Copia questa settimana">⎘ Copia sett.</button>
+        <button class="btn btn-teal btn-sm" id="paste-wk-btn" onclick="pasteWeek()" style="display:none;" title="Incolla settimana copiata">📋 Incolla</button>
+        <button class="btn btn-red btn-sm" onclick="clearWeek()" title="Svuota tutti i giorni della settimana">🗑 Svuota sett.</button>
+        <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia atleti</button>
         <button class="btn btn-outline btn-sm" onclick="exportPlannerPDF()">📄 PDF</button>
-        <button class="btn btn-outline btn-sm" onclick="exportPlannerWA()">📋 WhatsApp</button>
         <button class="btn btn-teal btn-sm" onclick="publishPlan()">✓ Pubblica</button>
       </div>
 
@@ -774,6 +776,9 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
     }).join('');
   }
 
+  // Toast (anche il modulo Firebase definirà la sua versione — questa è il fallback)
+  function _toastS(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
+
   window._delSessR=async function(di,key){
     if(!confirm('Eliminare questa sessione?')) return;
     var delPath=window._athModeAid
@@ -841,6 +846,70 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 
   window.delCurrentSess=function(){if(_eKey) window._delSessR(_eDay,_eKey);window.closeModal();};
   window.closeModal=function(){document.getElementById('modal').classList.remove('open');};
+
+  // ── COPIA / INCOLLA / SVUOTA SETTIMANA ─────────────────────────────
+  var _copiedWeekData=null;
+
+  window.copyWeekToClipboard=function(){
+    if(!_eWk){_toastS('⚠ Nessuna settimana aperta');return;}
+    var pd=(window._plansCache||{})[_eWk]||{};
+    // Copia solo le sessioni (giorno 0-6), non _config
+    var copy={};
+    for(var i=0;i<7;i++){
+      var day=pd[String(i)];
+      if(day&&Object.keys(day).length) copy[i]=JSON.parse(JSON.stringify(day));
+    }
+    if(!Object.keys(copy).length){_toastS('⚠ Nessuna sessione da copiare');return;}
+    _copiedWeekData=copy;
+    var pasteBtn=document.getElementById('paste-wk-btn');
+    if(pasteBtn) pasteBtn.style.display='inline-flex';
+    _toastS('✓ Settimana copiata — apri un\'altra settimana e incolla');
+  };
+
+  window.pasteWeek=function(){
+    if(!_copiedWeekData){_toastS('⚠ Nessuna settimana copiata');return;}
+    if(!_eWk){_toastS('⚠ Apri prima la settimana di destinazione');return;}
+    if(!confirm('Incollare le sessioni nella settimana '+_eWk+'? Le sessioni esistenti verranno mantenute (si aggiungono).'))return;
+    var t=Date.now();
+    var writes=[];
+    Object.entries(_copiedWeekData).forEach(function(kv){
+      var di=kv[0]; var daySess=kv[1];
+      Object.values(daySess).forEach(function(s,idx){
+        var newKey='sess_'+(t+idx*10)+'_'+di;
+        var path=DB_URL+'/plans/'+_eWk+'/'+di+'/'+newKey+'.json';
+        var data=Object.assign({},s,{ts:t+idx*10,createdAt:t});
+        delete data._k;
+        writes.push(fetch(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}));
+      });
+    });
+    Promise.all(writes).then(function(){
+      _restRefresh(_eWk);
+      _toastS('✓ Settimana incollata!');
+    }).catch(function(e){_toastS('Errore: '+e.message);});
+  };
+
+  window.clearWeek=function(){
+    if(!_eWk){_toastS('⚠ Nessuna settimana aperta');return;}
+    if(!confirm('Svuotare TUTTE le sessioni della settimana '+_eWk+'? Non si può annullare.'))return;
+    var pd=(window._plansCache||{})[_eWk]||{};
+    var dels=[];
+    for(var i=0;i<7;i++){
+      var day=pd[String(i)]; if(!day)continue;
+      Object.keys(day).forEach(function(k){
+        dels.push(fetch(DB_URL+'/plans/'+_eWk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
+      });
+    }
+    if(!dels.length){_toastS('Settimana già vuota');return;}
+    Promise.all(dels).then(function(){
+      if(window._plansCache&&window._plansCache[_eWk]){
+        for(var i=0;i<7;i++) delete window._plansCache[_eWk][String(i)];
+      }
+      _restGrid(_eWk);
+      window._calRender();
+      _toastS('✓ Settimana svuotata');
+    }).catch(function(e){_toastS('Errore: '+e.message);});
+  };
+  // ───────────────────────────────────────────────────────────────────
 
   window.saveConfig=async function(){
     if(!_eWk) return;
