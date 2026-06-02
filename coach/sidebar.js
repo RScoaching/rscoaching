@@ -53,7 +53,7 @@ window.markActiveNav = function(pageId) {
 window.SIDEBAR_CSS = `
 .sidebar{
   width:218px;
-  background:rgba(5,4,14,.85);
+  background:rgba(8,6,18,.88);
   backdrop-filter:blur(28px) saturate(1.8);
   -webkit-backdrop-filter:blur(28px) saturate(1.8);
   border-right:1px solid rgba(255,255,255,.06);
@@ -73,7 +73,7 @@ window.SIDEBAR_CSS = `
   filter:drop-shadow(0 0 18px rgba(255,90,31,.25));
 }
 .logo span{
-  background:linear-gradient(135deg,#FF5A1F,#E03000);
+  background:linear-gradient(135deg,#8B5CF6,#6D28D9);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
   background-clip:text;
 }
@@ -103,8 +103,8 @@ window.SIDEBAR_CSS = `
 }
 .nav-item.active{
   color:#fff;
-  background:linear-gradient(90deg,rgba(255,90,31,.18),rgba(255,90,31,.04));
-  border-left-color:#FF5A1F;
+  background:linear-gradient(90deg,rgba(139,92,246,.15),rgba(139,92,246,.04));
+  border-left-color:#8B5CF6;
   font-weight:600;
   box-shadow:inset 0 0 0 1px rgba(255,90,31,.12);
 }
