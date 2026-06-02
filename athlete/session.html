@@ -9,24 +9,24 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#07070F;
+  --bg:#060610;
   --card:rgba(255,255,255,0.04);
   --card2:rgba(255,255,255,0.06);
   --card3:rgba(255,255,255,0.09);
   --border:rgba(255,255,255,0.08);
   --border2:rgba(255,255,255,0.13);
-  --orange:#FF6830;
-  --orange2:#FF8B5A;--violet:#6366F1;--violet2:#818CF8;--shadow-v:0 4px 14px rgba(99,102,241,.3);
+  --orange:#FF5A1F;
+  --orange2:#FF7A45;--violet:#7C3AED;--violet2:#818CF8;--shadow-v:0 4px 14px rgba(99,102,241,.3);
   --amber:#F59E0B;
   --red:#EF4444;
   --green:#22C55E;
   --teal:#06D6A0;
   --purple:#818CF8;
-  --white:#F0F2FF;
+  --white:#EEF0FF;
   --muted:#64748B;
   --text:#94A3B8;
   --blur:blur(20px) saturate(1.4);
-  --grad-o:linear-gradient(135deg,#FF7040,#FF2800);
+  --grad-o:linear-gradient(135deg,#FF5A1F,#E03000);
   --shadow-card:0 8px 28px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.07);
   --shadow-btn:0 4px 20px rgba(255,104,48,.4);
 }
@@ -102,9 +102,7 @@ body::before{
 
 /* ── EX CARD */
 .ex-card{
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(1.4);
-  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  background:rgba(20,18,35,.78);
   border:1px solid rgba(255,255,255,.09);
   border-radius:20px;overflow:hidden;margin-bottom:14px;
   box-shadow:0 8px 28px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.07);
@@ -201,8 +199,14 @@ body::before{
 }
 .kg-inp.d{border-color:var(--green);color:var(--green);background:rgba(74,222,128,.06);}
 .kg-inp::placeholder{color:#4A4A5A;font-size:18px;}
-.kg-inp.suggested{color:rgba(255,255,255,.25);border-color:rgba(255,255,255,.1);}
-.kg-inp.suggested:focus{color:var(--white);border-color:var(--orange);}
+/* Suggested = valore dalla serie precedente, pronto da confermare */
+.kg-inp.suggested{
+  color:var(--orange2);
+  border-color:rgba(255,140,80,.4);
+  background:rgba(255,104,48,.06);
+  box-shadow:0 0 0 2px rgba(255,104,48,.12);
+}
+.kg-inp.suggested:focus{color:var(--white);border-color:var(--orange);background:rgba(255,104,48,.08);}
 .prev-reps-hint{font-size:9px;color:rgba(255,255,255,.2);text-align:center;margin-top:1px;letter-spacing:.3px;}
 
 /* ── REPS INPUT */
@@ -233,15 +237,24 @@ body::before{
 
 /* ── DONE BUTTON */
 .done-btn{
-  width:36px;height:36px;border-radius:50%;border:2px solid var(--border2);
+  width:40px;height:40px;border-radius:50%;border:2px solid var(--border2);
   background:rgba(255,255,255,.08);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  font-size:15px;transition:all .2s;color:var(--muted);
+  font-size:16px;transition:all .2s;color:var(--muted);flex-shrink:0;
 }
 .done-btn.d{
   background:var(--green);border-color:var(--green);color:#0E0E13;font-weight:900;
-  box-shadow:0 0 12px rgba(74,222,128,.35);
+  box-shadow:0 0 14px rgba(74,222,128,.4);
 }
+/* Pronto da confermare — kg suggerito dalla serie precedente */
+.done-btn.ready{
+  border-color:var(--orange);
+  background:rgba(255,104,48,.12);
+  color:var(--orange);
+  box-shadow:0 0 0 3px rgba(255,104,48,.15);
+  animation:readyPulse 1.8s ease-in-out infinite;
+}
+@keyframes readyPulse{0%,100%{box-shadow:0 0 0 3px rgba(255,104,48,.15)}50%{box-shadow:0 0 0 6px rgba(255,104,48,.08)}}
 .done-btn:active{transform:scale(.85);}
 
 /* ── E1RM */
@@ -964,7 +977,7 @@ function renderPesi(ex,ei){
           <div class="rpe-row">${[9,10].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
           <div class="rpe-val${d.rpe?' v'+d.rpe:''}">${d.rpe?'RPE '+d.rpe:'—'}</div>
         </div>
-        <button class="done-btn${d.done?' d':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':''}</button>
+        <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':''}</button>
       </div>`;
     }).join('');
     return (rows.length>1?secHdr:'')+rowHtml;
@@ -1264,8 +1277,10 @@ window.setKg=(ei,s,v,el)=>{
   if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
   setData[ei][s].kg=v;
   setData[ei][s].suggested=false;
-  // Remove visual suggestion class immediately without full re-render
-  if(el)el.classList.remove('suggested');
+  // Rimuovi stile suggested dall'input e dal pulsante done senza re-render
+  if(el){el.classList.remove('suggested');}
+  const doneBtn=el?.closest('.set-row')?.querySelector('.done-btn');
+  if(doneBtn){doneBtn.classList.remove('ready');doneBtn.textContent='';}
 };
 // Per-set actual reps (replaces global setReps)
 window.setRepsActual=(ei,s,v)=>{
