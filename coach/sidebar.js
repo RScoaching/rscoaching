@@ -53,7 +53,7 @@ window.markActiveNav = function(pageId) {
 window.SIDEBAR_CSS = `
 .sidebar{
   width:218px;
-  background:rgba(6,6,10,.82);
+  background:rgba(5,4,14,.85);
   backdrop-filter:blur(28px) saturate(1.8);
   -webkit-backdrop-filter:blur(28px) saturate(1.8);
   border-right:1px solid rgba(255,255,255,.06);
@@ -70,10 +70,10 @@ window.SIDEBAR_CSS = `
   font-family:'Bebas Neue',sans-serif;
   font-size:26px;letter-spacing:4px;
   color:#F8FAFF;
-  filter:drop-shadow(0 0 18px rgba(255,104,48,.25));
+  filter:drop-shadow(0 0 18px rgba(255,90,31,.25));
 }
 .logo span{
-  background:linear-gradient(135deg,#FF7040,#FF2800);
+  background:linear-gradient(135deg,#FF5A1F,#E03000);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
   background-clip:text;
 }
@@ -103,10 +103,10 @@ window.SIDEBAR_CSS = `
 }
 .nav-item.active{
   color:#fff;
-  background:linear-gradient(90deg,rgba(255,104,48,.18),rgba(255,104,48,.04));
-  border-left-color:#FF6830;
+  background:linear-gradient(90deg,rgba(255,90,31,.18),rgba(255,90,31,.04));
+  border-left-color:#FF5A1F;
   font-weight:600;
-  box-shadow:inset 0 0 0 1px rgba(255,104,48,.12);
+  box-shadow:inset 0 0 0 1px rgba(255,90,31,.12);
 }
 .nav-icon{font-size:14px;opacity:.55;flex-shrink:0;transition:opacity .2s;}
 .nav-item.active .nav-icon,.nav-item:hover .nav-icon{opacity:1;}
