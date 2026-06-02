@@ -11,13 +11,13 @@
 <script src="../exercises_db.js"></script>
 <style>
 :root{
-  --bg:#07070F;--card:rgba(255,255,255,0.04);--card2:rgba(255,255,255,0.06);--card3:rgba(255,255,255,0.09);
+  --bg:#060610;--card:rgba(255,255,255,0.04);--card2:rgba(255,255,255,0.06);--card3:rgba(255,255,255,0.09);
   --glass:rgba(255,255,255,0.04);--glass2:rgba(255,255,255,0.06);--glass3:rgba(255,255,255,0.09);
-  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.20);
-  --orange:#FF6830;--orange2:#FF8B5A;--violet:#6366F1;--violet2:#818CF8;--shadow-v:0 4px 14px rgba(99,102,241,.3);--gold:#FFB020;--red:#EF4444;--green:#22C55E;
+  --border:rgba(255,255,255,0.10);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.20);
+  --orange:#FF5A1F;--orange2:#FF7A45;--violet:#7C3AED;--violet2:#A78BFA;--shadow-v:0 4px 14px rgba(99,102,241,.3);--gold:#FFB020;--red:#EF4444;--green:#22C55E;
   --teal:#06D6A0;--blue:#6366F1;--purple:#818CF8;--cyan:#22D3EE;--amber:#F59E0B;--pink:#F472B6;
-  --white:#F0F2FF;--muted:#64748B;--text:#94A3B8;
-  --grad-o:linear-gradient(135deg,#FF7040,#FF2800);
+  --white:#EEF0FF;--muted:#64748B;--text:#94A3B8;
+  --grad-o:linear-gradient(135deg,#FF5A1F,#E03000);
   --shadow-card:0 8px 28px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.07);
   --shadow-btn:0 4px 20px rgba(255,104,48,.4);
   --blur:blur(20px) saturate(1.4);
@@ -342,9 +342,7 @@ select option{background:#10101E;}
 
 /* GLASS CARDS */
 .card,.tool-card,.wlog-card,.prog-card,.wd-card,.sess-card{
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(1.4);
-  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  background:rgba(18,15,32,.82);
   border:1px solid rgba(255,255,255,.09);
   border-radius:16px;
   margin:0 16px 12px;
@@ -381,9 +379,7 @@ select option{background:#10101E;}
 
 /* READINESS HERO glass */
 .readiness-hero{
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(1.4);
-  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  background:rgba(18,15,32,.82);
   border:1px solid rgba(255,255,255,.09);
   border-radius:16px;
   margin:0 16px 12px;
@@ -1218,26 +1214,36 @@ function renderPrograms(progData){
   if(!myProgs.length){el.innerHTML='<div class="empty" style="margin:0 18px;">Nessun programma assegnato.</div>';return;}
   const SPORT_LABELS={calcio:'Calcio',hybrid:'Hybrid',forza:'Forza',corsa:'Corsa',conditioning:'Conditioning'};
   const SPORT_CLS={calcio:'pst-calcio',hybrid:'pst-hybrid',forza:'pst-forza',corsa:'pst-calcio',conditioning:'pst-hybrid'};
-  el.innerHTML=myProgs.map(([pid,p])=>{
-    const weeks=Object.entries(p.weeks||{}).sort((a,b)=>a[1].order-b[1].order);
+
+  // Determina il piano attivo: quello con la settimana salvata più recente, altrimenti il primo
+  let activeIdx = 0;
+  let latestSaved = -1;
+  myProgs.forEach(([pid],i)=>{
+    const saved = localStorage.getItem(`rsc_week_${aid}_${pid}`);
+    if(saved !== null && i > latestSaved){ latestSaved = i; activeIdx = i; }
+  });
+
+  function buildProgCard([pid,p], isActive){
+    const weeks=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
     const sp=SPORT_LABELS[p.sport]||p.sport||'';
     const cls=SPORT_CLS[p.sport]||'pst-calcio';
-    return `<div class="prog-card">
+    const cur=parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0');
+    return `<div class="prog-card${isActive?'':' prog-archived'}">
       <div class="prog-card-head">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
           <div>
+            ${isActive?'<div style="font-size:8px;font-weight:800;letter-spacing:1.5px;color:var(--orange);text-transform:uppercase;margin-bottom:5px;">▶ Piano attivo</div>':''}
             <div class="prog-card-name">${p.name}</div>
             <div class="prog-card-meta">${weeks.length} settimane${p.notes?' · '+p.notes:''}</div>
             ${sp?`<span class="prog-sport-tag ${cls}">${sp}</span>`:''}
           </div>
-          <select onchange="setCurrentWeek('${pid}',this.value)" style="padding:6px 10px;background:var(--card2);border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:11px;color:var(--white);flex-shrink:0;">
-            ${weeks.map(([,w2],wi2)=>{const cur=parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0');return `<option value="${wi2}"${wi2===cur?' selected':''}>Sett. ${wi2+1}${w2.label?' — '+w2.label:''}</option>`;}).join('')}
+          <select onchange="setCurrentWeek('${pid}',this.value)" style="padding:6px 10px;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:11px;color:var(--white);flex-shrink:0;">
+            ${weeks.map(([,w2],wi2)=>`<option value="${wi2}"${wi2===cur?' selected':''}>Sett. ${wi2+1}${w2.label?' — '+w2.label:''}</option>`).join('')}
           </select>
         </div>
       </div>
       <div>${weeks.map(([wid,w],wi)=>{
         const sessions=Object.entries(w.sessions||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
-        const cur=parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0');
         return `<div class="week-row${wi===cur?' current-week':''}" onclick="toggleWeek('${wid}')">
           <div><div class="week-row-name">Settimana ${wi+1}${w.label?' — '+w.label:''}${wi===cur?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(255,104,48,.12);color:var(--orange);margin-left:8px;">IN CORSO</span>`:''}</div>
           <div class="week-row-meta">${sessions.length} sessioni</div></div>
@@ -1245,15 +1251,44 @@ function renderPrograms(progData){
         </div>
         <div class="week-sessions" id="wsess-${wid}">${sessions.map(([sid,s])=>`
           <a class="sess-start-btn" href="./session.html?id=${aid}&prog=${pid}&week=${wi}&sess=${sid}">
-            <div class="sess-icon" style="background:${SESS_BGS[s.type]||'var(--card2)'};">${TICONS[s.type]||'🏋️'}</div>
+            <div class="sess-icon" style="background:${SESS_BGS[s.type]||'rgba(255,255,255,.06)'};">${TICONS[s.type]||'🏋️'}</div>
             <div class="sess-info"><div class="sess-start-name">${s.name||s.type||'Sessione'}</div><div class="sess-start-meta">${Object.keys(s.exercises||{}).length} esercizi${s.notes?' · '+s.notes:''}</div></div>
             <span class="start-arrow">▶</span>
           </a>`).join('')}
         </div>`;
       }).join('')}</div>
     </div>`;
-  }).join('');
+  }
+
+  const activeProg = myProgs[activeIdx];
+  const archivedProgs = myProgs.filter((_,i)=>i!==activeIdx);
+
+  let html = buildProgCard(activeProg, true);
+
+  if(archivedProgs.length){
+    html += `<div style="margin:4px 16px 0;">
+      <button onclick="toggleArchive()" style="width:100%;padding:11px 16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .2s;" id="archive-toggle-btn">
+        <span>🗂 Archivio programmi (${archivedProgs.length})</span>
+        <span id="archive-chev" style="font-size:11px;">▾</span>
+      </button>
+      <div id="archive-list" style="display:none;margin-top:8px;">
+        ${archivedProgs.map(p=>buildProgCard(p,false)).join('')}
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
 }
+
+window.toggleArchive=()=>{
+  const list=document.getElementById('archive-list');
+  const chev=document.getElementById('archive-chev');
+  const btn=document.getElementById('archive-toggle-btn');
+  const open=list.style.display==='none';
+  list.style.display=open?'block':'none';
+  if(chev)chev.textContent=open?'▴':'▾';
+  if(btn)btn.style.color=open?'var(--text)':'var(--muted)';
+};
 
 window.setCurrentWeek=(pid,wi)=>{localStorage.setItem(`rsc_week_${aid}_${pid}`,wi);showToast(`✓ Settimana ${parseInt(wi)+1} attiva`);};
 window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=document.getElementById('wchev-'+wid);const o=el.classList.toggle('open');if(ch)ch.textContent=o?'▴':'▾';};
