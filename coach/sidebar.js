@@ -1,41 +1,49 @@
 // RS.Coaching — Shared Sidebar · Premium Glass Design
 window.SIDEBAR_HTML = `
-<div class="sidebar">
+<div class="sb-mob-bar" id="sb-mob-bar">
+  <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
+  <div class="sb-mob-logo">RS<span>.</span>Coaching</div>
+</div>
+<div class="sb-mob-overlay" id="sb-mob-ov"></div>
+<div class="sidebar" id="sb-sidebar">
   <div class="sb-top">
     <div class="logo">RS<span>.</span>Coaching</div>
     <div class="logo-sub">Strength &amp; Conditioning</div>
   </div>
   <div class="nav-s">
-    <div class="nav-lbl">Principale</div>
-    <a class="nav-item" href="./index.html" data-page="dashboard">
-      <span class="nav-icon">⊞</span><span>Dashboard</span>
+    <div class="nav-lbl">Overview</div>
+    <a class="nav-item" aria-label="Dashboard" href="./index.html" data-page="dashboard">
+      <span class="nav-icon">⊞</span><span class="nav-lbl-text">Dashboard</span>
     </a>
-    <a class="nav-item" href="./index.html?goto=athletes" data-page="athletes">
-      <span class="nav-icon">◎</span><span>Atleti</span>
+    <a class="nav-item" aria-label="Atleti" href="./index.html?goto=athletes" data-page="athletes">
+      <span class="nav-icon">◎</span><span class="nav-lbl-text">Atleti</span>
     </a>
-    <a class="nav-item" href="./index.html?goto=groups" data-page="groups">
-      <span class="nav-icon">◈</span><span>Gruppi</span>
+    <a class="nav-item" aria-label="Gruppi" href="./index.html?goto=groups" data-page="groups">
+      <span class="nav-icon">◈</span><span class="nav-lbl-text">Gruppi</span>
     </a>
-    <a class="nav-item" href="./index.html?goto=analytics" data-page="analytics">
-      <span class="nav-icon">📊</span><span>Analytics</span>
+    <a class="nav-item" aria-label="Analytics" href="./index.html?goto=analytics" data-page="analytics">
+      <span class="nav-icon">📊</span><span class="nav-lbl-text">Analytics</span>
     </a>
     <div class="nav-lbl">Programmazione</div>
-    <a class="nav-item" href="./builder.html" data-page="builder">
-      <span class="nav-icon">🔨</span><span>Program Builder</span>
+    <a class="nav-item" aria-label="Program Builder" href="./builder.html" data-page="builder">
+      <span class="nav-icon">🔨</span><span class="nav-lbl-text">Program Builder</span>
     </a>
-    <a class="nav-item" href="./planner.html" data-page="planner">
-      <span class="nav-icon">📅</span><span>Planner Settimanale</span>
+    <a class="nav-item" aria-label="Planner Settimanale" href="./planner.html" data-page="planner">
+      <span class="nav-icon">📅</span><span class="nav-lbl-text">Planner Settimanale</span>
     </a>
-    <div class="nav-lbl">Database</div>
-    <a class="nav-item" href="./index.html?goto=database" data-page="database">
-      <span class="nav-icon">🗄</span><span>Esercizi</span>
+    <div class="nav-lbl">Comunicazione</div>
+    <a class="nav-item" aria-label="Chat" href="./index.html?goto=chat-global" data-page="chat">
+      <span class="nav-icon">💬</span><span class="nav-lbl-text">Chat</span>
     </a>
-    <a class="nav-item" href="./index.html?goto=tools" data-page="tools">
-      <span class="nav-icon">🧮</span><span>Strumenti S&amp;C</span>
+    <div class="nav-lbl">Risorse</div>
+    <a class="nav-item" aria-label="Database Esercizi" href="./index.html?goto=database" data-page="database">
+      <span class="nav-icon">🗄</span><span class="nav-lbl-text">Database Esercizi</span>
     </a>
-    <div class="nav-lbl">Storico</div>
-    <a class="nav-item" href="./index.html?goto=sessions" data-page="sessions">
-      <span class="nav-icon">≡</span><span>Tutte le sedute</span>
+    <a class="nav-item" aria-label="Strumenti S&C" href="./index.html?goto=tools" data-page="tools">
+      <span class="nav-icon">🧮</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
+    </a>
+    <a class="nav-item" aria-label="Tutte le sedute" href="./index.html?goto=sessions" data-page="sessions">
+      <span class="nav-icon">≡</span><span class="nav-lbl-text">Tutte le sedute</span>
     </a>
   </div>
   <div class="sb-foot">
@@ -48,6 +56,17 @@ window.markActiveNav = function(pageId) {
     el.classList.remove('active');
     if (el.dataset.page === pageId) el.classList.add('active');
   });
+};
+
+window.initSidebarToggle = function() {
+  const ham = document.getElementById('sb-ham-btn');
+  const ov  = document.getElementById('sb-mob-ov');
+  const sb  = document.getElementById('sb-sidebar');
+  if (!ham || !ov || !sb) return;
+  function openSb()  { sb.classList.add('open'); ov.classList.add('open'); }
+  function closeSb() { sb.classList.remove('open'); ov.classList.remove('open'); }
+  ham.addEventListener('click', openSb);
+  ov.addEventListener('click', closeSb);
 };
 
 window.SIDEBAR_CSS = `
@@ -115,4 +134,41 @@ window.SIDEBAR_CSS = `
   border-top:1px solid rgba(255,255,255,.05);
   font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;flex-shrink:0;
 }
-.sb-foot strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}`;
+.sb-foot strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}
+/* ── Mobile sidebar bar (shared pages) ── */
+.sb-mob-bar{
+  display:none;position:fixed;top:0;left:0;right:0;height:52px;
+  background:rgba(8,6,18,.95);backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  align-items:center;padding:0 14px;gap:12px;z-index:600;
+}
+.sb-ham{
+  background:none;border:none;color:rgba(248,250,255,.7);
+  font-size:20px;cursor:pointer;padding:4px 6px;line-height:1;
+  border-radius:6px;transition:background .15s;
+}
+.sb-ham:hover{background:rgba(255,255,255,.08);}
+.sb-mob-logo{
+  font-family:'Bebas Neue',sans-serif;font-size:20px;
+  letter-spacing:3px;color:#F8FAFF;
+}
+.sb-mob-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+  z-index:590;
+}
+.sb-mob-overlay.open{display:block;}
+@media(max-width:900px){
+  .sb-mob-bar{display:flex;}
+  #sb-sidebar{
+    display:none;position:fixed;top:0;left:0;height:100vh;
+    z-index:595;transform:translateX(-100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  #sb-sidebar.open{display:flex !important;transform:translateX(0);}
+}
+@media(min-width:901px){
+  .sb-mob-bar{display:none !important;}
+  .sb-mob-overlay{display:none !important;}
+  #sb-sidebar{display:flex !important;transform:none !important;}
+}`;
