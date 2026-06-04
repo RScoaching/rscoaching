@@ -353,6 +353,14 @@ body::before{
 }
 .complex-label{font-size:9px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
 
+/* Drag-to-reorder */
+.ex-block[draggable="true"],.complex-group[draggable="true"]{cursor:grab;}
+.ex-block[draggable="true"]:active,.complex-group[draggable="true"]:active{cursor:grabbing;}
+.ex-drag-handle{display:flex;align-items:center;justify-content:center;width:18px;flex-shrink:0;color:var(--muted);opacity:.45;font-size:13px;cursor:grab;margin-top:1px;user-select:none;}
+.ex-drag-handle:hover{opacity:.85;}
+.ex-block.drag-over,.complex-group.drag-over{border-color:rgba(139,92,246,.6)!important;background:rgba(139,92,246,.06)!important;}
+.ex-block.dragging,.complex-group.dragging{opacity:.35;}
+
 /* Add buttons row */
 .add-row{display:flex;gap:6px;flex-wrap:wrap;padding-top:8px;}
 
@@ -1326,23 +1334,33 @@ function renderExerciseBlocks(wid,sid,exs){
   _exCounter=0; // reset numbering per session
   if(!exs.length)return `<div style="font-size:12px;color:var(--muted);padding:8px 0;">Nessun esercizio. Aggiungine uno.</div>`;
 
-  // Group by complex
-  const groups={}, standalone=[];
+  // Build ordered list respecting complex groups inline
+  const seen=new Set();
+  const ordered=[];
   exs.forEach(([eid,e])=>{
-    if(e.complexGroup){if(!groups[e.complexGroup])groups[e.complexGroup]=[];groups[e.complexGroup].push([eid,e]);}
-    else standalone.push([eid,e]);
+    if(e.complexGroup){
+      if(!seen.has(e.complexGroup)){
+        seen.add(e.complexGroup);
+        // collect all items of this group in order
+        const grpItems=exs.filter(([,x])=>x.complexGroup===e.complexGroup);
+        ordered.push({type:'complex',gkey:e.complexGroup,items:grpItems});
+      }
+    } else {
+      ordered.push({type:'standalone',eid,e});
+    }
   });
 
   let html='';
-  // Render complex groups first
-  Object.entries(groups).forEach(([gkey,items])=>{
-    html+=`<div class="complex-group">
-      <div class="complex-label">🔁 Complex / Superset</div>
-      ${items.map(([eid,e])=>renderExBlock(wid,sid,eid,e,true)).join('')}
-    </div>`;
+  ordered.forEach(item=>{
+    if(item.type==='complex'){
+      html+=`<div class="complex-group" draggable="true" data-drag-group="${item.gkey}" data-wid="${wid}" data-sid="${sid}">
+        <div class="complex-label"><span class="ex-drag-handle" style="margin-right:2px;">⠿</span>🔁 Complex / Superset</div>
+        ${item.items.map(([eid,e])=>renderExBlock(wid,sid,eid,e,true)).join('')}
+      </div>`;
+    } else {
+      html+=renderExBlock(wid,sid,item.eid,item.e,false);
+    }
   });
-  // Then standalone
-  standalone.forEach(([eid,e])=>{ html+=renderExBlock(wid,sid,eid,e,false); });
   return html;
 }
 
@@ -1374,8 +1392,9 @@ function renderExBlock(wid,sid,eid,e,inComplex){
     </div>`;
   }
 
-  return `<div class="ex-block">
+  return `<div class="ex-block" draggable="true" data-eid="${eid}" data-wid="${wid}" data-sid="${sid}">
     <div class="ex-block-head">
+      <span class="ex-drag-handle" title="Trascina per riordinare">⠿</span>
       ${!inComplex?`<div class="ex-num">${num}</div>`:''}
       <div class="ex-info">
         <div class="ex-name">${e.name||'—'}</div>
@@ -1395,6 +1414,114 @@ window.toggleEx=function(eid){
   const el=document.getElementById('ex-body-'+eid);
   if(el)el.classList.toggle('open');
 };
+
+// ── DRAG-TO-REORDER EXERCISES ────────────────────────────────────────
+(function(){
+  let _dragEl=null; // the element being dragged
+  let _dragOverEl=null;
+
+  function getDraggable(target){
+    // Returns the top-level draggable (.ex-block or .complex-group) from any child
+    return target.closest('.ex-block[draggable], .complex-group[draggable]');
+  }
+
+  function getSessBody(el){
+    return el.closest('.sess-body');
+  }
+
+  // Collect all draggable top-level items in a sess-body (ex-blocks + complex-groups)
+  function getDraggables(body){
+    // Direct children only (complex-group children are .ex-block inside .complex-group — we skip those)
+    return Array.from(body.querySelectorAll(':scope > .ex-block, :scope > .complex-group'));
+  }
+
+  document.addEventListener('dragstart',function(e){
+    const el=getDraggable(e.target);
+    // Don't allow drag from inside a complex-group on a child ex-block
+    if(!el)return;
+    // If the el is an .ex-block that's inside a .complex-group, skip individual drag
+    if(el.classList.contains('ex-block')&&el.closest('.complex-group'))return;
+    _dragEl=el;
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed='move';
+    e.dataTransfer.setData('text/plain','');
+  },{passive:false});
+
+  document.addEventListener('dragover',function(e){
+    if(!_dragEl)return;
+    const target=getDraggable(e.target);
+    if(!target||target===_dragEl)return;
+    // Same session body?
+    if(getSessBody(target)!==getSessBody(_dragEl))return;
+    e.preventDefault();
+    if(_dragOverEl&&_dragOverEl!==target){
+      _dragOverEl.classList.remove('drag-over');
+    }
+    _dragOverEl=target;
+    target.classList.add('drag-over');
+  },{passive:false});
+
+  document.addEventListener('dragleave',function(e){
+    const target=getDraggable(e.target);
+    if(target){target.classList.remove('drag-over');}
+    if(_dragOverEl&&!_dragOverEl.contains(e.relatedTarget)){
+      _dragOverEl.classList.remove('drag-over');
+    }
+  });
+
+  document.addEventListener('drop',function(e){
+    if(!_dragEl||!_dragOverEl||_dragEl===_dragOverEl)return;
+    e.preventDefault();
+    const body=getSessBody(_dragEl);
+    if(!body||getSessBody(_dragOverEl)!==body)return;
+
+    // Get wid/sid from the drag element
+    const wid=_dragEl.dataset.wid||_dragEl.querySelector('[data-wid]')?.dataset.wid;
+    const sid=_dragEl.dataset.sid||_dragEl.querySelector('[data-sid]')?.dataset.sid;
+    if(!wid||!sid)return;
+
+    // Reorder in DOM
+    const items=getDraggables(body);
+    const fromIdx=items.indexOf(_dragEl);
+    const toIdx=items.indexOf(_dragOverEl);
+    if(fromIdx<toIdx){
+      _dragOverEl.after(_dragEl);
+    } else {
+      _dragOverEl.before(_dragEl);
+    }
+
+    // Persist new order to Firebase
+    _persistOrder(wid,sid,body);
+  });
+
+  document.addEventListener('dragend',function(){
+    if(_dragEl)_dragEl.classList.remove('dragging');
+    if(_dragOverEl)_dragOverEl.classList.remove('drag-over');
+    _dragEl=null;_dragOverEl=null;
+  });
+
+  function _persistOrder(wid,sid,body){
+    const items=getDraggables(body);
+    const updates={};
+    let orderVal=10;
+    items.forEach(el=>{
+      if(el.classList.contains('complex-group')){
+        // All ex-blocks inside this complex-group get same order block
+        el.querySelectorAll('.ex-block[data-eid]').forEach(cxEl=>{
+          const eid=cxEl.dataset.eid;
+          if(eid)updates[`weeks/${wid}/sessions/${sid}/exercises/${eid}/order`]=orderVal;
+        });
+        orderVal+=10;
+      } else {
+        const eid=el.dataset.eid;
+        if(eid){updates[`weeks/${wid}/sessions/${sid}/exercises/${eid}/order`]=orderVal;orderVal+=10;}
+      }
+    });
+    if(Object.keys(updates).length){
+      update(ref(db),updates).catch(err=>console.error('Order update failed',err));
+    }
+  }
+})();
 
 // ── CONDITIONING BLOCK
 function renderConditioningBlock(wid,sid,s){
@@ -1674,13 +1801,15 @@ window.openModal=function(type,...args){
     const [wid,sid]=args;
     const _ptCx=programs[currentProgId]?.sport||'sc';
     const _stCx=p?.weeks?.[wid]?.sessions?.[args[1]]?.type||'pesi';
-    const exOpts=_getBldExNames(_ptCx,_stCx).map(n=>`<option value="${n}">${n}</option>`).join('');
+    const exNames=_getBldExNames(_ptCx,_stCx);
+    const dlOpts=exNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
     mb.innerHTML=`<h3>Aggiungi Complex / Superset</h3>
+      <datalist id="bld-cx-dl">${dlOpts}</datalist>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Es. A1 Squat pesante + A2 CMJ esplosivo. L'atleta alterna i due esercizi per ogni round.</div>
       ${[1,2].map(n=>`
         <div style="background:var(--card2);border-radius:10px;padding:12px;margin-bottom:8px;">
           <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px;">Esercizio A${n}</div>
-          <div class="field"><label>Esercizio</label><select id="cx-name-${n}"><option value="">Seleziona...</option>${exOpts}</select></div>
+          <div class="field"><label>Esercizio</label><input type="text" id="cx-name-${n}" list="bld-cx-dl" placeholder="Digita o cerca esercizio..." autocomplete="off" style="width:100%;padding:9px 11px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;color:var(--white);"></div>
           <div class="grid4">
             <div class="field"><label>Serie</label><input type="number" id="cx-sets-${n}" value="4" min="1"></div>
             <div class="field"><label>Reps</label><input id="cx-reps-${n}" value="${n===1?'4':'5'}" placeholder="5"></div>
