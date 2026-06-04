@@ -159,17 +159,16 @@ body::before{
 /* ── SETS TABLE */
 .sets-wrap{padding:0 12px 12px;}
 .sets-head{
-  display:grid;grid-template-columns:30px 40px 44px 1fr 78px 36px;
-  gap:5px;padding:8px 10px;
+  display:grid;grid-template-columns:32px 1fr 78px 62px 46px;
+  gap:6px;padding:8px 10px;
   background:rgba(255,255,255,.02);border-radius:10px;
   margin:10px 0 6px;
 }
 .sets-head span{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
 
 .set-row{
-  display:grid;grid-template-columns:30px 40px 44px 1fr 78px 36px;
-  gap:5px;padding:8px 10px;border-radius:13px;
-  align-items:center;margin-bottom:5px;
+  display:flex;flex-direction:column;overflow:hidden;
+  border-radius:13px;margin-bottom:5px;
   background:rgba(255,255,255,.05);border:1.5px solid var(--border);
   transition:all .22s cubic-bezier(.4,0,.2,1);
 }
@@ -179,6 +178,40 @@ body::before{
 }
 .set-row.done{
   background:rgba(74,222,128,.05);border-color:rgba(74,222,128,.28);
+}
+.set-row-main{
+  display:grid;grid-template-columns:32px 1fr 78px 62px 46px;
+  gap:6px;padding:9px 10px;align-items:center;
+}
+/* Previous performance column */
+.prev-col{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.prev-col-val{font-size:11px;font-weight:600;color:rgba(255,255,255,.35);line-height:1.2;text-align:center;}
+.prev-col-sub{font-size:9px;color:rgba(255,255,255,.18);text-align:center;}
+/* Compact RPE strip shown only on current active set */
+.rpe-compact{display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 10px 8px;border-top:1px solid rgba(255,255,255,.05);}
+.rpe-compact-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);}
+.rpe-compact-dots{display:flex;gap:5px;}
+.rpe-compact-dot{
+  width:28px;height:26px;border-radius:7px;border:1.5px solid var(--border2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--muted);background:rgba(255,255,255,.06);
+  transition:all .15s;
+}
+.rpe-compact-dot.r6,.rpe-compact-dot.r7{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);}
+.rpe-compact-dot.r8{background:rgba(245,158,11,.15);border-color:var(--amber);color:var(--amber);}
+.rpe-compact-dot.r9,.rpe-compact-dot.r10{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);}
+/* Add set button */
+.add-set-btn{
+  width:100%;margin-top:6px;padding:11px;
+  background:rgba(255,255,255,.03);border:1.5px dashed rgba(255,255,255,.10);
+  border-radius:12px;color:var(--muted);font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .18s;letter-spacing:.3px;
+}
+.add-set-btn:active{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.35);color:var(--primary2);}
+/* Elapsed timer in header */
+.elapsed-timer{
+  font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;
+  color:rgba(255,255,255,.35);min-width:42px;text-align:center;flex-shrink:0;
 }
 
 .sn{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--muted);text-align:center;}
@@ -237,7 +270,7 @@ body::before{
 
 /* ── DONE BUTTON */
 .done-btn{
-  width:40px;height:40px;border-radius:50%;border:2px solid var(--border2);
+  width:44px;height:44px;border-radius:50%;border:2px solid var(--border2);
   background:rgba(255,255,255,.08);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   font-size:16px;transition:all .2s;color:var(--muted);flex-shrink:0;
@@ -703,6 +736,7 @@ body::before{
       <div class="hdr-name" id="hdr-name">—</div>
       <div class="hdr-meta" id="hdr-meta">—</div>
     </div>
+    <div class="elapsed-timer" id="elapsed-timer">0:00</div>
     <div class="live-pill">● LIVE</div>
   </div>
   <div class="prog-bar"><div class="prog-fill" id="pfill" style="width:0%"></div></div>
@@ -871,8 +905,27 @@ function setup(){
   document.getElementById('hdr-name').textContent=session.name||'Sessione';
   document.getElementById('hdr-meta').textContent=`${athlete.name}${PROG?' · Sett.'+(WEEK+1):' · Piano rapido'}`;
   document.getElementById('home-btn').onclick=()=>{location.href=`../athlete/?id=${AID}`;};
+  // Elapsed session timer
+  setInterval(function(){
+    const el=document.getElementById('elapsed-timer');
+    if(!el)return;
+    const secs=Math.floor((Date.now()-startTs)/1000);
+    const m=Math.floor(secs/60),sc=secs%60;
+    el.textContent=m+':'+(sc<10?'0':'')+sc;
+  },1000);
   renderExNav();render();
 }
+
+// Add a set to an exercise
+window.addSet=function(ei){
+  if(!setData[ei])setData[ei]={};
+  const newIdx=Object.keys(setData[ei]).length;
+  const ex=exs[ei];
+  const prevK=(_prevKg[ex.name]&&_prevKg[ex.name][newIdx])?String(_prevKg[ex.name][newIdx].kg||''):'';
+  const prevR=(_prevKg[ex.name]&&_prevKg[ex.name][newIdx])?String(_prevKg[ex.name][newIdx].reps||''):'';
+  setData[ei][newIdx]={kg:prevK,suggested:!!prevK,prevReps:prevR,reps:null,rpe:null,done:false};
+  render();
+};
 
 function buildFromSession(s){
   exs=[];
@@ -1066,24 +1119,32 @@ function renderPesi(ex,ei){
       const targetReps=row.reps||ex.reps||'';
       const actualReps=d.reps!=null?String(d.reps):'';
       const prevRepHint=d.prevReps&&!d.done&&!actualReps?d.prevReps:'';
+      const prevKgVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].kg:null;
+      const prevRepsVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].reps:null;
+      const prevText=prevKgVal?`${prevKgVal}kg`:'—';
+      const prevSub=prevRepsVal?`× ${prevRepsVal}`:'';
       return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}">
-        <span class="sn${d.done?' d':''}">${s+1}</span>
-        <span class="reps-lbl" style="font-size:13px;color:rgba(255,255,255,.32);text-align:center;align-self:center;">${targetReps||'—'}</span>
-        <input class="reps-inp" type="text" inputmode="numeric"
-          value="${actualReps}" placeholder="${prevRepHint||'—'}" id="reps-${ei}-${s}"
-          oninput="setRepsActual(${ei},${s},this.value)">
-        <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="set-row-main">
+          <span class="sn${d.done?' d':''}">${s+1}</span>
+          <div class="prev-col">
+            <span class="prev-col-val">${prevText}</span>
+            ${prevSub?`<span class="prev-col-sub">${prevSub}</span>`:''}
+          </div>
           <input class="kg-inp${d.done?' d':''}${isSug?' suggested':''}" type="number" inputmode="decimal"
-            value="${d.kg}" placeholder="${kgSug||'—'}" id="kg-${ei}-${s}"
+            value="${d.kg}" placeholder="${kgSug||prevKgVal||'—'}" id="kg-${ei}-${s}"
             oninput="setKg(${ei},${s},this.value,this)">
-          ${isSug?`<div class="prev-reps-hint">↑ scorsa</div>`:''}
+          <input class="reps-inp" type="text" inputmode="numeric"
+            value="${actualReps}" placeholder="${prevRepHint||targetReps||'—'}" id="reps-${ei}-${s}"
+            oninput="setRepsActual(${ei},${s},this.value)">
+          <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':''}</button>
         </div>
-        <div class="rpe-col">
-          <div class="rpe-row">${[6,7,8].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
-          <div class="rpe-row">${[9,10].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})" title="RPE ${r}"></div>`).join('')}</div>
-          <div class="rpe-val${d.rpe?' v'+d.rpe:''}">${d.rpe?'RPE '+d.rpe:'—'}</div>
-        </div>
-        <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':''}</button>
+        ${(isCur&&!d.done)?`<div class="rpe-compact">
+          <span class="rpe-compact-lbl">RPE</span>
+          <div class="rpe-compact-dots">
+            ${[6,7,8,9,10].map(r=>`<div class="rpe-compact-dot${d.rpe===r?' r'+r:''}" onclick="setRpe(${ei},${s},${r})">${r}</div>`).join('')}
+          </div>
+        </div>`:''}
+        ${(d.done&&d.rpe)?`<div style="padding:3px 10px 5px;font-size:9px;color:var(--muted);text-align:right;">RPE ${d.rpe}</div>`:''}
       </div>`;
     }).join('');
     return (rows.length>1?secHdr:'')+rowHtml;
@@ -1116,8 +1177,9 @@ function renderPesi(ex,ei){
     </div>`:''}
     ${pct>0&&rm===0?`<div style="padding:10px 16px;background:rgba(255,209,102,.06);border-bottom:1px solid var(--border);font-size:11px;color:var(--amber);">⚠ Imposta 1RM nel profilo per vedere il carico</div>`:''}
     <div class="sets-wrap">
-      <div class="sets-head"><span>Set</span><span style="text-align:center;">Target</span><span style="text-align:center;">Fatte</span><span>Kg usati</span><span style="text-align:center;">RPE</span><span></span></div>
+      <div class="sets-head"><span>Set</span><span style="text-align:center;">Prec.</span><span style="text-align:center;">Kg</span><span style="text-align:center;">Reps</span><span></span></div>
       ${setsBodyHtml}
+      <button class="add-set-btn" onclick="window.addSet(${ei})">＋ Aggiungi serie</button>
     </div>
     ${e1rm>0?`<div class="e1rm-wrap">
       <div class="e1rm-chip"><div class="e1rm-lbl">e1RM stimato</div><div class="e1rm-val">${e1rm}kg</div></div>
@@ -1141,20 +1203,25 @@ function renderComplex(ex,ei){
     ${item.cue?`<div style="padding:8px 16px;"><div class="cue-chip">💡 ${item.cue}</div></div>`:''}
     ${kgSug>0?`<div class="sug-kg-bar"><div><div class="sug-kg-lbl">${item.name}</div><div class="sug-kg-pct">Sugg.</div></div><div><span class="sug-kg-val">${kgSug}</span><span class="sug-kg-unit"> kg</span></div></div>`:''}
     <div class="sets-wrap" style="padding-top:8px;">
-      <div class="sets-head"><span>Rd</span><span style="text-align:center;">Target</span><span style="text-align:center;">Fatte</span><span>Kg</span><span style="text-align:center;">RPE</span><span></span></div>
+      <div class="sets-head"><span>Rd</span><span style="text-align:center;">Prec.</span><span style="text-align:center;">Kg</span><span style="text-align:center;">Reps</span><span></span></div>
       ${Array.from({length:sets},(_,s)=>{
         const d=csd[s]||{kg:'',rpe:null,done:false};
+        const cPrevKg=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].kg:null;
+        const cPrevReps=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].reps:null;
+        const cPrevText=cPrevKg?`${cPrevKg}kg`:'—';
+        const cPrevSub=cPrevReps?`× ${cPrevReps}`:'';
         return `<div class="set-row${d.done?' done':''}">
-          <span class="sn${d.done?' d':''}">${s+1}</span>
-          <span class="reps-lbl" style="color:rgba(255,255,255,.32);text-align:center;align-self:center;">${item.reps||'—'}</span>
-          <input class="reps-inp" type="text" inputmode="numeric" value="${d.reps||''}" placeholder="—" id="reps-cx-${ei}-${ci}-${s}" oninput="setCxReps(${ei},${ci},${s},this.value)">
-          <input class="kg-inp${d.done?' d':''}" type="number" inputmode="decimal" value="${d.kg}" placeholder="${kgSug||'—'}" oninput="setCxKg(${ei},${ci},${s},this.value)">
-          <div class="rpe-col">
-            <div class="rpe-row">${[6,7,8].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setCxRpe(${ei},${ci},${s},${r})"></div>`).join('')}</div>
-            <div class="rpe-row">${[9,10].map(r=>`<div class="rpe-d${d.rpe===r?' r'+r:''}" onclick="setCxRpe(${ei},${ci},${s},${r})"></div>`).join('')}</div>
-            <div class="rpe-val${d.rpe?' v'+d.rpe:''}">${d.rpe?'RPE '+d.rpe:'—'}</div>
+          <div class="set-row-main">
+            <span class="sn${d.done?' d':''}">${s+1}</span>
+            <div class="prev-col">
+              <span class="prev-col-val">${cPrevText}</span>
+              ${cPrevSub?`<span class="prev-col-sub">${cPrevSub}</span>`:''}
+            </div>
+            <input class="kg-inp${d.done?' d':''}" type="number" inputmode="decimal" value="${d.kg}" placeholder="${kgSug||cPrevKg||'—'}" oninput="setCxKg(${ei},${ci},${s},this.value)">
+            <input class="reps-inp" type="text" inputmode="numeric" value="${d.reps||''}" placeholder="${item.reps||'—'}" id="reps-cx-${ei}-${ci}-${s}" oninput="setCxReps(${ei},${ci},${s},this.value)">
+            <button class="done-btn${d.done?' d':''}" onclick="toggleCxDone(${ei},${ci},${s})">${d.done?'✓':''}</button>
           </div>
-          <button class="done-btn${d.done?' d':''}" onclick="toggleCxDone(${ei},${ci},${s})">${d.done?'✓':''}</button>
+          ${d.done&&d.rpe?`<div style="padding:3px 10px 5px;font-size:9px;color:var(--muted);text-align:right;">RPE ${d.rpe}</div>`:''}
         </div>`;
       }).join('')}
     </div>`;
