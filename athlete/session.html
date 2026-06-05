@@ -184,6 +184,7 @@ body::before{
   position:relative;
   transition:transform .26s cubic-bezier(.4,0,.2,1);
   will-change:transform;
+  touch-action:pan-y;
 }
 .set-row-inner.swiped{transform:translateX(-68px);}
 .set-row-delete{
@@ -987,12 +988,12 @@ window.deleteSet=function(ei,s){
 
 // Swipe-to-delete touch handling
 (function(){
-  var startX=0,startY=0,activeInner=null,startOpen=false,isHoriz=false;
-  var SNAP=68,THRESHOLD=50;
+  var startX=0,startY=0,activeInner=null,startOpen=false,dirLocked=false,isHoriz=false;
+  var SNAP=68,THRESHOLD=40;
 
   function closeAll(except){
     document.querySelectorAll('.set-row-inner.swiped').forEach(function(el){
-      if(el!==except){el.classList.remove('swiped');el.style.transform='';}
+      if(el!==except){el.classList.remove('swiped');el.style.transform='';el.style.transition='';}
     });
   }
 
@@ -1003,15 +1004,15 @@ window.deleteSet=function(ei,s){
   }
 
   document.addEventListener('touchstart',function(e){
-    // Close any open rows when touching outside a set-row
-    if(!e.target.closest||!e.target.closest('.set-row')){closeAll(null);}
+    var inRow=e.target.closest&&e.target.closest('.set-row');
+    if(!inRow){closeAll(null);return;}
+    if(e.target.closest('.set-row-delete')){return;}
     activeInner=getRowInner(e);
     if(!activeInner)return;
-    // Don't interfere with delete button taps
-    if(e.target.closest('.set-row-delete')){activeInner=null;return;}
     startX=e.touches[0].clientX;
     startY=e.touches[0].clientY;
     startOpen=activeInner.classList.contains('swiped');
+    dirLocked=false;
     isHoriz=false;
   },{passive:true});
 
@@ -1020,17 +1021,19 @@ window.deleteSet=function(ei,s){
     var dx=e.touches[0].clientX-startX;
     var dy=e.touches[0].clientY-startY;
     var adx=Math.abs(dx),ady=Math.abs(dy);
-    // Determine direction on first meaningful move
-    if(!isHoriz&&adx<6&&ady<6)return;
-    if(!isHoriz){
-      if(ady>adx){activeInner=null;return;} // vertical scroll wins
-      isHoriz=true;
+    if(!dirLocked){
+      if(adx<5&&ady<5)return; // not enough movement yet
+      dirLocked=true;
+      isHoriz=adx>=ady;
+      if(!isHoriz){activeInner=null;return;} // vertical: let page scroll
     }
+    if(!isHoriz){activeInner=null;return;}
+    e.preventDefault(); // block vertical scroll during horizontal swipe
     var base=startOpen?-SNAP:0;
     var clamped=Math.max(-SNAP,Math.min(0,base+dx));
     activeInner.style.transition='none';
     activeInner.style.transform='translateX('+clamped+'px)';
-  },{passive:true});
+  },{passive:false}); // must be non-passive to preventDefault
 
   document.addEventListener('touchend',function(e){
     if(!activeInner)return;
@@ -1047,6 +1050,17 @@ window.deleteSet=function(ei,s){
       activeInner.style.transform='';
     }
     activeInner=null;
+    dirLocked=false;
+    isHoriz=false;
+  },{passive:true});
+
+  document.addEventListener('touchcancel',function(){
+    if(activeInner){
+      activeInner.style.transition='';
+      activeInner.style.transform=startOpen?'translateX(-'+SNAP+'px)':'';
+      if(!startOpen)activeInner.classList.remove('swiped');
+    }
+    activeInner=null;dirLocked=false;isHoriz=false;
   },{passive:true});
 })();
 
