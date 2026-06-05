@@ -179,6 +179,30 @@ body::before{
 .set-row.done{
   background:rgba(74,222,128,.05);border-color:rgba(74,222,128,.28);
 }
+.set-row-inner{
+  display:flex;flex-direction:column;
+  position:relative;
+  transition:transform .26s cubic-bezier(.4,0,.2,1);
+  will-change:transform;
+}
+.set-row-inner.swiped{transform:translateX(-68px);}
+.set-row-delete{
+  position:absolute;
+  right:-68px;top:0;bottom:0;width:68px;
+  background:var(--red);
+  display:flex;align-items:center;justify-content:center;
+  border-radius:0 11px 11px 0;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.set-row-delete:active{opacity:.82;}
+.set-row-delete svg{
+  width:20px;height:20px;
+  stroke:#fff;stroke-width:2;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;
+  pointer-events:none;
+}
+@media(prefers-reduced-motion:reduce){.set-row-inner{transition:none;}}
 .set-row-main{
   display:grid;grid-template-columns:28px 1fr 66px 54px 40px;
   gap:4px;padding:8px 8px;align-items:center;
@@ -930,6 +954,102 @@ window.addSet=function(ei){
   render();
 };
 
+// Delete a set via swipe-to-delete
+window.deleteSet=function(ei,s){
+  const sd=setData[ei];
+  if(!sd)return;
+  const keys=Object.keys(sd).map(Number).sort((a,b)=>a-b);
+  if(keys.length<=1)return; // keep at least 1 set
+  // Re-index: skip s, shift rest down
+  const newSd={};
+  let ni=0;
+  keys.forEach(k=>{if(k!==s)newSd[ni++]=sd[k];});
+  setData[ei]=newSd;
+  // Update set count on the exercise definition
+  const ex=exs[ei];
+  if(ex.setRows&&ex.setRows.length){
+    let idx=0;
+    for(let r=0;r<ex.setRows.length;r++){
+      const n=parseInt(ex.setRows[r].sets)||1;
+      if(s>=idx&&s<idx+n){
+        const newN=n-1;
+        if(newN<=0){ex.setRows.splice(r,1);}
+        else{ex.setRows[r]={...ex.setRows[r],sets:String(newN)};}
+        break;
+      }
+      idx+=n;
+    }
+  } else {
+    ex.sets=String(Math.max(1,(parseInt(ex.sets)||3)-1));
+  }
+  render();
+};
+
+// Swipe-to-delete touch handling
+(function(){
+  var startX=0,startY=0,activeInner=null,startOpen=false,isHoriz=false;
+  var SNAP=68,THRESHOLD=50;
+
+  function closeAll(except){
+    document.querySelectorAll('.set-row-inner.swiped').forEach(function(el){
+      if(el!==except){el.classList.remove('swiped');el.style.transform='';}
+    });
+  }
+
+  function getRowInner(e){
+    var el=e.target;
+    while(el&&!el.classList.contains('set-row'))el=el.parentElement;
+    return el?el.querySelector('.set-row-inner'):null;
+  }
+
+  document.addEventListener('touchstart',function(e){
+    // Close any open rows when touching outside a set-row
+    if(!e.target.closest||!e.target.closest('.set-row')){closeAll(null);}
+    activeInner=getRowInner(e);
+    if(!activeInner)return;
+    // Don't interfere with delete button taps
+    if(e.target.closest('.set-row-delete')){activeInner=null;return;}
+    startX=e.touches[0].clientX;
+    startY=e.touches[0].clientY;
+    startOpen=activeInner.classList.contains('swiped');
+    isHoriz=false;
+  },{passive:true});
+
+  document.addEventListener('touchmove',function(e){
+    if(!activeInner)return;
+    var dx=e.touches[0].clientX-startX;
+    var dy=e.touches[0].clientY-startY;
+    var adx=Math.abs(dx),ady=Math.abs(dy);
+    // Determine direction on first meaningful move
+    if(!isHoriz&&adx<6&&ady<6)return;
+    if(!isHoriz){
+      if(ady>adx){activeInner=null;return;} // vertical scroll wins
+      isHoriz=true;
+    }
+    var base=startOpen?-SNAP:0;
+    var clamped=Math.max(-SNAP,Math.min(0,base+dx));
+    activeInner.style.transition='none';
+    activeInner.style.transform='translateX('+clamped+'px)';
+  },{passive:true});
+
+  document.addEventListener('touchend',function(e){
+    if(!activeInner)return;
+    var dx=e.changedTouches[0].clientX-startX;
+    var base=startOpen?-SNAP:0;
+    var total=base+dx;
+    activeInner.style.transition='';
+    if(total<-THRESHOLD){
+      closeAll(activeInner);
+      activeInner.classList.add('swiped');
+      activeInner.style.transform='';
+    } else {
+      activeInner.classList.remove('swiped');
+      activeInner.style.transform='';
+    }
+    activeInner=null;
+  },{passive:true});
+})();
+
 function buildFromSession(s){
   exs=[];
   if(s.type==='conditioning'){
@@ -1126,20 +1246,25 @@ function renderPesi(ex,ei){
       const prevRepsVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].reps:null;
       const prevText=prevKgVal?`${prevKgVal}kg`:'—';
       const prevSub=prevRepsVal?`× ${prevRepsVal}`:'';
-      return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}">
-        <div class="set-row-main">
-          <span class="sn${d.done?' d':''}">${s+1}</span>
-          <div class="prev-col">
-            <span class="prev-col-val">${prevText}</span>
-            ${prevSub?`<span class="prev-col-sub">${prevSub}</span>`:''}
+      return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}" data-si="${ei}-${s}">
+        <div class="set-row-inner">
+          <div class="set-row-main">
+            <span class="sn${d.done?' d':''}">${s+1}</span>
+            <div class="prev-col">
+              <span class="prev-col-val">${prevText}</span>
+              ${prevSub?`<span class="prev-col-sub">${prevSub}</span>`:''}
+            </div>
+            <input class="kg-inp${d.done?' d':''}${isSug?' suggested':''}" type="number" inputmode="decimal"
+              value="${d.kg}" placeholder="${kgSug||prevKgVal||'—'}" id="kg-${ei}-${s}"
+              oninput="setKg(${ei},${s},this.value,this)">
+            <input class="reps-inp" type="text" inputmode="numeric"
+              value="${actualReps}" placeholder="${prevRepHint||targetReps||'—'}" id="reps-${ei}-${s}"
+              oninput="setRepsActual(${ei},${s},this.value)">
+            <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':'○'}</button>
           </div>
-          <input class="kg-inp${d.done?' d':''}${isSug?' suggested':''}" type="number" inputmode="decimal"
-            value="${d.kg}" placeholder="${kgSug||prevKgVal||'—'}" id="kg-${ei}-${s}"
-            oninput="setKg(${ei},${s},this.value,this)">
-          <input class="reps-inp" type="text" inputmode="numeric"
-            value="${actualReps}" placeholder="${prevRepHint||targetReps||'—'}" id="reps-${ei}-${s}"
-            oninput="setRepsActual(${ei},${s},this.value)">
-          <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':'○'}</button>
+          <div class="set-row-delete" onclick="event.stopPropagation();window.deleteSet(${ei},${s})">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </div>
         </div>
       </div>`;
     }).join('');
