@@ -783,7 +783,8 @@ function _getBldExNames(progType, sessType){
 }
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
-const RUNNING_TYPES=['Fondo Lento','Progressivo','Ripetute','Soglia','Interval Training','Long Run','Fartlek','Collinare','Testo libero'];
+const RUNNING_TYPES=['Attivazione','Riscaldamento','Fondo Lento','Progressivo','Ripetute','Soglia','Interval Training','Long Run','Fartlek','Collinare','Defaticamento','Testo libero'];
+const INTERVAL_TYPES=['Ripetute','Interval Training'];
 const RUNNING_ZONES=[
   {id:'Z1',label:'Z1 — Recupero Attivo',pct:'60-70% FC'},
   {id:'Z2',label:'Z2 — Aerobica Base',pct:'70-80% FC'},
@@ -1577,6 +1578,8 @@ function renderCorsaBlock(wid,sid,s){
   if(fasi && fasi.length){
     return fasi.map((f,i)=>{
       const zcol=ZCOL[f.zona]||'var(--muted)';
+      const hasInterval=f.reps||f.repDist||f.repPace;
+      const hasRec=f.recDist||f.recTime||f.recPace;
       return `<div class="ex-block" style="border-left:3px solid ${f.zona?zcol:'var(--border)'};padding-left:10px;margin-bottom:4px;">
         <div class="ex-block-head">
           <div style="flex:1;">
@@ -1588,6 +1591,17 @@ function renderCorsaBlock(wid,sid,s){
               ${f.dist?`<span>${f.dist}</span>`:''}
               ${f.pace?`<span>${f.pace} /km</span>`:''}
             </div>
+            ${hasInterval?`<div class="ex-params" style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;margin-top:3px;color:var(--green);">
+              ${f.reps?`<span>${f.reps}×</span>`:''}
+              ${f.repDist?`<span>${f.repDist}</span>`:''}
+              ${f.repPace?`<span>@ ${f.repPace}</span>`:''}
+            </div>`:''}
+            ${hasRec?`<div class="ex-params" style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;margin-top:2px;color:var(--muted);">
+              <span>Rec:</span>
+              ${f.recDist?`<span>${f.recDist}</span>`:''}
+              ${f.recTime?`<span>${f.recTime}</span>`:''}
+              ${f.recPace?`<span>@ ${f.recPace}</span>`:''}
+            </div>`:''}
             ${f.note?`<div class="ex-params" style="margin-top:3px;font-size:10px;color:var(--muted);font-style:italic;">${f.note}</div>`:''}
           </div>
         </div>
@@ -1949,20 +1963,37 @@ window.openModal=function(type,...args){
       :(s.corsaTipo?[{tipo:s.corsaTipo,zona:s.corsaZona||'',dist:s.corsaDist||'',pace:s.corsaPace||'',note:s.corsaNote||''}]:[{}]);
     const fasiTypeSel=(cur)=>RUNNING_TYPES.map(t=>`<option value="${t}"${cur===t?' selected':''}>${t}</option>`).join('');
     const fasiZonSel=(cur)=>`<option value="">—</option>`+RUNNING_ZONES.map(z=>`<option value="${z.id}"${cur===z.id?' selected':''}>${z.label}</option>`).join('');
+    const isIntv=(t)=>INTERVAL_TYPES.includes(t);
     const buildFaseRow=(f={},i)=>`<div class="fase-row" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:10px 10px 8px;margin-bottom:8px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;">Fase ${i+1}</span>
         <button style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;line-height:1;" onclick="removeFase(this)">×</button>
       </div>
       <div class="grid2" style="margin-bottom:6px;">
-        <div class="field" style="margin-bottom:0;"><label>Tipo</label><select class="fase-tipo">${fasiTypeSel(f.tipo)}</select></div>
+        <div class="field" style="margin-bottom:0;"><label>Tipo</label><select class="fase-tipo" onchange="window._toggleIntervalFields(this)">${fasiTypeSel(f.tipo)}</select></div>
         <div class="field" style="margin-bottom:0;"><label>Zona</label><select class="fase-zona">${fasiZonSel(f.zona)}</select></div>
       </div>
       <div class="grid2" style="margin-bottom:6px;">
-        <div class="field" style="margin-bottom:0;"><label>Distanza / Volume</label><input class="fase-dist" value="${f.dist||''}" placeholder="Es. 3 km / 5×400m"></div>
+        <div class="field" style="margin-bottom:0;"><label>Distanza / Volume</label><input class="fase-dist" value="${f.dist||''}" placeholder="Es. 3 km totali"></div>
         <div class="field" style="margin-bottom:0;"><label>Pace target</label><input class="fase-pace" value="${f.pace||''}" placeholder="Es. 4:30-4:50"></div>
       </div>
-      <div class="field" style="margin-bottom:0;"><label>Note fase</label><input class="fase-note" value="${f.note||''}" placeholder="Es. rec 90s, mantenere ritmo costante"></div>
+      <!-- Interval-specific fields -->
+      <div class="fase-interval-fields" style="display:${isIntv(f.tipo)?'block':'none'};border-top:1px solid var(--border);padding-top:8px;margin-top:2px;margin-bottom:6px;">
+        <div style="font-size:9px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Dettaglio Ripetute</div>
+        <div class="grid2" style="margin-bottom:6px;">
+          <div class="field" style="margin-bottom:0;"><label>N° Ripetute</label><input class="fase-reps" value="${f.reps||''}" placeholder="Es. 5"></div>
+          <div class="field" style="margin-bottom:0;"><label>Distanza / Rep</label><input class="fase-repDist" value="${f.repDist||''}" placeholder="Es. 400 m"></div>
+        </div>
+        <div class="grid2" style="margin-bottom:6px;">
+          <div class="field" style="margin-bottom:0;"><label>Pace lavoro</label><input class="fase-repPace" value="${f.repPace||''}" placeholder="Es. 3:45 /km"></div>
+          <div class="field" style="margin-bottom:0;"><label>Recupero (dist.)</label><input class="fase-recDist" value="${f.recDist||''}" placeholder="Es. 200 m"></div>
+        </div>
+        <div class="grid2" style="margin-bottom:0;">
+          <div class="field" style="margin-bottom:0;"><label>Recupero (tempo)</label><input class="fase-recTime" value="${f.recTime||''}" placeholder="Es. 90 sec"></div>
+          <div class="field" style="margin-bottom:0;"><label>Pace rec</label><input class="fase-recPace" value="${f.recPace||''}" placeholder="Es. jogging"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Note fase</label><input class="fase-note" value="${f.note||''}" placeholder="Es. mantenere ritmo costante"></div>
     </div>`;
     mb.innerHTML=`<h3>Modifica Corsa / Running</h3>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Aggiungi una o più fasi per strutturare la sessione (es. riscaldamento + blocco principale + defaticamento).</div>
@@ -1987,6 +2018,11 @@ window.openModal=function(type,...args){
       if(list.querySelectorAll('.fase-row').length<=1)return;// keep at least 1
       row.remove();
       list.querySelectorAll('.fase-row').forEach((r,i)=>{r.querySelector('span').textContent='Fase '+(i+1);});
+    };
+    window._toggleIntervalFields=function(sel){
+      const row=sel.closest('.fase-row');
+      const intFields=row.querySelector('.fase-interval-fields');
+      if(intFields){intFields.style.display=INTERVAL_TYPES.includes(sel.value)?'block':'none';}
     };
 
   } else if(type==='week-progress'){
@@ -2267,13 +2303,26 @@ window.saveCond=async function(wid,sid){
 
 window.saveCorsa=async function(wid,sid){
   const rows=[...document.querySelectorAll('#m-fasi-list .fase-row')];
-  const corsaFasi=rows.map(r=>({
-    tipo:r.querySelector('.fase-tipo')?.value||'',
-    zona:r.querySelector('.fase-zona')?.value||'',
-    dist:r.querySelector('.fase-dist')?.value||'',
-    pace:r.querySelector('.fase-pace')?.value||'',
-    note:r.querySelector('.fase-note')?.value||''
-  }));
+  const corsaFasi=rows.map(r=>{
+    const f={
+      tipo:r.querySelector('.fase-tipo')?.value||'',
+      zona:r.querySelector('.fase-zona')?.value||'',
+      dist:r.querySelector('.fase-dist')?.value||'',
+      pace:r.querySelector('.fase-pace')?.value||'',
+      note:r.querySelector('.fase-note')?.value||''
+    };
+    const intEl=r.querySelector('.fase-interval-fields');
+    if(intEl&&intEl.style.display!=='none'){
+      const v=(cls)=>r.querySelector('.'+cls)?.value||'';
+      f.reps=v('fase-reps');
+      f.repDist=v('fase-repDist');
+      f.repPace=v('fase-repPace');
+      f.recDist=v('fase-recDist');
+      f.recTime=v('fase-recTime');
+      f.recPace=v('fase-recPace');
+    }
+    return f;
+  });
   await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),{
     corsaFasi,
     corsaTipo:null,corsaZona:null,corsaDist:null,corsaPace:null,corsaNote:null
@@ -2456,12 +2505,16 @@ window.exportBuilderPDF=function(){
           // Single phase — compact layout
           const f=fasi[0];
           const zc=ZONE_COLOR[f.zona]||dot;
+          const hasIntv=f.reps||f.repDist||f.repPace;
+          const hasRec=f.recDist||f.recTime||f.recPace;
           body='<div class="c-run-single">'
             +(f.zona?'<span class="run-z-badge" style="background:'+zc+'15;color:'+zc+'">'+f.zona+'</span>':'')
             +(f.tipo?'<span class="run-tipo">'+f.tipo+'</span>':'')
             +'<div class="run-kv-row">'
             +(f.dist?'<div class="run-kv"><span class="kv-k">Distanza</span><span class="kv-v">'+f.dist+'</span></div>':'')
             +(f.pace?'<div class="run-kv"><span class="kv-k">Pace</span><span class="kv-v">'+f.pace+' /km</span></div>':'')
+            +(hasIntv?'<div class="run-kv"><span class="kv-k">Ripetute</span><span class="kv-v">'+(f.reps?f.reps+'×':'')+' '+(f.repDist||'')+' '+(f.repPace?'@ '+f.repPace:'')+'</span></div>':'')
+            +(hasRec?'<div class="run-kv"><span class="kv-k">Recupero</span><span class="kv-v">'+(f.recDist||'')+' '+(f.recTime||'')+' '+(f.recPace?'@ '+f.recPace:'')+'</span></div>':'')
             +'</div>'
             +(f.note?'<div class="run-fnote">'+f.note+'</div>':'')
             +'</div>';
@@ -2470,15 +2523,28 @@ window.exportBuilderPDF=function(){
           body='<div class="c-run-multi">';
           fasi.forEach((f,fi)=>{
             const zc=ZONE_COLOR[f.zona]||'#94a3b8';
+            const hasIntv=f.reps||f.repDist||f.repPace;
+            const hasRec=f.recDist||f.recTime||f.recPace;
             body+='<div class="rf">'
               +'<div class="rf-left">'
               +(f.zona?'<span class="rf-z" style="background:'+zc+'15;color:'+zc+'">'+f.zona+'</span>':'<span class="rf-num">'+(fi+1)+'</span>')
-              +'<span class="rf-tipo">'+( f.tipo||'Fase '+(fi+1))+'</span>'
+              +'<span class="rf-tipo">'+(f.tipo||'Fase '+(fi+1))+'</span>'
               +'</div>'
               +'<div class="rf-right">'
               +(f.dist?'<span class="rf-kv">'+f.dist+'</span>':'')
               +(f.pace?'<span class="rf-kv muted">'+f.pace+' /km</span>':'')
               +'</div>'
+              +(hasIntv?'<div class="rf-intv">'
+                +(f.reps?'<span class="intv-chip">'+f.reps+'×</span>':'')
+                +(f.repDist?'<span class="intv-chip">'+f.repDist+'</span>':'')
+                +(f.repPace?'<span class="intv-chip">@ '+f.repPace+'</span>':'')
+                +'</div>':'')
+              +(hasRec?'<div class="rf-rec">'
+                +'<span class="rec-lbl">rec</span>'
+                +(f.recDist?'<span>'+f.recDist+'</span>':'')
+                +(f.recTime?'<span>'+f.recTime+'</span>':'')
+                +(f.recPace?'<span>@ '+f.recPace+'</span>':'')
+                +'</div>':'')
               +(f.note?'<div class="rf-note">'+f.note+'</div>':'')
               +'</div>';
           });
@@ -2510,7 +2576,7 @@ window.exportBuilderPDF=function(){
         }
       }
 
-      sessHtml+='<div class="sc">'
+      sessHtml+='<div class="sc sc--'+(s.type||'pesi')+'">'
         +'<div class="sc-head">'
         +'<div class="sc-dot" style="background:'+dot+'"></div>'
         +'<div class="sc-meta">'
@@ -2534,105 +2600,110 @@ window.exportBuilderPDF=function(){
       +(wk.notes?'<span class="wh-note">'+wk.notes+'</span>':'')
       +'<span class="wh-cnt">'+sessions.length+' sessioni</span>'
       +'</div>'
-      +'<div class="sw" style="grid-template-columns:repeat('+Math.min(cols,3)+',1fr)">'+sessHtml+'</div>'
+      +'<div class="sw">'+sessHtml+'</div>'
       +'</div>';
   });
 
   const css=`
-@page{size:A4 portrait;margin:14mm 12mm 12mm}
+@page{size:A4 portrait;margin:12mm 10mm 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:8.5px;color:#18181b;background:#fff;line-height:1.45}
+body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:8px;color:#ede9f8;background:#0e0d14;line-height:1.4}
 
 /* ── HEADER */
-.pg-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:1.5px solid #18181b}
-.brand{font-size:11px;font-weight:900;letter-spacing:3px;color:#18181b}
+.pg-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #2a2640}
+.brand{font-size:10px;font-weight:900;letter-spacing:3px;color:#ede9f8}
 .brand em{color:#8B5CF6;font-style:normal}
-.brand-sub{font-size:6px;color:#a1a1aa;letter-spacing:1.2px;text-transform:uppercase;margin-top:2px}
+.brand-sub{font-size:5.5px;color:#504c6b;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .pg-right{text-align:right}
-.pg-prog{font-size:18px;font-weight:800;color:#18181b;letter-spacing:-.3px;line-height:1}
-.pg-meta{margin-top:4px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
-.pg-m{font-size:6.5px;color:#71717a}
-.pg-m strong{color:#18181b;font-weight:700}
-.pg-ath{font-size:6.5px;color:#71717a;margin-top:2px;text-align:right}
-.pg-date{font-size:6px;color:#a1a1aa;margin-top:3px;text-align:right}
+.pg-prog{font-size:16px;font-weight:800;color:#ede9f8;letter-spacing:-.5px;line-height:1}
+.pg-meta{margin-top:4px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.pg-m{font-size:6px;color:#504c6b}
+.pg-m strong{color:#9d97c0;font-weight:700}
+.pg-ath{font-size:6px;color:#504c6b;margin-top:2px;text-align:right}
+.pg-date{font-size:5.5px;color:#3d3959;margin-top:3px;text-align:right}
 
 /* ── TIMELINE */
-.tl{display:flex;gap:0;margin-bottom:16px;overflow:hidden;border-radius:4px;border:1px solid #e4e4e7}
-.tl-seg{flex:1;padding:6px 6px 5px;border-top:2.5px solid #e4e4e7;text-align:center;background:#fafafa}
-.tl-seg:not(:last-child){border-right:1px solid #e4e4e7}
-.tl-w{font-size:8px;font-weight:900;letter-spacing:.3px}
-.tl-ph{font-size:6px;color:#71717a;margin-top:1px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-s{font-size:5.5px;color:#a1a1aa;margin-top:2px}
+.tl{display:flex;gap:0;margin-bottom:14px;overflow:hidden;border-radius:4px;border:1px solid #2a2640}
+.tl-seg{flex:1;padding:5px 5px 4px;border-top:2px solid #2a2640;text-align:center;background:#130f1e}
+.tl-seg:not(:last-child){border-right:1px solid #2a2640}
+.tl-w{font-size:7.5px;font-weight:900;letter-spacing:.3px}
+.tl-ph{font-size:5.5px;color:#7e7a9f;margin-top:1px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-s{font-size:5px;color:#3d3959;margin-top:2px}
 
 /* ── WEEK BLOCK */
-.wb{margin-bottom:10px;page-break-inside:avoid}
-.wh{display:flex;align-items:center;gap:7px;padding:6px 0;margin-bottom:4px;border-bottom:1px solid #e4e4e7}
-.wh-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.wh-num{font-size:8px;font-weight:800;color:#18181b;letter-spacing:.3px}
-.wh-lbl{font-size:7.5px;font-weight:700;padding:1px 6px;border-radius:2px;background:currentColor;filter:opacity(.12);color:inherit;position:relative}
-.wh-lbl{background:transparent;filter:none;font-weight:700}
-.wh-note{font-size:7px;color:#71717a;font-style:italic;flex:1}
-.wh-cnt{font-size:6.5px;color:#a1a1aa;margin-left:auto;white-space:nowrap}
-.sw{display:grid;gap:5px}
+.wb{margin-bottom:9px;page-break-inside:avoid}
+.wh{display:flex;align-items:center;gap:6px;padding:5px 6px;margin-bottom:4px;background:#19172a;border-radius:3px;border:1px solid #2a2640}
+.wh-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.wh-num{font-size:7.5px;font-weight:800;color:#ede9f8;letter-spacing:.3px}
+.wh-lbl{font-size:7px;font-weight:700;color:inherit}
+.wh-note{font-size:6.5px;color:#7e7a9f;font-style:italic;flex:1;padding-left:4px}
+.wh-cnt{font-size:6px;color:#3d3959;margin-left:auto;white-space:nowrap}
+.sw{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start}
 
 /* ── SESSION CARD */
-.sc{background:#fff;border:1px solid #e4e4e7;border-radius:5px;overflow:hidden}
-.sc-head{display:flex;align-items:center;gap:7px;padding:6px 8px 5px;border-bottom:1px solid #f4f4f5}
+.sc{background:#141220;border:1px solid #2a2640;border-radius:4px;overflow:hidden;flex:1 1 180px;max-width:280px;min-width:130px}
+.sc--corsa{flex:0 1 170px;max-width:210px}
+.sc--recupero{flex:0 0 120px;max-width:150px}
+.sc--conditioning{flex:0 1 160px;max-width:200px}
+.sc-head{display:flex;align-items:center;gap:6px;padding:5px 7px 4px;border-bottom:1px solid #1e1b2f;background:#1a1727}
 .sc-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
-.sc-meta{flex:1;display:flex;align-items:center;gap:5px}
-.sc-day{font-size:6px;font-weight:800;color:#71717a;text-transform:uppercase;letter-spacing:.5px;background:#f4f4f5;padding:1px 4px;border-radius:2px}
-.sc-name{font-size:8px;font-weight:700;color:#18181b}
-.sc-tag{font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;margin-left:auto}
-.sc-snote{font-size:6.5px;color:#71717a;font-style:italic;padding:4px 8px;background:#fafafa;border-bottom:1px solid #f4f4f5}
-.empty-body{font-size:7px;color:#a1a1aa;padding:6px 8px;font-style:italic}
-.empty-week{font-size:7.5px;color:#a1a1aa;padding:8px;font-style:italic;text-align:center;border:1px dashed #e4e4e7;border-radius:5px}
+.sc-meta{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
+.sc-day{font-size:5.5px;font-weight:800;color:#504c6b;text-transform:uppercase;letter-spacing:.5px;background:#0e0d14;padding:1px 3px;border-radius:2px;white-space:nowrap}
+.sc-name{font-size:7.5px;font-weight:700;color:#ede9f8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-tag{font-size:5.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;margin-left:auto;padding-left:4px}
+.sc-snote{font-size:6px;color:#7e7a9f;font-style:italic;padding:3px 7px;background:#110f1b;border-bottom:1px solid #1e1b2f}
+.empty-body{font-size:7px;color:#3d3959;padding:6px 7px;font-style:italic}
+.empty-week{font-size:7px;color:#3d3959;padding:8px;font-style:italic;text-align:center;border:1px dashed #2a2640;border-radius:4px;width:100%}
 
 /* ── EXERCISE TABLE */
 .ex-tbl{width:100%;border-collapse:collapse}
-.ex-tbl thead tr{background:#fafafa;border-bottom:1px solid #e4e4e7}
-.ex-tbl th{font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#a1a1aa;padding:3px 6px;text-align:left}
+.ex-tbl thead tr{background:#0e0d14;border-bottom:1px solid #2a2640}
+.ex-tbl th{font-size:5.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#3d3959;padding:3px 5px;text-align:left}
 .ex-tbl th:nth-child(n+2){text-align:center}
-.ex-tbl td{padding:3px 6px;font-size:7.5px;border-bottom:1px solid #f4f4f5;vertical-align:top}
+.ex-tbl td{padding:2.5px 5px;font-size:7px;border-bottom:1px solid #1e1b2f;vertical-align:top}
 .ex-tbl tbody tr:last-child td{border-bottom:none}
-.en{font-weight:600;color:#18181b}
-.nu{text-align:center;color:#52525b;white-space:nowrap}
-.cx-sep td{background:#faf5ff;font-size:6px;font-weight:700;color:#8B5CF6;text-transform:uppercase;letter-spacing:.5px;padding:3px 6px}
-.cx-b{display:inline-block;font-size:6px;font-weight:800;padding:0 3px;border-radius:2px;margin-right:2px}
+.en{font-weight:600;color:#ede9f8}
+.nu{text-align:center;color:#9d97c0;white-space:nowrap}
+.cx-sep td{background:#1a1533;font-size:5.5px;font-weight:700;color:#8B5CF6;text-transform:uppercase;letter-spacing:.5px;padding:2.5px 5px}
+.cx-b{display:inline-block;font-size:5.5px;font-weight:800;padding:0 2px;border-radius:2px;margin-right:2px}
 
 /* ── CONDITIONING */
-.c-cond{padding:6px 8px}
-.cond-title{font-size:8px;font-weight:700;margin-bottom:4px}
-.cond-row{font-size:7px;color:#52525b;padding:1.5px 0;border-bottom:1px solid #f4f4f5}
+.c-cond{padding:5px 7px}
+.cond-title{font-size:7.5px;font-weight:700;margin-bottom:3px}
+.cond-row{font-size:6.5px;color:#9d97c0;padding:1.5px 0;border-bottom:1px solid #1e1b2f}
 .cond-row:last-child{border-bottom:none}
 
 /* ── RUNNING – single phase */
-.c-run-single{padding:6px 8px}
-.run-z-badge{font-size:7px;font-weight:800;padding:1px 6px;border-radius:3px;letter-spacing:.4px;margin-right:5px}
-.run-tipo{font-size:7.5px;font-weight:700;color:#18181b}
-.run-kv-row{display:flex;gap:14px;margin-top:5px;flex-wrap:wrap}
+.c-run-single{padding:5px 7px}
+.run-z-badge{font-size:6.5px;font-weight:800;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-right:4px}
+.run-tipo{font-size:7px;font-weight:700;color:#ede9f8}
+.run-kv-row{display:flex;gap:10px;margin-top:5px;flex-wrap:wrap}
 .run-kv{display:flex;flex-direction:column;gap:1px}
-.kv-k{font-size:5.5px;text-transform:uppercase;letter-spacing:.5px;color:#a1a1aa;font-weight:700}
-.kv-v{font-size:8.5px;font-weight:700;color:#18181b}
-.run-fnote{font-size:6.5px;color:#71717a;margin-top:5px;padding-top:4px;border-top:1px solid #f4f4f5;white-space:pre-line;line-height:1.5}
+.kv-k{font-size:5px;text-transform:uppercase;letter-spacing:.5px;color:#3d3959;font-weight:700}
+.kv-v{font-size:8px;font-weight:700;color:#ede9f8}
+.run-fnote{font-size:6px;color:#7e7a9f;margin-top:5px;padding-top:4px;border-top:1px solid #1e1b2f;white-space:pre-line;line-height:1.5}
 
 /* ── RUNNING – multi phase */
-.c-run-multi{padding:4px 8px}
-.rf{display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid #f4f4f5}
+.c-run-multi{padding:3px 7px}
+.rf{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:start;padding:3.5px 0;border-bottom:1px solid #1e1b2f}
 .rf:last-child{border-bottom:none}
-.rf-left{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
-.rf-z{font-size:6.5px;font-weight:800;padding:1px 5px;border-radius:3px;letter-spacing:.3px;white-space:nowrap}
-.rf-num{font-size:6.5px;font-weight:700;color:#a1a1aa;min-width:12px;text-align:center}
-.rf-tipo{font-size:7px;font-weight:600;color:#18181b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rf-right{display:flex;gap:8px;align-items:center;white-space:nowrap}
-.rf-kv{font-size:7px;font-weight:700;color:#18181b}
-.rf-kv.muted{font-weight:500;color:#71717a}
-.rf-note{font-size:6px;color:#a1a1aa;font-style:italic;margin-top:2px;padding-left:17px;grid-column:1/-1;width:100%}
-.c-run-multi .rf{display:grid;grid-template-columns:1fr auto;gap:6px 8px;align-items:start}
-.c-run-multi .rf-note{grid-column:1/-1}
+.rf-left{display:flex;align-items:center;gap:4px;min-width:0}
+.rf-z{font-size:6px;font-weight:800;padding:1px 4px;border-radius:3px;letter-spacing:.3px;white-space:nowrap}
+.rf-num{font-size:6px;font-weight:700;color:#3d3959;min-width:10px;text-align:center}
+.rf-tipo{font-size:6.5px;font-weight:600;color:#ede9f8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rf-right{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.rf-kv{font-size:6.5px;font-weight:700;color:#ede9f8}
+.rf-kv.muted{font-weight:500;color:#7e7a9f}
+.rf-note{font-size:5.5px;color:#504c6b;font-style:italic;grid-column:1/-1;padding-left:0;margin-top:1px}
+.rf-intv{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:3px;padding:2px 0}
+.rf-rec{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:3px;padding:2px 0;align-items:center}
+.intv-chip{font-size:6px;font-weight:700;color:#10B981;background:#10B98118;padding:1px 4px;border-radius:2px}
+.rec-lbl{font-size:5.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#504c6b;margin-right:1px}
+.rf-rec span{font-size:6px;color:#7e7a9f}
 
 /* ── FOOTER */
-.pg-foot{margin-top:12px;padding-top:8px;border-top:1px solid #e4e4e7;display:flex;justify-content:space-between;align-items:center;font-size:6px;color:#a1a1aa}
-.pg-foot strong{color:#18181b;font-weight:800}
+.pg-foot{margin-top:10px;padding-top:7px;border-top:1px solid #2a2640;display:flex;justify-content:space-between;align-items:center;font-size:5.5px;color:#3d3959}
+.pg-foot strong{color:#504c6b;font-weight:800}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `;
 
