@@ -42,16 +42,20 @@ body::before{
 }
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
-/* ── HEADER */
-.hdr{
-  background:rgba(7,7,15,.82);
+/* ── STICKY TOP WRAPPER */
+.sticky-top{
+  position:sticky;top:0;z-index:20;
+  background:rgba(7,7,15,.95);
   backdrop-filter:blur(28px) saturate(1.8);
   -webkit-backdrop-filter:blur(28px) saturate(1.8);
+  box-shadow:0 4px 32px rgba(0,0,0,.4);
+}
+
+/* ── HEADER */
+.hdr{
   border-bottom:1px solid rgba(255,255,255,.07);
   padding:14px 18px;
   display:flex;align-items:center;gap:12px;
-  position:sticky;top:0;z-index:20;
-  box-shadow:0 4px 32px rgba(0,0,0,.4);
 }
 .back{
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
@@ -715,15 +719,17 @@ body::before{
 
 /* ═══ VOLUME TRACKER + SET CHIPS ══════════════════════════════════════════ */
 .vol-tracker{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:7px 14px;
+  display:flex;align-items:center;gap:5px;
+  padding:5px 14px;
   background:linear-gradient(90deg,rgba(139,92,246,.12),rgba(99,102,241,.08));
   border-bottom:1px solid rgba(139,92,246,.20);
+  overflow:hidden;
 }
-.vol-tracker-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);}
-.vol-tracker-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--primary2);letter-spacing:1px;line-height:1;}
-.vol-tracker-unit{font-size:12px;color:var(--muted);}
-.vol-tracker-ex{font-size:12px;color:var(--text);margin-top:2px;}
+.vol-tracker-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);flex-shrink:0;}
+.vol-tracker-val{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--primary2);letter-spacing:1px;line-height:1;flex-shrink:0;}
+.vol-tracker-unit{font-size:11px;color:var(--muted);flex-shrink:0;}
+.vol-tracker-sep{font-size:11px;color:var(--muted);flex-shrink:0;}
+.vol-tracker-ex{font-size:11px;color:var(--text);flex-shrink:0;}
 
 .set-chips-row{display:none;}
 .sch{display:none;}
@@ -772,21 +778,26 @@ body::before{
 
 <!-- MAIN APP -->
 <div id="sapp" style="display:none">
-  <div class="hdr">
-    <button class="back" onclick="if(confirm('Uscire? I progressi di questa sessione saranno cancellati.')){try{localStorage.removeItem(_sessKey);}catch(e){}history.back()}">←</button>
-    <div class="hdr-info">
-      <div class="hdr-name" id="hdr-name">—</div>
-      <div class="hdr-meta" id="hdr-meta">—</div>
+  <!-- Sticky top bar: header + progress + vol + nav dots -->
+  <div class="sticky-top">
+    <div class="hdr">
+      <button class="back" onclick="exitSession()">←</button>
+      <div class="hdr-info">
+        <div class="hdr-name" id="hdr-name">—</div>
+        <div class="hdr-meta" id="hdr-meta">—</div>
+      </div>
+      <div class="elapsed-timer" id="elapsed-timer">0:00</div>
+      <div class="live-pill">● LIVE</div>
     </div>
-    <div class="elapsed-timer" id="elapsed-timer">0:00</div>
-    <div class="live-pill">● LIVE</div>
+    <div class="prog-bar"><div class="prog-fill" id="pfill" style="width:0%"></div></div>
+    <div class="vol-tracker" id="vol-tracker">
+      <span class="vol-tracker-label">VOL</span>
+      <span class="vol-tracker-val" id="vol-val">0</span><span class="vol-tracker-unit">t</span>
+      <span class="vol-tracker-sep">·</span>
+      <span class="vol-tracker-ex" id="vol-ex-count">0/0 es.</span>
+    </div>
+    <div class="ex-nav" id="ex-nav"></div>
   </div>
-  <div class="prog-bar"><div class="prog-fill" id="pfill" style="width:0%"></div></div>
-  <div class="vol-tracker" id="vol-tracker">
-    <div><div class="vol-tracker-label">Volume sessione</div><div class="vol-tracker-ex" id="vol-ex-count">0 / 0 esercizi</div></div>
-    <div><span class="vol-tracker-val" id="vol-val">0</span><span class="vol-tracker-unit"> t</span></div>
-  </div>
-  <div class="ex-nav" id="ex-nav"></div>
   <div class="content" id="content"></div>
   <div class="bot-bar">
     <button class="prev-btn" onclick="nav(-1)">←</button>
@@ -885,6 +896,14 @@ let exs=[], setData={}, best1rm={}, newPRs=[], campoChecked={};
 let cur=0, startTs=Date.now();
 // localStorage key for this session
 const _sessKey=`rsc_prog_${AID}_${PROG||'quick'}_${WEEK}_${SESS||'0'}`;
+
+// Exit session: confirm, clear saved progress, go back
+window.exitSession=function(){
+  if(confirm('Uscire? I progressi di questa sessione saranno cancellati.')){
+    try{localStorage.removeItem(_sessKey);}catch(e){}
+    history.back();
+  }
+};
 
 function saveProgress(){
   try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs}));}catch(e){}
@@ -1338,8 +1357,9 @@ function renderPesi(ex,ei){
     const sdt=sd[s];
     if(sdt?.done&&sdt?.kg){
       const kg=parseFloat(sdt.kg)||0;
-      // Use actual reps logged, fallback to exercise target reps
-      const reps=parseFloat(sdt.reps)||parseFloat(ex.reps)||1;
+      // Use actual reps logged, fallback to exercise target reps (parse range strings like "5-8")
+      const rawReps=sdt.reps||ex.reps||'';
+      const reps=parseFloat(String(rawReps).split(/[-–]/)[0])||5;
       if(kg>0&&reps>0){
         // Epley: 1RM = kg * (1 + reps/30); for 1 rep return kg directly
         const e=reps===1?kg:Math.round(kg*(1+reps/30));
@@ -1776,8 +1796,9 @@ function checkPR(ex,ei,s){
   const d=setData[ei][s];
   if(!d?.kg||!d?.done)return;
   const kg=parseFloat(d.kg);
-  // Use actual reps logged, fallback to exercise target reps
-  const reps=parseFloat(d.reps)||parseFloat(ex.reps)||1;
+  // Use actual reps logged, fallback to exercise target reps (parse range strings like "5-8")
+  const rawReps=d.reps||ex.reps||'';
+  const reps=parseFloat(String(rawReps).split(/[-–]/)[0])||5;
   const e1rm=reps===1?kg:Math.round(kg*(1+reps/30));
   if(e1rm>(best1rm[ex.name]||0)){
     best1rm[ex.name]=e1rm;
