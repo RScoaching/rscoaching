@@ -869,6 +869,22 @@ const isQuick=p.get('quick')==='1';
 let athlete={}, session={};
 let exs=[], setData={}, best1rm={}, newPRs=[], campoChecked={};
 let cur=0, startTs=Date.now();
+// localStorage key for this session
+const _sessKey=`rsc_prog_${AID}_${PROG||'quick'}_${WEEK}_${SESS||'0'}`;
+
+function saveProgress(){
+  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs}));}catch(e){}
+}
+function loadProgress(){
+  try{
+    const raw=localStorage.getItem(_sessKey);
+    if(!raw)return;
+    const saved=JSON.parse(raw);
+    if(saved.setData)setData=saved.setData;
+    if(saved.campoChecked)campoChecked=saved.campoChecked;
+    if(saved.startTs)startTs=saved.startTs;
+  }catch(e){}
+}
 // History: {exName: [{kg, reps}, ...]} from last session containing each exercise
 let _prevKg={};
 let restIv=null, restTotal=0, restLeft=0;
@@ -943,7 +959,9 @@ function setup(){
     const m=Math.floor(secs/60),sc=secs%60;
     el.textContent=m+':'+(sc<10?'0':'')+sc;
   },1000);
+  loadProgress();
   renderExNav();render();
+  initExObserver();
 }
 
 // Add a set to an exercise
@@ -1126,8 +1144,16 @@ function renderExNav(){
     const allDone=checkAllDone(i);
     return `<div class="ex-dot${i===cur?' active':''}${allDone?' done':''}" onclick="jumpTo(${i})">${allDone?'✓':i+1}</div>`;
   }).join('');
+  // Scroll the nav bar horizontally to show current dot — don't use scrollIntoView (causes page scroll)
   const dot=el.children[cur];
-  if(dot)dot.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  if(dot){
+    const navLeft=el.scrollLeft;
+    const navRight=navLeft+el.offsetWidth;
+    const dotLeft=dot.offsetLeft;
+    const dotRight=dotLeft+dot.offsetWidth;
+    if(dotLeft<navLeft+20)el.scrollLeft=dotLeft-20;
+    else if(dotRight>navRight-20)el.scrollLeft=dotRight-el.offsetWidth+20;
+  }
 }
 
 function checkAllDone(i){
@@ -1219,6 +1245,7 @@ function renderCard(ei){
   if(focusedId){const el=document.getElementById(focusedId);if(el){el.focus();const len=el.value.length;try{el.setSelectionRange(len,len);}catch(e){}}}
   renderExNav();
   updateVolumeTracker();
+  saveProgress();
 }
 
 function render(){
