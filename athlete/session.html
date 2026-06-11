@@ -126,6 +126,13 @@ body::before{
   background:rgba(255,255,255,.02);
   border-bottom:1px solid var(--border);
 }
+.ex-num-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;border-radius:50%;
+  background:var(--primary);color:#fff;
+  font-size:10px;font-weight:700;
+  float:right;margin-left:6px;
+}
 .ex-card-name{
   font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:.8px;
   color:var(--white);line-height:1.1;
@@ -1235,7 +1242,7 @@ function renderCard(ei){
   // Rebuild only this card
   let inner='';
   if(ex._type==='nota')inner=renderNota(ex);
-  else if(ex._type==='cond')inner=renderCond(ex);
+  else if(ex._type==='cond')inner=renderCond(ex,ei);
   else if(ex._type==='campo')inner=renderCampo(ex,ei);
   else if(ex._type==='complex')inner=renderComplex(ex,ei);
   else inner=renderPesi(ex,ei);
@@ -1266,7 +1273,7 @@ function render(){
   const html=exs.map((ex,i)=>{
     let inner='';
     if(ex._type==='nota')inner=renderNota(ex);
-    else if(ex._type==='cond')inner=renderCond(ex);
+    else if(ex._type==='cond')inner=renderCond(ex,i);
     else if(ex._type==='campo')inner=renderCampo(ex,i);
     else if(ex._type==='complex')inner=renderComplex(ex,i);
     else inner=renderPesi(ex,i);
@@ -1389,6 +1396,7 @@ function renderPesi(ex,ei){
   return `<div class="ex-card">
     ${chipsHtml}
     <div class="ex-card-head">
+      <div class="ex-num-badge">${ei+1}</div>
       <span class="ex-type-pill tp-pesi">Pesi</span>
       <div class="ex-card-name">${ex.name}</div>
       <div class="ex-card-params">${paramsSummary}${pct>0?` · @${pct}% 1RM`:ex.carico?` · ${ex.carico}`:''}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
@@ -1416,6 +1424,7 @@ function renderPesi(ex,ei){
 function renderComplex(ex,ei){
   const sets=parseInt(ex.items[0]?.sets)||4;
   let html=`<div class="ex-card"><div class="ex-card-head">
+    <div class="ex-num-badge">${ei+1}</div>
     <span class="ex-type-pill tp-complex">Superset</span>
     <div class="ex-card-name">${ex.items.map(it=>it.name).join(' + ')}</div>
     <div class="ex-card-params">${sets} round · Rec ${ex.rest||"3'"} dopo ogni round</div>
@@ -1459,6 +1468,7 @@ function renderCampo(ex,ei){
   const intClr={BASSA:'#22C55E',MEDIA:'#F59E0B',ALTA:'#EF4444',MAX:'#8B5CF6'};
   return `<div class="ex-card">
     <div class="ex-card-head">
+      <div class="ex-num-badge">${ei+1}</div>
       <span class="ex-type-pill tp-campo">Campo</span>
       <div class="ex-card-name">${ex.name}</div>
       <div class="ex-card-params">${[ex.sets&&`${ex.sets}×`,ex.reps,ex.rest&&`rec ${ex.rest}`].filter(Boolean).join(' · ')}</div>
@@ -1478,10 +1488,11 @@ function renderCampo(ex,ei){
   </div>`;
 }
 
-function renderCond(ex){
+function renderCond(ex,ei){
   const ct=(ex.condType||'').toUpperCase();
   return `<div class="ex-card">
     <div class="ex-card-head">
+      ${ei!=null?`<div class="ex-num-badge">${ei+1}</div>`:''}
       <span class="cond-badge">${ct||'Conditioning'}</span>
       ${ex.duration?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">${ex.duration}</div>`:''}
     </div>
@@ -1686,11 +1697,15 @@ window.setKg=(ei,s,v,el)=>{
   if(el){el.classList.remove('suggested');}
   const doneBtn=el?.closest('.set-row')?.querySelector('.done-btn');
   if(doneBtn){doneBtn.classList.remove('ready');doneBtn.textContent='';}
+  // Aggiorna volume in tempo reale se la serie è già completata
+  if(setData[ei][s].done)updateVolumeTracker();
 };
 // Per-set actual reps (replaces global setReps)
 window.setRepsActual=(ei,s,v)=>{
   if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
   setData[ei][s].reps=v;
+  // Aggiorna volume in tempo reale se la serie è già completata
+  if(setData[ei][s].done)updateVolumeTracker();
 };
 window.setRpe=(ei,s,r)=>{if(!setData[ei][s])setData[ei][s]={};setData[ei][s].rpe=r;renderCard(ei);};
 window.toggleDone=function(ei,s){
