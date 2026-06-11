@@ -198,11 +198,13 @@ body::before{
 .set-row-delete:active{opacity:.5;}
 .set-row-delete svg{
   width:15px;height:15px;
-  stroke:var(--muted);stroke-width:1.8;fill:none;
+  stroke:var(--red);stroke-width:1.8;fill:none;
   stroke-linecap:round;stroke-linejoin:round;
   pointer-events:none;
   opacity:0;
+  transition:opacity .18s;
 }
+.set-row-inner.swiped .set-row-delete svg{opacity:1;}
 @media(prefers-reduced-motion:reduce){.set-row-inner{transition:none;}}
 .set-row-main{
   display:grid;grid-template-columns:28px 1fr 66px 54px 40px;
@@ -1136,7 +1138,37 @@ function checkAllDone(i){
   if(ex._type==='complex')return ex.items.every((_,ci)=>Object.values(sd[ci]||{}).every(s=>s.done));
   return Object.values(sd).length>0&&Object.values(sd).every(s=>s.done);
 }
-window.jumpTo=i=>{cur=i;render();updateVolumeTracker();};
+window.jumpTo=i=>{
+  cur=i;
+  renderExNav();
+  updateVolumeTracker();
+  const card=document.getElementById('ex-card-'+i);
+  if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+};
+
+let _exObserver=null;
+function initExObserver(){
+  if(_exObserver)_exObserver.disconnect();
+  const cards=document.querySelectorAll('.ex-card-wrap');
+  if(!cards.length)return;
+  _exObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        const i=parseInt(entry.target.dataset.ei);
+        if(!isNaN(i)&&i!==cur){
+          cur=i;
+          renderExNav();
+          document.getElementById('pfill').style.width=`${(cur/Math.max(exs.length,1))*100}%`;
+          const isLast=cur===exs.length-1;
+          const nb=document.getElementById('next-btn');
+          nb.textContent=isLast?'COMPLETA ✓':'PROSSIMO →';
+          nb.className='next-btn'+(isLast?' fin':'');
+        }
+      }
+    });
+  },{rootMargin:'-15% 0px -70% 0px',threshold:0});
+  cards.forEach(c=>_exObserver.observe(c));
+}
 
 
 function updateVolumeTracker(){
@@ -1166,33 +1198,41 @@ function updateVolumeTracker(){
 }
 
 function render(){
-  // Preserve input values and focus across re-render
   const savedVals={};
   document.querySelectorAll('#content input[id]').forEach(inp=>{savedVals[inp.id]=inp.value;});
   const focusedId=document.activeElement&&document.activeElement.id||null;
+  const savedScrollY=window.scrollY;
 
-  const ex=exs[cur];
   const isLast=cur===exs.length-1;
   const nb=document.getElementById('next-btn');
   nb.textContent=isLast?'COMPLETA ✓':'PROSSIMO →';
   nb.className='next-btn'+(isLast?' fin':'');
   document.getElementById('pfill').style.width=`${(cur/Math.max(exs.length,1))*100}%`;
   renderExNav();
-  if(!ex){document.getElementById('content').innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);">Nessun esercizio.</div>';return;}
-  let html='';
-  if(ex._type==='nota')html=renderNota(ex);
-  else if(ex._type==='cond')html=renderCond(ex);
-  else if(ex._type==='campo')html=renderCampo(ex,cur);
-  else if(ex._type==='complex')html=renderComplex(ex,cur);
-  else html=renderPesi(ex,cur);
+
+  if(!exs.length){document.getElementById('content').innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);">Nessun esercizio.</div>';return;}
+
+  // Render ALL exercises stacked vertically
+  const html=exs.map((ex,i)=>{
+    let inner='';
+    if(ex._type==='nota')inner=renderNota(ex);
+    else if(ex._type==='cond')inner=renderCond(ex);
+    else if(ex._type==='campo')inner=renderCampo(ex,i);
+    else if(ex._type==='complex')inner=renderComplex(ex,i);
+    else inner=renderPesi(ex,i);
+    return `<div id="ex-card-${i}" class="ex-card-wrap" data-ei="${i}">${inner}</div>`;
+  }).join('');
   document.getElementById('content').innerHTML=html;
 
-  // Restore values and focus
+  // Restore input values and focus
   Object.entries(savedVals).forEach(([id,v])=>{const el=document.getElementById(id);if(el&&v!==undefined)el.value=v;});
   if(focusedId){const el=document.getElementById(focusedId);if(el){el.focus();const len=el.value.length;try{el.setSelectionRange(len,len);}catch(e){}}}
 
-  if(ex._type==='cond')setupCondUI();
-  window.scrollTo(0,0);
+  // Restore scroll position (re-render must not jump to top)
+  window.scrollTo(0,savedScrollY);
+
+  if(exs.some(ex=>ex._type==='cond'))setupCondUI();
+  initExObserver();
 }
 
 function kgSugFor(ex){
@@ -1699,8 +1739,23 @@ function renderNota(ex){
 }
 
 window.nav=async dir=>{
-  if(dir===1){if(cur<exs.length-1){cur++;render();}else await finish();}
-  else{if(cur>0){cur--;render();}}
+  if(dir===1){
+    if(cur<exs.length-1){
+      cur++;
+      renderExNav();
+      const card=document.getElementById('ex-card-'+cur);
+      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+    } else {
+      await finish();
+    }
+  } else {
+    if(cur>0){
+      cur--;
+      renderExNav();
+      const card=document.getElementById('ex-card-'+cur);
+      if(card)card.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  }
 };
 
 let _sessionStats=null;
