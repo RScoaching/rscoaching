@@ -79,19 +79,26 @@ body::before{
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary2));transition:width .5s ease;}
 
 /* ── EX NAV DOTS */
-.ex-nav{display:flex;gap:6px;padding:8px 12px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.ex-nav{display:flex;gap:5px;padding:6px 10px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch;background:rgba(10,9,20,.92);border-bottom:1px solid var(--border);}
 .ex-nav::-webkit-scrollbar{display:none;}
 .ex-dot{
-  width:26px;height:26px;border-radius:50%;
+  min-width:32px;height:32px;border-radius:8px;
   border:2px solid var(--border2);background:rgba(255,255,255,.06);
-  color:var(--muted);font-family:'Bebas Neue',sans-serif;font-size:11px;
+  color:var(--muted);font-family:'Bebas Neue',sans-serif;font-size:13px;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:all .2s;flex-shrink:0;
+  cursor:pointer;transition:all .2s;flex-shrink:0;padding:0 5px;
 }
 .ex-dot.active{
   background:var(--primary);border-color:var(--orange);color:#fff;
   box-shadow:0 0 14px rgba(255,104,48,.45);
+  min-width:auto;max-width:140px;
 }
+.ex-dot .dot-name{
+  display:none;font-size:9px;font-family:sans-serif;letter-spacing:.3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;
+  margin-left:3px;font-weight:600;
+}
+.ex-dot.active .dot-name{display:inline;}
 .ex-dot.done{
   background:rgba(74,222,128,.15);border-color:var(--green);
   color:var(--green);
@@ -709,14 +716,14 @@ body::before{
 /* ═══ VOLUME TRACKER + SET CHIPS ══════════════════════════════════════════ */
 .vol-tracker{
   display:flex;align-items:center;justify-content:space-between;
-  padding:5px 12px;
-  background:rgba(139,92,246,.06);
-  border-bottom:1px solid rgba(139,92,246,.10);
+  padding:7px 14px;
+  background:linear-gradient(90deg,rgba(139,92,246,.12),rgba(99,102,241,.08));
+  border-bottom:1px solid rgba(139,92,246,.20);
 }
 .vol-tracker-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);}
-.vol-tracker-val{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--primary2);letter-spacing:1px;}
-.vol-tracker-unit{font-size:10px;color:var(--muted);}
-.vol-tracker-ex{font-size:11px;color:var(--text);}
+.vol-tracker-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--primary2);letter-spacing:1px;line-height:1;}
+.vol-tracker-unit{font-size:12px;color:var(--muted);}
+.vol-tracker-ex{font-size:12px;color:var(--text);margin-top:2px;}
 
 .set-chips-row{display:none;}
 .sch{display:none;}
@@ -766,7 +773,7 @@ body::before{
 <!-- MAIN APP -->
 <div id="sapp" style="display:none">
   <div class="hdr">
-    <button class="back" onclick="if(confirm('Uscire? I progressi non saranno salvati.'))history.back()">←</button>
+    <button class="back" onclick="if(confirm('Uscire? I progressi di questa sessione saranno cancellati.')){try{localStorage.removeItem(_sessKey);}catch(e){}history.back()}">←</button>
     <div class="hdr-info">
       <div class="hdr-name" id="hdr-name">—</div>
       <div class="hdr-meta" id="hdr-meta">—</div>
@@ -1149,7 +1156,12 @@ function renderExNav(){
   const el=document.getElementById('ex-nav');
   el.innerHTML=exs.map((ex,i)=>{
     const allDone=checkAllDone(i);
-    return `<div class="ex-dot${i===cur?' active':''}${allDone?' done':''}" onclick="jumpTo(${i})">${allDone?'✓':i+1}</div>`;
+    const isActive=i===cur;
+    const label=allDone?'✓':i+1;
+    // Short name for active dot
+    const name=ex.name||(ex.items?ex.items.map(it=>it.name).join('+'):'')||'—';
+    const shortName=name.length>14?name.slice(0,13)+'…':name;
+    return `<div class="ex-dot${isActive?' active':''}${allDone?' done':''}" onclick="jumpTo(${i})">${label}${isActive?`<span class="dot-name">${shortName}</span>`:''}</div>`;
   }).join('');
   // Scroll the nav bar horizontally to show current dot — don't use scrollIntoView (causes page scroll)
   const dot=el.children[cur];
@@ -1320,13 +1332,19 @@ function renderPesi(ex,ei){
   const totalSets=rows.reduce((a,r)=>a+(parseInt(r.sets)||1),0);
   const doneN=Object.values(sd).filter(s=>s.done).length;
 
-  // e1RM across all sets
+  // e1RM across all sets (Epley formula, uses actual reps done)
   let e1rm=0;
   for(let s=0;s<totalSets;s++){
-    if(sd[s]?.done&&sd[s]?.kg){
-      const repsForRow=ex.reps||1; // use primary reps for estimation
-      const e=Math.round(parseFloat(sd[s].kg)*(1+parseFloat(repsForRow)/30));
-      if(e>e1rm)e1rm=e;
+    const sdt=sd[s];
+    if(sdt?.done&&sdt?.kg){
+      const kg=parseFloat(sdt.kg)||0;
+      // Use actual reps logged, fallback to exercise target reps
+      const reps=parseFloat(sdt.reps)||parseFloat(ex.reps)||1;
+      if(kg>0&&reps>0){
+        // Epley: 1RM = kg * (1 + reps/30); for 1 rep return kg directly
+        const e=reps===1?kg:Math.round(kg*(1+reps/30));
+        if(e>e1rm)e1rm=e;
+      }
     }
   }
   const isPR=e1rm>0&&e1rm>(best1rm[ex.name]||0);
@@ -1757,8 +1775,10 @@ window.toggleCampo=ei=>{campoChecked[ei]=!campoChecked[ei];renderCard(ei);};
 function checkPR(ex,ei,s){
   const d=setData[ei][s];
   if(!d?.kg||!d?.done)return;
-  const kg=parseFloat(d.kg);const reps=parseFloat(ex.reps||1);
-  const e1rm=Math.round(kg*(1+reps/30));
+  const kg=parseFloat(d.kg);
+  // Use actual reps logged, fallback to exercise target reps
+  const reps=parseFloat(d.reps)||parseFloat(ex.reps)||1;
+  const e1rm=reps===1?kg:Math.round(kg*(1+reps/30));
   if(e1rm>(best1rm[ex.name]||0)){
     best1rm[ex.name]=e1rm;
     if(!newPRs.find(pr=>pr.name===ex.name))newPRs.push({name:ex.name,value:e1rm});
