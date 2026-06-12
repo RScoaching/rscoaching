@@ -2,12 +2,28 @@
 window.SIDEBAR_HTML = `
 <div class="sb-mob-bar" id="sb-mob-bar">
   <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
-  <div class="sb-mob-logo">RS<span>.</span>Coaching</div>
+  <div class="sb-mob-logo" style="display:flex;align-items:center;gap:8px;">
+    <div style="width:26px;height:26px;background:#FF6830;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(255,104,48,.4);">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:13px;color:#fff;letter-spacing:1px;line-height:1;">RS</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0px;justify-content:center;">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:10px;color:#8B5CF6;letter-spacing:3px;line-height:1.1;">RS</span>
+      <span style="font-size:6.5px;font-weight:700;color:rgba(248,250,255,.35);letter-spacing:2.5px;text-transform:uppercase;line-height:1.2;">COACHING</span>
+    </div>
+  </div>
 </div>
 <div class="sb-mob-overlay" id="sb-mob-ov"></div>
 <div class="sidebar" id="sb-sidebar">
   <div class="sb-top">
-    <div class="logo">RS<span>.</span>Coaching</div>
+    <div class="logo" style="display:flex;align-items:center;gap:9px;font-size:unset;letter-spacing:unset;filter:none;">
+      <div style="width:32px;height:32px;background:#FF6830;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 12px rgba(255,104,48,.4);">
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:#fff;letter-spacing:1px;line-height:1;">RS</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1px;justify-content:center;">
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:12px;color:#8B5CF6;letter-spacing:3.5px;line-height:1.1;">RS</span>
+        <span style="font-size:7px;font-weight:700;color:rgba(248,250,255,.28);letter-spacing:2.5px;text-transform:uppercase;line-height:1.2;">COACHING</span>
+      </div>
+    </div>
     <div class="logo-sub">Strength &amp; Conditioning</div>
   </div>
   <div class="nav-s">
