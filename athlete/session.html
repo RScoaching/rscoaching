@@ -148,6 +148,32 @@ body::before{
 .ex-video-link:active{background:rgba(139,92,246,.22);}
 .ex-card-params{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.5;}
 
+/* ── EX MUSCLE TAGS */
+.ex-tags-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+.musc-tag{
+  font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;
+  padding:2px 6px;border-radius:8px;
+  background:rgba(139,92,246,.10);color:var(--primary2);
+  border:1px solid rgba(139,92,246,.18);
+  font-family:'Inter',sans-serif;
+}
+/* ── COMPLETION ANIMATIONS */
+@keyframes setFlash{
+  0%{transform:scale(0.95);opacity:0.5}
+  60%{transform:scale(1.12);opacity:1}
+  100%{transform:scale(1);opacity:1}
+}
+@keyframes exAllDone{
+  0%{box-shadow:0 0 0 0 rgba(139,92,246,.5)}
+  50%{box-shadow:0 0 0 8px rgba(139,92,246,.0)}
+  100%{box-shadow:none}
+}
+.ex-card.all-done{animation:exAllDone .7s cubic-bezier(0.23,1,0.32,1) both;}
+@media(prefers-reduced-motion:reduce){
+  .done-btn.d{animation:none!important;}
+  .ex-card.all-done{animation:none!important;}
+}
+
 /* ── CUE */
 .cue-chip{
   background:rgba(255,209,102,.07);border:1px solid rgba(255,209,102,.18);
@@ -330,6 +356,7 @@ body::before{
 .done-btn.d{
   background:linear-gradient(135deg,#8B5CF6,#6D28D9);border-color:#8B5CF6;color:#fff;font-size:13px;font-weight:900;
   box-shadow:0 0 14px rgba(139,92,246,.55),inset 0 1px 0 rgba(255,255,255,.2);
+  animation:setFlash .38s cubic-bezier(0.23,1,0.32,1) both;
 }
 .done-btn.ready{
   border-color:rgba(139,92,246,.7);
@@ -1432,6 +1459,16 @@ function kgSugFor(ex){
   return kgD>0?kgD:(rm>0&&pct>0?Math.round(rm*pct/100/2.5)*2.5:0);
 }
 
+function getExInfo(name){
+  if(!window.EXERCISES_DB)return null;
+  return window.EXERCISES_DB.find(e=>e.name.toLowerCase().trim()===(name||'').toLowerCase().trim())||null;
+}
+function exTagsHtml(name){
+  const info=getExInfo(name);
+  if(!info||!info.group)return '';
+  return `<div class="ex-tags-row"><span class="musc-tag">${info.group}</span></div>`;
+}
+
 function renderPesi(ex,ei){
   const sets=parseInt(ex.sets)||3;
   const rm=best1rm[ex.name]||0;
@@ -1542,6 +1579,7 @@ function renderPesi(ex,ei){
       <span class="ex-type-pill tp-pesi">Pesi</span>
       <div class="ex-card-name">${ex.name}</div>
       <div class="ex-card-params">${paramsSummary}${pct>0?` · @${pct}% 1RM`:ex.carico?` · ${ex.carico}`:''}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
+      ${exTagsHtml(ex.name)}
       ${ex.cue?`<div class="cue-chip">${ex.cue}</div>`:''}
       ${_vidUrl?`<a href="${_vidUrl}" target="_blank" class="ex-video-link">▶ VIDEO</a>`:''}
     </div>
@@ -1570,6 +1608,7 @@ function renderComplex(ex,ei){
     <span class="ex-type-pill tp-complex">Superset</span>
     <div class="ex-card-name">${ex.items.map(it=>it.name).join(' + ')}</div>
     <div class="ex-card-params">${sets} round · Rec ${ex.rest||"3'"} dopo ogni round</div>
+    ${exTagsHtml(ex.items[0]?.name||'')}
   </div>`;
   ex.items.forEach((item,ci)=>{
     const kgSug=kgSugFor(item);
@@ -1627,6 +1666,7 @@ function renderCampo(ex,ei){
       <span class="ex-type-pill tp-campo">Campo</span>
       <div class="ex-card-name">${ex.name}</div>
       <div class="ex-card-params">${[ex.sets&&`${ex.sets}×`,ex.reps,ex.rest&&`rec ${ex.rest}`].filter(Boolean).join(' · ')}</div>
+      ${exTagsHtml(ex.name)}
       ${ex.cue?`<div class="cue-chip">${ex.cue}</div>`:''}
     </div>
     <div class="campo-item${ck?' ck':''}">
