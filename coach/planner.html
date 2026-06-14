@@ -107,6 +107,10 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .day-body{flex:1;padding:6px;overflow-y:auto;min-height:100px;}
 .sess-chip{border-radius:8px;padding:7px 9px;margin-bottom:5px;cursor:pointer;transition:all .15s;position:relative;border:1px solid transparent;}
 .sess-chip:hover{filter:brightness(1.12);}
+.sess-chip[draggable]{cursor:grab;}
+.sess-chip[draggable]:active{cursor:grabbing;}
+.sess-chip.dnd-dragging{opacity:.35;transform:scale(.96);}
+.day-body.dnd-over{background:rgba(139,92,246,.10);outline:2px dashed rgba(139,92,246,.45);outline-offset:-2px;border-radius:8px;}
 .sess-chip .sc-type{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;opacity:.8;}
 .sess-chip .sc-name{font-size:12px;font-weight:600;color:var(--white);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sess-chip .sc-del{position:absolute;top:4px;right:5px;background:none;border:none;color:rgba(255,255,255,.3);font-size:11px;cursor:pointer;padding:2px;}
@@ -1999,7 +2003,7 @@ function renderGrid(){
     const sessHtml=filteredSessions.map(s=>{
       const exCount=s.exercises?Object.keys(s.exercises).length:0;
       const exBadge=exCount?`<div style="font-size:9px;color:var(--muted);margin-top:2px;">💪 ${exCount} esercizi</div>`:'';
-      return `<div class="sess-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" onclick="openEdit(${i},'${s._key}')">
+      return `<div class="sess-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" draggable="true" data-day="${i}" data-key="${s._key}" onclick="openEdit(${i},'${s._key}')">
         <button class="sc-del" onclick="event.stopPropagation();delSess(${i},'${s._key}')" title="Elimina">✕</button>
         <button class="sc-copy-btn" onclick="event.stopPropagation();copySess(${i},'${s._key}')" title="Copia sessione">⎘</button>
         <div class="sc-type">${TYPE_LABELS[s.type]||s.type}</div>
@@ -2015,13 +2019,39 @@ function renderGrid(){
         <div class="day-month">${d.toLocaleDateString('it-IT',{month:'short'})}</div>
         ${tag}
       </div>
-      <div class="day-body">
+      <div class="day-body" data-day-idx="${i}">
         ${sessHtml}
         <button class="add-sess-btn" onclick="openAdd(${i})">+ Aggiungi</button>
         ${hasCopied?`<button class="paste-sess-btn" onclick="pasteSess(${i})">📋 Incolla</button>`:''}
       </div>
     </div>`;
   }).join('');
+  // Wire drag-and-drop after innerHTML is set
+  _bindDnD(grid);
+}
+
+function _bindDnD(grid){
+  if(window._currentVersionId) return; // read-only
+  grid.querySelectorAll('.sess-chip[draggable]').forEach(chip=>{
+    chip.addEventListener('dragstart',e=>{
+      chip.classList.add('dnd-dragging');
+      e.dataTransfer.setData('application/json',JSON.stringify({day:chip.dataset.day,key:chip.dataset.key}));
+      e.dataTransfer.effectAllowed='move';
+    });
+    chip.addEventListener('dragend',()=>chip.classList.remove('dnd-dragging'));
+  });
+  grid.querySelectorAll('.day-body').forEach(body=>{
+    body.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
+    body.addEventListener('dragenter',e=>{e.preventDefault();body.classList.add('dnd-over');});
+    body.addEventListener('dragleave',e=>{if(!body.contains(e.relatedTarget))body.classList.remove('dnd-over');});
+    body.addEventListener('drop',async e=>{
+      e.preventDefault();body.classList.remove('dnd-over');
+      let payload;try{payload=JSON.parse(e.dataTransfer.getData('application/json'));}catch(err){return;}
+      const toDay=parseInt(body.dataset.dayIdx);
+      if(String(payload.day)===String(toDay)) return;
+      await window.moveSess(parseInt(payload.day),payload.key,toDay);
+    });
+  });
 }
 
 // ── CONFIG SAVE
@@ -2154,6 +2184,37 @@ window.pasteSess=async function(dayIdx){
     if(window._restRefresh) window._restRefresh(wk);
   }
   showToast('✓ Sessione incollata');
+};
+
+// ── DRAG-AND-DROP: MOVE SESSION BETWEEN DAYS
+window.moveSess=async function(fromDay,key,toDay){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura');return;}
+  const wk=currentWk||window._currentPlanWk;
+  if(!wk) return;
+  const planData=window._athModeAid
+    ?(window._athPlanCache||{})[window._athModeAid+'_'+wk]||{}
+    :plans[wk]||{};
+  const s=(planData[String(fromDay)]||{})[key];
+  if(!s){showToast('⚠ Sessione non trovata');return;}
+  const entry={...s,ts:Date.now()};
+  const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+  try{
+    if(window._athModeAid){
+      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
+      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days/${fromDay}/${key}.json`,{method:'DELETE'});
+      const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days.json`);
+      if(r.ok) window._athPlanCache[window._athModeAid+'_'+wk]=await r.json()||{};
+      renderGrid();
+    } else if(typeof set!=='undefined'&&typeof db!=='undefined'){
+      await set(ref(db,`plans/${wk}/${toDay}/${key}`),entry);
+      await remove(ref(db,`plans/${wk}/${fromDay}/${key}`));
+    } else {
+      await fetch(_dbUrl+`/plans/${wk}/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
+      await fetch(_dbUrl+`/plans/${wk}/${fromDay}/${key}.json`,{method:'DELETE'});
+      if(window._restRefresh) window._restRefresh(wk);
+    }
+    showToast('✓ Sessione spostata');
+  }catch(err){showToast('⚠ Errore spostamento: '+err.message);}
 };
 
 // ── AUTO SUGGEST
