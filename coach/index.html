@@ -1251,13 +1251,26 @@ function renderDetSessions(aid,aSess){
   return merged.map(({date,ci,wlog})=>{
     const rpe=ci?.rpe||wlog?.avgRpe||0;
     const rpeCls=rpe>=9?'p-red':rpe>=7?'p-warn':'p-ok';
+    const SLBL={forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test atletico'};
     let pills='';
     if(rpe>0)pills+=`<span class="pill ${rpeCls}">RPE ${rpe}</span>`;
     if(ci?.doms)pills+=`<span class="pill p-gray">DOMS ${ci.doms}</span>`;
     if(ci?.sleep)pills+=`<span class="pill p-blue">💤 ${ci.sleep}</span>`;
-    if(wlog?.duration)pills+=`<span class="pill p-purple">⏱ ${wlog.duration}'</span>`;
-    if(wlog?.totalSets)pills+=`<span class="pill p-orange">${wlog.totalSets} set</span>`;
-    if(wlog?.newPRs?.length)pills+=`<span class="pill p-gold">🏆 ${wlog.newPRs.length} PR</span>`;
+    if(wlog?.type==='match'){
+      if(wlog.minuti)pills+=`<span class="pill p-red">⏱ ${wlog.minuti}'</span>`;
+      if(wlog.ruolo)pills+=`<span class="pill p-gray">${wlog.ruolo==='titolare'?'TIT':'SUB'}</span>`;
+      if(wlog.gol!=null&&wlog.gol>0)pills+=`<span class="pill p-gold">⚽ ${wlog.gol} gol</span>`;
+      if(wlog.assist!=null&&wlog.assist>0)pills+=`<span class="pill p-purple">${wlog.assist} assist</span>`;
+    } else if(wlog?.type==='test'){
+      if(wlog.sprint10)pills+=`<span class="pill p-orange">10m ${wlog.sprint10}s</span>`;
+      if(wlog.sprint30)pills+=`<span class="pill p-orange">30m ${wlog.sprint30}s</span>`;
+      if(wlog.salto)pills+=`<span class="pill p-purple">↑ ${wlog.salto}cm</span>`;
+      if(wlog.yoyo)pills+=`<span class="pill p-green">Yo-Yo ${wlog.yoyo}m</span>`;
+    } else {
+      if(wlog?.duration)pills+=`<span class="pill p-purple">⏱ ${wlog.duration}'</span>`;
+      if(wlog?.totalSets)pills+=`<span class="pill p-orange">${wlog.totalSets} set</span>`;
+      if(wlog?.newPRs?.length)pills+=`<span class="pill p-gold">🏆 ${wlog.newPRs.length} PR</span>`;
+    }
     // Build exercise details from wlog
     let exHtml='';
     if(wlog?.exercises){
@@ -1281,7 +1294,7 @@ function renderDetSessions(aid,aSess){
     return `<div class="sess-item">
       <div class="sess-date">${date||'—'}</div>
       <div class="sess-body">
-        <div class="sess-day">${ci?.day||wlog?.type||'—'}</div>
+        <div class="sess-day">${wlog?.sessName||ci?.day||(wlog?.type?SLBL[wlog.type]||wlog.type:null)||'—'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${pills}</div>
         ${note?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">"${note.slice(0,80)}"</div>`:''}
         ${exHtml}
