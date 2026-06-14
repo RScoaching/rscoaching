@@ -1412,13 +1412,68 @@ function renderDetLoad(aid,aSess){
   aSess.forEach(s=>{const d=new Date(s.ts);const mon=new Date(d);mon.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));const wk=mon.toISOString().slice(0,10);if(!wkLoad[wk])wkLoad[wk]=0;wkLoad[wk]+=(s.rpe||5);});
   const wks=Object.keys(wkLoad).sort().slice(-8);
   const vals=wks.map(w=>wkLoad[w]);
+  // Exercise progress: parse sessionLogs for this athlete
+  const exMap={};
+  Object.values(sessionLogs[aid]||{}).forEach(l=>{
+    if(!l.exercises)return;
+    const date=l.date||(l.ts?new Date(l.ts).toISOString().slice(0,10):null);
+    if(!date)return;
+    Object.values(l.exercises).forEach(ex=>{
+      if(!ex.name)return;
+      const kg=parseFloat(ex.actualKg||ex.kg||0);
+      if(kg<=0)return;
+      const reps=parseInt(ex.reps||1)||1;
+      const orm=reps>1?Math.round(kg*(1+reps/30)*10)/10:kg;
+      if(!exMap[ex.name])exMap[ex.name]=[];
+      exMap[ex.name].push({date,kg,orm});
+    });
+  });
+  // Dedupe per date (keep best orm per day)
+  const exSeries={};
+  Object.entries(exMap).forEach(([name,pts])=>{
+    const byDate={};
+    pts.forEach(p=>{if(!byDate[p.date]||p.orm>byDate[p.date].orm)byDate[p.date]=p;});
+    const sorted=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
+    if(sorted.length>=2)exSeries[name]=sorted;
+  });
+  const topEx=Object.entries(exSeries).sort((a,b)=>b[1].length-a[1].length).slice(0,4);
+  const exHtml=topEx.length?`
+  <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Progressi Esercizi (1RM stimato)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${topEx.map(([name,pts],i)=>{
+        const last=pts[pts.length-1];const first=pts[0];
+        const delta=last.orm-first.orm;
+        const sign=delta>=0?'+':'';
+        const dColor=delta>0?'var(--green)':delta<0?'var(--red)':'var(--muted)';
+        return `<div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px;">
+          <div style="font-size:11px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">${name}</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:6px;">
+            <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--primary);">${last.orm}kg</span>
+            <span style="font-size:10px;color:${dColor};">${sign}${delta.toFixed(1)}kg</span>
+            <span style="font-size:9px;color:var(--muted);margin-left:auto;">${pts.length} sessioni</span>
+          </div>
+          <div style="height:60px;"><canvas id="ex-${aid}-${i}"></canvas></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`:'';
   setTimeout(()=>{
     const c=document.getElementById(`lc-${aid}`);if(!c)return;
     if(c._chart)c._chart.destroy();
     c._chart=new Chart(c,{type:'bar',data:{labels:wks.map(w=>w.slice(5)),datasets:[{data:vals,backgroundColor:'rgba(255,104,48,.55)',borderRadius:5,borderSkipped:false}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#475569',font:{size:9}}},y:{ticks:{color:'#475569',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}}}}});
+    // Exercise progress charts
+    topEx.forEach(([name,pts],i)=>{
+      const ec=document.getElementById(`ex-${aid}-${i}`);if(!ec)return;
+      if(ec._chart)ec._chart.destroy();
+      ec._chart=new Chart(ec,{type:'line',data:{
+        labels:pts.map(p=>p.date.slice(5)),
+        datasets:[{data:pts.map(p=>p.orm),borderColor:'rgba(139,92,246,.85)',backgroundColor:'rgba(139,92,246,.08)',borderWidth:2,fill:true,tension:.35,pointRadius:2,pointBackgroundColor:'rgba(139,92,246,1)',pointBorderColor:'#07070F',pointBorderWidth:1}]
+      },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y}kg`}}},scales:{x:{ticks:{color:'#475569',font:{size:8}},grid:{display:false}},y:{ticks:{color:'#475569',font:{size:8}},grid:{color:'rgba(255,255,255,.04)'}}}}});
+    });
   },100);
-  return acwrHtml+`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`;
+  return acwrHtml+`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`+exHtml;
 }
 
 window.detTab=function(id,el){
@@ -1436,6 +1491,12 @@ window.detTab=function(id,el){
   if(id==='sessions'&&currentAid&&!sessionLogs[currentAid]){
     get(ref(db,`session_logs/${currentAid}`)).then(s=>{
       if(s.val()){sessionLogs[currentAid]=s.val();const el=document.getElementById('det-sessions');if(el)el.innerHTML=renderDetSessions(currentAid,Object.values(sessions[currentAid]||{}).sort((a,b)=>b.ts-a.ts));}
+    });
+  }
+  // Quando si apre Carico, ricarica session_logs se necessario e aggiorna sezione esercizi
+  if(id==='load'&&currentAid&&!sessionLogs[currentAid]){
+    get(ref(db,`session_logs/${currentAid}`)).then(s=>{
+      if(s.val()){sessionLogs[currentAid]=s.val();const el=document.getElementById('det-load');if(el){const aS=Object.values(sessions[currentAid]||{}).sort((a,b)=>b.ts-a.ts);el.innerHTML=renderDetLoad(currentAid,aS);}}
     });
   }
   if(id==='overview'&&currentAid){
