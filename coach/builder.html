@@ -771,16 +771,36 @@ function _getBldExCats(progType, sessType){
   return sessCats.filter(c=>allowed.has(c));
 }
 
-function _getBldExNames(progType, sessType){
+function _getBldExNames(progType, sessType, group){
   const cats=new Set(_getBldExCats(progType, sessType));
   const db=window.EXERCISES_DB||[];
   const seen=new Set();
   const names=[];
   db.forEach(function(e){
-    if(cats.has(e.cat) && !seen.has(e.name)){seen.add(e.name);names.push(e.name);}
+    if(cats.has(e.cat) && !seen.has(e.name)){
+      if(!group||(e.group||'')===(group)){seen.add(e.name);names.push(e.name);}
+    }
   });
   return names.sort(function(a,b){return a.localeCompare(b,'it');});
 }
+// Returns sorted list of groups available for given prog/sess type
+function _getBldExGroups(progType, sessType){
+  const cats=new Set(_getBldExCats(progType, sessType));
+  const db=window.EXERCISES_DB||[];
+  const gs=new Set();
+  db.forEach(e=>{if(cats.has(e.cat)&&e.group)gs.add(e.group);});
+  return [...gs].sort((a,b)=>a.localeCompare(b,'it'));
+}
+// Refresh datalist for exercise name input in add-ex / add-complex modals
+window._refreshBldExDl=function(dlId, progType, sessType){
+  const grpSel=document.getElementById('m-ex-group-filter');
+  const grp=grpSel?grpSel.value:'';
+  const names=_getBldExNames(progType, sessType, grp);
+  const dl=document.getElementById(dlId);
+  if(dl)dl.innerHTML=names.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
+  const cnt=document.getElementById('m-ex-count');
+  if(cnt)cnt.textContent=names.length+' esercizi';
+};
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
 const RUNNING_TYPES=['Attivazione','Riscaldamento','Fondo Lento','Progressivo','Ripetute','Soglia','Interval Training','Long Run','Fartlek','Collinare','Defaticamento','Testo libero'];
@@ -1876,9 +1896,18 @@ window.openModal=function(type,...args){
     const exNames=_getBldExNames(_progType, _sessType);
     const _ptLabel=(PROG_TYPES[_progType]?.label||'S&C');
     const _stLabel=(SESS_TYPES[_sessType]?.label||_sessType);
+    const _exGroups=_getBldExGroups(_progType, _sessType);
     mb.innerHTML=`<h3>${eid?'Modifica esercizio':'Aggiungi esercizio'}</h3>
       <div style="font-size:10px;color:var(--teal);font-weight:600;margin-bottom:10px;letter-spacing:.4px;">
-        📚 ${exNames.length} esercizi — ${_ptLabel} · ${_stLabel}
+        📚 <span id="m-ex-count">${exNames.length} esercizi</span> — ${_ptLabel} · ${_stLabel}
+      </div>
+      <div class="field">
+        <label>Filtra per gruppo muscolare</label>
+        <select id="m-ex-group-filter" onchange="window._refreshBldExDl('bld-ex-dl','${_progType}','${_sessType}')"
+          style="width:100%;padding:8px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);">
+          <option value="">— Tutti i gruppi —</option>
+          ${_exGroups.map(g=>`<option value="${g.replace(/"/g,'&quot;')}">${g}</option>`).join('')}
+        </select>
       </div>
       <div class="field"><label>Esercizio</label>
         <input type="text" id="m-ename" list="bld-ex-dl" value="${(e.name||'').replace(/"/g,'&quot;')}" placeholder="Digita o cerca dal database..." autocomplete="off"
@@ -1917,10 +1946,19 @@ window.openModal=function(type,...args){
     const _ptCx=programs[currentProgId]?.sport||'sc';
     const _stCx=p?.weeks?.[wid]?.sessions?.[args[1]]?.type||'pesi';
     const exNames=_getBldExNames(_ptCx,_stCx);
+    const _cxGroups=_getBldExGroups(_ptCx,_stCx);
     const dlOpts=exNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
     mb.innerHTML=`<h3>Aggiungi Complex / Superset</h3>
       <datalist id="bld-cx-dl">${dlOpts}</datalist>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Es. A1 Squat pesante + A2 CMJ esplosivo. L'atleta alterna i due esercizi per ogni round.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Es. A1 Squat pesante + A2 CMJ esplosivo. L'atleta alterna i due esercizi per ogni round.</div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Filtra esercizi per gruppo</label>
+        <select id="m-ex-group-filter" onchange="window._refreshBldExDl('bld-cx-dl','${_ptCx}','${_stCx}')"
+          style="width:100%;padding:7px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Inter',sans-serif;font-size:12px;color:var(--white);">
+          <option value="">— Tutti i gruppi —</option>
+          ${_cxGroups.map(g=>`<option value="${g.replace(/"/g,'&quot;')}">${g}</option>`).join('')}
+        </select>
+      </div>
       ${[1,2].map(n=>`
         <div style="background:var(--card2);border-radius:10px;padding:12px;margin-bottom:8px;">
           <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px;">Esercizio A${n}</div>
