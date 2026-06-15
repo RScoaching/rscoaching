@@ -2593,10 +2593,12 @@ window.exportBuilderPDF=function(){
         const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0)).filter(e=>e&&e.name);
         if(exs.length){
           const STC={W:'#94a3b8',BO:'#f59e0b',D:'#f97316',F:'#ef4444'};
+          const hasNotes=exs.some(e=>e.notes||e.note||e.cue);
+          const cols=hasNotes?6:5;
           let rows='';let lastCx='';
           exs.forEach(e=>{
             if(e.complexGroup&&e.complexLabel!==lastCx){
-              rows+='<tr class="cx-sep"><td colspan="5">Complex '+(e.complexLabel||'A')+'</td></tr>';
+              rows+='<tr class="cx-sep"><td colspan="'+cols+'">Complex '+(e.complexLabel||'A')+'</td></tr>';
               lastCx=e.complexLabel||'';
             }
             const load=[e.pct?'@'+e.pct+'%':'',e.rpe?'RPE '+e.rpe:''].filter(Boolean).join(' ');
@@ -2606,9 +2608,11 @@ window.exportBuilderPDF=function(){
               sd=e.setRows.map(r=>(r.type?'<span style="color:'+(STC[r.type]||'#94a3b8')+';font-size:6px;font-weight:700">['+r.type+']</span> ':'')+r.sets).join('<br>');
               rd=e.setRows.map(r=>r.reps||'—').join('<br>');
             } else {sd=e.sets||'—';rd=e.reps||'—';}
-            rows+='<tr><td class="en">'+cxB+e.name+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'—')+'</td><td class="nu">'+(e.rest||'—')+'</td></tr>';
+            const noteCell=hasNotes?'<td class="note-cell">'+(e.cue||e.notes||e.note||'')+'</td>':'';
+            rows+='<tr><td class="en">'+cxB+e.name+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'—')+'</td><td class="nu">'+(e.rest||'—')+'</td>'+noteCell+'</tr>';
           });
-          body='<table class="ex-tbl"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th></tr></thead><tbody>'+rows+'</tbody></table>';
+          const noteHeader=hasNotes?'<th class="note-th">Note / Cue</th>':'';
+          body='<table class="ex-tbl"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th>'+noteHeader+'</tr></thead><tbody>'+rows+'</tbody></table>';
         } else {
           body='<div class="empty-body">Nessun esercizio</div>';
         }
@@ -2679,7 +2683,7 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:8px;c
 .sw{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start}
 
 /* ── SESSION CARD */
-.sc{background:#141220;border:1px solid #2a2640;border-radius:4px;overflow:hidden;flex:1 1 180px;max-width:280px;min-width:130px}
+.sc{background:#141220;border:1px solid #2a2640;border-radius:4px;overflow:hidden;flex:1 1 180px;max-width:280px;min-width:130px;page-break-inside:avoid;break-inside:avoid}
 .sc--corsa{flex:0 1 170px;max-width:210px}
 .sc--recupero{flex:0 0 120px;max-width:150px}
 .sc--conditioning{flex:0 1 160px;max-width:200px}
@@ -2704,6 +2708,8 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:8px;c
 .nu{text-align:center;color:#9d97c0;white-space:nowrap}
 .cx-sep td{background:#1a1533;font-size:5.5px;font-weight:700;color:#8B5CF6;text-transform:uppercase;letter-spacing:.5px;padding:2.5px 5px}
 .cx-b{display:inline-block;font-size:5.5px;font-weight:800;padding:0 2px;border-radius:2px;margin-right:2px}
+.note-cell{font-size:6px;color:#7e7a9f;font-style:italic;max-width:80px;word-break:break-word}
+.note-th{text-align:left!important;color:#3d3959}
 
 /* ── CONDITIONING */
 .c-cond{padding:5px 7px}
