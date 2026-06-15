@@ -427,6 +427,21 @@ body::before{
 }
 .add-sr-btn:hover{border-color:var(--orange);color:var(--orange);}
 
+/* ── BULK UPDATE BAR ── */
+.bulk-bar{
+  display:none;flex-wrap:wrap;align-items:center;gap:8px;
+  padding:8px 10px;margin-bottom:10px;
+  background:rgba(139,92,246,.08);
+  border:1px solid rgba(139,92,246,.22);
+  border-radius:10px;
+}
+.bulk-bar label{font-size:11px;color:var(--muted);margin-right:2px;}
+.bulk-bar .bulk-inp{
+  width:64px;padding:5px 7px;
+  background:var(--surface3);border:1px solid var(--border2);border-radius:7px;
+  font-size:12px;color:#fff;font-family:'Inter',sans-serif;
+}
+.ex-block.bulk-mode{padding-left:36px;position:relative;}
 /* ── MODAL / OVERLAY ── */
 .overlay{
   position:fixed;inset:0;
@@ -1356,17 +1371,27 @@ function renderSessionCard(wid,sid,s){
         <div class="sess-type-lbl">${st.label} · ${exs.length} esercizi</div>
       </div>
       <div class="sess-actions-bar" onclick="event.stopPropagation()">
+        <button class="btn btn-outline btn-sm" title="Selezione multipla" onclick="toggleBulkMode('${sid}')">☑</button>
         <button class="btn btn-outline btn-sm" onclick="openModal('edit-sess','${wid}','${sid}')">✏</button>
         <button class="btn btn-red btn-sm" onclick="deleteSession('${wid}','${sid}')">🗑</button>
       </div>
       <div class="sess-chevron">▾</div>
     </div>
     <div class="sess-body" id="sess-body-${sid}" style="display:none;">
+      <div class="bulk-bar" id="bulk-bar-${sid}">
+        <span style="font-size:11px;font-weight:600;color:var(--primary);">Bulk update selezionati:</span>
+        <label>Serie<input type="number" id="bulk-sets-${sid}" class="bulk-inp" min="1" max="20" placeholder="—"></label>
+        <label>Reps<input type="text" id="bulk-reps-${sid}" class="bulk-inp" placeholder="—"></label>
+        <label>%1RM<input type="text" id="bulk-load-${sid}" class="bulk-inp" placeholder="—"></label>
+        <button class="btn btn-purple btn-sm" onclick="applyBulkUpdate('${sid}','${wid}')">Applica</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleBulkMode('${sid}')">✕ Esci</button>
+      </div>
       ${exHtml}
       <div class="add-row" style="margin-top:8px;">
         ${s.type==='conditioning'?`<button class="btn btn-purple btn-sm" onclick="openModal('edit-cond','${wid}','${sid}')">✏ Modifica workout</button>`:s.type==='corsa'?`<button class="btn btn-purple btn-sm" onclick="openModal('edit-corsa','${wid}','${sid}')">✏ Modifica corsa</button>`:`
         <button class="btn btn-purple btn-sm" onclick="openModal('add-ex','${wid}','${sid}')">+ Esercizio</button>
         <button class="btn btn-outline btn-sm" onclick="openModal('add-complex','${wid}','${sid}')">🔁 Complex</button>
+        <button class="btn btn-outline btn-sm" title="Salva sessione come template" onclick="saveSessionTemplate('${wid}','${sid}')">💾 Salva template</button>
         `}
       </div>
     </div>
@@ -1450,7 +1475,7 @@ function renderExBlock(wid,sid,eid,e,inComplex){
     <div class="ex-block-head">
       <span class="ex-drag-handle" title="Trascina per riordinare">⠿</span>
       <div class="ex-info">
-        <div class="ex-name">${e.name||'—'}</div>
+        <div class="ex-name">${inComplex&&e.complexLabel?`<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:rgba(139,92,246,.18);color:var(--primary);margin-right:5px;vertical-align:middle;">${e.complexLabel}</span>`:''}${e.name||'—'}</div>
         ${e.cue?`<div class="ex-cue">💡 ${e.cue}</div>`:''}
         <div class="ex-params">${params.join(' · ')||'—'}</div>
       </div>
@@ -1749,8 +1774,10 @@ window.openModal=function(type,...args){
 
   if(type==='templates'){
     const [wid]=args;
+    // Show modal immediately with loading state
     mb.innerHTML=`<h3>🗂 Template Sessioni</h3>
       <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Aggiungi sessioni pre-costruite alla settimana corrente.</div>
+      <div id="custom-tmpl-section" style="margin-bottom:16px;"><div style="font-size:12px;color:var(--muted);padding:8px 0;">Caricamento template salvati…</div></div>
       <div class="tmpl-grid">
         ${SESSION_TEMPLATES.map(t=>`
           <div class="tmpl-card" onclick="applyTemplate('${t.id}','${wid}')">
@@ -1762,6 +1789,34 @@ window.openModal=function(type,...args){
       </div>
       <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button></div>`;
     document.getElementById('modal').classList.add('open');
+    // Load custom templates from Firebase
+    const coachId=sessionStorage.getItem('rsc_pin')||'raoul';
+    get(ref(db,`templates/${coachId}`)).then(snap=>{
+      const section=document.getElementById('custom-tmpl-section');
+      if(!section)return;
+      if(!snap.exists()){section.innerHTML='';return;}
+      const tmplData=snap.val();
+      const entries=Object.entries(tmplData).sort((a,b)=>(b[1].savedAt||0)-(a[1].savedAt||0));
+      section.innerHTML=`
+        <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">I tuoi template</div>
+        <div class="tmpl-grid" style="margin-bottom:4px;">
+          ${entries.map(([tid,t])=>`
+            <div class="tmpl-card" style="position:relative;">
+              <div style="position:absolute;top:6px;right:6px;z-index:2;">
+                <button style="background:rgba(239,68,68,.15);border:none;color:#ef4444;border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;" onclick="event.stopPropagation();deleteCustomTemplate('${tid}','${coachId}');this.closest('.tmpl-card').remove();" title="Elimina template">✕</button>
+              </div>
+              <div class="tmpl-icon" onclick="applyCustomTemplate('${tid}','${wid}','${coachId}')">💾</div>
+              <div class="tmpl-name" onclick="applyCustomTemplate('${tid}','${wid}','${coachId}')">${t.name||'Template'}</div>
+              <div class="tmpl-desc" onclick="applyCustomTemplate('${tid}','${wid}','${coachId}')">${(t.exercises||[]).length} esercizi · ${t.type||'pesi'}</div>
+              <span class="tmpl-badge" style="background:rgba(139,92,246,.12);color:var(--primary);">Custom</span>
+            </div>`).join('')}
+        </div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0 10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Template predefiniti</div>`;
+    }).catch(()=>{
+      const section=document.getElementById('custom-tmpl-section');
+      if(section)section.innerHTML='';
+    });
     return;
   }
 
@@ -2272,14 +2327,43 @@ function renderSetRowsList(){
   tbody.innerHTML=window._setRows.map((r,i)=>`
     <tr>
       <td class="sr-type">
-        <select class="sr-inp" onchange="window._setRows[${i}].type=this.value;renderSetRowsList()">
+        <select class="sr-inp" data-row="${i}" data-col="0" onchange="window._setRows[${i}].type=this.value;renderSetRowsList()">
           ${Object.entries(ST_LABELS).map(([v,d])=>`<option value="${v}"${r.type===v?' selected':''}>${d.label}</option>`).join('')}
         </select>
       </td>
-      <td class="sr-sets"><input class="sr-inp" type="number" value="${r.sets}" min="1" max="20" style="text-align:center;" oninput="window._setRows[${i}].sets=+this.value"></td>
-      <td class="sr-reps"><input class="sr-inp" type="text" value="${r.reps}" placeholder='8 / "30 / 8-12' oninput="window._setRows[${i}].reps=this.value"></td>
+      <td class="sr-sets"><input class="sr-inp" type="number" data-row="${i}" data-col="1" value="${r.sets}" min="1" max="20" style="text-align:center;" oninput="window._setRows[${i}].sets=+this.value"></td>
+      <td class="sr-reps"><input class="sr-inp" type="text" data-row="${i}" data-col="2" value="${r.reps}" placeholder='8 / "30 / 8-12' oninput="window._setRows[${i}].reps=this.value"></td>
       <td class="sr-rm"><button class="sr-rm-btn" onclick="removeSetRow(${i})" title="Rimuovi">&times;</button></td>
     </tr>`).join('');
+  _attachSrNavigation();
+}
+
+function _attachSrNavigation(){
+  const tbody=document.getElementById('sr-list');
+  if(!tbody||tbody._navAttached)return;
+  tbody._navAttached=true;
+  tbody.addEventListener('keydown',function(e){
+    const el=e.target;
+    if(!el.matches('.sr-inp[data-col]'))return;
+    const row=+el.dataset.row;
+    const col=+el.dataset.col;
+    const totalRows=window._setRows.length;
+    if(e.key==='Tab'){
+      e.preventDefault();
+      if(!e.shiftKey&&col===2){
+        if(row===totalRows-1){window.addSetRow();setTimeout(()=>{document.querySelector(`#sr-list .sr-inp[data-row="${row+1}"][data-col="1"]`)?.focus()},40);}
+        else{document.querySelector(`#sr-list .sr-inp[data-row="${row+1}"][data-col="1"]`)?.focus();}
+      } else if(e.shiftKey&&col===0){
+        if(row>0)document.querySelector(`#sr-list .sr-inp[data-row="${row-1}"][data-col="2"]`)?.focus();
+      } else {
+        document.querySelector(`#sr-list .sr-inp[data-row="${row}"][data-col="${e.shiftKey?col-1:col+1}"]`)?.focus();
+      }
+    } else if(e.key==='Enter'){
+      e.preventDefault();
+      if(row===totalRows-1){window.addSetRow();setTimeout(()=>{document.querySelector(`#sr-list .sr-inp[data-row="${row+1}"][data-col="1"]`)?.focus()},40);}
+      else{document.querySelector(`#sr-list .sr-inp[data-row="${row+1}"][data-col="1"]`)?.focus();}
+    }
+  });
 }
 window.addSetRow=function(){
   const last=window._setRows[window._setRows.length-1]||{};
@@ -2290,6 +2374,90 @@ window.removeSetRow=function(i){
   if(window._setRows.length<=1)return;
   window._setRows.splice(i,1);
   renderSetRowsList();
+};
+// ─────────────────────────────────────────────────────────────────────
+
+// ─── BULK UPDATE ──────────────────────────────────────────────────────
+window.toggleBulkMode=function(sid){
+  const sessBody=document.getElementById('sess-body-'+sid);
+  if(!sessBody)return;
+  const bulkBar=document.getElementById('bulk-bar-'+sid);
+  const isActive=bulkBar&&bulkBar.style.display==='flex';
+  if(isActive){
+    sessBody.querySelectorAll('.ex-bulk-cb').forEach(cb=>cb.remove());
+    sessBody.querySelectorAll('.ex-block').forEach(bl=>{bl.classList.remove('bulk-mode');bl.style.position='';});
+    if(bulkBar)bulkBar.style.display='none';
+  } else {
+    sessBody.querySelectorAll('.ex-block').forEach(bl=>{
+      bl.classList.add('bulk-mode');
+      if(!bl.querySelector('.ex-bulk-cb')){
+        const cb=document.createElement('input');
+        cb.type='checkbox';cb.className='ex-bulk-cb';
+        Object.assign(cb.style,{position:'absolute',left:'10px',top:'50%',transform:'translateY(-50%)',width:'16px',height:'16px',accentColor:'var(--primary)',cursor:'pointer',zIndex:'2'});
+        bl.prepend(cb);
+      }
+    });
+    if(bulkBar)bulkBar.style.display='flex';
+  }
+};
+
+window.applyBulkUpdate=async function(sid,wid){
+  const sessBody=document.getElementById('sess-body-'+sid);
+  if(!sessBody)return;
+  const checked=[...sessBody.querySelectorAll('.ex-bulk-cb:checked')];
+  if(!checked.length){showToast('Seleziona almeno un esercizio');return;}
+  const bulkSets=document.getElementById('bulk-sets-'+sid)?.value?.trim();
+  const bulkReps=document.getElementById('bulk-reps-'+sid)?.value?.trim();
+  const bulkLoad=document.getElementById('bulk-load-'+sid)?.value?.trim();
+  if(!bulkSets&&!bulkReps&&!bulkLoad){showToast('Inserisci almeno un valore');return;}
+  const updates={};
+  checked.forEach(cb=>{
+    const eid=cb.closest('.ex-block')?.dataset.eid;
+    if(!eid)return;
+    const base=`programs/${currentProgId}/weeks/${wid}/sessions/${sid}/exercises/${eid}`;
+    if(bulkSets)updates[`${base}/sets`]=+bulkSets;
+    if(bulkReps)updates[`${base}/reps`]=bulkReps;
+    if(bulkLoad)updates[`${base}/pct`]=bulkLoad;
+  });
+  await update(ref(db),updates);
+  showToast(`✓ Aggiornati ${checked.length} esercizi`);
+};
+// ─────────────────────────────────────────────────────────────────────
+
+// ─── TEMPLATE SAVE/LOAD ───────────────────────────────────────────────
+window.saveSessionTemplate=function(wid,sid){
+  const name=prompt('Nome del template:','');
+  if(!name?.trim())return;
+  const coachId=sessionStorage.getItem('rsc_pin')||'raoul';
+  const sess=programs[currentProgId]?.weeks?.[wid]?.sessions?.[sid];
+  if(!sess){showToast('Sessione non trovata');return;}
+  const rawExs=sess.exercises?Object.values(sess.exercises):[];
+  push(ref(db,`templates/${coachId}`),{
+    name:name.trim(),
+    type:sess.type||'pesi',
+    exercises:rawExs,
+    savedAt:Date.now()
+  }).then(()=>showToast('✓ Template salvato!'));
+};
+
+window.applyCustomTemplate=async function(tid,wid,coachId){
+  const snap=await get(ref(db,`templates/${coachId}/${tid}`));
+  if(!snap.exists())return;
+  const t=snap.val();
+  const sessRef=ref(db,`programs/${currentProgId}/weeks/${wid}/sessions`);
+  const newSessRef=await push(sessRef,{
+    name:t.name,type:t.type||'pesi',order:Date.now()
+  });
+  const exs=t.exercises||[];
+  for(let i=0;i<exs.length;i++){
+    await push(ref(db,`${newSessRef.key?`programs/${currentProgId}/weeks/${wid}/sessions/${newSessRef.key}/exercises`:''}`),{...exs[i],order:i});
+  }
+  closeModal();showToast('✓ Template caricato!');
+};
+
+window.deleteCustomTemplate=function(tid,coachId){
+  if(!confirm('Eliminare questo template?'))return;
+  remove(ref(db,`templates/${coachId}/${tid}`)).then(()=>showToast('✓ Template eliminato'));
 };
 // ─────────────────────────────────────────────────────────────────────
 
