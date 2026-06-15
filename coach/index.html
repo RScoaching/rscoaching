@@ -290,6 +290,14 @@ body::after{
 .lv-2{background:rgba(245,158,11,.1);color:var(--amber);}
 .lv-3{background:rgba(99,102,241,.10);color:var(--purple);}
 
+/* ── Sessions filters ── */
+.sess-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:rgba(16,14,26,.92);border:1px solid rgba(255,255,255,.08);border-radius:14px;}
+.sess-filters select,.sess-filters input[type=date]{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:9px;color:var(--white);font-family:'Inter',sans-serif;font-size:12px;padding:7px 11px;-webkit-appearance:none;cursor:pointer;transition:border-color .18s;}
+.sess-filters select:focus,.sess-filters input[type=date]:focus{outline:none;border-color:rgba(255,104,48,.5);}
+.sess-filters select option{background:#12101e;color:var(--white);}
+.date-sep{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:rgba(248,250,255,.28);padding:14px 0 6px;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:6px;}
+.date-sep:first-child{padding-top:0;}
+
 /* ── Detail panel ── */
 .detail{
   background:rgba(16,14,28,.88);
@@ -894,6 +902,15 @@ body::after{
 <!-- SESSIONS -->
 <div class="page" id="page-sessions">
   <div class="pg-head"><div><div class="pg-title">Tutte le Sedute</div><div class="pg-sub">Storico check-in atleti</div></div></div>
+  <div class="sess-filters">
+    <select id="sess-ath-sel" onchange="sessAthFilter(this.value)">
+      <option value="">Tutti gli atleti</option>
+    </select>
+    <input type="date" id="sess-from" onchange="sessDateFilter()" title="Da data">
+    <input type="date" id="sess-to" onchange="sessDateFilter()" title="A data">
+    <button class="btn btn-outline btn-sm" onclick="sessReset()">Reset</button>
+    <span id="sess-count" style="font-size:11px;color:var(--muted);margin-left:auto;align-self:center;"></span>
+  </div>
   <div id="all-sessions-list"></div>
 </div>
 
@@ -1835,21 +1852,82 @@ function renderDB(){
 window.dbSearch=function(v){_dbSearch=v.toLowerCase();renderDB();}
 window.dbFilter=function(v){_dbFilter=v;renderDB();}
 
-// ── ALL SESSIONS
+// ── ALL SESSIONS – filter state
+let _sessAth='', _sessFrom='', _sessTo='';
+window.sessAthFilter=function(v){_sessAth=v;renderAllSessions();}
+window.sessDateFilter=function(){
+  _sessFrom=document.getElementById('sess-from')?.value||'';
+  _sessTo=document.getElementById('sess-to')?.value||'';
+  renderAllSessions();
+}
+window.sessReset=function(){
+  _sessAth='';_sessFrom='';_sessTo='';
+  const sel=document.getElementById('sess-ath-sel');
+  if(sel)sel.value='';
+  const f=document.getElementById('sess-from');if(f)f.value='';
+  const t=document.getElementById('sess-to');if(t)t.value='';
+  renderAllSessions();
+}
+
 function renderAllSessions(){
-  const all=[];
-  Object.entries(sessions).forEach(([aid,aS])=>{Object.values(aS).forEach(s=>{all.push({...s,athName:athletes[aid]?.name||'—'});});});
+  // Populate athlete dropdown if needed
+  const sel=document.getElementById('sess-ath-sel');
+  if(sel&&sel.options.length<=1){
+    Object.entries(athletes).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'')).forEach(([aid,a])=>{
+      const o=document.createElement('option');o.value=aid;o.textContent=a.name||aid;sel.appendChild(o);
+    });
+    if(_sessAth)sel.value=_sessAth;
+  }
+
+  // Build full list
+  let all=[];
+  Object.entries(sessions).forEach(([aid,aS])=>{
+    Object.values(aS).forEach(s=>{all.push({...s,aid,athName:athletes[aid]?.name||'—'});});
+  });
   all.sort((a,b)=>b.ts-a.ts);
-  document.getElementById('all-sessions-list').innerHTML=all.slice(0,40).map(s=>`
-    <div class="live-row">
-      <div class="live-av">${ini(s.athName)}</div>
-      <div style="flex:1;"><div style="font-weight:600;font-size:13px;color:var(--white);">${s.athName}</div><div style="font-size:11px;color:var(--muted);">${s.date||'—'} · ${s.day||'—'}</div></div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;">
-        ${s.rpe?`<span class="pill ${s.rpe>=9?'p-red':s.rpe>=7?'p-warn':'p-ok'}">RPE ${s.rpe}</span>`:''}
-        ${s.doms?`<span class="pill p-gray">D:${s.doms}</span>`:''}
-        ${s.sleep?`<span class="pill p-blue">💤${s.sleep}</span>`:''}
-      </div>
-    </div>`).join('')||'<div class="empty">Nessuna seduta.</div>';
+
+  // Apply filters
+  if(_sessAth)all=all.filter(s=>s.aid===_sessAth);
+  if(_sessFrom)all=all.filter(s=>s.date&&s.date>=_sessFrom);
+  if(_sessTo)all=all.filter(s=>s.date&&s.date<=_sessTo);
+
+  // Update count
+  const cnt=document.getElementById('sess-count');
+  if(cnt)cnt.textContent=all.length?`${all.length} sedut${all.length===1?'a':'e'}`:'';
+
+  if(!all.length){
+    document.getElementById('all-sessions-list').innerHTML='<div class="empty">Nessuna seduta trovata.</div>';
+    return;
+  }
+
+  // Group by date
+  const byDate={};
+  all.forEach(s=>{const d=s.date||'—';if(!byDate[d])byDate[d]=[];byDate[d].push(s);});
+
+  const html=Object.entries(byDate).map(([date,rows])=>{
+    const rowsHtml=rows.map(s=>{
+      const rpeClass=s.rpe>=9?'p-red':s.rpe>=7?'p-warn':'p-ok';
+      const wellness=[];
+      if(s.rpe)wellness.push(`<span class="pill ${rpeClass}">RPE ${s.rpe}</span>`);
+      if(s.doms)wellness.push(`<span class="pill p-gray">DOMS ${s.doms}</span>`);
+      if(s.sleep)wellness.push(`<span class="pill p-blue">Sonno ${s.sleep}</span>`);
+      if(s.mood)wellness.push(`<span class="pill p-purple">Umore ${s.mood}</span>`);
+      const subLine=s.day||'';
+      return `<div class="live-row">
+        <div class="live-av">${ini(s.athName)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.athName}</div>
+          ${subLine?`<div style="font-size:11px;color:var(--muted);">${subLine}</div>`:''}
+          ${s.note?`<div style="font-size:11px;color:rgba(248,250,255,.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.note}</div>`:''}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">${wellness.join('')}</div>
+      </div>`;
+    }).join('');
+    const dateLabel=date!=='—'?new Date(date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):date;
+    return `<div class="date-sep">${dateLabel} <span style="opacity:.6;font-weight:500;">(${rows.length})</span></div>${rowsHtml}`;
+  }).join('');
+
+  document.getElementById('all-sessions-list').innerHTML=html;
 }
 
 // ── MODAL
