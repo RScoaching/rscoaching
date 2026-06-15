@@ -111,6 +111,13 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);heig
 .sess-chip[draggable]:active{cursor:grabbing;}
 .sess-chip.dnd-dragging{opacity:.35;transform:scale(.96);}
 .day-body.dnd-over{background:rgba(139,92,246,.10);outline:2px dashed rgba(139,92,246,.45);outline-offset:-2px;border-radius:8px;}
+.week-row[draggable]{cursor:grab;}
+.week-row[draggable]:active{cursor:grabbing;}
+.week-row.dnd-dragging{opacity:.4;transform:scale(.98);}
+.week-row.dnd-over{outline:2px dashed var(--teal);outline-offset:-2px;background:rgba(45,212,191,.08);}
+.bulk-day-lbl{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text);background:rgba(255,255,255,.04);border-radius:6px;padding:5px 8px;cursor:pointer;user-select:none;}
+.bulk-day-lbl:hover{background:rgba(255,255,255,.08);}
+.bulk-day-lbl input[type=checkbox]{accent-color:var(--primary);width:14px;height:14px;}
 .sess-chip .sc-type{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;opacity:.8;}
 .sess-chip .sc-name{font-size:12px;font-weight:600;color:var(--white);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sess-chip .sc-del{position:absolute;top:4px;right:5px;background:none;border:none;color:rgba(255,255,255,.3);font-size:11px;cursor:pointer;padding:2px;}
@@ -315,6 +322,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
         <button class="btn btn-outline btn-sm" id="copy-wk-btn" onclick="copyWeekToClipboard()" title="Copia questa settimana">⎘ Copia sett.</button>
         <button class="btn btn-teal btn-sm" id="paste-wk-btn" onclick="pasteWeek()" style="display:none;" title="Incolla settimana copiata">📋 Incolla</button>
+        <button class="btn btn-outline btn-sm" onclick="openBulkApply()" title="Assegna stesso tipo a più giorni">⊞ Bulk</button>
         <button class="btn btn-red btn-sm" onclick="clearWeek()" title="Svuota tutti i giorni della settimana">🗑 Svuota sett.</button>
         <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia atleti</button>
         <button class="btn btn-outline btn-sm" onclick="exportPlannerPDF()">📄 PDF</button>
@@ -1820,7 +1828,7 @@ onValue(ref(db,'plans'),s=>{
   plans=s.val()||{};
   window._plansCache=plans;           // share with standalone renderer
   window._calRender(window._calDate); // refresh calendar with Firebase data
-  if(currentWk)renderEditor();
+  if(currentWk)renderGrid();
 });
 onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();});
 
@@ -1895,7 +1903,7 @@ function renderCalendar(){
 
     const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
 
-    return `<div class="week-row${isSelected?' selected':''}" onclick="selectWeek('${w.key}')">
+    return `<div class="week-row${isSelected?' selected':''}" draggable="true" data-wk="${w.key}" onclick="selectWeek('${w.key}')">
       <div class="week-row-head">
         <div class="week-num">W${getWeekNumber(w.start)}</div>
         <div class="week-dates">
@@ -1906,6 +1914,7 @@ function renderCalendar(){
       <div class="week-mini-days">${miniDays}</div>
     </div>`;
   }).join('');
+  _bindWeekDnD();
 }
 
 // Navigazione per MESE (sovrascrive la versione standalone)
@@ -2519,7 +2528,181 @@ window.deleteCurrentVersion=async function(){
   renderGrid();
   if(window._loadVersions) window._loadVersions(currentWk);
 };
+
+// ── COPIA / INCOLLA SETTIMANA (override Firebase) ────────────────────────────
+let _fbCopiedWeek=null;
+
+window.copyWeekToClipboard=function(){
+  if(!currentWk){showToast('⚠ Nessuna settimana aperta');return;}
+  const wData=plans[currentWk]||{};
+  const copy={};
+  for(let i=0;i<7;i++){
+    const day=wData[String(i)];
+    if(day&&typeof day==='object'){
+      const sessions={};
+      Object.entries(day).forEach(([k,v])=>{if(k&&!k.startsWith('_'))sessions[k]=v;});
+      if(Object.keys(sessions).length)copy[i]=sessions;
+    }
+  }
+  if(!Object.keys(copy).length){showToast('⚠ Nessuna sessione da copiare');return;}
+  _fbCopiedWeek=copy;
+  const pasteBtn=document.getElementById('paste-wk-btn');
+  if(pasteBtn)pasteBtn.style.display='inline-flex';
+  showToast('✓ Settimana copiata — vai all\'altra settimana e incolla');
+};
+
+window.pasteWeek=async function(){
+  if(!_fbCopiedWeek){showToast('⚠ Nessuna settimana copiata');return;}
+  if(!currentWk){showToast('⚠ Apri prima la settimana di destinazione');return;}
+  showToast('⏳ Incollando…');
+  try{
+    const writes={};
+    Object.entries(_fbCopiedWeek).forEach(([dayIdx,sessions])=>{
+      Object.entries(sessions).forEach(([key,val])=>{
+        writes[`plans/${currentWk}/${dayIdx}/${key}`]=val;
+      });
+    });
+    await update(ref(db),writes);
+    showToast('✓ Settimana incollata');
+  }catch(e){showToast('Errore incolla: '+e.message);}
+};
+
+// ── DRAG & DROP SETTIMANE ─────────────────────────────────────────────────────
+let _dndSrcWk=null;
+
+function _bindWeekDnD(){
+  document.querySelectorAll('.week-row[data-wk]').forEach(el=>{
+    el.addEventListener('dragstart',e=>{
+      _dndSrcWk=el.dataset.wk;
+      e.dataTransfer.effectAllowed='move';
+      el.classList.add('dnd-dragging');
+    });
+    el.addEventListener('dragend',()=>{
+      el.classList.remove('dnd-dragging');
+      document.querySelectorAll('.week-row.dnd-over').forEach(r=>r.classList.remove('dnd-over'));
+    });
+    el.addEventListener('dragenter',e=>{e.preventDefault();el.classList.add('dnd-over');});
+    el.addEventListener('dragleave',()=>el.classList.remove('dnd-over'));
+    el.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
+    el.addEventListener('drop',async e=>{
+      e.preventDefault();
+      el.classList.remove('dnd-over');
+      const destWk=el.dataset.wk;
+      if(!_dndSrcWk||_dndSrcWk===destWk)return;
+      await _swapWeeks(_dndSrcWk,destWk);
+      _dndSrcWk=null;
+    });
+  });
+}
+
+async function _swapWeeks(wkA,wkB){
+  showToast('⏳ Scambio settimane…');
+  try{
+    const [snapA,snapB]=await Promise.all([
+      get(ref(db,`plans/${wkA}`)),
+      get(ref(db,`plans/${wkB}`))
+    ]);
+    const dataA=snapA.val()||{};
+    const dataB=snapB.val()||{};
+
+    // Estrai solo sessioni (no chiavi _config, _published, ecc.)
+    const sessA={},sessB={};
+    for(let i=0;i<7;i++){
+      sessA[i]={}; sessB[i]={};
+      const dA=dataA[String(i)]||{};
+      const dB=dataB[String(i)]||{};
+      Object.entries(dA).forEach(([k,v])=>{if(!k.startsWith('_'))sessA[i][k]=v;});
+      Object.entries(dB).forEach(([k,v])=>{if(!k.startsWith('_'))sessB[i][k]=v;});
+    }
+
+    const writes={};
+    for(let i=0;i<7;i++){
+      // Prima azzerrare, poi scrivere
+      writes[`plans/${wkA}/${i}`]=Object.keys(sessB[i]).length?sessB[i]:null;
+      writes[`plans/${wkB}/${i}`]=Object.keys(sessA[i]).length?sessA[i]:null;
+    }
+    await update(ref(db),writes);
+    showToast('✓ Settimane scambiate');
+  }catch(e){showToast('Errore swap: '+e.message);}
+}
+
+// ── BULK APPLY ────────────────────────────────────────────────────────────────
+window.openBulkApply=function(){
+  if(!currentWk){showToast('⚠ Apri prima una settimana');return;}
+  document.getElementById('modal-bulk').style.display='flex';
+};
+
+window.closeBulkApply=function(){
+  document.getElementById('modal-bulk').style.display='none';
+};
+
+window.doBulkApply=async function(){
+  if(!currentWk){showToast('⚠ Nessuna settimana aperta');return;}
+  const type=document.getElementById('bulk-type-sel').value;
+  const note=document.getElementById('bulk-note-inp').value.trim();
+  const checkboxes=document.querySelectorAll('#modal-bulk .bulk-day-cb:checked');
+  if(!checkboxes.length){showToast('⚠ Seleziona almeno un giorno');return;}
+  const writes={};
+  checkboxes.forEach(cb=>{
+    const dayIdx=cb.value;
+    const key='-bulk'+Date.now()+Math.random().toString(36).slice(2,6);
+    writes[`plans/${currentWk}/${dayIdx}/${key}`]={type,note:note||null,ts:Date.now()};
+  });
+  try{
+    await update(ref(db),writes);
+    closeBulkApply();
+    showToast(`✓ ${TYPE_LABELS[type]||type} applicato a ${checkboxes.length} giorn${checkboxes.length>1?'i':'o'}`);
+  }catch(e){showToast('Errore bulk: '+e.message);}
+};
 </script>
+
+<!-- ── MODAL BULK APPLY ──────────────────────────────────────────────────────── -->
+<div id="modal-bulk" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeBulkApply()">
+  <div class="modal-box" style="max-width:380px;">
+    <div class="modal-head">
+      <span>⊞ Assegna a più giorni</span>
+      <button class="modal-close" onclick="closeBulkApply()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label class="cfg-lbl" style="margin-bottom:6px;display:block;">Tipo sessione</label>
+        <select id="bulk-type-sel" class="cfg-sel" style="width:100%;">
+          <option value="squadra">⚽ Squadra</option>
+          <option value="forza">🏋️ Forza</option>
+          <option value="sprint">⚡ Sprint</option>
+          <option value="plyo">🦘 Pliometria</option>
+          <option value="rec">🔄 Recupero</option>
+          <option value="priming">🎯 Priming</option>
+          <option value="riposo">😴 Riposo</option>
+          <option value="z2">🟢 Z2 Easy</option>
+          <option value="lungo">🔵 Long Run</option>
+          <option value="tempo">🟠 Tempo/Soglia</option>
+          <option value="interval">🔴 Interval</option>
+        </select>
+      </div>
+      <div>
+        <label class="cfg-lbl" style="margin-bottom:6px;display:block;">Note (opzionale)</label>
+        <input id="bulk-note-inp" type="text" class="cfg-inp" placeholder="es. 45min Z2" style="width:100%;box-sizing:border-box;">
+      </div>
+      <div>
+        <label class="cfg-lbl" style="margin-bottom:8px;display:block;">Giorni</label>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="0"> Lun</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="1"> Mar</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="2"> Mer</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="3"> Gio</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="4"> Ven</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="5"> Sab</label>
+          <label class="bulk-day-lbl"><input type="checkbox" class="bulk-day-cb" value="6"> Dom</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-outline btn-sm" onclick="closeBulkApply()">Annulla</button>
+      <button class="btn btn-purple btn-sm" onclick="doBulkApply()">✓ Applica</button>
+    </div>
+  </div>
+</div>
 <script src="./sidebar.js"></script>
 </body>
 </html>
