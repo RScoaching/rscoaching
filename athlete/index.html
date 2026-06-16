@@ -133,6 +133,7 @@ body::before{
 /* SESSION CARD */
 .sess-card:active{transform:scale(.99);}
 .sess-head{padding:12px 16px 10px;}
+.sess-readiness-chip{display:inline-block;margin-top:5px;font-size:16px;line-height:1;}
 .sess-type-tag{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;margin-bottom:4px;display:flex;align-items:center;gap:5px;}
 .sess-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:.8px;color:var(--white);line-height:1.05;}
 .sess-note{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55;}
@@ -1493,6 +1494,16 @@ if(!aid){
       renderReadiness(todayCi);
     });
 
+    // Questionnaires readiness
+    onValue(ref(db,`questionnaires/${aid}`),qSnap=>{
+      window._questionnairesCache=qSnap.val()||{};
+      const todayKey=new Date().toISOString().slice(0,10);
+      window._todayReadinessSemaforo=window._questionnairesCache[todayKey]?.readiness?.semaforo||null;
+      const liveEl=document.getElementById('sess-readiness-live');
+      if(liveEl&&window._todayReadinessSemaforo)liveEl.textContent=window._todayReadinessSemaforo;
+      renderReadinessSparkline();
+    });
+
     // 1RM — seed default exercises if athlete has none yet
     const _seedDefaultExercises=async()=>{
       const DEFAULT_EX=[
@@ -1909,6 +1920,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           <div class="sess-title">${title}</div>
           ${note?`<div class="sess-note">${note}</div>`:''}
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}
+          ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
         </div>
         <div style="padding:14px 16px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted);">
           <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--red);font-size:16px;">⏱</span> Minuti giocati</div>
@@ -1929,6 +1941,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           <div class="sess-title">${title}</div>
           ${note?`<div class="sess-note">${note}</div>`:''}
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}
+          ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
         </div>
         ${exercises&&exercises.length?exListHtml(exercises):'<div style="padding:12px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);">Sprint 10m · Sprint 30m · Salto · Yo-Yo</div>'}
         <div class="sess-action"><button class="start-btn" onclick="openTestSheet('${sid}')">📊 REGISTRA TEST</button></div>
@@ -1943,6 +1956,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           <div class="sess-title">${title}</div>
           ${note?`<div class="sess-note">${note}</div>`:''}
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}
+          ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
         </div>
         ${extra?`<div style="border-top:1px solid var(--border);padding:10px 16px;font-size:12px;color:var(--muted);white-space:pre-line;">${extra}</div>`:'<div style="padding:12px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);">Stretching · Foam rolling · Idratazione · Sonno</div>'}
         <div class="sess-action"><button class="start-btn-soft" style="color:var(--green);border-color:var(--green);" onclick="showToast('✅ Recupero registrato')">🔄 RECUPERO COMPLETATO</button></div>
@@ -1958,6 +1972,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
         <div class="sess-title">${title}</div>
         ${note?`<div class="sess-note">${note}</div>`:''}
         ${progName?`<div class="sess-prog-label">${progName}</div>`:''}
+        ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
       </div>
       ${exListHtml(exercises)}
       ${extra?`<div style="border-top:1px solid var(--border);padding:10px 16px;font-size:12px;color:var(--muted);white-space:pre-line;">${extra}</div>`:''}
@@ -2318,17 +2333,30 @@ function renderCheckinHistory(list){
   if(!list.length){el.innerHTML='<div class="empty">Nessun check-in ancora.</div>';return;}
   const icons={fatica:'💪',sonno:'😴',stress:'🧠',motivazione:'🔥',doms:'🦵'};
   const colors={fatica:'var(--red)',sonno:'var(--blue)',stress:'var(--purple)',motivazione:'var(--green)',doms:'var(--amber)'};
-  el.innerHTML=list.slice(0,10).map(ci=>`
-    <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+  el.innerHTML=list.slice(0,10).map(ci=>{
+    // Convert Italian date DD/MM/YYYY -> YYYY-MM-DD for questionnaires lookup
+    let readinessSemaforo='';
+    if(ci.date&&window._questionnairesCache){
+      const parts=ci.date.split('/');
+      if(parts.length===3){
+        const isoKey=`${parts[2]}-${parts[1]}-${parts[0]}`;
+        readinessSemaforo=window._questionnairesCache[isoKey]?.readiness?.semaforo||'';
+      }
+    }
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--border);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
         <div style="font-size:13px;font-weight:600;color:var(--white);">${ci.date||'—'}</div>
-        ${ci.pains?.length?`<div style="font-size:10px;color:var(--red);">⚠ ${ci.pains.join(', ')}</div>`:''}
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${readinessSemaforo?`<span style="font-size:16px;" title="Prontezza">${readinessSemaforo}</span>`:''}
+          ${ci.pains?.length?`<div style="font-size:10px;color:var(--red);">⚠ ${ci.pains.join(', ')}</div>`:''}
+        </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         ${[['fatica',ci.fatica],['sonno',ci.sonno],['stress',ci.stress],['motivazione',ci.motivazione],['doms',ci.doms]].filter(([,v])=>v!=null).map(([k,v])=>`<div style="display:flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 8px;"><span style="font-size:13px;">${icons[k]||'•'}</span><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:${colors[k]||'var(--white)'};">${v}</span></div>`).join('')}
       </div>
       ${ci.note?`<div style="font-size:11px;color:var(--muted);margin-top:5px;font-style:italic;">"${ci.note.slice(0,80)}"</div>`:''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── WELLNESS SPARKLINES
@@ -2346,7 +2374,9 @@ function renderWellnessSparklines(ciList){
     {key:'motivazione',label:'Motiv.',icon:'🔥',color:'rgba(52,211,153,.9)',bg:'rgba(52,211,153,.12)'},
     {key:'fatica',label:'Fatica',icon:'💪',color:'rgba(239,68,68,.9)',bg:'rgba(239,68,68,.12)'},
   ];
-  el.innerHTML=metrics.map(m=>`<div class="wsp-item"><div class="wsp-lbl">${m.icon} ${m.label}</div><div class="wsp-val" id="wsp-val-${m.key}">—</div><div class="wsp-trend" id="wsp-trend-${m.key}"></div><div class="wsp-cv"><canvas id="wsp-c-${m.key}"></canvas></div></div>`).join('');
+  el.innerHTML=metrics.map(m=>`<div class="wsp-item"><div class="wsp-lbl">${m.icon} ${m.label}</div><div class="wsp-val" id="wsp-val-${m.key}">—</div><div class="wsp-trend" id="wsp-trend-${m.key}"></div><div class="wsp-cv"><canvas id="wsp-c-${m.key}"></canvas></div></div>`).join('')+`<div class="wsp-item"><div class="wsp-lbl">🟢 Prontezza</div><div class="wsp-val" id="wsp-val-readiness">—</div><div class="wsp-trend" id="wsp-trend-readiness"></div><div class="wsp-cv"><canvas id="wsp-c-readiness"></canvas></div></div>`;
+  // render readiness sparkline if questionnaires already loaded
+  renderReadinessSparkline();
   metrics.forEach(m=>{
     const vals=days.map(d=>d[m.key]??null).filter(v=>v!==null);
     const last=vals.length?vals[vals.length-1]:null;
@@ -2370,6 +2400,37 @@ function renderWellnessSparklines(ciList){
       plugins:{legend:{display:false},tooltip:{enabled:false}},
       scales:{x:{display:false},y:{display:false,min:0,max:10,beginAtZero:false}}}});
   });
+}
+
+// ── READINESS SPARKLINE (4th metric, from questionnaires)
+function renderReadinessSparkline(){
+  const valEl=document.getElementById('wsp-val-readiness');
+  const trendEl=document.getElementById('wsp-trend-readiness');
+  const canvas=document.getElementById('wsp-c-readiness');
+  if(!valEl||!canvas)return;
+  const cache=window._questionnairesCache||{};
+  // Sort keys (YYYY-MM-DD), take last 7 days with readiness data
+  const entries=Object.entries(cache)
+    .filter(([,v])=>v?.readiness?.avg!=null)
+    .sort(([a],[b])=>a.localeCompare(b))
+    .slice(-7);
+  const vals=entries.map(([,v])=>v.readiness.avg);
+  const labels=entries.map(([k])=>k.slice(5)); // MM-DD
+  const last=vals.length?vals[vals.length-1]:null;
+  valEl.textContent=last!=null?last.toFixed(1):'—';
+  if(trendEl&&vals.length>=2){
+    const delta=+(vals[vals.length-1]-vals[vals.length-2]).toFixed(1);
+    trendEl.textContent=delta>0?`▲ +${delta}`:delta<0?`▼ ${delta}`:'—';
+    trendEl.style.color=delta===0?'var(--muted)':delta>0?'#34d399':'#f87171';
+  }
+  if(canvas._chart)canvas._chart.destroy();
+  if(vals.length<2)return;
+  canvas._chart=new Chart(canvas,{type:'line',data:{
+    labels,
+    datasets:[{data:vals,borderColor:'rgba(16,185,129,.9)',backgroundColor:'rgba(16,185,129,.12)',borderWidth:1.5,fill:true,tension:.35,pointRadius:0,pointHoverRadius:3}]
+  },options:{responsive:true,maintainAspectRatio:false,animation:false,
+    plugins:{legend:{display:false},tooltip:{enabled:false}},
+    scales:{x:{display:false},y:{display:false,min:1,max:5,beginAtZero:false}}}});
 }
 
 // ── AVERAGES
