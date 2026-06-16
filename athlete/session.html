@@ -2347,11 +2347,13 @@ window.saveReadiness=async function(){
   const dolori=parseInt(document.getElementById('rd-dolori-inp').value);
   const stress=parseInt(document.getElementById('rd-stress-inp').value);
   const energia=parseInt(document.getElementById('rd-energia-inp').value);
-  const avg=(sonno+dolori+stress+energia)/4;
-  const semaforo=avg>=3.5?'🟢':avg>=2.5?'🟡':'🔴';
+  // Frozen schema: score 0-100, weighting sonno 30% / dolori 25% inv / energia 25% / stress 20% inv
+  const n=v=>(v-1)/4, inv=v=>(5-v)/4;
+  const score=Math.round((n(sonno)*0.30+inv(dolori)*0.25+n(energia)*0.25+inv(stress)*0.20)*100);
+  const semaforo=score>=70?'🟢':score>=40?'🟡':'🔴';
   try{
     await set(ref(db,`questionnaires/${AID}/${dateKey}/readiness`),{
-      ts:now.getTime(),sonno,dolori,stress,energia,avg:Math.round(avg*10)/10,semaforo
+      ts:now.getTime(),sleep:sonno,soreness:dolori,stress,energy:energia,score,semaforo
     });
   }catch(e){console.warn('Readiness save error',e);}
   document.getElementById('semaforo').textContent=semaforo;
