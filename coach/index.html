@@ -954,7 +954,7 @@ const db=getDatabase(app);
 const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("🔐 PIN preparatore:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#50506A;font-family:Inter,sans-serif;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
-let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={},chatData={};
+let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={},chatData={},questionnaires={};
 const BASE=(()=>{const p=window.location.pathname;const base=p.replace(/\/coach\/.*$/,'').replace(/^\/+/,'');return window.location.origin+'/'+(base?base+'/':'')+'athlete/?id=';})();
 let currentAid=null;
 const LV_L={1:'Principiante',2:'Intermedio',3:'Avanzato'};
@@ -981,6 +981,7 @@ onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
 onValue(ref(db,'session_logs'),s=>{sessionLogs=s.val()||{};});
+onValue(ref(db,'questionnaires'),s=>{questionnaires=s.val()||{};renderAthletes();});
 onValue(ref(db,'chat'),s=>{
   chatData=s.val()||{};
   renderAthletes(); // aggiorna badge messaggi non letti nella lista atleti
@@ -1243,6 +1244,12 @@ function renderMonitoring(){
     if(avgFat>7&&ci3.length>0)alerts.push({label:'Fatica '+avgFat.toFixed(1),cls:'p-red'});
     if(avgMot>0&&avgMot<4&&ci3.length>0)alerts.push({label:'Mot. '+avgMot.toFixed(1),cls:'p-warn'});
     if(avgSlp>0&&avgSlp<5&&ci3.length>0)alerts.push({label:'Sonno '+avgSlp.toFixed(1),cls:'p-warn'});
+    // Readiness (questionnaires): score basso = alert
+    const rdy=rdyScore(aid);
+    if(rdy!=null){
+      if(rdy<40)alerts.push({label:'Readiness '+rdy,cls:'p-red'});
+      else if(rdy<55)alerts.push({label:'Readiness '+rdy,cls:'p-warn'});
+    }
     if(a.injuries)alerts.push({label:'Infortuno',cls:'p-red'});
 
     // Mostra solo atleti con almeno un alert
@@ -1307,11 +1314,23 @@ window.openAthlete=function(aid,silent){
     <div id="det-overview">${renderDetOverview(aid,a,aSess,aCi)}</div>
     <div id="det-tests" style="display:none;">${renderDetTests(aid)}</div>
     <div id="det-sessions" style="display:none;">${renderDetSessions(aid,aSess)}</div>
-    <div id="det-checkin" style="display:none;">${renderDetCheckin(aCi)}</div>
+    <div id="det-checkin" style="display:none;">${renderDetCheckin(aid,aCi)}</div>
     <div id="det-load" style="display:none;">${renderDetLoad(aid,aSess)}</div>
     <div id="det-chat" style="display:none;">${renderDetChat(aid)}</div>`;
   if(!silent){panel.scrollIntoView({behavior:'smooth',block:'start'});pg('athletes',document.querySelectorAll('.nav-item')[1]);}
 };
+
+// ── PHASE 3: Readiness / Feedback (questionnaires)
+function qEntries(aid){return Object.entries(questionnaires[aid]||{}).map(([date,q])=>({date,r:q&&q.readiness,f:q&&q.feedback})).sort((a,b)=>b.date.localeCompare(a.date));}
+function readinessInfo(aid){
+  const all=qEntries(aid).filter(e=>e.r&&typeof e.r.score==='number');
+  const cut=new Date(Date.now()-7*864e5).toISOString().slice(0,10);
+  const w=all.filter(e=>e.date>=cut);
+  const avg7=w.length?Math.round(w.reduce((t,e)=>t+e.r.score,0)/w.length):null;
+  return {last:all[0]||null,avg7,count7:w.length,all};
+}
+function rdyColor(s){return s>=70?'var(--green)':s>=40?'var(--amber)':'var(--red)';}
+function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:(ri.last?ri.last.r.score:null);}
 
 function renderDetOverview(aid,a,aSess,aCi){
   const ci7=aCi.filter(c=>c.ts>Date.now()-7*864e5);
@@ -1323,6 +1342,7 @@ function renderDetOverview(aid,a,aSess,aCi){
     <div class="metric m-purple"><div class="metric-lbl">RPE medio</div><div class="metric-val">${avgRpe}</div></div>
     <div class="metric m-blue"><div class="metric-lbl">Sonno 7gg</div><div class="metric-val">${avgSleep}</div></div>
     <div class="metric m-red"><div class="metric-lbl">Fatica 7gg</div><div class="metric-val">${avgFat}</div></div>
+    ${(()=>{const rs=rdyScore(aid);return `<div class="metric m-green"><div class="metric-lbl">Readiness 7gg</div><div class="metric-val" style="color:${rs!=null?rdyColor(rs):'var(--muted)'}">${rs!=null?rs:'—'}</div></div>`;})()}
   </div>
   ${a.injuries?`<div class="alert-item red" style="margin-bottom:10px;">⚠ Infortuni: ${a.injuries}</div>`:''}
   ${a.notes?`<div class="alert-item" style="margin-bottom:10px;">📝 ${a.notes}</div>`:''}
@@ -1402,9 +1422,12 @@ function renderDetSessions(aid,aSess){
   }).join('');
 }
 
-function renderDetCheckin(aCi){
-  if(!aCi.length)return '<div class="empty">Nessun check-in.</div>';
-  return aCi.slice(0,12).map(ci=>`<div class="sess-item"><div class="sess-date">${ci.date||'—'}</div><div class="sess-body" style="display:flex;gap:5px;flex-wrap:wrap;">${ci.fatica!=null?`<span class="pill p-red">F:${ci.fatica}</span>`:''}${ci.sonno!=null?`<span class="pill p-blue">S:${ci.sonno}</span>`:''}${ci.doms!=null?`<span class="pill p-gold">D:${ci.doms}</span>`:''}${ci.motivazione!=null?`<span class="pill p-green">M:${ci.motivazione}</span>`:''}${ci.pains?.length?`<span class="pill p-red">⚠ ${ci.pains.join(', ')}</span>`:''}</div></div>`).join('');
+function renderDetCheckin(aid,aCi){
+  const ciHtml=aCi.length?aCi.slice(0,12).map(ci=>`<div class="sess-item"><div class="sess-date">${ci.date||'—'}</div><div class="sess-body" style="display:flex;gap:5px;flex-wrap:wrap;">${ci.fatica!=null?`<span class="pill p-red">F:${ci.fatica}</span>`:''}${ci.sonno!=null?`<span class="pill p-blue">S:${ci.sonno}</span>`:''}${ci.doms!=null?`<span class="pill p-gold">D:${ci.doms}</span>`:''}${ci.motivazione!=null?`<span class="pill p-green">M:${ci.motivazione}</span>`:''}${ci.pains?.length?`<span class="pill p-red">⚠ ${ci.pains.join(', ')}</span>`:''}</div></div>`).join(''):'<div class="empty">Nessun check-in.</div>';
+  // Phase 3: feedback post-seduta (sRPE + nota) dai questionnaires
+  const fb=qEntries(aid).filter(e=>e.f&&(e.f.sessionRpe!=null||e.f.note));
+  const fbHtml=fb.length?`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 8px;">Feedback sedute (sRPE)</div>`+fb.slice(0,12).map(e=>{const rpe=e.f.sessionRpe;const col=rpe>=8?'p-red':rpe>=6?'p-warn':'p-ok';return `<div class="sess-item"><div class="sess-date">${e.date}</div><div class="sess-body" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${rpe!=null?`<span class="pill ${col}">sRPE ${rpe}</span>`:''}${e.f.note?`<span style="font-size:12px;color:var(--muted);">${e.f.note}</span>`:''}</div></div>`;}).join(''):'';
+  return ciHtml+fbHtml;
 }
 
 function renderDetLoad(aid,aSess){
@@ -1429,6 +1452,11 @@ function renderDetLoad(aid,aSess){
   aSess.forEach(s=>{const d=new Date(s.ts);const mon=new Date(d);mon.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));const wk=mon.toISOString().slice(0,10);if(!wkLoad[wk])wkLoad[wk]=0;wkLoad[wk]+=(s.rpe||5);});
   const wks=Object.keys(wkLoad).sort().slice(-8);
   const vals=wks.map(w=>wkLoad[w]);
+  // Phase 3: media readiness settimanale allineata a wks (asse secondario)
+  const rdyByWk={};
+  qEntries(aid).forEach(e=>{if(!e.r||typeof e.r.score!=='number')return;const d=new Date(e.date);const mon=new Date(d);mon.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));const wk=mon.toISOString().slice(0,10);(rdyByWk[wk]=rdyByWk[wk]||[]).push(e.r.score);});
+  const rdyVals=wks.map(w=>{const arr=rdyByWk[w];return arr&&arr.length?Math.round(arr.reduce((t,x)=>t+x,0)/arr.length):null;});
+  const hasRdy=rdyVals.some(v=>v!=null);
   // Exercise progress: parse sessionLogs for this athlete
   const exMap={};
   Object.values(sessionLogs[aid]||{}).forEach(l=>{
@@ -1478,8 +1506,8 @@ function renderDetLoad(aid,aSess){
   setTimeout(()=>{
     const c=document.getElementById(`lc-${aid}`);if(!c)return;
     if(c._chart)c._chart.destroy();
-    c._chart=new Chart(c,{type:'bar',data:{labels:wks.map(w=>w.slice(5)),datasets:[{data:vals,backgroundColor:'rgba(255,104,48,.55)',borderRadius:5,borderSkipped:false}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#475569',font:{size:9}}},y:{ticks:{color:'#475569',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}}}}});
+    c._chart=new Chart(c,{type:'bar',data:{labels:wks.map(w=>w.slice(5)),datasets:[{type:'bar',label:'Carico',data:vals,backgroundColor:'rgba(255,104,48,.55)',borderRadius:5,borderSkipped:false,yAxisID:'y'}].concat(hasRdy?[{type:'line',label:'Readiness',data:rdyVals,borderColor:'rgba(139,92,246,.9)',backgroundColor:'rgba(139,92,246,.1)',borderWidth:2,tension:.3,pointRadius:3,pointBackgroundColor:'rgba(139,92,246,1)',pointBorderColor:'#07070F',pointBorderWidth:1,spanGaps:true,yAxisID:'y1'}]:[])},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:hasRdy,labels:{color:'#94A3B8',font:{size:9},boxWidth:10}}},scales:{x:{ticks:{color:'#475569',font:{size:9}}},y:{ticks:{color:'#475569',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}},y1:{display:hasRdy,position:'right',min:0,max:100,ticks:{color:'#8B5CF6',font:{size:9}},grid:{display:false}}}}});
     // Exercise progress charts
     topEx.forEach(([name,pts],i)=>{
       const ec=document.getElementById(`ex-${aid}-${i}`);if(!ec)return;
@@ -1490,7 +1518,7 @@ function renderDetLoad(aid,aSess){
       },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y}kg`}}},scales:{x:{ticks:{color:'#475569',font:{size:8}},grid:{display:false}},y:{ticks:{color:'#475569',font:{size:8}},grid:{color:'rgba(255,255,255,.04)'}}}}});
     });
   },100);
-  return acwrHtml+`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`+exHtml;
+  return acwrHtml+`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Volume carico settimanale (somma RPE sessioni)${hasRdy?' · <span style="color:var(--primary)">linea readiness</span>':''}</div><div style="height:130px;"><canvas id="lc-${aid}"></canvas></div>`+exHtml;
 }
 
 window.detTab=function(id,el){
