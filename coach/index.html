@@ -1845,6 +1845,10 @@ let _dbSearch='', _dbFilter='', _dbPattern='', _dbMuscle='', _dbEquip='';
 function renderDB(){
   const el=document.getElementById('db-content');
   _populateDbFacets();
+  // HTML-escape per nomi/URL utente (es. nomi con apostrofo: "L'affondo")
+  const _h=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // Escape JSON per attributo HTML single-quoted (JSON.stringify NON escapa l'apostrofo)
+  const _attr=o=>JSON.stringify(o).replace(/&/g,'&amp;').replace(/'/g,'&#39;');
 
   // ── Merge: exercises_db.js (base) + Firebase custom overrides
   const OLD_CATS_D=new Set(['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro']);
@@ -1888,18 +1892,18 @@ function renderDB(){
       <div class="db-cat-name">${CAT_LABEL[cat]||cat} <span style="font-size:10px;opacity:.5;">(${items.length})</span></div>
       <div class="db-items">${items.map(ex=>`<div class="db-item">
         <div class="db-item-main">
-          <div class="db-item-name">${ex.name}</div>
+          <div class="db-item-name">${_h(ex.name)}</div>
           ${(()=>{const L=window.EX_TAG_LABELS||{};const ch=[];
-            if(ex.equip)ch.push(`<span class="db-tag t-equip">${(L.equip||{})[ex.equip]||ex.equip}</span>`);
-            if(ex.pattern)ch.push(`<span class="db-tag">${(L.pattern||{})[ex.pattern]||ex.pattern}</span>`);
-            (ex.muscles||[]).slice(0,2).forEach(m=>ch.push(`<span class="db-tag">${(L.muscles||{})[m]||m}</span>`));
-            if(ex.side==='unilaterale')ch.push(`<span class="db-tag t-side">${(L.side||{}).unilaterale||'Unilaterale'}</span>`);
+            if(ex.equip)ch.push(`<span class="db-tag t-equip">${_h((L.equip||{})[ex.equip]||ex.equip)}</span>`);
+            if(ex.pattern)ch.push(`<span class="db-tag">${_h((L.pattern||{})[ex.pattern]||ex.pattern)}</span>`);
+            (ex.muscles||[]).slice(0,2).forEach(m=>ch.push(`<span class="db-tag">${_h((L.muscles||{})[m]||m)}</span>`));
+            if(ex.side==='unilaterale')ch.push(`<span class="db-tag t-side">${_h((L.side||{}).unilaterale||'Unilaterale')}</span>`);
             return ch.length?`<div class="db-item-tags">${ch.join('')}</div>`:'';})()}
         </div>
-        ${ex.url?`<a href="${ex.url}" target="_blank" class="db-video-link" title="${ex.url}">▶ video</a>`:'<span class="db-no-video">—</span>'}
+        ${ex.url?`<a href="${_h(ex.url)}" target="_blank" class="db-video-link" title="${_h(ex.url)}">▶ video</a>`:'<span class="db-no-video">—</span>'}
         <div class="db-item-actions">
-          <button class="db-edit" onclick='openModal("editExercise",${JSON.stringify(ex)})' title="Modifica">✏️</button>
-          ${ex.custom?`<button class="db-del" onclick="delExercise('${ex.fbKey}')" title="Rimuovi">✕</button>`:''}
+          <button class="db-edit" onclick='openModal("editExercise",${_attr(ex)})' title="Modifica">✏️</button>
+          ${ex.custom?`<button class="db-del" onclick="delExercise('${_h(ex.fbKey)}')" title="Rimuovi">✕</button>`:''}
         </div>
       </div>`).join('')}</div>
     </div>`).join('')||'<div class="empty">Database vuoto.</div>';
@@ -2039,14 +2043,16 @@ window.openModal=function(type,...args){
   } else if(type==='editExercise'){
     const [ex]=args; // ex is the full merged object
     const fbKey=ex.fbKey||null;
+    const _eh=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const _eattr=o=>JSON.stringify(o).replace(/&/g,'&amp;').replace(/'/g,'&#39;');
     const CATS=['forza','pliometria','velocita_sprint','olimpico','resistenza','condizionamento','priming','mobilita','recupero','altro','Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning'];
     mb.innerHTML=`<h3>Modifica Esercizio</h3>
       <div style="margin-bottom:10px;font-size:11px;color:var(--muted);">Sorgente: ${ex.src==='static'?'📚 database statico':'⭐ custom Firebase'}</div>
-      <div class="grid2"><div class="field"><label>Nome esercizio</label><input id="m-exname" value="${ex.name||''}" ${ex.src==='static'?'readonly style="opacity:.6;"':''}></div><div class="field"><label>Categoria</label><select id="m-excat" ${ex.src==='static'?'disabled style="opacity:.6;"':''}>${CATS.map(c=>`<option value="${c}"${ex.cat===c?' selected':''}>${c}</option>`).join('')}</select></div></div>
-      <div class="field"><label>Link video (YouTube, ecc.)</label><input id="m-exvideo" value="${ex.url||''}" placeholder="https://youtube.com/..."></div>
-      ${ex.url?`<div style="margin:4px 0 10px;"><a href="${ex.url}" target="_blank" style="color:var(--orange);font-size:11px;word-break:break-all;">▶ Apri link attuale</a></div>`:''}
+      <div class="grid2"><div class="field"><label>Nome esercizio</label><input id="m-exname" value="${_eh(ex.name||'')}" ${ex.src==='static'?'readonly style="opacity:.6;"':''}></div><div class="field"><label>Categoria</label><select id="m-excat" ${ex.src==='static'?'disabled style="opacity:.6;"':''}>${CATS.map(c=>`<option value="${c}"${ex.cat===c?' selected':''}>${c}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Link video (YouTube, ecc.)</label><input id="m-exvideo" value="${_eh(ex.url||'')}" placeholder="https://youtube.com/..."></div>
+      ${ex.url?`<div style="margin:4px 0 10px;"><a href="${_eh(ex.url)}" target="_blank" style="color:var(--orange);font-size:11px;word-break:break-all;">▶ Apri link attuale</a></div>`:''}
       <div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Modificare il link video sovrascrive solo il link in Firebase (il resto rimane uguale)</div>
-      <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick='saveEditExercise(${JSON.stringify({fbKey,name:ex.name,cat:ex.cat,src:ex.src})})'>Salva →</button></div>`;
+      <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick='saveEditExercise(${_eattr({fbKey,name:ex.name,cat:ex.cat,src:ex.src})})'>Salva →</button></div>`;
   }
   document.getElementById('modal-overlay').classList.add('open');
 };
