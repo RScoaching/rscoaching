@@ -2708,6 +2708,8 @@ window.exportBuilderPDF=function(){
   const p=programs[currentProgId]; if(!p){showToast('⚠ Nessun programma selezionato');return;}
   const DAYS=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
   // --- NEW REDESIGNED PDF --- (replaces old version entirely, ends at closing brace below)
+  // HTML-escape per evitare rotture/iniezioni da stringhe utente (nomi, note, cue, ecc.)
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   const SESS_DOT={pesi:'#8B5CF6',sprint:'#EF4444',corsa:'#10B981',conditioning:'#F59E0B',recupero:'#64748B'};
   const SESS_LABEL={pesi:'Pesi',sprint:'Sprint',corsa:'Corsa',conditioning:'Conditioning',recupero:'Recupero'};
@@ -2727,7 +2729,7 @@ window.exportBuilderPDF=function(){
     const sessCount=Object.values(wk.sessions||{}).length;
     return '<div class="tl-seg" style="border-top-color:'+col+';">'
       +'<div class="tl-w" style="color:'+col+'">W'+(wi+1)+'</div>'
-      +(wk.label?'<div class="tl-ph">'+wk.label+'</div>':'')
+      +(wk.label?'<div class="tl-ph">'+esc(wk.label)+'</div>':'')
       +'<div class="tl-s">'+sessCount+' sess.</div>'
       +'</div>';
   }).join('');
@@ -2749,11 +2751,11 @@ window.exportBuilderPDF=function(){
       let body='';
 
       if(s.type==='conditioning'){
-        const ct=s.condType||'Workout';
+        const ct=esc(s.condType||'Workout');
         const lines=(s.condContent||'').split('\n').filter(Boolean);
         body='<div class="c-cond">'
-          +'<div class="cond-title" style="color:'+dot+'">'+ct+(s.duration?' · '+s.duration:'')+'</div>'
-          +(lines.map(l=>'<div class="cond-row">'+l+'</div>').join(''))
+          +'<div class="cond-title" style="color:'+dot+'">'+ct+(s.duration?' · '+esc(s.duration):'')+'</div>'
+          +(lines.map(l=>'<div class="cond-row">'+esc(l)+'</div>').join(''))
           +'</div>';
 
       } else if(s.type==='corsa'){
@@ -2767,15 +2769,15 @@ window.exportBuilderPDF=function(){
           const hasIntv=f.reps||f.repDist||f.repPace;
           const hasRec=f.recDist||f.recTime||f.recPace;
           body='<div class="c-run-single">'
-            +(f.zona?'<span class="run-z-badge" style="background:'+zc+'15;color:'+zc+'">'+f.zona+'</span>':'')
-            +(f.tipo?'<span class="run-tipo">'+f.tipo+'</span>':'')
+            +(f.zona?'<span class="run-z-badge" style="background:'+zc+'15;color:'+zc+'">'+esc(f.zona)+'</span>':'')
+            +(f.tipo?'<span class="run-tipo">'+esc(f.tipo)+'</span>':'')
             +'<div class="run-kv-row">'
-            +(f.dist?'<div class="run-kv"><span class="kv-k">Distanza</span><span class="kv-v">'+f.dist+'</span></div>':'')
-            +(f.pace?'<div class="run-kv"><span class="kv-k">Pace</span><span class="kv-v">'+f.pace+' /km</span></div>':'')
-            +(hasIntv?'<div class="run-kv"><span class="kv-k">Ripetute</span><span class="kv-v">'+(f.reps?f.reps+'×':'')+' '+(f.repDist||'')+' '+(f.repPace?'@ '+f.repPace:'')+'</span></div>':'')
-            +(hasRec?'<div class="run-kv"><span class="kv-k">Recupero</span><span class="kv-v">'+(f.recDist||'')+' '+(f.recTime||'')+' '+(f.recPace?'@ '+f.recPace:'')+'</span></div>':'')
+            +(f.dist?'<div class="run-kv"><span class="kv-k">Distanza</span><span class="kv-v">'+esc(f.dist)+'</span></div>':'')
+            +(f.pace?'<div class="run-kv"><span class="kv-k">Pace</span><span class="kv-v">'+esc(f.pace)+' /km</span></div>':'')
+            +(hasIntv?'<div class="run-kv"><span class="kv-k">Ripetute</span><span class="kv-v">'+(f.reps?esc(f.reps)+'×':'')+' '+esc(f.repDist||'')+' '+(f.repPace?'@ '+esc(f.repPace):'')+'</span></div>':'')
+            +(hasRec?'<div class="run-kv"><span class="kv-k">Recupero</span><span class="kv-v">'+esc(f.recDist||'')+' '+esc(f.recTime||'')+' '+(f.recPace?'@ '+esc(f.recPace):'')+'</span></div>':'')
             +'</div>'
-            +(f.note?'<div class="run-fnote">'+f.note+'</div>':'')
+            +(f.note?'<div class="run-fnote">'+esc(f.note)+'</div>':'')
             +'</div>';
         } else if(fasi.length>1){
           // Multi-phase — table-like
@@ -2786,25 +2788,25 @@ window.exportBuilderPDF=function(){
             const hasRec=f.recDist||f.recTime||f.recPace;
             body+='<div class="rf">'
               +'<div class="rf-left">'
-              +(f.zona?'<span class="rf-z" style="background:'+zc+'15;color:'+zc+'">'+f.zona+'</span>':'<span class="rf-num">'+(fi+1)+'</span>')
-              +'<span class="rf-tipo">'+(f.tipo||'Fase '+(fi+1))+'</span>'
+              +(f.zona?'<span class="rf-z" style="background:'+zc+'15;color:'+zc+'">'+esc(f.zona)+'</span>':'<span class="rf-num">'+(fi+1)+'</span>')
+              +'<span class="rf-tipo">'+(f.tipo?esc(f.tipo):'Fase '+(fi+1))+'</span>'
               +'</div>'
               +'<div class="rf-right">'
-              +(f.dist?'<span class="rf-kv">'+f.dist+'</span>':'')
-              +(f.pace?'<span class="rf-kv muted">'+f.pace+' /km</span>':'')
+              +(f.dist?'<span class="rf-kv">'+esc(f.dist)+'</span>':'')
+              +(f.pace?'<span class="rf-kv muted">'+esc(f.pace)+' /km</span>':'')
               +'</div>'
               +(hasIntv?'<div class="rf-intv">'
-                +(f.reps?'<span class="intv-chip">'+f.reps+'×</span>':'')
-                +(f.repDist?'<span class="intv-chip">'+f.repDist+'</span>':'')
-                +(f.repPace?'<span class="intv-chip">@ '+f.repPace+'</span>':'')
+                +(f.reps?'<span class="intv-chip">'+esc(f.reps)+'×</span>':'')
+                +(f.repDist?'<span class="intv-chip">'+esc(f.repDist)+'</span>':'')
+                +(f.repPace?'<span class="intv-chip">@ '+esc(f.repPace)+'</span>':'')
                 +'</div>':'')
               +(hasRec?'<div class="rf-rec">'
                 +'<span class="rec-lbl">rec</span>'
-                +(f.recDist?'<span>'+f.recDist+'</span>':'')
-                +(f.recTime?'<span>'+f.recTime+'</span>':'')
-                +(f.recPace?'<span>@ '+f.recPace+'</span>':'')
+                +(f.recDist?'<span>'+esc(f.recDist)+'</span>':'')
+                +(f.recTime?'<span>'+esc(f.recTime)+'</span>':'')
+                +(f.recPace?'<span>@ '+esc(f.recPace)+'</span>':'')
                 +'</div>':'')
-              +(f.note?'<div class="rf-note">'+f.note+'</div>':'')
+              +(f.note?'<div class="rf-note">'+esc(f.note)+'</div>':'')
               +'</div>';
           });
           body+='</div>';
@@ -2819,18 +2821,18 @@ window.exportBuilderPDF=function(){
           let rows='';let lastCx='';
           exs.forEach(e=>{
             if(e.complexGroup&&e.complexLabel!==lastCx){
-              rows+='<tr class="cx-sep"><td colspan="'+cols+'">Complex '+(e.complexLabel||'A')+'</td></tr>';
+              rows+='<tr class="cx-sep"><td colspan="'+cols+'">Complex '+esc(e.complexLabel||'A')+'</td></tr>';
               lastCx=e.complexLabel||'';
             }
-            const load=[e.pct?'@'+e.pct+'%':'',e.rpe?'RPE '+e.rpe:''].filter(Boolean).join(' ');
-            const cxB=e.complexGroup?'<span class="cx-b" style="background:'+dot+'22;color:'+dot+'">'+(e.complexLabel||'A')+'</span> ':'';
+            const load=[e.pct?'@'+esc(e.pct)+'%':'',e.rpe?'RPE '+esc(e.rpe):''].filter(Boolean).join(' ');
+            const cxB=e.complexGroup?'<span class="cx-b" style="background:'+dot+'22;color:'+dot+'">'+esc(e.complexLabel||'A')+'</span> ':'';
             let sd='',rd='';
             if(e.setRows&&e.setRows.length){
-              sd=e.setRows.map(r=>(r.type?'<span style="color:'+(STC[r.type]||'#94a3b8')+';font-size:6px;font-weight:700">['+r.type+']</span> ':'')+r.sets).join('<br>');
-              rd=e.setRows.map(r=>r.reps||'—').join('<br>');
-            } else {sd=e.sets||'—';rd=e.reps||'—';}
-            const noteCell=hasNotes?'<td class="note-cell">'+(e.cue||e.notes||e.note||'')+'</td>':'';
-            rows+='<tr><td class="en">'+cxB+e.name+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'—')+'</td><td class="nu">'+(e.rest||'—')+'</td>'+noteCell+'</tr>';
+              sd=e.setRows.map(r=>(r.type?'<span style="color:'+(STC[r.type]||'#94a3b8')+';font-size:6px;font-weight:700">['+esc(r.type)+']</span> ':'')+esc(r.sets)).join('<br>');
+              rd=e.setRows.map(r=>esc(r.reps||'—')).join('<br>');
+            } else {sd=esc(e.sets||'—');rd=esc(e.reps||'—');}
+            const noteCell=hasNotes?'<td class="note-cell">'+esc(e.cue||e.notes||e.note||'')+'</td>':'';
+            rows+='<tr><td class="en">'+cxB+esc(e.name)+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'—')+'</td><td class="nu">'+esc(e.rest||'—')+'</td>'+noteCell+'</tr>';
           });
           const noteHeader=hasNotes?'<th class="note-th">Note / Cue</th>':'';
           body='<table class="ex-tbl"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th>'+noteHeader+'</tr></thead><tbody>'+rows+'</tbody></table>';
@@ -2839,16 +2841,17 @@ window.exportBuilderPDF=function(){
         }
       }
 
-      sessHtml+='<div class="sc sc--'+(s.type||'pesi')+'">'
+      const typeCls=String(s.type||'pesi').replace(/[^a-z0-9_-]/gi,'');
+      sessHtml+='<div class="sc sc--'+typeCls+'">'
         +'<div class="sc-head">'
         +'<div class="sc-dot" style="background:'+dot+'"></div>'
         +'<div class="sc-meta">'
-        +(dayLbl?'<span class="sc-day">'+dayLbl+'</span>':'')
-        +'<span class="sc-name">'+(s.name||lbl)+'</span>'
+        +(dayLbl?'<span class="sc-day">'+esc(dayLbl)+'</span>':'')
+        +'<span class="sc-name">'+esc(s.name||lbl)+'</span>'
         +'</div>'
-        +'<span class="sc-tag" style="color:'+dot+'">'+lbl+'</span>'
+        +'<span class="sc-tag" style="color:'+dot+'">'+esc(lbl)+'</span>'
         +'</div>'
-        +(s.notes?'<div class="sc-snote">'+s.notes+'</div>':'')
+        +(s.notes?'<div class="sc-snote">'+esc(s.notes)+'</div>':'')
         +body
         +'</div>';
     });
@@ -2859,8 +2862,8 @@ window.exportBuilderPDF=function(){
       +'<div class="wh">'
       +'<span class="wh-dot" style="background:'+phCol+'"></span>'
       +'<span class="wh-num">Settimana '+(wi+1)+'</span>'
-      +(wk.label?'<span class="wh-lbl" style="color:'+phCol+'">'+wk.label+'</span>':'')
-      +(wk.notes?'<span class="wh-note">'+wk.notes+'</span>':'')
+      +(wk.label?'<span class="wh-lbl" style="color:'+phCol+'">'+esc(wk.label)+'</span>':'')
+      +(wk.notes?'<span class="wh-note">'+esc(wk.notes)+'</span>':'')
       +'<span class="wh-cnt">'+sessions.length+' sessioni</span>'
       +'</div>'
       +'<div class="sw">'+sessHtml+'</div>'
@@ -2972,20 +2975,20 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `;
 
-  const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+p.name+' — RS Coaching</title><style>'+css+'</style></head><body>'
+  const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' — RS Coaching</title><style>'+css+'</style></head><body>'
     // Header
     +'<div class="pg-head">'
     +'<div><div class="brand">RS<em>C</em></div><div class="brand-sub">Strength &amp; Conditioning</div></div>'
     +'<div class="pg-right">'
-    +'<div class="pg-prog">'+p.name+'</div>'
+    +'<div class="pg-prog">'+esc(p.name)+'</div>'
     +'<div class="pg-meta">'
-    +(p.sport?'<span class="pg-m"><strong>'+p.sport+'</strong></span>':'')
+    +(p.sport?'<span class="pg-m"><strong>'+esc(p.sport)+'</strong></span>':'')
     +'<span class="pg-m"><strong>'+allWeeks.length+'</strong> settimane</span>'
-    +(p.phase?'<span class="pg-m"><strong>'+p.phase+'</strong></span>':'')
-    +(p.category?'<span class="pg-m">'+p.category+'</span>':'')
+    +(p.phase?'<span class="pg-m"><strong>'+esc(p.phase)+'</strong></span>':'')
+    +(p.category?'<span class="pg-m">'+esc(p.category)+'</span>':'')
     +'</div>'
-    +(athleteNames.length?'<div class="pg-ath">'+athleteNames.join(' · ')+'</div>':'')
-    +'<div class="pg-date">'+todayStr+'</div>'
+    +(athleteNames.length?'<div class="pg-ath">'+athleteNames.map(esc).join(' · ')+'</div>':'')
+    +'<div class="pg-date">'+esc(todayStr)+'</div>'
     +'</div>'
     +'</div>'
     // Timeline
@@ -2995,11 +2998,12 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
     // Footer
     +'<div class="pg-foot">'
     +'<span><strong>RS Coaching</strong> · Strength &amp; Conditioning</span>'
-    +'<span>'+p.name+' · '+allWeeks.length+' settimane · '+new Date().getFullYear()+'</span>'
+    +'<span>'+esc(p.name)+' · '+allWeeks.length+' settimane · '+new Date().getFullYear()+'</span>'
     +'</div>'
     +'</body></html>';
 
   const pw=window.open('','_blank','width=900,height=1100');
+  if(!pw){showToast('⚠ Popup bloccato. Abilita i popup per esportare il PDF.');return;}
   pw.document.write(html);
   pw.document.close();
   pw.focus();
