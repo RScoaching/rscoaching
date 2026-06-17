@@ -396,7 +396,12 @@ body::after{
   transition:all .18s;
 }
 .db-item:hover{border-color:var(--border2);}
-.db-item-name{font-size:12px;font-weight:500;color:var(--white);flex:1;min-width:0;}
+.db-item-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.db-item-name{font-size:12px;font-weight:500;color:var(--white);}
+.db-item-tags{display:flex;flex-wrap:wrap;gap:4px;}
+.db-tag{font-size:9px;font-weight:600;letter-spacing:.2px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.06);color:var(--muted);white-space:nowrap;}
+.db-tag.t-equip{background:rgba(255,104,48,.12);color:#ffb088;}
+.db-tag.t-side{background:rgba(45,212,191,.12);color:#7fe6d6;}
 .db-video-link{font-size:10px;font-weight:600;color:var(--orange);text-decoration:none;white-space:nowrap;padding:2px 7px;border-radius:5px;background:rgba(139,92,246,.09);}
 .db-video-link:hover{background:rgba(255,104,48,.28);}
 .db-no-video{font-size:10px;color:var(--muted);opacity:.4;}
@@ -831,6 +836,15 @@ body::after{
       <option value="priming">🔄 Priming</option>
       <option value="mobilita">🤸 Mobilità</option>
       <option value="recupero">🧊 Recupero</option>
+    </select>
+    <select id="db-pattern-filter" onchange="dbPatternFilter(this.value)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
+      <option value="">Tutti i pattern</option>
+    </select>
+    <select id="db-muscle-filter" onchange="dbMuscleFilter(this.value)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
+      <option value="">Tutti i muscoli</option>
+    </select>
+    <select id="db-equip-filter" onchange="dbEquipFilter(this.value)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
+      <option value="">Tutti gli attrezzi</option>
     </select>
   </div>
   <div id="db-content"></div>
@@ -1827,16 +1841,17 @@ function renderAnalytics(){
 }
 
 // ── DATABASE
-let _dbSearch='', _dbFilter='';
+let _dbSearch='', _dbFilter='', _dbPattern='', _dbMuscle='', _dbEquip='';
 function renderDB(){
   const el=document.getElementById('db-content');
+  _populateDbFacets();
 
   // ── Merge: exercises_db.js (base) + Firebase custom overrides
   const OLD_CATS_D=new Set(['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro']);
   const merged={};
   (window.EXERCISES_DB||[]).forEach(e=>{
     const key=e.name.toLowerCase().trim();
-    merged[key]={name:e.name,cat:e.cat,group:e.group||'',url:e.url||null,src:'static'};
+    merged[key]={name:e.name,cat:e.cat,group:e.group||'',url:e.url||null,src:'static',pattern:e.pattern||'',muscles:e.muscles||[],equip:e.equip||'',side:e.side||''};
   });
   Object.entries(exercises).forEach(([fbKey,e])=>{
     if(!e||!e.name)return;
@@ -1846,12 +1861,16 @@ function renderDB(){
       if(e.url||e.video)merged[key].url=e.url||e.video;
       merged[key].fbKey=fbKey;merged[key].custom=true;
     } else {
-      merged[key]={name:e.name,cat:e.cat||'altro',group:e.group||'',url:e.url||e.video||null,src:'firebase',fbKey:fbKey,custom:true};
+      const t=(window.tagExercise?window.tagExercise(e):{})||{};
+      merged[key]={name:e.name,cat:e.cat||'altro',group:e.group||'',url:e.url||e.video||null,src:'firebase',fbKey:fbKey,custom:true,pattern:t.pattern||'',muscles:t.muscles||[],equip:t.equip||'',side:t.side||''};
     }
   });
 
   let all=Object.values(merged);
   if(_dbFilter)all=all.filter(e=>e.cat===_dbFilter);
+  if(_dbPattern)all=all.filter(e=>e.pattern===_dbPattern);
+  if(_dbMuscle)all=all.filter(e=>(e.muscles||[]).indexOf(_dbMuscle)>=0);
+  if(_dbEquip)all=all.filter(e=>e.equip===_dbEquip);
   if(_dbSearch)all=all.filter(e=>e.name.toLowerCase().includes(_dbSearch));
   all.sort((a,b)=>a.name.localeCompare(b.name,'it'));
 
@@ -1868,7 +1887,15 @@ function renderDB(){
     <div class="db-category">
       <div class="db-cat-name">${CAT_LABEL[cat]||cat} <span style="font-size:10px;opacity:.5;">(${items.length})</span></div>
       <div class="db-items">${items.map(ex=>`<div class="db-item">
-        <div class="db-item-name">${ex.name}</div>
+        <div class="db-item-main">
+          <div class="db-item-name">${ex.name}</div>
+          ${(()=>{const L=window.EX_TAG_LABELS||{};const ch=[];
+            if(ex.equip)ch.push(`<span class="db-tag t-equip">${(L.equip||{})[ex.equip]||ex.equip}</span>`);
+            if(ex.pattern)ch.push(`<span class="db-tag">${(L.pattern||{})[ex.pattern]||ex.pattern}</span>`);
+            (ex.muscles||[]).slice(0,2).forEach(m=>ch.push(`<span class="db-tag">${(L.muscles||{})[m]||m}</span>`));
+            if(ex.side==='unilaterale')ch.push(`<span class="db-tag t-side">${(L.side||{}).unilaterale||'Unilaterale'}</span>`);
+            return ch.length?`<div class="db-item-tags">${ch.join('')}</div>`:'';})()}
+        </div>
         ${ex.url?`<a href="${ex.url}" target="_blank" class="db-video-link" title="${ex.url}">▶ video</a>`:'<span class="db-no-video">—</span>'}
         <div class="db-item-actions">
           <button class="db-edit" onclick='openModal("editExercise",${JSON.stringify(ex)})' title="Modifica">✏️</button>
@@ -1879,6 +1906,25 @@ function renderDB(){
 }
 window.dbSearch=function(v){_dbSearch=v.toLowerCase();renderDB();}
 window.dbFilter=function(v){_dbFilter=v;renderDB();}
+window.dbPatternFilter=function(v){_dbPattern=v;renderDB();}
+window.dbMuscleFilter=function(v){_dbMuscle=v;renderDB();}
+window.dbEquipFilter=function(v){_dbEquip=v;renderDB();}
+// Populate tag-facet dropdowns from the merged DB (once, on first render)
+function _populateDbFacets(){
+  const L=window.EX_TAG_LABELS||{};
+  const fill=(id,facet,isArr)=>{
+    const sel=document.getElementById(id); if(!sel||sel.dataset.filled)return;
+    const set=new Set();
+    (window.EXERCISES_DB||[]).forEach(e=>{ if(isArr)(e[facet]||[]).forEach(x=>set.add(x)); else if(e[facet])set.add(e[facet]); });
+    const labels=L[facet]||{};
+    const opts=[...set].map(v=>[v,labels[v]||v]).sort((a,b)=>a[1].localeCompare(b[1],'it'));
+    sel.insertAdjacentHTML('beforeend',opts.map(([v,l])=>`<option value="${v}">${l}</option>`).join(''));
+    sel.dataset.filled='1';
+  };
+  fill('db-pattern-filter','pattern',false);
+  fill('db-muscle-filter','muscles',true);
+  fill('db-equip-filter','equip',false);
+}
 
 // ── ALL SESSIONS – filter state
 let _sessAth='', _sessFrom='', _sessTo='';
