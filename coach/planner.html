@@ -1238,6 +1238,7 @@ document.addEventListener('DOMContentLoaded',function(){
   window.exportPlannerPDF=function(){
     var wk=window._currentPlanWk||_eWk;
     if(!wk){_toastS('⚠ Seleziona prima una settimana');return;}
+    var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
     var pd=(window._plansCache||{})[wk]||(window.plans||{})[wk]||{};
     var conf=pd._config||{};
     var DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
@@ -1245,6 +1246,7 @@ document.addEventListener('DOMContentLoaded',function(){
     var TYPE_COLOR={squadra:'#2563EB',forza:'#7C3AED',sprint:'#DC2626',plyo:'#D97706',rec:'#059669',priming:'#0891B2',riposo:'#64748B',conditioning:'#EA580C',z2:'#22C55E',lungo:'#0EA5E9',tempo:'#F59E0B',interval:'#EF4444',match:'#DC2626',test:'#D97706'};
     var TYPE_BG={squadra:'#EFF6FF',forza:'#F5F3FF',sprint:'#FFF1F2',plyo:'#FFFBEB',rec:'#F0FDF4',priming:'#ECFEFF',riposo:'#F8FAFC',conditioning:'#FFF7ED',z2:'#F0FDF4',lungo:'#F0F9FF',tempo:'#FFFBEB',interval:'#FFF1F2',match:'#FFF1F2',test:'#FFFBEB'};
     var mon=new Date(wk+'T00:00:00');
+    if(isNaN(mon.getTime())){_toastS('⚠ Settimana non valida');return;}
     var sun=new Date(mon);sun.setDate(mon.getDate()+6);
     var gameDay=conf.gameDay!=null?parseInt(String(conf.gameDay),10):null;
     function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
@@ -1275,7 +1277,7 @@ document.addEventListener('DOMContentLoaded',function(){
       });
     }
     var weekLabel=fm(mon)+' – '+fm(sun);
-    if(conf.weekType)weekLabel+=' · '+conf.weekType.toUpperCase();
+    if(conf.weekType)weekLabel+=' · '+esc(String(conf.weekType).toUpperCase());
     var dayBlocks='';
     for(var di=0;di<7;di++){
       var dayData=pd[String(di)]||{};
@@ -1300,24 +1302,24 @@ document.addEventListener('DOMContentLoaded',function(){
           exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th>'+(hasNotes?'<th>Note</th>':'')+'</tr></thead><tbody>';
           exArr.forEach(function(e){
             if(!e.name)return;
-            var load=e.pct?'@'+e.pct+'%'+(e.rpe?' RPE '+e.rpe:''):e.rpe?'RPE '+e.rpe:(e.carico||e.load||'—');
-            var noteCell=hasNotes?'<td class="note-cell">'+(e.cue||e.notes||e.note||'')+'</td>':'';
-            exHtml+='<tr><td class="ex-name">'+e.name+'</td><td class="num">'+(e.sets||'—')+'</td><td class="num">'+(e.reps||'—')+'</td><td class="num">'+load+'</td><td class="num">'+(e.rest||'')+'</td>'+noteCell+'</tr>';
+            var load=e.pct?'@'+esc(e.pct)+'%'+(e.rpe?' RPE '+esc(e.rpe):''):e.rpe?'RPE '+esc(e.rpe):esc(e.carico||e.load||'—');
+            var noteCell=hasNotes?'<td class="note-cell">'+esc(e.cue||e.notes||e.note||'')+'</td>':'';
+            exHtml+='<tr><td class="ex-name">'+esc(e.name)+'</td><td class="num">'+esc(e.sets||'—')+'</td><td class="num">'+esc(e.reps||'—')+'</td><td class="num">'+load+'</td><td class="num">'+esc(e.rest||'')+'</td>'+noteCell+'</tr>';
           });
           exHtml+='</tbody></table>';
         }
-        var note=s.note?'<div class="sess-note">'+s.note+'</div>':'';
-        var sessName=s.name&&s.name!==(TYPE_NAME[s.type]||s.type)?'<span class="sess-name-label">'+s.name+'</span>':'';
-        var durChip=s.duration?'<span class="sess-dur">'+s.duration+'</span>':'';
-        sessHtml+='<div class="sess-block"><div class="sess-hdr" style="background:'+col+';"><span class="sess-type-name">'+(TYPE_NAME[s.type]||s.type)+'</span>'+sessName+durChip+'</div>'+note+exHtml+'</div>';
+        var note=s.note?'<div class="sess-note">'+esc(s.note)+'</div>':'';
+        var sessName=s.name&&s.name!==(TYPE_NAME[s.type]||s.type)?'<span class="sess-name-label">'+esc(s.name)+'</span>':'';
+        var durChip=s.duration?'<span class="sess-dur">'+esc(s.duration)+'</span>':'';
+        sessHtml+='<div class="sess-block"><div class="sess-hdr" style="background:'+col+';"><span class="sess-type-name">'+esc(TYPE_NAME[s.type]||s.type)+'</span>'+sessName+durChip+'</div>'+note+exHtml+'</div>';
       });
       dayBlocks+='<div class="day-col'+(isGame?' is-game':'')+'"><div class="day-hdr" style="background:'+hdrBg+';"><div><div class="day-name">'+DAYS[di].substring(0,3).toUpperCase()+'</div><div class="day-date">'+fmS(dayDate)+'</div></div>'+relBadge+'</div><div class="day-body">'+sessHtml+'</div></div>';
     }
     var statChips=Object.entries(typeCounts).map(function(kv){
-      return '<span class="stat-chip" style="background:'+(TYPE_BG[kv[0]]||'#f1f5f9')+'"><i class="dot" style="background:'+(TYPE_COLOR[kv[0]]||'#888')+'"></i>'+(TYPE_NAME[kv[0]]||kv[0])+' <b>'+kv[1]+'</b></span>';
+      return '<span class="stat-chip" style="background:'+(TYPE_BG[kv[0]]||'#f1f5f9')+'"><i class="dot" style="background:'+(TYPE_COLOR[kv[0]]||'#888')+'"></i>'+esc(TYPE_NAME[kv[0]]||kv[0])+' <b>'+kv[1]+'</b></span>';
     }).join('');
     var statsBar=totalSessions?'<div class="stats-bar"><span class="stats-lbl">'+totalSessions+' session'+(totalSessions===1?'e':'i')+'</span>'+statChips+'</div>':'';
-    var html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Piano – '+wk+'</title><style>'
+    var html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Piano – '+esc(wk)+'</title><style>'
       +'@page{size:A4 landscape;margin:10mm 8mm}*{box-sizing:border-box}'
       +'body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:9px;color:#1a1a2e;margin:0;background:#fff}'
       +'.pdf-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:7px;margin-bottom:5px;border-bottom:2px solid #E2611C}'
@@ -1361,9 +1363,10 @@ document.addEventListener('DOMContentLoaded',function(){
       +'</div>'
       +statsBar
       +'<div class="week-grid">'+dayBlocks+'</div>'
-      +'<div class="pdf-footer"><span>RS Coaching · Strength &amp; Conditioning · Piano Settimanale</span><span>'+wk+'</span></div>'
+      +'<div class="pdf-footer"><span>RS Coaching · Strength &amp; Conditioning · Piano Settimanale</span><span>'+esc(wk)+'</span></div>'
       +'</body></html>';
     var pw=window.open('','_blank','width=1200,height=800');
+    if(!pw){_toastS('⚠ Popup bloccato. Abilita i popup per esportare il PDF.');return;}
     pw.document.write(html);
     pw.document.close();
     pw.focus();
