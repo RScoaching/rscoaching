@@ -661,8 +661,135 @@ var _db = [
 
 ];
 
+// ============================================================
+// TAGGING ENGINE — inferisce pattern / muscles / equip / side
+// da name + group + cat. Deterministico, nessun campo bloccante.
+// Phase 5: tagging multidimensionale (libreria filtrabile).
+// ============================================================
+function tagExercise(e){
+  var name=(e.name||''); var n=name.toLowerCase();
+  var grp=(e.group||''); var g=grp.toLowerCase();
+  var cat=(e.cat||'');
+  var has=function(){ for(var i=0;i<arguments.length;i++){ if(n.indexOf(arguments[i])>=0) return true; } return false; };
+  var gis=function(){ for(var i=0;i<arguments.length;i++){ if(grp===arguments[i]) return true; } return false; };
+
+  // ---- EQUIP (singolo primario, per priorità) ----
+  var equip='corpo_libero';
+  if(has('smith')) equip='smith';
+  else if(has('sled','slitta')) equip='sled';
+  else if(has('battle rope','corda')) equip='corda';
+  else if(has('med ball','medicine ball','palla medica','wall ball')) equip='palla_medica';
+  else if(has('cable','cavo','pulley','pulldown','lat machine','pushdown')) equip='cavi';
+  else if(has('machine','macchina','leg press','hack squat','pendulum','leg extension','leg curl','pec deck','pec dec','chest press machine','reverse fly machine','calf machine')) equip='macchina';
+  else if(has('barbell','bilanciere','trap bar','zercher','high bar','low bar','front squat','power clean','clean','snatch','jerk','good morning','hip thrust',' bar ')) equip='bilanciere';
+  else if(has('kettlebell','kb ','kb)',' kb','goblet','farmer')) equip='kettlebell';
+  else if(has('dumbbell','manubrio','manubri','db ',' db','incline db')) equip='manubri';
+  else if(has('band','banded','elastico','elastic')) equip='elastico';
+  if(gis('Olympic') && equip==='corpo_libero') equip='bilanciere';
+
+  // ---- SIDE ----
+  var side='bilaterale';
+  if(has('single leg','single arm','single-leg','single-arm','single ','singola','singolo','unilateral','split squat','lunge','affondo','step up','step-up','rfess','bulgarian','pistol','kickstand','b-stance','b stance','skater','one arm','1-arm','one-arm','step down','staggered','sl ','copenhagen','side plank','plank laterale','suitcase','single farmer','offset'))
+    side='unilaterale';
+
+  // ---- PATTERN ----
+  var pattern='altro';
+  if(gis('Squat Variations')){
+    if(has('lunge','affondo','split squat','step up','step-up','rfess','bulgarian','step down','kickstand')) pattern='affondo';
+    else pattern='squat';
+  }
+  else if(gis('Hinging','Hamstring','Femorali','Catena Posteriore','Glutei')) pattern='hinge';
+  else if(gis('Quad Isolation','Quadricipiti')) pattern='isolamento';
+  else if(gis('Calf','Polpacci')) pattern='isolamento';
+  else if(gis('Adductor','Abductor')) pattern='isolamento';
+  else if(gis('Panca / Chest Press','Croci / Flies','Horizontal Press')) pattern='spinta_orizz';
+  else if(gis('Vertical Press','Spalle')) pattern='spinta_vert';
+  else if(gis('Shoulder RTC')){
+    if(has('dip')) pattern='spinta_orizz';
+    else if(has('fly','croci','press','pressa')) pattern='spinta_orizz';
+    else pattern='cuffia_rotatori';
+  }
+  else if(gis('Horizontal Row')) pattern='tirata_orizz';
+  else if(gis('Schiena')){ pattern=has('pull up','pullup','chin up','chinup','pulldown','lat machine','trazion')?'tirata_vert':'tirata_orizz'; }
+  else if(gis('Vertical Pull')) pattern='tirata_vert';
+  else if(gis('Core','Core Carry')) pattern=has('carry','farmer','trasporto')?'trasporto':'core';
+  else if(gis('Bicipiti','Tricipiti','Bicep Tricep','Forearm Elbow')) pattern='isolamento';
+  else if(gis('Olympic')) pattern='olimpico';
+  else if(gis('Jumping','Medicine Ball')) pattern='pliometria';
+  else if(gis('Sprint','Sprint Drills')) pattern='sprint';
+  else if(gis('Change of Direction')) pattern='cambio_direzione';
+  else if(gis('Conditioning','Endurance')) pattern='condizionamento';
+  else if(gis('ROM','Hip Mobility')) pattern='mobilita';
+  else if(gis('Isometrics')) pattern='isometrico';
+  else if(gis('Recovery')) pattern='recupero';
+  else if(gis('Priming')) pattern='priming';
+  else if(gis('Funzionale')) pattern=has('carry','farmer','trasporto')?'trasporto':'condizionamento';
+  if(pattern==='altro'){
+    if(cat==='mobilita') pattern='mobilita';
+    else if(cat==='pliometria') pattern='pliometria';
+    else if(cat==='velocita_sprint'||cat==='velocita_prep') pattern='sprint';
+    else if(cat==='recupero') pattern='recupero';
+    else if(cat==='priming') pattern='priming';
+    else if(cat==='olimpico') pattern='olimpico';
+    else if(cat==='resistenza'||cat==='condizionamento') pattern='condizionamento';
+  }
+
+  // ---- MUSCLES (array) ----
+  var m=[];
+  var add=function(){ for(var i=0;i<arguments.length;i++){ if(m.indexOf(arguments[i])<0) m.push(arguments[i]); } };
+  if(gis('Squat Variations')) add('quadricipiti','glutei');
+  if(gis('Quad Isolation','Quadricipiti')) add('quadricipiti');
+  if(gis('Hinging','Catena Posteriore')) add('femorali','glutei');
+  if(gis('Hamstring','Femorali')) add('femorali');
+  if(gis('Glutei')) add('glutei');
+  if(gis('Calf','Polpacci')) add('polpacci');
+  if(gis('Adductor')) add('adduttori');
+  if(gis('Abductor')) add('abduttori','glutei');
+  if(gis('Panca / Chest Press','Croci / Flies','Horizontal Press')) add('pettorali');
+  if(gis('Horizontal Press')) add('tricipiti','spalle');
+  if(gis('Vertical Press','Spalle')) add('spalle','tricipiti');
+  if(gis('Shoulder RTC')){ if(has('reverse fly','rear','reverse')) add('spalle','schiena'); else if(has('dip')) add('pettorali','tricipiti'); else if(has('fly','croci')) add('pettorali','spalle'); else add('spalle'); }
+  if(gis('Horizontal Row','Vertical Pull','Schiena')) add('schiena','bicipiti');
+  if(gis('Bicipiti')) add('bicipiti');
+  if(gis('Tricipiti')) add('tricipiti');
+  if(gis('Bicep Tricep')) add('bicipiti','tricipiti');
+  if(gis('Forearm Elbow')) add('avambracci');
+  if(gis('Core','Core Carry','Isometrics')) { if(has('cervical','collo')) add('collo'); else if(has('shoulder','spalla')) add('spalle'); else add('core'); }
+  if(gis('Jumping','Sprint','Sprint Drills','Change of Direction')) add('quadricipiti','glutei','femorali','polpacci');
+  if(gis('Olympic')) add('full_body');
+  if(gis('Medicine Ball')) add('core','spalle');
+  if(gis('Conditioning','Endurance')) add('full_body');
+  if(gis('Hip Mobility')) add('anca');
+  if(gis('Funzionale')) add('full_body');
+  if(gis('Priming','Recovery')) add('full_body');
+  if(gis('ROM')){
+    if(has('cervical','collo')) add('collo');
+    else if(has('thoracic','t-spine','open book','child','cat-cow','scorpion')) add('schiena');
+    else if(has('elbow','wrist','gomito','polso')) add('avambracci');
+    else if(has('shoulder','spalla')) add('spalle');
+    else if(has('hip','anca')) add('anca');
+    else add('full_body');
+  }
+  if(m.length===0) add('altro');
+
+  return { pattern:pattern, muscles:m, equip:equip, side:side };
+}
+
+// Arricchisce ogni voce statica con i tag inferiti
+_db.forEach(function(e){ var t=tagExercise(e); e.pattern=t.pattern; e.muscles=t.muscles; e.equip=t.equip; e.side=t.side; });
+
+// Etichette IT per la UI (label leggibili dai tag)
+var TAG_LABELS = {
+  pattern: {squat:'Squat', affondo:'Affondo', hinge:'Hinge', spinta_orizz:'Spinta orizz.', spinta_vert:'Spinta vert.', tirata_orizz:'Tirata orizz.', tirata_vert:'Tirata vert.', isolamento:'Isolamento', core:'Core', trasporto:'Trasporto', cuffia_rotatori:'Cuffia rotatori', olimpico:'Olimpico', pliometria:'Pliometria', sprint:'Sprint', cambio_direzione:'Cambio direzione', condizionamento:'Condizionamento', mobilita:'Mobilità', isometrico:'Isometrico', recupero:'Recupero', priming:'Priming', altro:'Altro'},
+  muscles: {quadricipiti:'Quadricipiti', femorali:'Femorali', glutei:'Glutei', polpacci:'Polpacci', adduttori:'Adduttori', abduttori:'Abduttori', pettorali:'Pettorali', schiena:'Schiena', spalle:'Spalle', bicipiti:'Bicipiti', tricipiti:'Tricipiti', avambracci:'Avambracci', core:'Core', collo:'Collo', anca:'Anca', full_body:'Full body', altro:'Altro'},
+  equip: {corpo_libero:'Corpo libero', bilanciere:'Bilanciere', manubri:'Manubri', kettlebell:'Kettlebell', macchina:'Macchina', smith:'Smith', cavi:'Cavi', elastico:'Elastico', palla_medica:'Palla medica', sled:'Sled', corda:'Battle rope'},
+  side: {bilaterale:'Bilaterale', unilaterale:'Unilaterale'}
+};
+
 // ─── Public API ──────────────────────────────────────────────
 window.EXERCISES_DB = _db;
+window.tagExercise = tagExercise;
+window.EX_TAG_LABELS = TAG_LABELS;
 
 // Name → URL lookup (case-insensitive)
 window.EX_URL_MAP = {};
