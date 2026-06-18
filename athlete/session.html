@@ -1136,6 +1136,15 @@ window.exitSession=function(){
 function saveProgress(){
   try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs}));}catch(e){}
 }
+let _saveTmr=null;
+function saveProgressDebounced(){
+  if(_saveTmr)clearTimeout(_saveTmr);
+  _saveTmr=setTimeout(()=>{_saveTmr=null;saveProgress();},400);
+}
+// Flush dei dati in sospeso prima che la pagina venga chiusa/aggiornata
+function flushProgress(){if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}saveProgress();}
+window.addEventListener('pagehide',flushProgress);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushProgress();});
 function loadProgress(){
   try{
     const raw=localStorage.getItem(_sessKey);
@@ -1634,8 +1643,8 @@ function renderPesi(ex,ei){
       const prevRepHint=d.prevReps&&!d.done&&!actualReps?d.prevReps:'';
       const prevKgVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].kg:null;
       const prevRepsVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].reps:null;
-      const prevText=prevKgVal?`${prevKgVal}kg`:'—';
-      const prevSub=prevRepsVal?`× ${prevRepsVal}`:'';
+      const prevText=(prevRepsVal&&prevKgVal)?`${prevRepsVal}×${prevKgVal}`:(prevKgVal?`${prevKgVal}kg`:'—');
+      const prevSub=(prevRepsVal&&prevKgVal)?'reps×kg':(prevKgVal?'kg':'');
       return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}" data-si="${ei}-${s}">
         <div class="set-row-inner">
           <div class="set-row-main">
@@ -1736,8 +1745,8 @@ function renderComplex(ex,ei){
         const d=csd[s]||{kg:'',rpe:null,done:false};
         const cPrevKg=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].kg:null;
         const cPrevReps=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].reps:null;
-        const cPrevText=cPrevKg?`${cPrevKg}kg`:'—';
-        const cPrevSub=cPrevReps?`× ${cPrevReps}`:'';
+        const cPrevText=(cPrevReps&&cPrevKg)?`${cPrevReps}×${cPrevKg}`:(cPrevKg?`${cPrevKg}kg`:'—');
+        const cPrevSub=(cPrevReps&&cPrevKg)?'reps×kg':(cPrevKg?'kg':'');
         return `<div class="set-row${d.done?' done':''}">
           <div class="set-row-main">
             <span class="sn${d.done?' d':''}">${s+1}</span>
@@ -1995,6 +2004,8 @@ window.setKg=(ei,s,v,el)=>{
   if(doneBtn){doneBtn.classList.remove('ready');doneBtn.textContent='';}
   // Aggiorna volume in tempo reale se la serie è già completata
   if(setData[ei][s].done)updateVolumeTracker();
+  // Persisti i dati digitati (auto-save) senza re-render per non perdere il focus
+  saveProgressDebounced();
 };
 // Per-set actual reps (replaces global setReps)
 window.setRepsActual=(ei,s,v)=>{
@@ -2002,6 +2013,8 @@ window.setRepsActual=(ei,s,v)=>{
   setData[ei][s].reps=v;
   // Aggiorna volume in tempo reale se la serie è già completata
   if(setData[ei][s].done)updateVolumeTracker();
+  // Persisti i dati digitati (auto-save) senza re-render per non perdere il focus
+  saveProgressDebounced();
 };
 window.setRpe=(ei,s,r)=>{if(!setData[ei][s])setData[ei][s]={};setData[ei][s].rpe=r;renderCard(ei);};
 window.toggleDone=function(ei,s){
@@ -2056,8 +2069,8 @@ window.toggleDone=function(ei,s){
     },150);
   }
 };
-window.setCxKg=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].kg=v;};
-window.setCxReps=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].reps=v;};
+window.setCxKg=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].kg=v;saveProgressDebounced();};
+window.setCxReps=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].reps=v;saveProgressDebounced();};
 window.setCxRpe=(ei,ci,s,r)=>{if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].rpe=r;renderCard(ei);};
 window.toggleCxDone=function(ei,ci,s){
   if(!setData[ei][ci][s])setData[ei][ci][s]={};
