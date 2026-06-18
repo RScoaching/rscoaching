@@ -38,6 +38,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .icon-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:var(--text);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
 .icon-btn:hover{background:rgba(255,106,46,.1);border-color:var(--violet);color:var(--violet);}
 
+.cal-ctx{margin:12px 12px 8px;padding:12px 14px;background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.32);border-radius:12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0;}
+.cal-ctx-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--violet2);}
+.cal-ctx-sel{width:100%;padding:9px 10px;background:rgba(0,0,0,.32);border:1px solid rgba(139,92,246,.38);border-radius:8px;color:var(--white);font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;outline:none;transition:border-color .15s;}
+.cal-ctx-sel:hover,.cal-ctx-sel:focus{border-color:var(--violet);}
+.cal-ctx-hint{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.cal-newplan-btn{margin:0 12px 10px;padding:9px 14px;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;flex-shrink:0;}
+.cal-newplan-btn:hover{background:rgba(255,106,46,.08);border-color:var(--primary);color:var(--primary2);}
+.cal-newplan-btn:active{transform:scale(.985);}
 .cal-month-view-btn{margin:0 12px 8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(6,214,160,.08);border:1px solid rgba(6,214,160,.28);border-radius:10px;color:var(--teal);font-family:'Inter',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;flex-shrink:0;}
 .cal-month-view-btn:hover{background:rgba(6,214,160,.14);border-color:var(--teal);}
 .cal-month-view-btn:active{transform:scale(.985);}
@@ -349,8 +357,18 @@ document.addEventListener('DOMContentLoaded',function(){
         <button class="icon-btn" onclick="shiftMonth(1)" title="Mese successivo">→</button>
       </div>
     </div>
+    <div class="cal-ctx">
+      <label class="cal-ctx-lbl" for="global-ctx-sel">① Stai lavorando su</label>
+      <select class="cal-ctx-sel" id="global-ctx-sel" onchange="switchAthMode(this.value)">
+        <option value="">👥 Gruppo (piano base)</option>
+      </select>
+      <div class="cal-ctx-hint">Scegli prima il gruppo o l'atleta, poi apri una settimana o la vista mese.</div>
+    </div>
+    <button class="cal-newplan-btn" id="cal-newplan-btn" onclick="newEmptyPlan()" title="Torna al piano base del Gruppo per costruire un piano pulito da assegnare agli atleti">
+      ＋ Nuovo piano (Gruppo)
+    </button>
     <button class="cal-month-view-btn" id="cal-month-view-btn" onclick="openMonthView()" title="Vedi tutte le settimane del mese, trascina le sessioni tra i giorni">
-      <span>📅 Vista Mese</span>
+      <span>📅 ② Vista Mese</span>
       <span class="cmv-sub">tutte le settimane insieme</span>
     </button>
     <div class="weeks-list" id="weeks-list"></div>
@@ -624,19 +642,26 @@ document.addEventListener('DOMContentLoaded',function(){
       var isSel=w.k===cur;
       var mini='<div class="mini-day"></div>'.repeat(7);
       var pill='<span class="wpill wp-empty">Vuota</span>';
-      if(window._plansCache&&window._plansCache[w.k]){
-        var wd=window._plansCache[w.k];
-        var cnt=Object.entries(wd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
-        var conf=wd._config||{};
-        if(wd._published) pill='<span class="wpill wp-done">✓ Pub</span>';
-        else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
-        if(conf.weekType) pill+='<span class="wpill" style="background:rgba(28,23,30,.92);color:var(--text);">'+conf.weekType+'</span>';
+      var aid=window._athModeAid||null;
+      var grp=(window._plansCache&&window._plansCache[w.k])||null;
+      var wd=aid?((window._athPlanCache||{})[aid+'_'+w.k]||null):grp;
+      var cnt=0;
+      if(wd){
+        cnt=Object.entries(wd).filter(function(kv){return!kv[0].startsWith('_');}).reduce(function(t,kv){return t+Object.keys(kv[1]||{}).length;},0);
         mini=Array.from({length:7},function(_,i){
           var fd=Object.values(wd[String(i)]||{});
           var cls=fd[0]&&fd[0].type?'md-'+fd[0].type:'';
           return '<div class="mini-day '+cls+'"></div>';
         }).join('');
       }
+      if(aid){
+        if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
+      } else if(grp){
+        if(grp._published) pill='<span class="wpill wp-done">✓ Pub</span>';
+        else if(cnt>0) pill='<span class="wpill wp-draft">'+cnt+' sess.</span>';
+      }
+      var conf=(grp&&grp._config)||{};
+      if(conf.weekType) pill+='<span class="wpill" style="background:rgba(28,23,30,.92);color:var(--text);">'+conf.weekType+'</span>';
       return '<div class="week-row'+(isSel?' selected':'')+'" id="wrow-'+w.k+'" onclick="window._swk(\''+w.k+'\')">'+
         '<div class="week-row-head">'+
         '<div class="week-num">W'+wn(w.s)+'</div>'+
@@ -647,6 +672,10 @@ document.addEventListener('DOMContentLoaded',function(){
         '</div>';
     }).join('');
     document.getElementById('weeks-list').innerHTML=html;
+    // In modalità atleta: assicura che le settimane visibili siano in cache (auto-refresh)
+    if(window._athModeAid && window._ensureCtxCache){
+      window._ensureCtxCache(ww.map(function(w){return w.k;}));
+    }
     // scroll alla settimana corrente al primo caricamento
     if(!cur){
       var mon=new Date(today);mon.setDate(today.getDate()-((today.getDay()||7)-1));
@@ -726,6 +755,12 @@ document.addEventListener('DOMContentLoaded',function(){
   var wizWk=null, wizTpl=null, wizDays=[];
 
   window.openWeekOrWiz=function(wk){
+    // In athlete context the wizard (which builds GROUP templates) doesn't apply:
+    // open the editor directly so edits land in the athlete's own plan.
+    if(window._athModeAid){
+      if(window._openEditor) window._openEditor(wk);
+      return;
+    }
     var plans=window._plansCache||{};
     var wData=plans[wk]||{};
     var hasSessions=Object.keys(wData).some(function(k){return!k.startsWith('_');});
@@ -1892,7 +1927,7 @@ onValue(ref(db,'plans'),s=>{
   if(_viewMode==='month')renderMonth();
   else if(currentWk)renderGrid();
 });
-onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();});
+onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();if(window._populateGlobalCtx)window._populateGlobalCtx();});
 
 // Wire week-selection: standalone clicks → wizard (se settimana vuota) o editor (se già ha sessioni)
 window._onWkSelect=function(wk){if(window.openWeekOrWiz)window.openWeekOrWiz(wk);};
@@ -2020,11 +2055,13 @@ function renderEditor(){
   if(typeof _setWeekUiVisible==='function')_setWeekUiVisible(true);
   // Reset versione quando si apre una nuova settimana
   if(window._resetVersion) window._resetVersion();
-  // Reset athlete mode when opening new week
-  window._athModeAid=null;
+  // Mantieni il contesto Gruppo/Atleta scelto globalmente (NON resettare per settimana)
+  const _ctxAid=window._athModeAid||null;
   const mSel=document.getElementById('ath-mode-sel');
-  if(mSel) mSel.value='';
-  document.querySelectorAll('.cfg-item-group').forEach(el=>el.style.display='flex');
+  if(mSel) mSel.value=_ctxAid||'';
+  const gSel=document.getElementById('global-ctx-sel');
+  if(gSel) gSel.value=_ctxAid||'';
+  document.querySelectorAll('.cfg-item-group').forEach(el=>el.style.display=_ctxAid?'none':'flex');
 
   document.getElementById('ed-empty').style.display='none';
   const edContent=document.getElementById('ed-content');
@@ -2049,6 +2086,16 @@ function renderEditor(){
   renderAssignedChips();
   // Populate athlete selector with all athletes
   if(window._populateAthSel) window._populateAthSel(currentWk);
+  // Ri-sincronizza i selettori dopo il populate (gli option vengono ricostruiti)
+  if(mSel) mSel.value=_ctxAid||'';
+  if(gSel) gSel.value=_ctxAid||'';
+  // In modalità atleta: prefetch del piano individuale + stato dedicato
+  if(_ctxAid){
+    if(window._prefetchAthWeeks) window._prefetchAthWeeks(_ctxAid,[currentWk]).then(()=>renderGrid());
+    const _nm=(athletes[_ctxAid]||{}).name||_ctxAid;
+    const _st=document.getElementById('ed-status');
+    if(_st){ _st.textContent='🎯 Piano di '+_nm; _st.style.color='var(--amber)'; }
+  }
   // Carica versioni salvate per questa settimana
   if(window._loadVersions) window._loadVersions(currentWk);
 }
@@ -2214,8 +2261,14 @@ function renderMonth(){
   if(!_monthViewDate)_monthViewDate=currentWk?new Date(currentWk+'T00:00:00'):new Date();
   const y=_monthViewDate.getFullYear(), m=_monthViewDate.getMonth();
   const weeks=getWeeksInMonth(y,m);
+  // In modalità atleta: assicura che tutte le settimane del mese siano in cache (auto-refresh)
+  if(window._athModeAid){
+    const _miss=weeks.map(w=>w.key).filter(k=>(window._athPlanCache||{})[window._athModeAid+'_'+k]===undefined);
+    if(_miss.length){ window._prefetchAthWeeks(window._athModeAid,_miss).then(()=>renderMonth()); }
+  }
   const today=new Date(); today.setHours(0,0,0,0);
   const monthLbl=_monthViewDate.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
+  const ctxName=window._athModeAid?('🎯 '+((athletes[window._athModeAid]||{}).name||window._athModeAid)):'👥 Gruppo (piano base)';
   const hasCopied=!!_fbCopiedWeek;
 
   const weeksHtml=weeks.map(w=>{
@@ -2268,6 +2321,7 @@ function renderMonth(){
     <button class="icon-btn" onclick="shiftMonthView(-1)">‹</button>
     <span class="mt-label">${monthLbl}</span>
     <button class="icon-btn" onclick="shiftMonthView(1)">›</button>
+    <span class="mt-ctx" style="margin-left:10px;padding:4px 10px;border-radius:8px;background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.34);color:var(--violet2);font-size:11px;font-weight:700;white-space:nowrap;">${ctxName}</span>
     <span class="mt-hint">Trascina le sessioni tra giorni e settimane · Clicca per modificare</span>
   </div>
   <div class="month-weeks">${weeksHtml}</div>`;
@@ -2624,35 +2678,77 @@ window.removeAssigned=async function(aid){
   showToast('Atleta rimosso dalla settimana');
 };
 
-// ── MODALITÀ ATLETA (Firebase version — sovrascrive standalone)
+// ── MODALITÀ ATLETA / GRUPPO (contesto globale, persiste tra settimane e viste)
+// Settimane attualmente visibili (calendario sinistro + vista mese + settimana aperta)
+function _visibleWeekKeys(){
+  const set=new Set();
+  try{ getWeeksInMonth(currentMonthDate.getFullYear(),currentMonthDate.getMonth()).forEach(w=>set.add(w.key)); }catch(e){}
+  if(_monthViewDate){ try{ getWeeksInMonth(_monthViewDate.getFullYear(),_monthViewDate.getMonth()).forEach(w=>set.add(w.key)); }catch(e){} }
+  if(currentWk) set.add(currentWk);
+  return [...set];
+}
+// Prefetch dei piani individuali per le settimane indicate (REST → cache)
+window._prefetchAthWeeks=async function(aid,weekKeys){
+  if(!aid||!weekKeys||!weekKeys.length) return;
+  window._athPlanCache=window._athPlanCache||{};
+  const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+  await Promise.all(weekKeys.map(async wk=>{
+    const ck=aid+'_'+wk;
+    try{
+      const r=await fetch(_dbUrl+`/athlete_plans/${aid}/${wk}/days.json`);
+      window._athPlanCache[ck]=(r.ok?(await r.json()):null)||{};
+    }catch(e){ if(window._athPlanCache[ck]===undefined) window._athPlanCache[ck]={}; }
+  }));
+};
+// Auto-refresh della cache per le settimane visibili (chiamato dal calendario standalone)
+window._ensureCtxCache=function(keys){
+  const aid=window._athModeAid; if(!aid) return;
+  window._athPlanCache=window._athPlanCache||{};
+  const miss=(keys||[]).filter(k=>window._athPlanCache[aid+'_'+k]===undefined);
+  if(!miss.length) return;
+  window._prefetchAthWeeks(aid,miss).then(()=>{ if(window._calRender)window._calRender(); });
+};
+function _renderCurrentView(){
+  if(_viewMode==='month') renderMonth();
+  else if(currentWk) renderGrid();
+}
 window.switchAthMode=function(aid){
-  window._athModeAid=aid||null;
-  const cfgGroups=document.querySelectorAll('.cfg-item-group');
-  cfgGroups.forEach(el=>el.style.display=aid?'none':'flex');
+  aid=aid||null;
+  window._athModeAid=aid;
+  // Sincronizza entrambi i selettori (globale + editor)
+  const gSel=document.getElementById('global-ctx-sel'); if(gSel) gSel.value=aid||'';
+  const eSel=document.getElementById('ath-mode-sel'); if(eSel) eSel.value=aid||'';
+  // In modalità atleta, la config gruppo (giorno gara / tipo settimana) non si applica
+  document.querySelectorAll('.cfg-item-group').forEach(el=>el.style.display=aid?'none':'flex');
+  // Stato
   const st=document.getElementById('ed-status');
   if(st){
     if(aid){
-      const name=(athletes[aid]||{}).name||aid;
-      st.textContent='🎯 Piano di '+name;
+      st.textContent='🎯 Piano di '+((athletes[aid]||{}).name||aid);
       st.style.color='var(--amber)';
-    } else {
+    } else if(currentWk){
       const pub=plans[currentWk]?._published;
       st.textContent=pub?`✓ Pubblicata il ${new Date(pub).toLocaleDateString('it-IT')}`:'Bozza';
       st.style.color=pub?'var(--teal)':'var(--amber)';
-    }
+    } else { st.textContent=''; }
   }
+  // Prefetch settimane visibili poi ridisegna vista + calendario
   if(aid){
-    // Fetch athlete plan via REST and refresh grid
-    const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
-    fetch(_dbUrl+`/athlete_plans/${aid}/${currentWk}/days.json`)
-      .then(r=>r.ok?r.json():null)
-      .then(days=>{
-        window._athPlanCache[aid+'_'+currentWk]=days||{};
-        renderGrid();
-      });
+    window._prefetchAthWeeks(aid,_visibleWeekKeys()).then(()=>{
+      _renderCurrentView();
+      if(window._calRender) window._calRender();
+    });
   } else {
-    renderGrid();
+    _renderCurrentView();
+    if(window._calRender) window._calRender();
   }
+};
+
+// "Nuovo piano (Gruppo)": torna al piano base pulito e apre la vista mese per costruirlo
+window.newEmptyPlan=function(){
+  window.switchAthMode('');               // contesto = Gruppo (piano base)
+  window.openMonthView();                 // canvas mensile per costruire
+  showToast('👥 Piano base Gruppo — costruisci qui, poi assegna agli atleti con "Invia atleti"');
 };
 
 window._populateAthSel=function(wk){
@@ -2666,6 +2762,21 @@ window._populateAthSel=function(wk){
     opt.textContent=(a||{}).name||id;
     sel.appendChild(opt);
   });
+  sel.value=window._athModeAid||'';
+};
+
+// Popola il selettore di contesto globale (Gruppo + atleti)
+window._populateGlobalCtx=function(){
+  const sel=document.getElementById('global-ctx-sel');
+  if(!sel) return;
+  while(sel.options.length>1) sel.remove(1);
+  Object.entries(athletes||{}).forEach(([id,a])=>{
+    const opt=document.createElement('option');
+    opt.value=id;
+    opt.textContent='🏃 '+((a||{}).name||id);
+    sel.appendChild(opt);
+  });
+  sel.value=window._athModeAid||'';
 };
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
