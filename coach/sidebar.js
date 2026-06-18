@@ -2,27 +2,17 @@
 window.SIDEBAR_HTML = `
 <div class="sb-mob-bar" id="sb-mob-bar">
   <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
-  <div class="sb-mob-logo" style="display:flex;align-items:center;gap:8px;">
-    <div style="width:26px;height:26px;background:#FF6830;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(255,104,48,.4);">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:13px;color:#fff;letter-spacing:1px;line-height:1;">RS</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:0px;justify-content:center;">
-      <span style="font-family:'Bebas Neue',sans-serif;font-size:10px;color:#8B5CF6;letter-spacing:3px;line-height:1.1;">RS</span>
-      <span style="font-size:6.5px;font-weight:700;color:rgba(248,250,255,.35);letter-spacing:2.5px;text-transform:uppercase;line-height:1.2;">COACHING</span>
-    </div>
+  <div class="rs-logo sm">
+    <svg class="rs-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect width="36" height="36" rx="10" fill="url(#rsGsbM)"/><rect x="9" y="20" width="4.2" height="7" rx="2.1" fill="#fff" opacity=".55"/><rect x="15.9" y="15" width="4.2" height="12" rx="2.1" fill="#fff" opacity=".8"/><rect x="22.8" y="9" width="4.2" height="18" rx="2.1" fill="#fff"/><defs><linearGradient id="rsGsbM" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF8A4D"/><stop offset="1" stop-color="#E2611C"/></linearGradient></defs></svg>
+    <div class="rs-word"><b>RS</b><span>COACHING</span></div>
   </div>
 </div>
 <div class="sb-mob-overlay" id="sb-mob-ov"></div>
 <div class="sidebar" id="sb-sidebar">
   <div class="sb-top">
-    <div class="logo" style="display:flex;align-items:center;gap:9px;font-size:unset;letter-spacing:unset;filter:none;">
-      <div style="width:32px;height:32px;background:#FF6830;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 12px rgba(255,104,48,.4);">
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:#fff;letter-spacing:1px;line-height:1;">RS</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:1px;justify-content:center;">
-        <span style="font-family:'Bebas Neue',sans-serif;font-size:12px;color:#8B5CF6;letter-spacing:3.5px;line-height:1.1;">RS</span>
-        <span style="font-size:7px;font-weight:700;color:rgba(248,250,255,.28);letter-spacing:2.5px;text-transform:uppercase;line-height:1.2;">COACHING</span>
-      </div>
+    <div class="rs-logo">
+      <svg class="rs-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect width="36" height="36" rx="10" fill="url(#rsGsb)"/><rect x="9" y="20" width="4.2" height="7" rx="2.1" fill="#fff" opacity=".55"/><rect x="15.9" y="15" width="4.2" height="12" rx="2.1" fill="#fff" opacity=".8"/><rect x="22.8" y="9" width="4.2" height="18" rx="2.1" fill="#fff"/><defs><linearGradient id="rsGsb" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF8A4D"/><stop offset="1" stop-color="#E2611C"/></linearGradient></defs></svg>
+      <div class="rs-word"><b>RS</b><span>COACHING</span></div>
     </div>
     <div class="logo-sub">Strength &amp; Conditioning</div>
   </div>
@@ -88,9 +78,9 @@ window.initSidebarToggle = function() {
 window.SIDEBAR_CSS = `
 .sidebar{
   width:218px;
-  background:rgba(8,6,18,.88);
-  backdrop-filter:blur(28px) saturate(1.8);
-  -webkit-backdrop-filter:blur(28px) saturate(1.8);
+  background:rgba(20,16,23,.90);
+  backdrop-filter:blur(28px) saturate(1.6);
+  -webkit-backdrop-filter:blur(28px) saturate(1.6);
   border-right:1px solid rgba(255,255,255,.06);
   display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh;
@@ -101,20 +91,18 @@ window.SIDEBAR_CSS = `
   border-bottom:1px solid rgba(255,255,255,.05);
   flex-shrink:0;
 }
-.logo{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:26px;letter-spacing:4px;
-  color:#F8FAFF;
-  filter:drop-shadow(0 0 18px rgba(255,90,31,.25));
-}
-.logo span{
-  background:linear-gradient(135deg,#8B5CF6,#6D28D9);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  background-clip:text;
-}
+/* RS logo lockup (mark + wordmark) */
+.rs-logo{display:flex;align-items:center;gap:9px;}
+.rs-mark{flex-shrink:0;width:30px;height:30px;filter:drop-shadow(0 3px 10px rgba(255,106,46,.40));}
+.rs-word{font-family:'Bebas Neue',sans-serif;line-height:1;letter-spacing:1.5px;font-size:19px;white-space:nowrap;}
+.rs-word b{font-weight:400;color:#FF6A2E;}
+.rs-word span{font-weight:400;color:#F4F1EC;}
+.rs-logo.sm{gap:8px;}
+.rs-logo.sm .rs-mark{width:26px;height:26px;}
+.rs-logo.sm .rs-word{font-size:16px;letter-spacing:1px;}
 .logo-sub{
-  font-size:9px;color:rgba(248,250,255,.20);
-  letter-spacing:2px;margin-top:4px;text-transform:uppercase;
+  font-size:9px;color:rgba(244,241,236,.30);
+  letter-spacing:2px;margin-top:6px;text-transform:uppercase;
 }
 .nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
@@ -138,10 +126,10 @@ window.SIDEBAR_CSS = `
 }
 .nav-item.active{
   color:#fff;
-  background:linear-gradient(90deg,rgba(139,92,246,.15),rgba(139,92,246,.04));
-  border-left-color:#8B5CF6;
+  background:linear-gradient(90deg,rgba(255,106,46,.16),rgba(255,106,46,.04));
+  border-left-color:#FF6A2E;
   font-weight:600;
-  box-shadow:inset 0 0 0 1px rgba(255,90,31,.12);
+  box-shadow:inset 0 0 0 1px rgba(255,106,46,.14);
 }
 .nav-icon{font-size:14px;opacity:.55;flex-shrink:0;transition:opacity .2s;}
 .nav-item.active .nav-icon,.nav-item:hover .nav-icon{opacity:1;}
@@ -154,7 +142,7 @@ window.SIDEBAR_CSS = `
 /* ── Mobile sidebar bar (shared pages) ── */
 .sb-mob-bar{
   display:none;position:fixed;top:0;left:0;right:0;height:52px;
-  background:rgba(8,6,18,.95);backdrop-filter:blur(20px);
+  background:rgba(20,16,23,.96);backdrop-filter:blur(20px);
   -webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid rgba(255,255,255,.06);
   align-items:center;padding:0 14px;gap:12px;z-index:600;
