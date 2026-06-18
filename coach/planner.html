@@ -143,6 +143,43 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .add-sess-btn{width:100%;padding:6px;background:transparent;border:1px dashed var(--border);border-radius:7px;color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;text-align:center;font-family:'Inter',sans-serif;}
 .add-sess-btn:hover{border-color:var(--teal);color:var(--teal);}
 
+/* VIEW TOGGLE (Settimana / Mese) */
+.view-toggle{display:inline-flex;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:9px;padding:2px;}
+.vt-btn{padding:5px 12px;border:none;background:transparent;color:var(--muted);font-family:'Inter',sans-serif;font-size:12px;font-weight:600;border-radius:7px;cursor:pointer;transition:all .15s;}
+.vt-btn:hover{color:var(--text);}
+.vt-btn.active{background:var(--teal);color:#070B12;}
+
+/* MONTH VIEW (4 settimane impilate, stile Relay) */
+.month-grid{flex:1;overflow-y:auto;flex-direction:column;}
+.month-toolbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--content);border-bottom:1px solid var(--border);}
+.mt-label{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.5px;color:var(--white);min-width:150px;}
+.mt-hint{font-size:11px;color:var(--muted);margin-left:auto;}
+.month-weeks{display:flex;flex-direction:column;gap:12px;padding:14px 16px;}
+.month-week{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:rgba(255,255,255,.02);}
+.month-week.is-current{border-color:var(--teal);box-shadow:0 0 0 1px rgba(6,214,160,.25);}
+.mw-head{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--border);}
+.mw-title{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.5px;color:var(--white);display:flex;align-items:baseline;gap:8px;}
+.mw-wk{font-family:'Inter',sans-serif;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:0;}
+.mw-actions{display:flex;gap:5px;}
+.mw-grid{display:grid;grid-template-columns:repeat(7,1fr);}
+.mw-day{border-right:1px solid var(--border);min-height:104px;display:flex;flex-direction:column;}
+.mw-day:last-child{border-right:none;}
+.mw-day.is-gara{background:rgba(251,113,74,.05);}
+.mw-day-head{display:flex;align-items:center;justify-content:space-between;padding:4px 7px;border-bottom:1px solid var(--border);}
+.mw-day-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);}
+.mw-day-num{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--white);line-height:1;}
+.mw-day.is-today .mw-day-num{color:var(--teal);}
+.mw-day-body{flex:1;padding:4px;overflow-y:auto;max-height:200px;}
+.mw-chip{border-radius:6px;padding:4px 6px;margin-bottom:3px;cursor:grab;border:1px solid transparent;transition:filter .15s;}
+.mw-chip:hover{filter:brightness(1.12);}
+.mw-chip:active{cursor:grabbing;}
+.mw-chip.dnd-dragging{opacity:.35;}
+.mwc-type{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.8;}
+.mwc-name{font-size:10px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.mw-add{width:100%;padding:3px;background:transparent;border:1px dashed var(--border);border-radius:5px;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;line-height:1;}
+.mw-add:hover{border-color:var(--teal);color:var(--teal);}
+.mw-day.dnd-over{background:rgba(255,106,46,.10);outline:2px dashed rgba(255,106,46,.45);outline-offset:-2px;}
+
 /* ATLETI SECTION */
 .ed-athletes{padding:12px 20px;border-top:1px solid var(--border);background:rgba(255,255,255,.04);flex-shrink:0;}
 .ath-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
@@ -321,6 +358,10 @@ document.addEventListener('DOMContentLoaded',function(){
     <div id="ed-content" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
       <div class="ed-head">
         <div class="ed-title" id="ed-title">—</div>
+        <div class="view-toggle" id="view-toggle">
+          <button class="vt-btn active" id="vt-week" onclick="setViewMode('week')">Settimana</button>
+          <button class="vt-btn" id="vt-month" onclick="setViewMode('month')">Mese</button>
+        </div>
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
         <button class="btn btn-outline btn-sm" id="copy-wk-btn" onclick="copyWeekToClipboard()" title="Copia questa settimana">⎘ Copia sett.</button>
         <button class="btn btn-teal btn-sm" id="paste-wk-btn" onclick="pasteWeek()" style="display:none;" title="Incolla settimana copiata">📋 Incolla</button>
@@ -390,6 +431,7 @@ document.addEventListener('DOMContentLoaded',function(){
       </div>
 
       <div class="week-grid" id="week-grid"></div>
+      <div class="month-grid" id="month-grid" style="display:none;"></div>
 
       <!-- ATLETI ASSEGNATI -->
       <div class="ed-athletes">
@@ -1819,6 +1861,8 @@ let plans={}, athletes={};
 let currentWk=null;         // "2026-05-26" (monday ISO)
 let currentMonthDate=new Date();
 let editingDay=null, editingKey=null, currentType=null;
+let _viewMode='week';       // 'week' | 'month' (vista editor)
+let _monthViewDate=null;    // mese mostrato nella vista mese
 
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
@@ -1834,7 +1878,8 @@ onValue(ref(db,'plans'),s=>{
   plans=s.val()||{};
   window._plansCache=plans;           // share with standalone renderer
   window._calRender(window._calDate); // refresh calendar with Firebase data
-  if(currentWk)renderGrid();
+  if(_viewMode==='month')renderMonth();
+  else if(currentWk)renderGrid();
 });
 onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();});
 
@@ -1950,6 +1995,14 @@ window.selectWeek=function(wk){
 
 function renderEditor(){
   if(!currentWk){return;}
+  // Aprire una settimana riporta sempre alla vista Settimana
+  _viewMode='week';
+  const _vw=document.getElementById('vt-week'),_vm=document.getElementById('vt-month');
+  if(_vw)_vw.classList.add('active');
+  if(_vm)_vm.classList.remove('active');
+  const _mg=document.getElementById('month-grid'),_wg=document.getElementById('week-grid');
+  if(_mg)_mg.style.display='none';
+  if(_wg)_wg.style.display='grid';
   // Reset versione quando si apre una nuova settimana
   if(window._resetVersion) window._resetVersion();
   // Reset athlete mode when opening new week
@@ -2076,6 +2129,145 @@ function _bindDnD(grid){
     });
   });
 }
+
+// ── VISTA MESE (4 settimane impilate, stile Relay) ───────────────────────────
+window.setViewMode=function(m){
+  _viewMode=m;
+  const vw=document.getElementById('vt-week'),vm=document.getElementById('vt-month');
+  if(vw)vw.classList.toggle('active',m==='week');
+  if(vm)vm.classList.toggle('active',m==='month');
+  const wg=document.getElementById('week-grid'),mg=document.getElementById('month-grid');
+  if(m==='month'){
+    if(wg)wg.style.display='none';
+    if(mg)mg.style.display='flex';
+    if(!_monthViewDate)_monthViewDate=currentWk?new Date(currentWk+'T00:00:00'):new Date();
+    renderMonth();
+  } else {
+    if(mg)mg.style.display='none';
+    if(wg)wg.style.display='grid';
+    if(currentWk)renderGrid();
+  }
+};
+
+window.shiftMonthView=function(dir){
+  const b=_monthViewDate||new Date();
+  _monthViewDate=new Date(b.getFullYear(),b.getMonth()+dir,1);
+  renderMonth();
+};
+
+function _monthPlanData(wk){
+  if(window._athModeAid) return (window._athPlanCache||{})[window._athModeAid+'_'+wk]||{};
+  return plans[wk]||{};
+}
+
+function renderMonth(){
+  const mg=document.getElementById('month-grid');
+  if(!mg) return;
+  if(!_monthViewDate)_monthViewDate=currentWk?new Date(currentWk+'T00:00:00'):new Date();
+  const y=_monthViewDate.getFullYear(), m=_monthViewDate.getMonth();
+  const weeks=getWeeksInMonth(y,m);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const monthLbl=_monthViewDate.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
+  const hasCopied=!!_fbCopiedWeek;
+
+  const weeksHtml=weeks.map(w=>{
+    const monday=new Date(w.key+'T00:00:00');
+    const sunday=new Date(monday); sunday.setDate(sunday.getDate()+6);
+    const pd=_monthPlanData(w.key);
+    const conf=(plans[w.key]||{})._config||{};
+    const gameDay=conf.gameDay??6;
+    const isCurWeek=(w.key===currentWk);
+    const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+
+    const daysHtml=Array.from({length:7},(_,i)=>{
+      const d=new Date(monday); d.setDate(d.getDate()+i);
+      const isToday=d.getTime()===today.getTime();
+      const isGara=(gameDay>=0&&i===gameDay);
+      const sess=Object.entries(pd[String(i)]||{})
+        .filter(([k])=>!k.startsWith('_'))
+        .map(([k,v])=>({...v,_key:k}))
+        .sort((a,b)=>(a.ts||0)-(b.ts||0));
+      const chips=sess.map(s=>{
+        const safeNote=(s.note||'').replace(/"/g,'&quot;');
+        return `<div class="mw-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" draggable="true" data-wk="${w.key}" data-day="${i}" data-key="${s._key}" onclick="monthEditSess('${w.key}',${i},'${s._key}')" title="${safeNote}">
+          <div class="mwc-type">${TYPE_LABELS[s.type]||s.type}</div>
+          <div class="mwc-name">${s.note||'—'}</div>
+        </div>`;
+      }).join('');
+      return `<div class="mw-day${isToday?' is-today':''}${isGara?' is-gara':''}" data-wk="${w.key}" data-day-idx="${i}">
+        <div class="mw-day-head"><span class="mw-day-name">${DAYS_S[i]}</span><span class="mw-day-num">${d.getDate()}</span></div>
+        <div class="mw-day-body">
+          ${chips}
+          <button class="mw-add" onclick="monthAddSess('${w.key}',${i})" title="Aggiungi sessione">+</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="month-week${isCurWeek?' is-current':''}">
+      <div class="mw-head">
+        <div class="mw-title">W${getWeekNumber(monday)} <span class="mw-wk">${fmt(monday)} — ${fmt(sunday)}</span></div>
+        <div class="mw-actions">
+          <button class="btn btn-outline btn-sm" onclick="copyWeekToClipboard('${w.key}')" title="Copia settimana">⎘</button>
+          <button class="btn btn-teal btn-sm" onclick="pasteWeek('${w.key}')" title="Incolla settimana copiata"${hasCopied?'':' style="display:none;"'}>📋</button>
+          <button class="btn btn-outline btn-sm" onclick="openWeekFromMonth('${w.key}')" title="Apri settimana">✎</button>
+        </div>
+      </div>
+      <div class="mw-grid">${daysHtml}</div>
+    </div>`;
+  }).join('');
+
+  mg.innerHTML=`<div class="month-toolbar">
+    <button class="icon-btn" onclick="shiftMonthView(-1)">‹</button>
+    <span class="mt-label">${monthLbl}</span>
+    <button class="icon-btn" onclick="shiftMonthView(1)">›</button>
+    <span class="mt-hint">Trascina le sessioni tra giorni e settimane · Clicca per modificare</span>
+  </div>
+  <div class="month-weeks">${weeksHtml}</div>`;
+  _bindMonthDnD(mg);
+}
+
+function _bindMonthDnD(root){
+  if(window._currentVersionId) return; // sola lettura
+  root.querySelectorAll('.mw-chip[draggable]').forEach(chip=>{
+    chip.addEventListener('dragstart',e=>{
+      chip.classList.add('dnd-dragging');
+      e.dataTransfer.setData('application/json',JSON.stringify({wk:chip.dataset.wk,day:chip.dataset.day,key:chip.dataset.key}));
+      e.dataTransfer.effectAllowed='move';
+    });
+    chip.addEventListener('dragend',()=>chip.classList.remove('dnd-dragging'));
+  });
+  root.querySelectorAll('.mw-day').forEach(cell=>{
+    cell.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
+    cell.addEventListener('dragenter',e=>{e.preventDefault();cell.classList.add('dnd-over');});
+    cell.addEventListener('dragleave',e=>{if(!cell.contains(e.relatedTarget))cell.classList.remove('dnd-over');});
+    cell.addEventListener('drop',async e=>{
+      e.preventDefault();cell.classList.remove('dnd-over');
+      let p;try{p=JSON.parse(e.dataTransfer.getData('application/json'));}catch(err){return;}
+      const toWk=cell.dataset.wk, toDay=parseInt(cell.dataset.dayIdx);
+      if(String(p.wk)===String(toWk)&&String(p.day)===String(toDay)) return;
+      await window.moveSess(parseInt(p.day),p.key,toDay,p.wk,toWk);
+    });
+  });
+}
+
+// Aprire/modificare una settimana dalla vista mese → passa alla vista settimana
+window.openWeekFromMonth=function(wk){
+  currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
+  renderEditor();
+  if(window._calRender) window._calRender();
+};
+window.monthEditSess=function(wk,day,key){
+  currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
+  renderEditor();
+  if(window._calRender) window._calRender();
+  window.openEdit(day,key);
+};
+window.monthAddSess=function(wk,day){
+  currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
+  renderEditor();
+  if(window._calRender) window._calRender();
+  window.openAdd(day);
+};
 
 // ── CONFIG SAVE
 window.saveConfig=function(){
@@ -2209,32 +2401,35 @@ window.pasteSess=async function(dayIdx){
   showToast('✓ Sessione incollata');
 };
 
-// ── DRAG-AND-DROP: MOVE SESSION BETWEEN DAYS
-window.moveSess=async function(fromDay,key,toDay){
+// ── DRAG-AND-DROP: MOVE SESSION BETWEEN DAYS (e tra settimane in vista mese)
+window.moveSess=async function(fromDay,key,toDay,fromWk,toWk){
   if(window._currentVersionId){showToast('⚠ Modalità sola lettura');return;}
-  const wk=currentWk||window._currentPlanWk;
-  if(!wk) return;
+  fromWk=fromWk||currentWk||window._currentPlanWk;
+  toWk=toWk||fromWk;
+  if(!fromWk) return;
   const planData=window._athModeAid
-    ?(window._athPlanCache||{})[window._athModeAid+'_'+wk]||{}
-    :plans[wk]||{};
+    ?(window._athPlanCache||{})[window._athModeAid+'_'+fromWk]||{}
+    :plans[fromWk]||{};
   const s=(planData[String(fromDay)]||{})[key];
   if(!s){showToast('⚠ Sessione non trovata');return;}
   const entry={...s,ts:Date.now()};
   const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
   try{
     if(window._athModeAid){
-      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
-      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days/${fromDay}/${key}.json`,{method:'DELETE'});
-      const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days.json`);
-      if(r.ok) window._athPlanCache[window._athModeAid+'_'+wk]=await r.json()||{};
-      renderGrid();
+      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${toWk}/days/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
+      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${fromWk}/days/${fromDay}/${key}.json`,{method:'DELETE'});
+      for(const wk of new Set([fromWk,toWk])){
+        const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days.json`);
+        if(r.ok) window._athPlanCache[window._athModeAid+'_'+wk]=await r.json()||{};
+      }
+      if(_viewMode==='month')renderMonth(); else renderGrid();
     } else if(typeof set!=='undefined'&&typeof db!=='undefined'){
-      await set(ref(db,`plans/${wk}/${toDay}/${key}`),entry);
-      await remove(ref(db,`plans/${wk}/${fromDay}/${key}`));
+      await set(ref(db,`plans/${toWk}/${toDay}/${key}`),entry);
+      await remove(ref(db,`plans/${fromWk}/${fromDay}/${key}`));
     } else {
-      await fetch(_dbUrl+`/plans/${wk}/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
-      await fetch(_dbUrl+`/plans/${wk}/${fromDay}/${key}.json`,{method:'DELETE'});
-      if(window._restRefresh) window._restRefresh(wk);
+      await fetch(_dbUrl+`/plans/${toWk}/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
+      await fetch(_dbUrl+`/plans/${fromWk}/${fromDay}/${key}.json`,{method:'DELETE'});
+      if(window._restRefresh){window._restRefresh(fromWk);if(toWk!==fromWk)window._restRefresh(toWk);}
     }
     showToast('✓ Sessione spostata');
   }catch(err){showToast('⚠ Errore spostamento: '+err.message);}
@@ -2538,9 +2733,10 @@ window.deleteCurrentVersion=async function(){
 // ── COPIA / INCOLLA SETTIMANA (override Firebase) ────────────────────────────
 let _fbCopiedWeek=null;
 
-window.copyWeekToClipboard=function(){
-  if(!currentWk){showToast('⚠ Nessuna settimana aperta');return;}
-  const wData=plans[currentWk]||{};
+window.copyWeekToClipboard=function(wkArg){
+  const wk=(typeof wkArg==='string'&&wkArg)?wkArg:currentWk;
+  if(!wk){showToast('⚠ Nessuna settimana aperta');return;}
+  const wData=plans[wk]||{};
   const copy={};
   for(let i=0;i<7;i++){
     const day=wData[String(i)];
@@ -2554,18 +2750,20 @@ window.copyWeekToClipboard=function(){
   _fbCopiedWeek=copy;
   const pasteBtn=document.getElementById('paste-wk-btn');
   if(pasteBtn)pasteBtn.style.display='inline-flex';
+  if(_viewMode==='month')renderMonth();
   showToast('✓ Settimana copiata — vai all\'altra settimana e incolla');
 };
 
-window.pasteWeek=async function(){
+window.pasteWeek=async function(wkArg){
   if(!_fbCopiedWeek){showToast('⚠ Nessuna settimana copiata');return;}
-  if(!currentWk){showToast('⚠ Apri prima la settimana di destinazione');return;}
+  const wk=(typeof wkArg==='string'&&wkArg)?wkArg:currentWk;
+  if(!wk){showToast('⚠ Apri prima la settimana di destinazione');return;}
   showToast('⏳ Incollando…');
   try{
     const writes={};
     Object.entries(_fbCopiedWeek).forEach(([dayIdx,sessions])=>{
       Object.entries(sessions).forEach(([key,val])=>{
-        writes[`plans/${currentWk}/${dayIdx}/${key}`]=val;
+        writes[`plans/${wk}/${dayIdx}/${key}`]=val;
       });
     });
     await update(ref(db),writes);
