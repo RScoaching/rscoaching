@@ -690,9 +690,11 @@ body::before{
 
 /* ── DONE SCREEN */
 .done-screen{
-  display:none;position:fixed;inset:0;
+  display:none;position:fixed;top:0;left:0;right:0;
+  height:100vh;height:100dvh;
   background:var(--bg);
   z-index:200;flex-direction:column;align-items:stretch;overflow:hidden;
+  overscroll-behavior:contain;
 }
 .done-screen.show{display:flex;}
 .done-scroll{
@@ -1136,13 +1138,14 @@ window.exitSession=function(){
 function saveProgress(){
   try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs}));}catch(e){}
 }
-let _saveTmr=null;
+let _saveTmr=null, _sessionFinished=false;
 function saveProgressDebounced(){
+  if(_sessionFinished)return;
   if(_saveTmr)clearTimeout(_saveTmr);
   _saveTmr=setTimeout(()=>{_saveTmr=null;saveProgress();},400);
 }
 // Flush dei dati in sospeso prima che la pagina venga chiusa/aggiornata
-function flushProgress(){if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}saveProgress();}
+function flushProgress(){if(_sessionFinished)return;if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}saveProgress();}
 window.addEventListener('pagehide',flushProgress);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushProgress();});
 function loadProgress(){
@@ -2279,10 +2282,18 @@ async function finish(){
     }
   }
 
+  // Sessione salvata: pulisci i progressi locali così la prossima volta riparte da zero
+  _sessionFinished=true;
+  if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}
+  try{localStorage.removeItem(_sessKey);}catch(e){}
+
   showDoneScreen(dur,totalSets,avgRpe);
 }
 
 function showDoneScreen(dur,totalSets,avgRpe){
+  // Chiudi la tastiera iOS e resetta lo scroll per evitare lo sfasamento del viewport
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  window.scrollTo(0,0);
   document.getElementById('sapp').style.display='none';
   const ds=document.getElementById('done-screen');ds.classList.add('show');
   setTimeout(()=>{const rf=document.getElementById('done-ring-fill');if(rf)rf.classList.add('animate');},100);
