@@ -38,6 +38,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .icon-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:var(--text);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
 .icon-btn:hover{background:rgba(255,106,46,.1);border-color:var(--violet);color:var(--violet);}
 
+.cal-month-view-btn{margin:0 12px 8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(6,214,160,.08);border:1px solid rgba(6,214,160,.28);border-radius:10px;color:var(--teal);font-family:'Inter',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;flex-shrink:0;}
+.cal-month-view-btn:hover{background:rgba(6,214,160,.14);border-color:var(--teal);}
+.cal-month-view-btn:active{transform:scale(.985);}
+.cal-month-view-btn.active{background:var(--teal);color:#070B12;border-color:var(--teal);}
+.cal-month-view-btn .cmv-sub{font-size:10px;font-weight:500;opacity:.8;letter-spacing:.2px;}
 .weeks-list{flex:1;overflow-y:auto;padding:8px;height:0;}
 .week-row{border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.04);margin-bottom:6px;cursor:pointer;transition:all .15s;overflow:hidden;}
 .week-row:hover{border-color:var(--border2);background:rgba(255,255,255,.06);}
@@ -344,6 +349,10 @@ document.addEventListener('DOMContentLoaded',function(){
         <button class="icon-btn" onclick="shiftMonth(1)" title="Mese successivo">→</button>
       </div>
     </div>
+    <button class="cal-month-view-btn" id="cal-month-view-btn" onclick="openMonthView()" title="Vedi tutte le settimane del mese, trascina le sessioni tra i giorni">
+      <span>📅 Vista Mese</span>
+      <span class="cmv-sub">tutte le settimane insieme</span>
+    </button>
     <div class="weeks-list" id="weeks-list"></div>
   </div>
 
@@ -362,6 +371,7 @@ document.addEventListener('DOMContentLoaded',function(){
           <button class="vt-btn active" id="vt-week" onclick="setViewMode('week')">Settimana</button>
           <button class="vt-btn" id="vt-month" onclick="setViewMode('month')">Mese</button>
         </div>
+        <span id="ed-week-actions" style="display:contents;">
         <button class="btn btn-blue btn-sm" onclick="autoSuggest()">⚡ Suggerimenti</button>
         <button class="btn btn-outline btn-sm" id="copy-wk-btn" onclick="copyWeekToClipboard()" title="Copia questa settimana">⎘ Copia sett.</button>
         <button class="btn btn-teal btn-sm" id="paste-wk-btn" onclick="pasteWeek()" style="display:none;" title="Incolla settimana copiata">📋 Incolla</button>
@@ -370,9 +380,10 @@ document.addEventListener('DOMContentLoaded',function(){
         <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia atleti</button>
         <button class="btn btn-outline btn-sm" onclick="exportPlannerPDF()">📄 PDF</button>
         <button class="btn btn-teal btn-sm" onclick="publishPlan()">✓ Pubblica</button>
+        </span>
       </div>
 
-      <div class="ed-config">
+      <div class="ed-config" id="ed-config">
         <div class="cfg-item cfg-item-group">
           <div class="cfg-lbl">Giorno Gara</div>
           <select class="cfg-sel" id="sel-gameday" onchange="saveConfig();renderGrid()">
@@ -2000,9 +2011,13 @@ function renderEditor(){
   const _vw=document.getElementById('vt-week'),_vm=document.getElementById('vt-month');
   if(_vw)_vw.classList.add('active');
   if(_vm)_vm.classList.remove('active');
+  const _mvBtn=document.getElementById('cal-month-view-btn');
+  if(_mvBtn)_mvBtn.classList.remove('active');
   const _mg=document.getElementById('month-grid'),_wg=document.getElementById('week-grid');
   if(_mg)_mg.style.display='none';
   if(_wg)_wg.style.display='grid';
+  // Ripristina la UI specifica della settimana (era nascosta in vista mese)
+  if(typeof _setWeekUiVisible==='function')_setWeekUiVisible(true);
   // Reset versione quando si apre una nuova settimana
   if(window._resetVersion) window._resetVersion();
   // Reset athlete mode when opening new week
@@ -2131,22 +2146,55 @@ function _bindDnD(grid){
 }
 
 // ── VISTA MESE (4 settimane impilate, stile Relay) ───────────────────────────
+// Mostra/nasconde gli elementi specifici della singola settimana
+function _setWeekUiVisible(show){
+  const cfg=document.getElementById('ed-config');
+  const ath=document.querySelector('.ed-athletes');
+  const wkActions=document.getElementById('ed-week-actions');
+  if(cfg)cfg.style.display=show?'':'none';
+  if(ath)ath.style.display=show?'':'none';
+  if(wkActions)wkActions.style.display=show?'contents':'none';
+}
+
 window.setViewMode=function(m){
   _viewMode=m;
   const vw=document.getElementById('vt-week'),vm=document.getElementById('vt-month');
   if(vw)vw.classList.toggle('active',m==='week');
   if(vm)vm.classList.toggle('active',m==='month');
+  const mvBtn=document.getElementById('cal-month-view-btn');
+  if(mvBtn)mvBtn.classList.toggle('active',m==='month');
   const wg=document.getElementById('week-grid'),mg=document.getElementById('month-grid');
   if(m==='month'){
     if(wg)wg.style.display='none';
     if(mg)mg.style.display='flex';
+    _setWeekUiVisible(false);
     if(!_monthViewDate)_monthViewDate=currentWk?new Date(currentWk+'T00:00:00'):new Date();
+    const t=document.getElementById('ed-title'); if(t)t.textContent='Vista Mensile';
     renderMonth();
   } else {
     if(mg)mg.style.display='none';
     if(wg)wg.style.display='grid';
-    if(currentWk)renderGrid();
+    _setWeekUiVisible(true);
+    if(currentWk){ renderEditor(); }
+    else {
+      // Nessuna settimana selezionata → torna allo stato vuoto
+      const ec=document.getElementById('ed-content'); if(ec)ec.style.display='none';
+      const ee=document.getElementById('ed-empty'); if(ee)ee.style.display='flex';
+    }
   }
+};
+
+// Apre la vista mese direttamente dal pannello calendario (senza dover aprire una settimana)
+window.openMonthView=function(){
+  // Allinea il mese mostrato a quello del calendario di sinistra
+  _monthViewDate = (typeof currentMonthDate!=='undefined' && currentMonthDate)
+    ? new Date(currentMonthDate.getFullYear(),currentMonthDate.getMonth(),1)
+    : new Date();
+  // Mostra il pannello editor (anche se nessuna settimana è aperta)
+  const ee=document.getElementById('ed-empty'); if(ee)ee.style.display='none';
+  const ec=document.getElementById('ed-content'); if(ec)ec.style.display='flex';
+  const verB=document.getElementById('ver-banner'); if(verB)verB.style.display='none';
+  setViewMode('month');
 };
 
 window.shiftMonthView=function(dir){
