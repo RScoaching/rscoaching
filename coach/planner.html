@@ -81,10 +81,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 
 /* EDITOR PANEL */
 .editor-panel{flex:1;display:flex;flex-direction:column;background:var(--content);overflow:hidden;}
-.ed-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);}
-.ed-empty-icon{font-size:48px;opacity:.4;}
-.ed-empty-title{font-family:'Bebas Neue',sans-serif;font-size:24px;color:rgba(255,255,255,.2);}
-.ed-empty-sub{font-size:13px;text-align:center;max-width:260px;}
+/* NB: class is "ed-blank" (NOT "ed-empty") on purpose — style-v2.css has a greedy
+   rule `[class*="empty"]{display:flex !important}` that would override the inline
+   display:none we toggle from JS and leave this placeholder stuck on screen
+   (e.g. on top of the month view). The id stays "ed-empty" so JS is unchanged. */
+.ed-blank{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);}
+.ed-blank-icon{font-size:48px;opacity:.4;}
+.ed-blank-title{font-family:'Bebas Neue',sans-serif;font-size:24px;color:rgba(255,255,255,.2);}
+.ed-blank-sub{font-size:13px;text-align:center;max-width:260px;}
 
 .ed-head{padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .ed-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;color:var(--white);flex:1;}
@@ -435,10 +439,10 @@ document.addEventListener('DOMContentLoaded',function(){
 
   <!-- EDITOR PANEL -->
   <div class="editor-panel" id="editor-panel">
-    <div class="ed-empty" id="ed-empty">
-      <div class="ed-empty-icon">📅</div>
-      <div class="ed-empty-title">Program Calendar</div>
-      <div class="ed-empty-sub">Seleziona una settimana dal pannello a sinistra per iniziare a pianificare</div>
+    <div class="ed-blank" id="ed-empty">
+      <div class="ed-blank-icon">📅</div>
+      <div class="ed-blank-title">Program Calendar</div>
+      <div class="ed-blank-sub">Seleziona una settimana dal pannello a sinistra per iniziare a pianificare</div>
     </div>
 
     <div id="ed-content" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
@@ -2811,14 +2815,15 @@ window.openWeekFromMonth=function(wk){
   if(window._calRender) window._calRender();
 };
 window.monthEditSess=function(wk,day,key){
+  // Resta in vista Mese: imposta solo la settimana target e apri il modal.
+  // (NON chiamare renderEditor → quello forzava _viewMode='week' e faceva
+  //  "saltare" alla vista Settimana dopo Salva/Annulla.)
   currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
-  renderEditor();
   if(window._calRender) window._calRender();
   window.openEdit(day,key);
 };
 window.monthAddSess=function(wk,day){
   currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
-  renderEditor();
   if(window._calRender) window._calRender();
   window.openAdd(day);
 };
@@ -2889,7 +2894,7 @@ window.saveSession=async function(){
     // Refresh athlete cache
     const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days.json`);
     if(r.ok) window._athPlanCache[window._athModeAid+'_'+currentWk]=await r.json()||{};
-    renderGrid();
+    if(_viewMode==='month')renderMonth(); else renderGrid();
   } else {
     const path=`plans/${currentWk}/${editingDay}`;
     if(editingKey){
@@ -2910,7 +2915,7 @@ window.delSess=async function(dayIdx,key){
     await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days/${dayIdx}/${key}.json`,{method:'DELETE'});
     const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days.json`);
     if(r.ok) window._athPlanCache[window._athModeAid+'_'+currentWk]=await r.json()||{};
-    renderGrid();
+    if(_viewMode==='month')renderMonth(); else renderGrid();
   } else {
     await remove(ref(db,`plans/${currentWk}/${dayIdx}/${key}`));
   }
