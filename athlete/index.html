@@ -646,6 +646,17 @@ select option{background:#10101E;}
 .sess-mini-chip{font-size:10px;font-weight:600;color:var(--white);background:rgba(255,106,46,.08);border:1px solid rgba(255,106,46,.16);border-radius:8px;padding:4px 9px;letter-spacing:.1px;}
 .sess-mini-more{font-size:10px;color:var(--muted);font-weight:600;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:4px 9px;}
 
+/* ═══ RUNNING SESSION (corsa) — zona + ritmo + %FCmax ═══════════════════════ */
+.sess-corsa{border-top:1px solid var(--border);padding:12px 16px 4px;}
+.corsa-fase{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:12px;}
+.corsa-fase+.corsa-fase{margin-top:8px;}
+.corsa-fz{flex-shrink:0;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;letter-spacing:.4px;}
+.corsa-fbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.corsa-ftipo{font-size:13px;font-weight:700;color:var(--white);letter-spacing:.1px;}
+.corsa-fdetail{font-size:12.5px;color:var(--white);opacity:.85;font-variant-numeric:tabular-nums;line-height:1.4;}
+.corsa-ffc{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.2px;}
+.corsa-fnote{font-size:11px;color:var(--muted);font-style:italic;line-height:1.4;}
+
 /* ═══ WEEK DOTS — UPGRADED ══════════════════════════════════════════════════ */
 .bcard .wd-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;padding:2px 0;}
 .bcard .wd-label{font-size:7px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
@@ -1432,10 +1443,10 @@ const params=new URLSearchParams(window.location.search);
 const aid=params.get('id');
 
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-const SESS_COLORS={forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)',squadra:'var(--blue)',riposo:'var(--muted)',pesi:'var(--purple)',campo:'var(--green)',conditioning:'var(--orange)',match:'var(--red)',test:'var(--amber)'};
-const SESS_LABELS={forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero attivo',priming:'Priming G-1',squadra:'Allenamento Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test atletico'};
-const TICONS={forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',squadra:'⚽',riposo:'😴',pesi:'🏋️',campo:'⚽',conditioning:'🔥',match:'🏟️',test:'📊'};
-const SESS_BGS={pesi:'rgba(255,106,46,.10)',campo:'rgba(34,197,94,.1)',sprint:'rgba(239,68,68,.1)',conditioning:'rgba(255,106,46,.1)',rec:'rgba(34,197,94,.08)',forza:'rgba(255,106,46,.10)',squadra:'rgba(255,106,46,.1)',match:'rgba(239,68,68,.10)',test:'rgba(251,191,36,.10)'};
+const SESS_COLORS={forza:'var(--purple)',sprint:'var(--red)',plyo:'var(--amber)',rec:'var(--green)',priming:'var(--text)',squadra:'var(--blue)',riposo:'var(--muted)',pesi:'var(--purple)',campo:'var(--green)',conditioning:'var(--orange)',match:'var(--red)',test:'var(--amber)',z2:'var(--green)',lungo:'var(--blue)',tempo:'var(--amber)',interval:'var(--red)'};
+const SESS_LABELS={forza:'Forza neurale',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero attivo',priming:'Priming G-1',squadra:'Allenamento Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test atletico',z2:'Corsa Z2 Easy',lungo:'Long Run',tempo:'Tempo / Soglia',interval:'Interval Training'};
+const TICONS={forza:'🏋️',sprint:'⚡',plyo:'🦘',rec:'🔄',priming:'🎯',squadra:'⚽',riposo:'😴',pesi:'🏋️',campo:'⚽',conditioning:'🔥',match:'🏟️',test:'📊',z2:'🟢',lungo:'🔵',tempo:'🟠',interval:'🔴'};
+const SESS_BGS={pesi:'rgba(255,106,46,.10)',campo:'rgba(34,197,94,.1)',sprint:'rgba(239,68,68,.1)',conditioning:'rgba(255,106,46,.1)',rec:'rgba(34,197,94,.08)',forza:'rgba(255,106,46,.10)',squadra:'rgba(255,106,46,.1)',match:'rgba(239,68,68,.10)',test:'rgba(251,191,36,.10)',z2:'rgba(34,197,94,.10)',lungo:'rgba(99,102,241,.10)',tempo:'rgba(245,158,11,.10)',interval:'rgba(239,68,68,.10)'};
 
 if(!aid){
   document.getElementById('loading').style.display='none';
@@ -1902,7 +1913,49 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     </div>`;
   }
 
-  function sessionCard(type,title,note,exercises,extra,progId,weekIdx,sessId,progName){
+  // ── RUNNING (corsa): zone + pace + %FCmax, never serie×reps×carico
+  const RUN_TYPES_ATH=new Set(['z2','lungo','tempo','interval']);
+  const ZC_ATH={Z1:'#10B981',Z2:'#3B82F6',Z3:'#F59E0B',Z4:'#F97316',Z5:'#EF4444'};
+  const ZF_ATH={Z1:'60-70% FCmax',Z2:'70-80% FCmax',Z3:'80-87% FCmax',Z4:'87-92% FCmax',Z5:'92-100% FCmax'};
+  const ZL_ATH={Z1:'Recupero',Z2:'Aerobica base',Z3:'Medio / Tempo',Z4:'Soglia',Z5:'VO₂max'};
+  function corsaHtml(fasi){
+    if(!fasi)return '';
+    const arr=Array.isArray(fasi)?fasi:Object.values(fasi);
+    if(!arr.length)return '';
+    const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const pk=p=>{p=String(p||'').trim();if(!p)return '';return /km|\//i.test(p)?p.replace(/\s*\/\s*km/i,'/km'):p+'/km';};
+    const cards=arr.map(f=>{
+      if(!f)return '';
+      const z=f.zona||'';
+      const zc=ZC_ATH[z]||'';
+      const fz=z?`<span class="corsa-fz" style="background:${zc}22;color:${zc};border:1px solid ${zc}44;">${z}</span>`:'';
+      const tipo=esc(f.tipo||ZL_ATH[z]||'Corsa');
+      const isIntv=f.reps||f.repDist||f.repPace;
+      let detail='';
+      if(isIntv){
+        const head=[];
+        if(f.reps)head.push(esc(String(f.reps).replace(/\s*[x×]\s*$/i,''))+'×');
+        if(f.repDist)head.push(esc(f.repDist));
+        let line=head.join(' ');
+        if(f.repPace)line+=(line?' @ ':'')+esc(pk(f.repPace));
+        const rec=f.rec||[f.recDist,f.recTime,f.recPace].filter(Boolean).join(' ');
+        if(rec)line+=(line?' · ':'')+'rec '+esc(rec);
+        detail=line;
+      }else{
+        const parts=[];
+        if(f.dist)parts.push(esc(f.dist));
+        if(f.pace)parts.push(esc(pk(f.pace)));
+        detail=parts.join(' · ');
+      }
+      const fc=z?`<div class="corsa-ffc">${ZF_ATH[z]}</div>`:'';
+      const note=f.note?`<div class="corsa-fnote">${esc(f.note)}</div>`:'';
+      return `<div class="corsa-fase">${fz}<div class="corsa-fbody"><div class="corsa-ftipo">${tipo}</div>${detail?`<div class="corsa-fdetail">${detail}</div>`:''}${fc}${note}</div></div>`;
+    }).filter(Boolean).join('');
+    if(!cards)return '';
+    return `<div class="sess-corsa"><div class="sess-mini-label">${arr.length} ${arr.length===1?'fase':'fasi'}</div>${cards}</div>`;
+  }
+
+  function sessionCard(type,title,note,exercises,extra,progId,weekIdx,sessId,progName,corsaFasi){
     const color=SESS_COLORS[type]||'var(--text)';
     const label=SESS_LABELS[type]||type||'Sessione';
     const icon=TICONS[type]||'📋';
@@ -1960,6 +2013,23 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       </div>`;
     }
 
+    // ── CORSA (running): self-contained card with zone/pace/%FCmax, no set-by-set player
+    if(RUN_TYPES_ATH.has(type)){
+      const nFasi=corsaFasi?(Array.isArray(corsaFasi)?corsaFasi.length:Object.keys(corsaFasi).length):0;
+      const runBody=nFasi?corsaHtml(corsaFasi):(exercises&&exercises.length?exListHtml(exercises):'');
+      return `<div class="sess-card">
+        <div class="sess-head">
+          <div class="sess-type-tag" style="color:${color};">${icon} ${label}</div>
+          <div class="sess-title">${title}</div>
+          ${note?`<div class="sess-note">${note}</div>`:''}
+          ${progName?`<div class="sess-prog-label">${progName}</div>`:''}
+          ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
+        </div>
+        ${runBody}
+        <div class="sess-action"><button class="start-btn-soft" style="color:var(--green);border-color:var(--green);" onclick="showToast('✅ Corsa registrata')">🏃 ALLENAMENTO COMPLETATO</button></div>
+      </div>`;
+    }
+
     const actionBtn=hasLive
       ?`<a class="start-btn" href="./session.html?id=${aid}&prog=${progId}&week=${weekIdx}&sess=${sessId}">▶ INIZIA SESSIONE</a>`
       :`<button class="start-btn-soft" onclick="openLiveQuick('${type||'pesi'}')">▶ SESSIONE RAPIDA</button>`;
@@ -2000,7 +2070,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
         wrap.innerHTML=sessions.map((s,si)=>{
           const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
           const title=sessions.length>1?`${DAYS[dayIdx]} — Sessione ${si+1}`:DAYS[dayIdx];
-          return sessionCard(s.type,title,s.note,exs,s.detail||'',null,null,null,null);
+          return sessionCard(s.type,title,s.note,exs,s.detail||'',null,null,null,null,s.corsaFasi);
         }).join('');
         if(dayIdx===todayIdx){window._whSessType=first.type||null;updateWHMetaRow();updateWeekDotToday();}
         return;
@@ -2025,7 +2095,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
       let extra='';
       if(s.type==='conditioning')extra=`${s.condType||''}${s.duration?' · '+s.duration:''}\n${s.condContent||''}`;
-      progCards.push(sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,progId,wi,sid,`📋 ${prog.name} · Sett. ${wi+1}${wkData.label?' — '+wkData.label:''}`));
+      progCards.push(sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,progId,wi,sid,`📋 ${prog.name} · Sett. ${wi+1}${wkData.label?' — '+wkData.label:''}`,s.corsaFasi));
     }
   }
   if(progCards.length){wrap.innerHTML=progCards.join('');if(dayIdx===todayIdx){window._whSessType=_firstPT;updateWHMetaRow();updateWeekDotToday();}return;}
@@ -2038,7 +2108,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       const daySess=Object.entries(raw).filter(([k])=>k!=='_published').map(([,v])=>v).sort((a,b)=>a.ts-b.ts);
       if(daySess.length){
         window._quickSessionDay={type:daySess[0].type,note:daySess[0].note,exercises:daySess[0].exercises||{}};
-        wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,Object.values(s.exercises||{}),null,null,null,null,null)).join('');
+        wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,Object.values(s.exercises||{}),null,null,null,null,null,s.corsaFasi)).join('');
         if(dayIdx===todayIdx){window._whSessType=daySess[0].type||null;updateWHMetaRow();updateWeekDotToday();}
         return;
       }
@@ -2066,7 +2136,7 @@ function updateWeekDotToday(type){
 function populateSelDay(qpData,todayIdx){
   const sel=document.getElementById('sel-day');if(!sel)return;
   const DNAMES=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
-  const SL={forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test'};
+  const SL={forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test',z2:'Z2 Easy',lungo:'Long Run',tempo:'Tempo/Soglia',interval:'Interval'};
   const monday=getMondayOf(new Date());
   sel.innerHTML=DNAMES.map((d,i)=>{
     const date=new Date(monday);date.setDate(date.getDate()+i);
