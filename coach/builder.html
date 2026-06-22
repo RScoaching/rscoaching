@@ -691,6 +691,7 @@ document.addEventListener('DOMContentLoaded',function(){
             <button class="btn btn-outline btn-sm" onclick="openModal('copy-prog')">⎘ Copia</button>
             <button class="btn btn-amber btn-sm" id="archive-btn" onclick="toggleArchive()">📦 Archivia</button>
             <button class="btn btn-amber btn-sm" onclick="openModal('week-progress')">⏩ Avanza</button>
+            <button class="btn btn-teal btn-sm" onclick="openModal('gen-meso')">📈 Genera</button>
             <button class="btn btn-purple btn-sm" onclick="exportWhatsApp()">📋 WA</button>
             <button class="btn btn-outline btn-sm" onclick="exportBuilderPDF()">📄 PDF</button>
             <button class="btn btn-red btn-sm" onclick="deleteProgram()">🗑</button>
@@ -2201,6 +2202,40 @@ window.openModal=function(type,...args){
       <div style="font-size:11px;color:var(--muted);margin-top:10px;">💡 Nota: la settimana viene salvata nel browser dell'atleta. Questo pannello mostra le opzioni — l'atleta vede automaticamente la sessione corretta quando apre l'app.</div>
       <div class="mactions"><button class="btn btn-teal" onclick="closeModal()">Chiudi</button></div>`;
 
+  } else if(type==='gen-meso'){
+    const weeks=Object.entries(p?.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+    const _gmSel="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);";
+    const _gmCap="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;";
+    const _gmRadio=(val,nome,desc,checked)=>`<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:9px;cursor:pointer;">
+          <input type="radio" name="gm-model" value="${val}"${checked?' checked':''} onchange="_mesoUpd()" style="margin-top:2px;flex-shrink:0;">
+          <span><span style="font-size:13px;font-weight:600;color:var(--white);">${nome}</span><br><span style="font-size:11px;color:var(--muted);line-height:1.4;">${desc}</span></span>
+        </label>`;
+    mb.innerHTML=`<h3>📈 Genera mesociclo</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Crea automaticamente più settimane progressive da una settimana base. Le percentuali %1RM degli esercizi vengono adattate; corsa e condizionamento restano invariati.</div>
+      <div style="margin-bottom:12px;">
+        <div style="${_gmCap}">Settimana base</div>
+        <select id="gm-base" style="${_gmSel}" onchange="_mesoPreview()">
+          ${weeks.length?weeks.map(([wid,wk],wi)=>`<option value="${wid}">Sett. ${wi+1}${wk.label?' · '+wk.label:''}</option>`).join(''):'<option value="">Nessuna settimana</option>'}
+        </select>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="${_gmCap}">Quante settimane generare</div>
+        <input id="gm-count" type="number" min="1" max="11" value="3" style="${_gmSel}" oninput="_mesoPreview()">
+      </div>
+      <div style="${_gmCap}">Modello di progressione</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        ${_gmRadio('lineare','Lineare','Il carico sale di poco ogni settimana',true)}
+        ${_gmRadio('ondulata','Ondulata','Intensità che oscilla: pesante, leggera, media',false)}
+        ${_gmRadio('step','Step + deload','Blocchi in salita con settimana di scarico',false)}
+      </div>
+      <div id="gm-params" style="margin-bottom:14px;"></div>
+      <div id="gm-preview" style="padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:9px;margin-bottom:14px;min-height:42px;"></div>
+      <div class="mactions">
+        <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
+        <button class="btn btn-teal" onclick="generateMeso()">📈 Genera →</button>
+      </div>`;
+    setTimeout(()=>{ if(typeof window._mesoUpd==='function') window._mesoUpd(); },0);
+
   } else if(type==='assign'){
     const ids=Object.keys(athletes);
     const assigned=p?.assignedTo||{};
@@ -2665,6 +2700,117 @@ window.pasteWeek=async function(){
     await set(newSRef,{...sData,order:(s.order||0)});
   }
   showToast(`✓ Settimana da "${clip.fromProgName}" incollata`);
+};
+// ── GENERATORE MESOCICLO (progressione automatica %1RM) ──
+// Trasforma il pct di un esercizio in base al modello e all'indice di settimana (0-based, appesa dopo la base).
+function _mesoPct(basePct,idx,m){
+  const b=parseFloat(basePct);
+  if(isNaN(b)||b<=0) return basePct;            // non-numerico o 0 -> lasciato com'è (salta corsa/condizionamento)
+  let v;
+  if(m.model==='ondulata'){
+    const seq=[m.amp,-m.amp,0];                  // pesante, leggera, media (oscilla attorno alla base)
+    v=b+seq[idx%3];
+  } else if(m.model==='step'){
+    const cycle=m.stepw+1;                        // n settimane di carico + 1 di scarico
+    const pos=idx%cycle;
+    v=(pos===m.stepw)?(b*m.deload/100):(b+(pos+1)*m.delta);
+  } else {                                        // lineare
+    v=b+(idx+1)*m.delta;
+  }
+  v=Math.max(0,Math.min(120,Math.round(v*2)/2)); // clamp 0-120, arrotonda a 0.5
+  return String(v);
+}
+function _mesoIsDeload(idx,m){
+  if(m.model!=='step') return false;
+  const cycle=m.stepw+1;
+  return (idx%cycle)===m.stepw;
+}
+function _mesoParams(model){
+  const num=(id,def)=>{const el=document.getElementById(id);const v=el?parseFloat(el.value):NaN;return isNaN(v)?def:v;};
+  return {
+    model,
+    delta:num('gm-delta',2.5),
+    amp:num('gm-amp',5),
+    stepw:Math.max(1,Math.round(num('gm-stepw',3))),
+    deload:Math.max(40,Math.min(100,num('gm-deload',85)))
+  };
+}
+window._mesoUpd=function(){
+  const sel=document.querySelector('input[name="gm-model"]:checked');
+  const model=sel?sel.value:'lineare';
+  const pd=document.getElementById('gm-params'); if(!pd){return;}
+  const _f="width:100%;padding:9px 11px;background:var(--card2);border:1px solid var(--border);border-radius:9px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);";
+  const _c="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;";
+  if(model==='lineare'){
+    pd.innerHTML=`<div style="${_c}">Incremento settimanale (%1RM)</div><input id="gm-delta" type="number" step="0.5" value="2.5" style="${_f}" oninput="_mesoPreview()">`;
+  } else if(model==='ondulata'){
+    pd.innerHTML=`<div style="${_c}">Ampiezza oscillazione (± %1RM)</div><input id="gm-amp" type="number" step="0.5" value="5" style="${_f}" oninput="_mesoPreview()">`;
+  } else {
+    pd.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><div style="${_c}">Settimane di carico</div><input id="gm-stepw" type="number" step="1" min="1" value="3" style="${_f}" oninput="_mesoPreview()"></div>
+      <div><div style="${_c}">Incremento (%1RM)</div><input id="gm-delta" type="number" step="0.5" value="2.5" style="${_f}" oninput="_mesoPreview()"></div>
+      <div style="grid-column:1/-1;"><div style="${_c}">Deload (% del carico base)</div><input id="gm-deload" type="number" step="1" min="40" max="100" value="85" style="${_f}" oninput="_mesoPreview()"></div>
+    </div>`;
+  }
+  window._mesoPreview();
+};
+window._mesoPreview=function(){
+  const pv=document.getElementById('gm-preview'); if(!pv){return;}
+  const sel=document.querySelector('input[name="gm-model"]:checked');
+  const model=sel?sel.value:'lineare';
+  const cEl=document.getElementById('gm-count');
+  const count=Math.max(1,Math.min(11,Math.round(parseFloat(cEl?cEl.value:3)||3)));
+  const m=_mesoParams(model);
+  const sample=80;
+  let chips='';
+  for(let i=0;i<count;i++){
+    const v=_mesoPct(String(sample),i,m);
+    const dl=_mesoIsDeload(i,m);
+    chips+=`<span style="display:inline-block;padding:4px 9px;border-radius:7px;font-size:12px;font-weight:600;margin:3px 3px 0 0;${dl?'background:rgba(245,158,11,.16);color:var(--amber);':'background:var(--card2);color:var(--white);'}">S${i+1}: ${v}%${dl?' ↓':''}</span>`;
+  }
+  pv.innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Anteprima su un esercizio @${sample}% 1RM:</div><div style="display:flex;flex-wrap:wrap;">${chips}</div>`;
+};
+window.generateMeso=async function(){
+  const p=programs[currentProgId]; if(!p){showToast('⚠ Nessun programma');return;}
+  const bEl=document.getElementById('gm-base');
+  const baseWid=bEl?bEl.value:'';
+  const srcWk=p.weeks?.[baseWid]; if(!srcWk){showToast('⚠ Seleziona una settimana base');return;}
+  const sel=document.querySelector('input[name="gm-model"]:checked');
+  const model=sel?sel.value:'lineare';
+  const cEl=document.getElementById('gm-count');
+  const count=Math.max(1,Math.min(11,Math.round(parseFloat(cEl?cEl.value:3)||3)));
+  const m=_mesoParams(model);
+  const baseLabel=(srcWk.label||'Settimana').replace(/\s*\(copia\)\s*$/i,'').trim()||'Settimana';
+  try{
+    const allWks=Object.values(p.weeks||{});
+    let order=(allWks.length>0?Math.max(...allWks.map(w=>w.order||0)):0);
+    const srcSessions=Object.values(srcWk.sessions||{});
+    for(let i=0;i<count;i++){
+      order++;
+      const dl=_mesoIsDeload(i,m);
+      const wkLabel=dl?'Deload':`${baseLabel} +${i+1}`;
+      const newWkRef=push(ref(db,`programs/${currentProgId}/weeks`));
+      await set(newWkRef,{label:wkLabel,notes:srcWk.notes||'',order,sessions:{}});
+      for(const s of srcSessions){
+        const {_key:_omit,...sData}=s;
+        if(sData.exercises){
+          const ex2={};
+          for(const [eid,ex] of Object.entries(sData.exercises)){
+            ex2[eid]={...ex,pct:_mesoPct(ex.pct,i,m)};
+          }
+          sData.exercises=ex2;
+        }
+        const newSRef=push(ref(db,`programs/${currentProgId}/weeks/${newWkRef.key}/sessions`));
+        await set(newSRef,{...sData,order:(s.order||0)});
+      }
+    }
+    closeModal();
+    showToast(`✓ Mesociclo: ${count} settimane (${model}) aggiunte`);
+    renderWeekTabs();
+    renderWeekContent();
+  }catch(e){
+    showToast('⚠ Errore generazione: '+(e&&e.message?e.message:e));
+  }
 };
 window.deleteSession=async function(wid,sid){
   if(!confirm('Eliminare questa sessione?'))return;
