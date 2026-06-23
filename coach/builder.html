@@ -1418,6 +1418,7 @@ function renderSessionCard(wid,sid,s){
         ${s.type==='conditioning'?`<button class="btn btn-purple btn-sm" onclick="openModal('edit-cond','${wid}','${sid}')">✏ Modifica workout</button>`:s.type==='corsa'?`<button class="btn btn-purple btn-sm" onclick="openModal('edit-corsa','${wid}','${sid}')">✏ Modifica corsa</button>`:`
         <button class="btn btn-purple btn-sm" onclick="openModal('add-ex','${wid}','${sid}')">+ Esercizio</button>
         <button class="btn btn-outline btn-sm" onclick="openModal('add-complex','${wid}','${sid}')">🔁 Complex</button>
+        <button class="btn btn-outline btn-sm" title="Aggiungi un blocco di esercizi pronto" onclick="openModal('add-block','${wid}','${sid}')">🧱 Blocco</button>
         <button class="btn btn-outline btn-sm" title="Salva sessione come template" onclick="saveSessionTemplate('${wid}','${sid}')">💾 Salva template</button>
         `}
       </div>
@@ -1761,6 +1762,59 @@ const SESSION_TEMPLATES=[
     ]},
 ];
 
+// ── BLOCCHI PRONTI (gruppi di esercizi da aggiungere a una sessione esistente)
+const BLOCK_TEMPLATES=[
+  {id:'wu-dinamico',icon:'🔆',name:'Riscaldamento dinamico',badge:'Warm-up',
+    exercises:[
+      {name:'Corsa progressiva',sets:'1',reps:'400m',rest:'',cue:'Dal blando al medio'},
+      {name:'Skip A / B',sets:'2',reps:'20m',rest:'30s'},
+      {name:'Calciata dietro',sets:'2',reps:'20m',rest:'30s'},
+      {name:'Affondi in camminata',sets:'1',reps:'10/lato',rest:''},
+      {name:'Leg swing avanti + laterale',sets:'1',reps:'10/lato',rest:''},
+    ]},
+  {id:'wu-forza',icon:'🔌',name:'Attivazione pre-forza',badge:'Warm-up',
+    exercises:[
+      {name:'Glute bridge',sets:'2',reps:'12',rest:'30s',cue:'Spinta dai talloni'},
+      {name:'Band walk laterale',sets:'2',reps:'12/lato',rest:'30s'},
+      {name:'Bird dog',sets:'2',reps:'8/lato',rest:'30s'},
+      {name:'Goblet squat leggero',sets:'2',reps:'8',rest:'45s'},
+    ]},
+  {id:'core-anti',icon:'🛡',name:'Core anti-movimento',badge:'Core',
+    exercises:[
+      {name:'Plank',sets:'3',reps:'40s',rest:'45s'},
+      {name:'Pallof press',sets:'3',reps:'10/lato',rest:'45s',cue:'Anti-rotazione, bacino fermo'},
+      {name:'Dead bug',sets:'3',reps:'8/lato',rest:'45s'},
+      {name:'Side plank',sets:'3',reps:'30s/lato',rest:'45s'},
+    ]},
+  {id:'cooldown',icon:'🧘',name:'Defaticamento + mobilità',badge:'Cooldown',
+    exercises:[
+      {name:'Corsa blanda defaticante',sets:'1',reps:'5-8min',rest:''},
+      {name:'Stretching catena posteriore',sets:'2',reps:'40s',rest:'20s'},
+      {name:'Foam rolling quadricipiti',sets:'1',reps:'60s/lato',rest:''},
+      {name:'Mobilità anca 90/90',sets:'2',reps:'8/lato',rest:'30s'},
+    ]},
+  {id:'rsa',icon:'🔂',name:'Sprint ripetuti (RSA)',badge:'RSA',
+    exercises:[
+      {name:'Sprint lineare 30m',sets:'10',reps:'1',rest:'30s',cue:'Recupero incompleto, tieni la qualità'},
+      {name:'Navetta 10+10m',sets:'6',reps:'1',rest:'30s'},
+      {name:'Recupero camminata',sets:'1',reps:'3min',rest:''},
+    ]},
+  {id:'sprint-accel',icon:'⚡',name:'Sprint & accelerazioni',badge:'Velocità',
+    exercises:[
+      {name:'Allunghi progressivi',sets:'3',reps:'40m',rest:'90s'},
+      {name:'Accelerazione 0-10m',sets:'5',reps:'1',rest:'2min'},
+      {name:'Sprint volante 20m',sets:'4',reps:'1',rest:'3min'},
+      {name:'Sprint 30m da fermo',sets:'4',reps:'1',rest:'3min'},
+    ]},
+  {id:'pliometria',icon:'🦘',name:'Pliometria reattiva',badge:'Potenza',
+    exercises:[
+      {name:'Pogo jumps',sets:'3',reps:'10',rest:'60s',cue:'Contatto rapido, caviglia rigida'},
+      {name:'Box jump',sets:'4',reps:'5',rest:'90s'},
+      {name:'Balzi alternati',sets:'3',reps:'6/lato',rest:'90s'},
+      {name:'Drop jump',sets:'3',reps:'5',rest:'2min'},
+    ]},
+];
+
 async function applyTemplate(tmplId,wid){
   const tmpl=SESSION_TEMPLATES.find(t=>t.id===tmplId);
   if(!tmpl||!wid)return;
@@ -1793,6 +1847,23 @@ async function applyTemplate(tmplId,wid){
   showToast('✓ Template aggiunto: '+tmpl.name);
 }
 window.applyTemplate=applyTemplate;
+
+// Aggiunge un blocco pronto (gruppo di esercizi) in coda alla sessione esistente
+async function applyBlock(blockId,wid,sid){
+  const blk=BLOCK_TEMPLATES.find(b=>b.id===blockId);
+  if(!blk||!wid||!sid)return;
+  const exPath=`programs/${currentProgId}/weeks/${wid}/sessions/${sid}/exercises`;
+  const existing=programs[currentProgId]?.weeks?.[wid]?.sessions?.[sid]?.exercises||{};
+  let order=Object.keys(existing).length;
+  const updates={};
+  (blk.exercises||[]).forEach((ex,i)=>{
+    updates['ex_'+Date.now()+'_'+i]={...ex,order:order++};
+  });
+  await update(ref(db,exPath),updates);
+  closeModal();
+  showToast('✓ Blocco "'+blk.name+'" aggiunto ('+(blk.exercises||[]).length+' esercizi)');
+}
+window.applyBlock=applyBlock;
 
 window.openModal=function(type,...args){
   const mb=document.getElementById('modal-body');
@@ -1844,6 +1915,25 @@ window.openModal=function(type,...args){
       const section=document.getElementById('custom-tmpl-section');
       if(section)section.innerHTML='';
     });
+    return;
+  }
+
+  if(type==='add-block'){
+    const [wid,sid]=args;
+    const sName=p?.weeks?.[wid]?.sessions?.[sid]?.name||'questa sessione';
+    mb.innerHTML=`<h3>🧱 Blocchi pronti</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Aggiungi un gruppo di esercizi già pronto in coda a <b style="color:var(--white);">${sName}</b>.</div>
+      <div class="tmpl-grid">
+        ${BLOCK_TEMPLATES.map(b=>`
+          <div class="tmpl-card" onclick="applyBlock('${b.id}','${wid}','${sid}')">
+            <div class="tmpl-icon">${b.icon}</div>
+            <div class="tmpl-name">${b.name}</div>
+            <div class="tmpl-desc">${(b.exercises||[]).length} esercizi pronti</div>
+            <span class="tmpl-badge" style="background:rgba(255,106,46,.1);color:var(--orange);">${b.badge}</span>
+          </div>`).join('')}
+      </div>
+      <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button></div>`;
+    document.getElementById('modal').classList.add('open');
     return;
   }
 
