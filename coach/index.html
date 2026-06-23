@@ -2090,9 +2090,23 @@ window.openModal=function(type,...args){
       ${editId?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);"><div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Link atleta</div><div class="link-gen show">${BASE}${editId}</div><button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="copyLink('${BASE}${editId}')">📋 Copia link</button></div>`:''}`;
   } else if(type==='group'){
     const [editId]=args;const g=editId?groups[editId]||{}:{};
+    const ge=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const gvars=Array.isArray(g.vars)?g.vars:Object.values(g.vars||{});
+    const gvarRow=(v={})=>`<div class="gvar-row" style="display:grid;grid-template-columns:0.9fr 1.3fr auto;gap:6px;margin-bottom:6px;align-items:center;">
+        <input class="gv-k" value="${ge(v.k)}" placeholder="Nome (es. G1)">
+        <input class="gv-v" value="${ge(v.v)}" placeholder="Valore (es. 4:30)">
+        <button type="button" class="btn btn-outline btn-sm" title="Rimuovi" onclick="this.closest('.gvar-row').remove()">×</button>
+      </div>`;
+    window._gvarRow=gvarRow;
+    window._addGVar=function(){const c=document.getElementById('m-gvars');if(c)c.insertAdjacentHTML('beforeend',gvarRow({}));};
     mb.innerHTML=`<h3>${editId?'Modifica gruppo':'Nuovo gruppo'}</h3>
       <div class="field"><label>Nome gruppo</label><input id="m-gname" value="${g.name||''}" placeholder="Es. Prima Squadra, Under 18..."></div>
       <div class="field"><label>Note</label><textarea id="m-gnotes">${g.notes||''}</textarea></div>
+      <div class="field">
+        <label>Variabili gruppo <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">ritmi, zone FC — richiamale nel builder con <code>{nome}</code></span></label>
+        <div id="m-gvars">${(gvars.length?gvars:[{}]).map(v=>gvarRow(v)).join('')}</div>
+        <button type="button" class="btn btn-outline btn-sm" style="margin-top:2px;" onclick="window._addGVar()">+ Variabile</button>
+      </div>
       <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveGroup('${editId||''}')">Salva →</button></div>`;
   } else if(type==='test'){
     const [aid,tName]=args;const t=tests[aid]?.[tName]||{};
@@ -2132,8 +2146,14 @@ window.saveAthlete=async function(editId){
 };
 window.saveGroup=async function(editId){
   const name=document.getElementById('m-gname').value.trim();if(!name){showToast('⚠ Nome richiesto');return;}
-  if(editId)await update(ref(db,`groups/${editId}`),{name,notes:document.getElementById('m-gnotes').value.trim()||null});
-  else await push(ref(db,'groups'),{name,notes:document.getElementById('m-gnotes').value.trim()||null});
+  const notes=document.getElementById('m-gnotes').value.trim()||null;
+  const vars=[...document.querySelectorAll('#m-gvars .gvar-row')].map(r=>({
+    k:(r.querySelector('.gv-k')?.value||'').trim(),
+    v:(r.querySelector('.gv-v')?.value||'').trim()
+  })).filter(x=>x.k);
+  const data={name,notes,vars:vars.length?vars:null};
+  if(editId)await update(ref(db,`groups/${editId}`),data);
+  else await push(ref(db,'groups'),data);
   closeModal();showToast('✓ Gruppo salvato!');
 };
 window.saveTest=async function(aid,tName){
