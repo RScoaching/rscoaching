@@ -599,6 +599,7 @@ document.addEventListener('DOMContentLoaded',function(){
             </div>
           </div>
           <span class="ed-actions-sep"></span>
+          <button class="btn btn-teal btn-sm" id="assign-wk-btn" onclick="openAssignWeek()" style="display:none;" title="Assegna questo foglio senza data a una settimana del calendario">📅 Assegna a una settimana</button>
           <button class="btn btn-purple btn-sm" onclick="openSendModal()">👥 Invia atleti</button>
           <button class="btn btn-teal btn-sm" onclick="publishPlan()">✓ Pubblica</button>
         </div>
@@ -785,6 +786,20 @@ document.addEventListener('DOMContentLoaded',function(){
     <div class="mactions">
       <button class="btn btn-outline" onclick="document.getElementById('modal-send').classList.remove('open')">Annulla</button>
       <button class="btn btn-purple" onclick="doSend()">Invia piano →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ASSEGNA SETTIMANA (foglio senza data) -->
+<div class="overlay" id="modal-assign">
+  <div class="modal" style="max-width:380px;">
+    <h3>📅 Assegna a una settimana</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Scegli una data: il foglio viene spostato sulla settimana (lun-dom) che la contiene. I giorni 1-7 diventano lun-dom.</div>
+    <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:6px;">Data nella settimana scelta</label>
+    <input type="date" id="assign-wk-date" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--white);font-size:14px;margin-bottom:16px;">
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="closeAssignWeek()">Annulla</button>
+      <button class="btn btn-teal" onclick="confirmAssignWeek()">Assegna →</button>
     </div>
   </div>
 </div>
@@ -2851,6 +2866,12 @@ let _viewMode='week';       // 'week' | 'month' (vista editor)
 let _monthViewDate=null;    // mese mostrato nella vista mese
 let _monthSpan=4;           // settimane visibili in vista mese: 1 | 2 | 4
 
+// Foglio vuoto SENZA data: le sessioni vivono sotto plans/__draft__ e si
+// assegnano a una settimana del calendario dopo (vedi confirmAssignWeek).
+// Una chiave non-data è invisibile a calendario/mese (che generano date), quindi è sicura.
+const DRAFT_WK='__draft__';
+const _isDraftWk=wk=>!/^\d{4}-\d{2}-\d{2}$/.test(String(wk||''));
+
 const DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const DAYS_S=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
 const TYPE_COLORS={squadra:'sc-squadra',forza:'sc-forza',sprint:'sc-sprint',plyo:'sc-plyo',rec:'sc-rec',priming:'sc-priming',riposo:'sc-riposo',z2:'sc-z2',lungo:'sc-lungo',tempo:'sc-tempo',interval:'sc-interval'};
@@ -3032,10 +3053,20 @@ function renderEditor(){
   const edContent=document.getElementById('ed-content');
   edContent.style.display='flex';
 
-  const monday=new Date(currentWk+'T00:00:00');
-  const sunday=new Date(monday); sunday.setDate(sunday.getDate()+6);
-  const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
-  document.getElementById('ed-title').textContent=`${fmt(monday)} — ${fmt(sunday).split(' ').slice(0,2).join(' ')}`;
+  // Foglio senza data: nascondi i controlli legati al calendario, mostra "Assegna"
+  const _draft=_isDraftWk(currentWk);
+  const _wkNav=document.getElementById('wk-nav'); if(_wkNav)_wkNav.style.display=_draft?'none':'';
+  const _vTog=document.getElementById('view-toggle'); if(_vTog)_vTog.style.visibility=_draft?'hidden':'';
+  const _asgBtn=document.getElementById('assign-wk-btn'); if(_asgBtn)_asgBtn.style.display=_draft?'':'none';
+
+  if(_draft){
+    document.getElementById('ed-title').textContent='Foglio nuovo · senza data';
+  } else {
+    const monday=new Date(currentWk+'T00:00:00');
+    const sunday=new Date(monday); sunday.setDate(sunday.getDate()+6);
+    const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
+    document.getElementById('ed-title').textContent=`${fmt(monday)} — ${fmt(sunday).split(' ').slice(0,2).join(' ')}`;
+  }
 
   // Config
   const conf=plans[currentWk]?._config||{};
@@ -3044,8 +3075,13 @@ function renderEditor(){
 
   // Status
   const pub=plans[currentWk]?._published;
-  document.getElementById('ed-status').textContent=pub?`✓ Pubblicata il ${new Date(pub).toLocaleDateString('it-IT')}` :'Bozza';
-  document.getElementById('ed-status').style.color=pub?'var(--teal)':'var(--amber)';
+  if(_draft){
+    document.getElementById('ed-status').textContent='Bozza senza data · 📅 Assegna a una settimana per pubblicarla';
+    document.getElementById('ed-status').style.color='var(--amber)';
+  } else {
+    document.getElementById('ed-status').textContent=pub?`✓ Pubblicata il ${new Date(pub).toLocaleDateString('it-IT')}` :'Bozza';
+    document.getElementById('ed-status').style.color=pub?'var(--teal)':'var(--amber)';
+  }
 
   renderGrid();
   renderAssignedChips();
@@ -3074,13 +3110,14 @@ function renderGrid(){
     :(window._athModeAid
       ?(window._athPlanCache||{})[window._athModeAid+'_'+currentWk]||{}
       :plans[currentWk]||{});
-  const monday=new Date(currentWk+'T00:00:00');
+  const _draft=_isDraftWk(currentWk);
+  const monday=_draft?null:new Date(currentWk+'T00:00:00');
   const today=new Date(); today.setHours(0,0,0,0);
 
   const grid=document.getElementById('week-grid');
   grid.innerHTML=DAYS.map((dayName,i)=>{
-    const d=new Date(monday); d.setDate(d.getDate()+i);
-    const isToday=d.getTime()===today.getTime();
+    const d=_draft?null:new Date(monday); if(d)d.setDate(d.getDate()+i);
+    const isToday=d?d.getTime()===today.getTime():false;
     const diff=i-gameDay;
     let tag='';
     if(gameDay>=0){
@@ -3129,12 +3166,15 @@ function renderGrid(){
       </div>`;
     }).join('');
 
-    return `<div class="day-col${isToday?' day-today':''}">
-      <div class="day-head">
-        <div class="day-name">${DAYS_S[i]}</div>
+    const headHtml=_draft
+      ? `<div class="day-name">Giorno ${i+1}</div>${tag}`
+      : `<div class="day-name">${DAYS_S[i]}</div>
         <div class="day-date">${d.getDate()}</div>
         <div class="day-month">${d.toLocaleDateString('it-IT',{month:'short'})}</div>
-        ${tag}
+        ${tag}`;
+    return `<div class="day-col${isToday?' day-today':''}">
+      <div class="day-head">
+        ${headHtml}
       </div>
       <div class="day-body" data-day-idx="${i}">
         <div class="day-sessions">${sessHtml}</div>
@@ -3216,7 +3256,7 @@ window.closeActionsMenu=closeActionsMenu;
 
 // Navigazione settimana ‹ › nell'editor: chiude il loop copia→incolla
 window.shiftWeek=function(dir){
-  if(!currentWk) return;
+  if(!currentWk||_isDraftWk(currentWk)) return;  // niente navigazione su un foglio senza data
   const d=new Date(currentWk+'T00:00:00');
   d.setDate(d.getDate()+(dir*7));
   const wk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -3250,7 +3290,7 @@ window.setViewMode=function(m){
     if(wg)wg.style.display='none';
     if(mg)mg.style.display='flex';
     _setWeekUiVisible(false);
-    if(!_monthViewDate)_monthViewDate=currentWk?new Date(currentWk+'T00:00:00'):new Date();
+    if(!_monthViewDate)_monthViewDate=(currentWk&&!_isDraftWk(currentWk))?new Date(currentWk+'T00:00:00'):new Date();
     const t=document.getElementById('ed-title'); if(t)t.textContent='Vista Mensile';
     renderMonth();
     _triggerViewFade(mg);
@@ -3671,6 +3711,7 @@ window.autoSuggest=async function(){
 // ── PUBLISH
 window.publishPlan=async function(){
   if(!currentWk) return;
+  if(_isDraftWk(currentWk)){showToast('⚠ Assegna prima il foglio a una settimana (📅 Assegna)');return;}
   const planData=plans[currentWk]||{};
   const sessCnt=Object.entries(planData).filter(([k])=>!k.startsWith('_')).reduce((t,[,d])=>t+Object.keys(d||{}).length,0);
   if(!sessCnt){showToast('⚠ Aggiungi almeno una sessione');return;}
@@ -3681,6 +3722,7 @@ window.publishPlan=async function(){
 // ── SEND TO ATHLETES
 window.openSendModal=async function(){
   if(!currentWk){showToast('⚠ Seleziona prima una settimana');return;}
+  if(_isDraftWk(currentWk)){showToast('⚠ Assegna prima il foglio a una settimana (📅 Assegna)');return;}
   const athIds=Object.keys(athletes);
   const wData=plans[currentWk]||{};
   const assigned=wData._athletes||{};
@@ -3847,41 +3889,58 @@ window.switchAthMode=function(aid){
   }
 };
 
-// "Nuovo piano pulito (Gruppo)": trova la prossima settimana vuota e apre un foglio vuoto
-window.newEmptyPlan=function(){
-  const key=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
-  const mondayOf=x=>{const m=new Date(x);m.setHours(0,0,0,0);m.setDate(m.getDate()-((m.getDay()||7)-1));return m;};
-  // Punto di partenza: deduco da quel che sto guardando, non da oggi.
-  // 1) settimana selezionata/aperta → 2) mese in vista → 3) oggi
-  let d;
-  const viewedWk=window._selWk||window._currentPlanWk||currentWk;
-  if(viewedWk){
-    d=mondayOf(new Date(viewedWk+'T00:00:00'));
-  } else if(window._calYear!=null && window._calMonth!=null){
-    d=mondayOf(new Date(window._calYear,window._calMonth,1));
-  } else {
-    d=mondayOf(new Date());
-  }
+// "Nuovo piano pulito (Gruppo)": apre un foglio VUOTO senza data.
+// Niente salto alla prima settimana libera: le sessioni si salvano sotto
+// plans/__draft__ e poi si assegnano a una settimana scelta (📅 Assegna).
+window.newEmptyPlan=async function(){
   window.switchAthMode('');               // contesto = Gruppo (piano base)
-  const cache=window._plansCache||{};
-  let wk=null;
-  for(let i=0;i<52;i++){
-    const k=key(d);
-    const wd=cache[k]||{};
-    const hasSessions=Object.keys(wd).some(kk=>!kk.startsWith('_'));
-    if(!hasSessions){ wk=k; break; }
-    d.setDate(d.getDate()+7);
-  }
-  if(!wk) wk=key(d);
-  // Porta la vista calendario sul mese della settimana scelta
-  const mon=new Date(wk+'T00:00:00');
-  window._calYear=mon.getFullYear(); window._calMonth=mon.getMonth();
-  if(window._calRender) window._calRender();
-  window._selWk=wk; window._currentPlanWk=wk; currentWk=wk;
-  // Foglio vuoto: apri direttamente l'editor della settimana vuota (niente wizard forzato)
-  if(window._openEditor) window._openEditor(wk);
-  else if(window.openWeekOrWiz) window.openWeekOrWiz(wk);
-  else showToast('Nessuna settimana vuota trovata');
+  // Parti pulito: rimuovi un eventuale foglio bozza precedente
+  try{ await remove(ref(db,'plans/'+DRAFT_WK)); }catch(e){}
+  if(plans[DRAFT_WK]) delete plans[DRAFT_WK];
+  _viewMode='week';
+  currentWk=DRAFT_WK; window._currentPlanWk=DRAFT_WK; window._selWk=DRAFT_WK;
+  if(window._calRender) window._calRender();   // deseleziona le settimane nel calendario
+  renderEditor();
+  showToast('Foglio vuoto pronto. Aggiungi le sessioni, poi 📅 Assegna a una settimana');
+};
+
+// Apre il modale per assegnare il foglio senza data a una settimana del calendario.
+window.openAssignWeek=function(){
+  if(!_isDraftWk(currentWk)){showToast('Apri prima un foglio nuovo');return;}
+  const draft=plans[DRAFT_WK]||{};
+  if(!Object.keys(draft).some(k=>!k.startsWith('_'))){showToast('⚠ Il foglio è vuoto: aggiungi almeno una sessione');return;}
+  const inp=document.getElementById('assign-wk-date');
+  if(inp&&!inp.value){const t=new Date();inp.value=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');}
+  document.getElementById('modal-assign').classList.add('open');
+};
+window.closeAssignWeek=function(){document.getElementById('modal-assign').classList.remove('open');};
+// Sposta plans/__draft__/* sulla settimana (lun-dom) che contiene la data scelta.
+window.confirmAssignWeek=async function(){
+  const val=(document.getElementById('assign-wk-date')||{}).value||'';
+  if(!val){showToast('⚠ Scegli una data');return;}
+  const d=new Date(val+'T00:00:00');
+  if(isNaN(d.getTime())){showToast('⚠ Data non valida');return;}
+  const mon=new Date(d); mon.setHours(0,0,0,0); mon.setDate(mon.getDate()-((mon.getDay()||7)-1));
+  const key=mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+  const draft=plans[DRAFT_WK]||{};
+  const days=Object.keys(draft).filter(k=>!k.startsWith('_'));
+  if(!days.length){showToast('⚠ Il foglio è vuoto');return;}
+  const target=plans[key]||{};
+  const targetHas=Object.keys(target).some(k=>!k.startsWith('_'));
+  if(targetHas && !confirm('La settimana del '+mon.toLocaleDateString('it-IT',{day:'numeric',month:'long'})+' ha già delle sessioni. Vuoi unire il foglio a quella settimana?')) return;
+  const upd={};
+  if(draft._config && !target._config) upd['plans/'+key+'/_config']=draft._config;
+  days.forEach(day=>{ Object.entries(draft[day]||{}).forEach(([sk,sv])=>{ upd['plans/'+key+'/'+day+'/'+sk]=sv; }); });
+  upd['plans/'+DRAFT_WK]=null;
+  try{
+    await update(ref(db),upd);
+    closeAssignWeek();
+    window._calYear=mon.getFullYear(); window._calMonth=mon.getMonth(); currentMonthDate=new Date(mon);
+    currentWk=key; window._currentPlanWk=key; window._selWk=key;
+    if(window._calRender) window._calRender();
+    renderEditor();
+    showToast('✓ Foglio assegnato alla settimana del '+mon.toLocaleDateString('it-IT',{day:'numeric',month:'long'}));
+  }catch(e){showToast('❌ '+e.message);}
 };
 
 window._populateAthSel=function(wk){
