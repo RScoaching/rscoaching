@@ -1884,6 +1884,27 @@ function updateWHMetaRow(){
 }
 
 // ── TODAY PLAN
+// ── GROUP VARIABLES (#9): il preparatore definisce ritmi/zone FC su groups/{id}.vars; i token {nome} si risolvono qui
+window._grpVars=window._grpVars||{};
+let _grpVarsPromise=null;
+function loadGroupVars(gid){
+  if(!gid){window._grpVars={};return Promise.resolve({});}
+  if(_grpVarsPromise)return _grpVarsPromise;
+  _grpVarsPromise=get(ref(db,`groups/${gid}`)).then(s=>{
+    const g=s.val()||{};
+    const raw=Array.isArray(g.vars)?g.vars:Object.values(g.vars||{});
+    const map={};
+    raw.forEach(v=>{if(v&&v.k!=null&&String(v.k).trim())map[String(v.k).trim().toLowerCase()]=String(v.v==null?'':v.v);});
+    window._grpVars=map;return map;
+  }).catch(()=>{window._grpVars={};return {};});
+  return _grpVarsPromise;
+}
+function resolveVars(txt){
+  const map=window._grpVars;
+  if(txt==null||!map)return txt;
+  return String(txt).replace(/\{([^{}]+)\}/g,(m,k)=>{const h=map[String(k).trim().toLowerCase()];return h!=null&&h!==''?h:m;});
+}
+
 async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   const now=new Date();
   const todayIdx=now.getDay()===0?6:now.getDay()-1;
@@ -1893,6 +1914,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   const wrap=document.getElementById('today-content');
   const lblEl=document.getElementById('oggi-sec-lbl');
   if(lblEl)lblEl.textContent=dayIdx===todayIdx?'Allenamento di oggi':'Allenamento';
+  await loadGroupVars(athlete&&athlete.group);
   try{
 
   function exListHtml(exercises){
@@ -1935,20 +1957,20 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       if(isIntv){
         const head=[];
         if(f.reps)head.push(esc(String(f.reps).replace(/\s*[x×]\s*$/i,''))+'×');
-        if(f.repDist)head.push(esc(f.repDist));
+        if(f.repDist)head.push(esc(resolveVars(f.repDist)));
         let line=head.join(' ');
-        if(f.repPace)line+=(line?' @ ':'')+esc(pk(f.repPace));
+        if(f.repPace)line+=(line?' @ ':'')+esc(pk(resolveVars(f.repPace)));
         const rec=f.rec||[f.recDist,f.recTime,f.recPace].filter(Boolean).join(' ');
-        if(rec)line+=(line?' · ':'')+'rec '+esc(rec);
+        if(rec)line+=(line?' · ':'')+'rec '+esc(resolveVars(rec));
         detail=line;
       }else{
         const parts=[];
-        if(f.dist)parts.push(esc(f.dist));
-        if(f.pace)parts.push(esc(pk(f.pace)));
+        if(f.dist)parts.push(esc(resolveVars(f.dist)));
+        if(f.pace)parts.push(esc(pk(resolveVars(f.pace))));
         detail=parts.join(' · ');
       }
       const fc=z?`<div class="corsa-ffc">${ZF_ATH[z]}</div>`:'';
-      const note=f.note?`<div class="corsa-fnote">${esc(f.note)}</div>`:'';
+      const note=f.note?`<div class="corsa-fnote">${esc(resolveVars(f.note))}</div>`:'';
       return `<div class="corsa-fase">${fz}<div class="corsa-fbody"><div class="corsa-ftipo">${tipo}</div>${detail?`<div class="corsa-fdetail">${detail}</div>`:''}${fc}${note}</div></div>`;
     }).filter(Boolean).join('');
     if(!cards)return '';
