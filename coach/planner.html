@@ -287,6 +287,26 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .mw-add{width:100%;padding:3px;background:transparent;border:1px dashed var(--border);border-radius:5px;color:var(--muted);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;line-height:1;}
 .mw-add:hover{border-color:var(--teal);color:var(--teal);}
 .mw-day.dnd-over{background:rgba(255,106,46,.10);outline:2px dashed rgba(255,106,46,.45);outline-offset:-2px;}
+/* Multi-selezione vista mese */
+.mw-chip{position:relative;}
+.month-weeks.selmode .mw-chip{cursor:pointer;}
+.mw-chip.is-sel{outline:2px solid var(--teal);outline-offset:-2px;box-shadow:0 0 0 3px rgba(6,214,160,.18);}
+.mw-chip.is-sel::after{content:'✓';position:absolute;top:1px;right:2px;width:13px;height:13px;display:flex;align-items:center;justify-content:center;background:var(--teal);color:#070B12;font-size:9px;font-weight:800;border-radius:50%;line-height:1;}
+.msel-toggle{appearance:none;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--muted);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;letter-spacing:.3px;padding:5px 11px;border-radius:8px;cursor:pointer;flex-shrink:0;transition:background .15s,color .15s,transform .1s,border-color .15s;}
+.msel-toggle:hover{color:var(--white);border-color:var(--muted);}
+.msel-toggle:active{transform:scale(.96);}
+.msel-toggle.active{background:var(--teal);color:#070B12;border-color:var(--teal);}
+.msel-bar{position:sticky;bottom:0;z-index:3;display:flex;align-items:center;gap:10px;padding:11px 16px;background:rgba(20,20,26,.96);border-top:1px solid var(--border2);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.msel-count{font-family:'Inter',sans-serif;font-size:13px;font-weight:700;color:var(--white);margin-right:auto;}
+.mcopy-list{display:flex;flex-direction:column;gap:5px;max-height:300px;overflow-y:auto;}
+.mcopy-wk{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);transition:border-color .15s,background .15s;}
+.mcopy-wk:hover{border-color:var(--teal);background:rgba(6,214,160,.06);}
+.mcopy-wk input{accent-color:var(--teal);width:16px;height:16px;cursor:pointer;flex-shrink:0;}
+.mcopy-wk-main{flex:1;min-width:0;}
+.mcopy-wk.is-src{opacity:.5;cursor:not-allowed;}
+.mcopy-wk.is-src:hover{border-color:var(--border);background:none;}
+.mcopy-wk-tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:rgba(255,255,255,.08);padding:2px 6px;border-radius:5px;flex-shrink:0;}
+@media (prefers-reduced-motion:reduce){.msel-toggle:active{transform:none;}}
 
 /* ATLETI SECTION */
 .ed-athletes{padding:12px 20px;border-top:1px solid var(--border);background:rgba(255,255,255,.04);flex-shrink:0;}
@@ -800,6 +820,19 @@ document.addEventListener('DOMContentLoaded',function(){
     <div class="mactions">
       <button class="btn btn-outline" onclick="closeAssignWeek()">Annulla</button>
       <button class="btn btn-teal" onclick="confirmAssignWeek()">Assegna →</button>
+    </div>
+  </div>
+</div>
+
+<!-- COPIA MULTIPLA (vista mese) -->
+<div class="overlay" id="modal-mcopy">
+  <div class="modal" style="max-width:420px;">
+    <h3>Copia <span id="mcopy-count">0</span> allenamenti</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Scegli su quali settimane copiarli. Le sessioni mantengono lo stesso giorno della settimana e si aggiungono a quelle esistenti.</div>
+    <div id="mcopy-weeks" class="mcopy-list"></div>
+    <div class="mactions" style="margin-top:16px;">
+      <button class="btn btn-outline" onclick="closeMonthCopy()">Annulla</button>
+      <button class="btn btn-teal" onclick="confirmMonthCopy()">Copia &rarr;</button>
     </div>
   </div>
 </div>
@@ -3419,7 +3452,9 @@ function renderMonth(){
         .sort((a,b)=>(a.ts||0)-(b.ts||0));
       const chips=sess.map(s=>{
         const safeNote=(s.note||'').replace(/"/g,'&quot;');
-        return `<div class="mw-chip ${TYPE_COLORS[s.type]||'sc-squadra'}" draggable="true" data-wk="${w.key}" data-day="${i}" data-key="${s._key}" onclick="monthEditSess('${w.key}',${i},'${s._key}')" title="${safeNote}">
+        const _selId=w.key+'|'+i+'|'+s._key;
+        const _isSel=window._monthSelMode&&window._monthSel&&window._monthSel.has(_selId);
+        return `<div class="mw-chip ${TYPE_COLORS[s.type]||'sc-squadra'}${_isSel?' is-sel':''}" draggable="${window._monthSelMode?'false':'true'}" data-wk="${w.key}" data-day="${i}" data-key="${s._key}" onclick="monthChipClick('${w.key}',${i},'${s._key}')" title="${safeNote}">
           <div class="mwc-type">${TYPE_LABELS[s.type]||s.type}</div>
           <div class="mwc-name">${s.note||'—'}</div>
         </div>`;
@@ -3447,15 +3482,23 @@ function renderMonth(){
   }).join('');
 
   const spanBtn=(n,l)=>`<button class="msp-btn${_monthSpan===n?' active':''}" onclick="setMonthSpan(${n})" title="Mostra ${l}">${l}</button>`;
+  const _selN=(window._monthSel?window._monthSel.size:0);
+  const _selBar=window._monthSelMode?`<div class="msel-bar">
+    <span class="msel-count">${_selN?(_selN+(_selN===1?' allenamento selezionato':' allenamenti selezionati')):'Tocca gli allenamenti che vuoi copiare'}</span>
+    <button class="btn btn-outline btn-sm" onclick="clearMonthSel()">Deseleziona</button>
+    <button class="btn btn-teal btn-sm" onclick="openMonthCopy()">Copia in settimane →</button>
+  </div>`:'';
   mg.innerHTML=`<div class="month-toolbar">
     <button class="icon-btn" onclick="shiftMonthView(-1)">‹</button>
     <span class="mt-label">${monthLbl}</span>
     <button class="icon-btn" onclick="shiftMonthView(1)">›</button>
     <span class="mt-ctx" style="margin-left:10px;padding:4px 10px;border-radius:8px;background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.34);color:var(--violet2);font-size:11px;font-weight:700;white-space:nowrap;">${ctxName}</span>
     <div class="mspan-toggle" role="group" aria-label="Settimane visibili">${spanBtn(1,'1W')}${spanBtn(2,'2W')}${spanBtn(4,'4W')}</div>
+    <button class="msel-toggle${window._monthSelMode?' active':''}" onclick="toggleMonthSelMode()" title="Seleziona piu allenamenti e copiali su altre settimane">${window._monthSelMode?'✕ Esci':'☑ Seleziona'}</button>
   </div>
   ${phaseBar}
-  <div class="month-weeks">${weeksHtml}</div>`;
+  <div class="month-weeks${window._monthSelMode?' selmode':''}">${weeksHtml}</div>
+  ${_selBar}`;
   _bindMonthDnD(mg);
 }
 
@@ -3501,6 +3544,100 @@ window.monthAddSess=function(wk,day){
   currentWk=wk; window._currentPlanWk=wk; window._selWk=wk;
   if(window._calRender) window._calRender();
   window.openAdd(day);
+};
+
+// ── MULTI-SELEZIONE VISTA MESE: scegli più allenamenti e copiali su altre settimane
+window._monthSel=window._monthSel||new Set();
+window.toggleMonthSelMode=function(){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura. Torna al piano principale');return;}
+  window._monthSelMode=!window._monthSelMode;
+  if(!window._monthSelMode) window._monthSel.clear();
+  renderMonth();
+};
+window.clearMonthSel=function(){ if(window._monthSel) window._monthSel.clear(); renderMonth(); };
+window.monthChipClick=function(wk,day,key){
+  if(window._monthSelMode){
+    const id=wk+'|'+day+'|'+key;
+    window._monthSel=window._monthSel||new Set();
+    if(window._monthSel.has(id)) window._monthSel.delete(id); else window._monthSel.add(id);
+    renderMonth();
+  } else {
+    window.monthEditSess(wk,day,key);
+  }
+};
+// Apre il modale con l'elenco delle settimane di destinazione
+window.openMonthCopy=function(){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura');return;}
+  const n=window._monthSel?window._monthSel.size:0;
+  if(!n){showToast('⚠ Seleziona almeno un allenamento');return;}
+  const cnt=document.getElementById('mcopy-count'); if(cnt) cnt.textContent=n;
+  const box=document.getElementById('mcopy-weeks'); if(!box) return;
+  const srcWeeks=new Set([...window._monthSel].map(s=>s.split('|')[0]));
+  let anchor=(currentWk&&/^\d{4}-\d{2}-\d{2}$/.test(currentWk))?new Date(currentWk+'T00:00:00'):new Date();
+  anchor.setHours(0,0,0,0); anchor.setDate(anchor.getDate()-((anchor.getDay()||7)-1));
+  const fmt=d=>d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+  let html='';
+  for(let i=0;i<16;i++){
+    const mon=new Date(anchor); mon.setDate(mon.getDate()+i*7);
+    const key=mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+    const sun=new Date(mon); sun.setDate(sun.getDate()+6);
+    const isSrc=srcWeeks.has(key);
+    html+=`<label class="mcopy-wk${isSrc?' is-src':''}">
+      <input type="checkbox" value="${key}" ${isSrc?'disabled':''}>
+      <span class="mcopy-wk-main">W${getWeekNumber(mon)} · ${fmt(mon)} - ${fmt(sun)}</span>
+      ${isSrc?'<span class="mcopy-wk-tag">origine</span>':''}
+    </label>`;
+  }
+  box.innerHTML=html;
+  document.getElementById('modal-mcopy').classList.add('open');
+};
+window.closeMonthCopy=function(){ document.getElementById('modal-mcopy').classList.remove('open'); };
+window.confirmMonthCopy=async function(){
+  if(window._currentVersionId){showToast('⚠ Modalità sola lettura');return;}
+  const targetWeeks=[...document.querySelectorAll('#mcopy-weeks input[type=checkbox]:checked')].map(c=>c.value);
+  if(!targetWeeks.length){showToast('⚠ Scegli almeno una settimana di destinazione');return;}
+  const sel=window._monthSel?[...window._monthSel]:[];
+  const items=[];
+  sel.forEach(id=>{
+    const p=id.split('|'); const wk=p[0], day=p[1], key=p[2];
+    const s=(_monthPlanData(wk)[String(day)]||{})[key];
+    if(s) items.push({day:String(day),sess:s});
+  });
+  if(!items.length){showToast('⚠ Allenamenti non trovati');return;}
+  // Prepara le scritture (una nuova sessione per ogni allenamento × ogni settimana scelta)
+  const writes=[]; let i=0;
+  targetWeeks.forEach(wk=>{
+    items.forEach(it=>{
+      const nk='s'+(Date.now()+(i++));
+      const entry={...it.sess,ts:Date.now()};
+      delete entry._key; delete entry.createdAt;
+      writes.push({wk,day:it.day,key:nk,entry});
+    });
+  });
+  showToast('⏳ Copio…');
+  try{
+    if(window._athModeAid){
+      const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+      const aid=window._athModeAid;
+      for(const w of writes){
+        await fetch(_dbUrl+`/athlete_plans/${aid}/${w.wk}/days/${w.day}/${w.key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(w.entry)});
+      }
+      window._athPlanCache=window._athPlanCache||{};
+      for(const wk of targetWeeks){
+        const r=await fetch(_dbUrl+`/athlete_plans/${aid}/${wk}/days.json`);
+        if(r.ok) window._athPlanCache[aid+'_'+wk]=await r.json()||{};
+      }
+    } else {
+      const upd={};
+      writes.forEach(w=>{ upd['plans/'+w.wk+'/'+w.day+'/'+w.key]=w.entry; });
+      await update(ref(db),upd);
+      writes.forEach(w=>{ if(!plans[w.wk])plans[w.wk]={}; if(!plans[w.wk][w.day])plans[w.wk][w.day]={}; plans[w.wk][w.day][w.key]=w.entry; });
+    }
+    closeMonthCopy();
+    window._monthSelMode=false; if(window._monthSel) window._monthSel.clear();
+    renderMonth();
+    showToast('✓ '+items.length+' allenament'+(items.length===1?'o':'i')+' copiat'+(items.length===1?'o':'i')+' su '+targetWeeks.length+' settiman'+(targetWeeks.length===1?'a':'e'));
+  }catch(e){ showToast('❌ '+e.message); }
 };
 
 // ── CONFIG SAVE
