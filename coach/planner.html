@@ -101,8 +101,19 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
    (e.g. on top of the month view). The id stays "ed-empty" so JS is unchanged. */
 .ed-blank{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);}
 .ed-blank-icon{font-size:48px;opacity:.4;}
-.ed-blank-title{font-family:'Bebas Neue',sans-serif;font-size:24px;color:rgba(255,255,255,.2);}
-.ed-blank-sub{font-size:13px;text-align:center;max-width:260px;}
+.ed-blank-title{font-family:'Bebas Neue',sans-serif;font-size:24px;color:rgba(244,241,236,.55);}
+.ed-blank-sub{font-size:13px;text-align:center;max-width:300px;}
+.ed-blank-actions{display:flex;flex-direction:column;gap:9px;margin-top:10px;width:100%;max-width:330px;}
+.ed-blank-btn{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:'Inter',sans-serif;text-align:left;cursor:pointer;transition:transform .15s,border-color .15s,background .15s;}
+.ed-blank-btn:hover{background:rgba(255,255,255,.07);border-color:var(--border2);transform:translateY(-1px);}
+.ed-blank-btn:active{transform:translateY(0) scale(.99);}
+.ed-blank-btn-primary{background:rgba(6,182,212,.10);border-color:rgba(6,182,212,.34);}
+.ed-blank-btn-primary:hover{background:rgba(6,182,212,.16);border-color:var(--teal);}
+.ed-blank-btn-ic{flex-shrink:0;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px;background:rgba(255,255,255,.05);border-radius:9px;}
+.ed-blank-btn-primary .ed-blank-btn-ic{background:rgba(6,182,212,.16);}
+.ed-blank-btn-tx{display:flex;flex-direction:column;gap:1px;line-height:1.25;}
+.ed-blank-btn-tx b{font-size:13.5px;font-weight:700;color:var(--white);}
+.ed-blank-btn-tx small{font-size:11px;color:var(--muted);}
 
 .ed-head{padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .ed-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;color:var(--white);flex:1;}
@@ -587,8 +598,22 @@ document.addEventListener('DOMContentLoaded',function(){
   <div class="editor-panel" id="editor-panel">
     <div class="ed-blank" id="ed-empty">
       <div class="ed-blank-icon">📅</div>
-      <div class="ed-blank-title">Program Calendar</div>
-      <div class="ed-blank-sub">Seleziona una settimana dal pannello a sinistra per iniziare a pianificare</div>
+      <div class="ed-blank-title">Inizia a costruire</div>
+      <div class="ed-blank-sub">Apri una settimana dal pannello a sinistra, oppure parti da qui:</div>
+      <div class="ed-blank-actions">
+        <button class="ed-blank-btn ed-blank-btn-primary" onclick="newEmptyPlan()">
+          <span class="ed-blank-btn-ic">＋</span>
+          <span class="ed-blank-btn-tx"><b>Nuovo piano pulito</b><small>Costruisci una settimana da zero</small></span>
+        </button>
+        <button class="ed-blank-btn" onclick="openModels()">
+          <span class="ed-blank-btn-ic">📂</span>
+          <span class="ed-blank-btn-tx"><b>I miei piani salvati</b><small>Ricarica un piano e assegnalo</small></span>
+        </button>
+        <button class="ed-blank-btn" onclick="openMonthView()">
+          <span class="ed-blank-btn-ic">📅</span>
+          <span class="ed-blank-btn-tx"><b>Vista mese</b><small>Tutte le settimane insieme</small></span>
+        </button>
+      </div>
     </div>
 
     <div id="ed-content" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
@@ -609,6 +634,7 @@ document.addEventListener('DOMContentLoaded',function(){
           <button class="btn-ghost btn-ghost-teal" id="paste-wk-btn" onclick="pasteWeek()" style="display:none;" title="Incolla settimana copiata">📋<span class="bg-lbl">Incolla</span></button>
           <button class="btn-ghost" onclick="exportPlannerPDF()" title="Esporta il programma in PDF">📄<span class="bg-lbl">PDF</span></button>
           <button class="btn-ghost btn-ghost-red" onclick="clearWeek()" title="Svuota tutti i giorni della settimana">🗑<span class="bg-lbl">Svuota</span></button>
+          <button class="btn-ghost" id="save-plan-btn" onclick="saveWeekModel()" title="Salva questa settimana come piano riutilizzabile (lo ritrovi in 'I miei piani')">💾<span class="bg-lbl">Salva piano</span></button>
           <div class="act-menu-wrap">
             <button class="btn-ghost act-menu-btn" id="act-menu-btn" onclick="toggleActionsMenu(event)" title="Altre azioni" aria-haspopup="true" aria-expanded="false">⋯</button>
             <div class="act-menu" id="act-menu" role="menu">
@@ -905,6 +931,34 @@ document.addEventListener('DOMContentLoaded',function(){
     <div class="mactions">
       <button class="btn btn-outline" onclick="closeSaveVersionModal()">Annulla</button>
       <button class="btn btn-teal" onclick="doSaveVersion()">💾 Salva →</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG INPUT (sostituisce prompt del browser) -->
+<div class="overlay" id="ui-prompt" style="z-index:1200;">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="ui-prompt-title">Dai un nome</h3>
+    <div id="ui-prompt-msg" style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;display:none;"></div>
+    <div class="field"><label id="ui-prompt-label">Nome</label>
+      <input type="text" id="ui-prompt-input" maxlength="60" autocomplete="off"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();_uiPromptOk();}else if(event.key==='Escape'){_uiPromptCancel();}">
+    </div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="_uiPromptCancel()">Annulla</button>
+      <button class="btn btn-teal" id="ui-prompt-ok" onclick="_uiPromptOk()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG CONFERMA (sostituisce confirm del browser) -->
+<div class="overlay" id="ui-confirm" style="z-index:1200;">
+  <div class="modal" style="max-width:420px;" tabindex="-1" onkeydown="if(event.key==='Escape')_uiConfirmPick(false);">
+    <h3 id="ui-confirm-title">Confermi?</h3>
+    <div id="ui-confirm-msg" style="font-size:13px;color:var(--text);line-height:1.55;white-space:pre-line;margin-bottom:2px;"></div>
+    <div class="mactions">
+      <button class="btn btn-outline" onclick="_uiConfirmPick(false)">Annulla</button>
+      <button class="btn btn-teal" id="ui-confirm-ok" onclick="_uiConfirmPick(true)">Conferma</button>
     </div>
   </div>
 </div>
@@ -1757,6 +1811,52 @@ document.addEventListener('DOMContentLoaded',function(){
     await Promise.all(writes);
   }
 
+  // ── DIALOG riutilizzabili: _uiPrompt / _uiConfirm (al posto di prompt/confirm) ──
+  var _uiPmResolver=null,_uiCfResolver=null;
+  window._uiPrompt=function(opts){
+    opts=opts||{};
+    return new Promise(function(resolve){
+      _uiPmResolver=resolve;
+      document.getElementById('ui-prompt-title').textContent=opts.title||'Dai un nome';
+      var msg=document.getElementById('ui-prompt-msg');
+      if(opts.message){msg.textContent=opts.message;msg.style.display='block';}else{msg.style.display='none';}
+      document.getElementById('ui-prompt-label').textContent=opts.label||'Nome';
+      var inp=document.getElementById('ui-prompt-input');
+      inp.value=opts.value||'';
+      inp.placeholder=opts.placeholder||'';
+      inp.maxLength=opts.maxLength||60;
+      document.getElementById('ui-prompt-ok').textContent=opts.okLabel||'Salva';
+      document.getElementById('ui-prompt').classList.add('open');
+      setTimeout(function(){inp.focus();inp.select();},40);
+    });
+  };
+  window._uiPromptOk=function(){
+    var v=document.getElementById('ui-prompt-input').value;
+    document.getElementById('ui-prompt').classList.remove('open');
+    var r=_uiPmResolver;_uiPmResolver=null;if(r)r(v);
+  };
+  window._uiPromptCancel=function(){
+    document.getElementById('ui-prompt').classList.remove('open');
+    var r=_uiPmResolver;_uiPmResolver=null;if(r)r(null);
+  };
+  window._uiConfirm=function(opts){
+    opts=opts||{};
+    return new Promise(function(resolve){
+      _uiCfResolver=resolve;
+      document.getElementById('ui-confirm-title').textContent=opts.title||'Confermi?';
+      document.getElementById('ui-confirm-msg').textContent=opts.message||'';
+      var ok=document.getElementById('ui-confirm-ok');
+      ok.textContent=opts.okLabel||'Conferma';
+      ok.className='btn '+(opts.danger?'btn-red':'btn-teal');
+      document.getElementById('ui-confirm').classList.add('open');
+      setTimeout(function(){ok.focus();},40);
+    });
+  };
+  window._uiConfirmPick=function(val){
+    document.getElementById('ui-confirm').classList.remove('open');
+    var r=_uiCfResolver;_uiCfResolver=null;if(r)r(val);
+  };
+
   window.openModels=function(){
     if(window._athModeAid){_toastS('⚠ I piani salvati funzionano solo sul piano del gruppo');return;}
     var wk=_eWk||window._currentPlanWk;
@@ -1798,11 +1898,12 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   window.saveWeekModel=async function(){
+    if(window._athModeAid){_toastS('⚠ I piani salvati funzionano solo sul piano del gruppo');return;}
     var wk=_eWk||window._currentPlanWk;
     if(!wk){_toastS('⚠ Apri prima una settimana da salvare');return;}
     var w=await _readWeekDays(wk);
     if(!w.count){_toastS('⚠ La settimana aperta è vuota');return;}
-    var name=(prompt('Dai un nome a questo piano (lo ritroverai in “I miei piani”):', w.weekType?w.weekType.charAt(0).toUpperCase()+w.weekType.slice(1):'Settimana')||'').trim();
+    var name=((await _uiPrompt({title:'Salva come piano',label:'Nome del piano',message:'Lo ritroverai in "I miei piani" e potrai ricaricarlo su qualsiasi settimana.',value:(w.weekType?w.weekType.charAt(0).toUpperCase()+w.weekType.slice(1):'Settimana'),placeholder:'Es. Accumulo - settimana 1',okLabel:'💾 Salva'}))||'').trim();
     if(!name)return;
     _toastS('⏳ Salvo il piano…');
     try{
@@ -1821,7 +1922,7 @@ document.addEventListener('DOMContentLoaded',function(){
       var r=await fetch(DB_URL+'/week_templates/'+id+'.json');
       var m=r.ok?await r.json():null;
       if(!m){_toastS('⚠ Piano non trovato');return;}
-      if(!confirm('Caricare "'+m.name+'" nella settimana '+_wkLabel(wk)+'?\nLe sessioni attuali verranno sostituite.'))return;
+      if(!(await _uiConfirm({title:'Carica piano',message:'Caricare "'+m.name+'" nella settimana '+_wkLabel(wk)+'?\nLe sessioni attuali verranno sostituite.',okLabel:'Carica'})))return;
       _toastS('⏳ Carico…');
       await _writeWeekDays(wk,m.days,m.weekType,m.gameDay);
       await _restRefresh(wk);
@@ -1832,7 +1933,7 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 
   window.delWeekModel=async function(id){
-    if(!confirm('Eliminare questo piano salvato?\nNon si può annullare.'))return;
+    if(!(await _uiConfirm({title:'Elimina piano',message:'Eliminare questo piano salvato?\nNon si può annullare.',okLabel:'Elimina',danger:true})))return;
     await fetch(DB_URL+'/week_templates/'+id+'.json',{method:'DELETE'});
     _toastS('✓ Piano eliminato');
     _loadWeekModels();
@@ -1875,7 +1976,7 @@ document.addEventListener('DOMContentLoaded',function(){
         total+=w.count;
       }
       if(!total){_toastS('⚠ Le settimane selezionate sono vuote');return;}
-      var name=(prompt('Dai un nome a questo blocco ('+n+' settimane):','Blocco '+n+' sett.')||'').trim();
+      var name=((await _uiPrompt({title:'Salva blocco',label:'Nome del blocco',message:n+' settimane consecutive a partire da quella aperta.',value:'Blocco '+n+' sett.',okLabel:'💾 Salva'}))||'').trim();
       if(!name)return;
       var id='mt_'+Date.now();
       var rec={name:name,createdAt:Date.now(),weeks:weeks};
@@ -1893,7 +1994,7 @@ document.addEventListener('DOMContentLoaded',function(){
       var m=r.ok?await r.json():null;
       if(!m||!m.weeks||!m.weeks.length){_toastS('⚠ Blocco non trovato');return;}
       var n=m.weeks.length;
-      if(!confirm('Caricare "'+m.name+'" ('+n+' settimane) a partire dal '+fmt(new Date(wk+'T00:00:00'))+'?\nLe settimane interessate verranno sostituite.'))return;
+      if(!(await _uiConfirm({title:'Carica blocco',message:'Caricare "'+m.name+'" ('+n+' settimane) a partire dal '+fmt(new Date(wk+'T00:00:00'))+'?\nLe settimane interessate verranno sostituite.',okLabel:'Carica'})))return;
       _toastS('⏳ Carico '+n+' settimane…');
       for(var i=0;i<n;i++){
         var w=m.weeks[i]||{};
@@ -1907,7 +2008,7 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 
   window.delMesoModel=async function(id){
-    if(!confirm('Eliminare questo blocco salvato?\nNon si può annullare.'))return;
+    if(!(await _uiConfirm({title:'Elimina blocco',message:'Eliminare questo blocco salvato?\nNon si può annullare.',okLabel:'Elimina',danger:true})))return;
     await fetch(DB_URL+'/meso_templates/'+id+'.json',{method:'DELETE'});
     _toastS('✓ Blocco eliminato');
     _loadMesoModels();
