@@ -646,6 +646,8 @@ document.addEventListener('DOMContentLoaded',function(){
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();openBulkApply()">⊞ Applica a più giorni</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();openModels()">📂 I miei piani salvati</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();_toggleVolPanel()">📊 Volume settimana</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerCSV()">📑 Esporta CSV (Excel)</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerJSON()">🗂 Esporta JSON (backup)</button>
             </div>
           </div>
           <span class="ed-actions-sep"></span>
@@ -1403,6 +1405,59 @@ document.addEventListener('DOMContentLoaded',function(){
     if(window.tagExercise){ try{ return window.tagExercise({name:name}).pattern||'altro'; }catch(e){} }
     return 'altro';
   };
+  // Colori zona per i chip di volume corsa (scope standalone: ZCOL del modulo non e' raggiungibile qui)
+  var _VOL_ZCOL={Z1:'#10B981',Z2:'#3B82F6',Z3:'#F59E0B',Z4:'#F97316',Z5:'#EF4444'};
+  // ── Parser difensivi per il volume corsa: ritornano 0 se la stringa non e' interpretabile, mai eccezioni ──
+  // Distanza libera ("8 km", "800 m", "1,5 km", numero puro) → metri.
+  window._parseDistM=function(str){
+    if(str==null) return 0;
+    var s=String(str).toLowerCase().replace(',','.');
+    var m=s.match(/(\d+(?:\.\d+)?)/);
+    if(!m) return 0;
+    var n=parseFloat(m[1]);
+    if(isNaN(n)||n<=0) return 0;
+    if(/\d\s*k/.test(s)) return n*1000;            // "8 km", "8k"
+    if(/\d\s*m/.test(s)||/metr/.test(s)) return n; // "800 m", "800 metri"
+    return n<=50 ? n*1000 : n;                      // numero puro: piccoli = km, grandi = metri
+  };
+  // Ritmo "m:ss" (per km) → secondi/km.
+  window._parsePaceSec=function(str){
+    if(str==null) return 0;
+    var m=String(str).match(/(\d+):(\d{1,2})/);
+    if(!m) return 0;
+    var sec=parseInt(m[1],10)*60+parseInt(m[2],10);
+    return (sec>0&&sec<3600)?sec:0;                 // pace plausibile (< 60:00/km)
+  };
+  // Tempo libero ("2'", "90''", "1:30", "2 min", "30 sec") → secondi. Doppio apice = secondi, singolo = minuti.
+  window._parseTimeSec=function(str){
+    if(str==null) return 0;
+    var s=String(str).toLowerCase().replace(',','.');
+    var m=s.match(/(\d+):(\d{1,2})/);                              // mm:ss
+    if(m) return parseInt(m[1],10)*60+parseInt(m[2],10);
+    m=s.match(/(\d+(?:\.\d+)?)\s*(''|″|"|sec\b|s\b)/);        // secondi (doppio apice / sec)
+    if(m) return Math.round(parseFloat(m[1]));
+    m=s.match(/(\d+(?:\.\d+)?)\s*('|′|min)/);                 // minuti (singolo apice / min)
+    if(m) return Math.round(parseFloat(m[1])*60);
+    return 0;
+  };
+  // Volume di una singola fase corsa → {meters, seconds, zona}. Conta solo il lavoro (no recupero),
+  // cosi' i km totali = somma delle zone e i minuti sono il tempo "stimolo" stimato da ritmo × distanza.
+  window._faseVol=function(f){
+    var out={meters:0,seconds:0,zona:(f&&f.zona)||''};
+    if(!f||typeof f!=='object') return out;
+    var isIntv=f.reps||f.repDist||f.repPace;
+    if(isIntv){
+      var reps=parseInt(f.reps,10); if(isNaN(reps)||reps<1) reps=1;
+      var rd=window._parseDistM(f.repDist), rp=window._parsePaceSec(f.repPace);
+      out.meters=reps*rd;
+      if(rd&&rp) out.seconds=reps*(rd/1000)*rp;
+    } else {
+      var d=window._parseDistM(f.dist), p=window._parsePaceSec(f.pace);
+      out.meters=d;
+      if(d&&p) out.seconds=(d/1000)*p;
+    }
+    return out;
+  };
   window._toggleVolPanel=function(){
     window._volPanelOpen=!window._volPanelOpen;
     var p=document.getElementById('vol-panel');
@@ -1422,6 +1477,7 @@ document.addEventListener('DOMContentLoaded',function(){
       pd=(window._plansCache||{})[wk]||{};
     }
     var setsByPat={},totSess=0,totEx=0,totSets=0;
+    var runM=0,runSec=0,zoneM={};
     for(var i=0;i<7;i++){
       var day=pd[String(i)];
       if(!day||typeof day!=='object') continue;
@@ -1430,6 +1486,16 @@ document.addEventListener('DOMContentLoaded',function(){
         var s=day[k];
         if(!s||typeof s!=='object') return;
         totSess++;
+        // Corsa: accumula prima dell'early-return (le sedute di corsa non hanno .exercises)
+        var cf=s.corsaFasi;
+        if(cf){
+          var farr=Array.isArray(cf)?cf:Object.values(cf);
+          farr.forEach(function(f){
+            var v=window._faseVol(f);
+            if(v.meters>0){ runM+=v.meters; var zk=v.zona||'n/d'; zoneM[zk]=(zoneM[zk]||0)+v.meters; }
+            if(v.seconds>0) runSec+=v.seconds;
+          });
+        }
         var exs=s.exercises;
         if(!exs||typeof exs!=='object') return;
         Object.keys(exs).forEach(function(ek){
@@ -1483,13 +1549,36 @@ document.addEventListener('DOMContentLoaded',function(){
       +'</div>'
       +'<button class="vol-close" onclick="_toggleVolPanel()" title="Chiudi" aria-label="Chiudi pannello volume">✕</button>'
     +'</div>';
+    // ── Blocco Corsa: km totali, minuti stimati e ripartizione per zona ──
+    function _fmtKm(m){ return (Math.round(m/100)/10).toString().replace('.',','); }
+    var runHtml='';
+    if(runM>0){
+      var zOrder=['Z1','Z2','Z3','Z4','Z5'];
+      var zKeys=Object.keys(zoneM).filter(function(z){return zoneM[z]>0;}).sort(function(a,b){
+        var ia=zOrder.indexOf(a), ib=zOrder.indexOf(b);
+        return (ia<0?99:ia)-(ib<0?99:ib);
+      });
+      var zChips=zKeys.map(function(z){
+        var c=_VOL_ZCOL[z]||'var(--muted)';
+        return '<span class="vol-chip"><i style="background:'+c+';"></i>'+(z==='n/d'?'n/d':z)+' <b>'+_fmtKm(zoneM[z])+'</b> km</span>';
+      }).join('');
+      runHtml='<div class="vol-sub">Corsa</div>'
+        +'<div class="vol-stats" style="margin-bottom:9px;">'
+          +'<div class="vol-stat"><b>'+_fmtKm(runM)+'</b><span>km</span></div>'
+          +(runSec>0?'<div class="vol-stat" title="Stima da ritmo × distanza, solo lavoro"><b>'+Math.round(runSec/60)+'</b><span>min stim.</span></div>':'')
+        +'</div>'
+        +(zChips?'<div class="vol-chips">'+zChips+'</div>':'');
+    }
+    var parts=[];
+    if(pats.length>0) parts.push('<div class="vol-sub">Serie per pattern</div><div class="vol-chips">'+chips+'</div>'+balHtml);
+    if(runHtml) parts.push(runHtml);
     var body;
     if(totSess===0){
       body='<div class="vol-empty">Nessuna seduta pianificata in questa settimana.</div>';
-    } else if(pats.length===0){
-      body='<div class="vol-empty">Sedute presenti ma nessun esercizio riconosciuto. Aggiungi esercizi dalla libreria per vedere il volume per pattern.</div>';
+    } else if(parts.length===0){
+      body='<div class="vol-empty">Sedute presenti ma nessun esercizio o corsa riconosciuto. Aggiungi esercizi dalla libreria o fasi di corsa per vedere il volume.</div>';
     } else {
-      body='<div class="vol-sub">Serie per pattern</div><div class="vol-chips">'+chips+'</div>'+balHtml;
+      body=parts.join('');
     }
     panel.innerHTML=head+body;
   };
@@ -2302,6 +2391,135 @@ document.addEventListener('DOMContentLoaded',function(){
       txt+='\n';
     }
     navigator.clipboard.writeText(txt).then(function(){_toastS('✓ Copiato per WhatsApp!');}).catch(function(){_toastS('⚠ Copia manuale necessaria');});
+  };
+
+  // ── ESPORTA CSV / JSON (sola lettura, lato client; nessuna scrittura su Firebase) ──
+  var _EXP_TYPE_NAME={squadra:'Squadra',forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',riposo:'Riposo',conditioning:'Conditioning',z2:'Z2 Easy',lungo:'Long Run',tempo:'Tempo/Soglia',interval:'Interval',match:'Partita',test:'Test atletico'};
+  var _EXP_DAYS=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+  window._exportCtx=function(){
+    var wk=window._currentPlanWk||_eWk;
+    if(!wk) return null;
+    var pd, scopeKind, scopeName;
+    if(window._currentVersionId&&window._currentVersionData){
+      pd=window._currentVersionData.days||{};
+      scopeKind='versione'; scopeName=window._currentVersionData.name||'versione';
+    } else if(window._athModeAid){
+      pd=(window._athPlanCache||{})[window._athModeAid+'_'+wk]||{};
+      scopeKind='atleta'; scopeName=((window._restAths||{})[window._athModeAid]||{}).name||window._athModeAid;
+    } else {
+      pd=(window._plansCache||{})[wk]||{};
+      scopeKind='gruppo'; scopeName='Gruppo';
+    }
+    return {wk:wk, pd:pd, scopeKind:scopeKind, scopeName:scopeName};
+  };
+  function _expIsDraft(wk){return !/^\d{4}-\d{2}-\d{2}$/.test(String(wk||''));}
+  function _expSlug(s){return String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'piano';}
+  function _expLocalISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function _expDownload(filename,content,mime){
+    try{
+      var blob=new Blob([content],{type:mime});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download=filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){try{document.body.removeChild(a);}catch(_){} URL.revokeObjectURL(url);},120);
+      return true;
+    }catch(e){ _toastS('Errore download: '+e.message); return false; }
+  }
+  function _expCount(pd){
+    var n=0;
+    for(var i=0;i<7;i++){var day=pd[String(i)]; if(!day||typeof day!=='object')continue;
+      Object.keys(day).forEach(function(k){if(k.charAt(0)!=='_'&&day[k]&&typeof day[k]==='object')n++;});}
+    return n;
+  }
+  window.exportPlannerCSV=function(){
+    var ctx=window._exportCtx();
+    if(!ctx){_toastS('⚠ Seleziona prima una settimana');return;}
+    if(!_expCount(ctx.pd)){_toastS('⚠ Nessuna sessione da esportare');return;}
+    var draft=_expIsDraft(ctx.wk);
+    var mon=draft?null:new Date(ctx.wk+'T00:00:00');
+    function dISO(di){ if(!mon)return ''; var d=new Date(mon); d.setDate(mon.getDate()+di); return _expLocalISO(d); }
+    function q(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }
+    var cols=['Giorno','Data','Tipo seduta','Nome seduta','Note seduta','Voce','Nome / Fase','Serie','Ripetizioni / Distanza','Carico / Ritmo','Recupero','Zona','Note voce'];
+    var rows=[cols.map(q).join(',')];
+    for(var i=0;i<7;i++){
+      var day=ctx.pd[String(i)]; if(!day||typeof day!=='object')continue;
+      var dayName=_EXP_DAYS[i], dayDate=dISO(i);
+      Object.keys(day).forEach(function(k){
+        if(k.charAt(0)==='_')return;
+        var s=day[k]; if(!s||typeof s!=='object')return;
+        var tName=_EXP_TYPE_NAME[s.type]||s.type||'';
+        var sName=(s.name&&s.name!==tName)?s.name:'';
+        var sNote=s.note||'';
+        var wrote=false;
+        var exs=s.exercises;
+        if(exs&&typeof exs==='object'){
+          var exArr=Array.isArray(exs)?exs:Object.values(exs);
+          exArr=exArr.filter(function(e){return e&&e.name;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+          exArr.forEach(function(e){
+            var load=e.pct?('@'+e.pct+'%'+(e.rpe?(' RPE '+e.rpe):'')):(e.rpe?('RPE '+e.rpe):(e.carico||e.load||''));
+            rows.push([dayName,dayDate,tName,sName,sNote,'Esercizio',e.name||'',e.sets||'',e.reps||'',load,e.rest||'','',e.cue||e.notes||e.note||''].map(q).join(','));
+            wrote=true;
+          });
+        }
+        var cf=s.corsaFasi;
+        if(cf){
+          var farr=Array.isArray(cf)?cf:Object.values(cf);
+          farr.forEach(function(f){
+            if(!f||typeof f!=='object')return;
+            var isIntv=f.reps||f.repDist||f.repPace;
+            var faseName=f.tipo||(isIntv?'Interval':'Steady');
+            var serie=isIntv?(f.reps||''):'';
+            var dist=isIntv?(f.repDist||''):(f.dist||'');
+            var ritmo=isIntv?(f.repPace||''):(f.pace||'');
+            var rec=f.rec||f.recDist||f.recTime||f.recPace||'';
+            rows.push([dayName,dayDate,tName,sName,sNote,'Corsa',faseName,serie,dist,ritmo,rec,f.zona||'',f.note||''].map(q).join(','));
+            wrote=true;
+          });
+        }
+        if(!wrote){
+          rows.push([dayName,dayDate,tName,sName,sNote,(s.type==='riposo'?'Riposo':'Seduta'),'','','','','','',''].map(q).join(','));
+        }
+      });
+    }
+    var csv='\uFEFF'+rows.join('\r\n')+'\r\n';
+    var fn='RSCoaching_'+(draft?'bozza':ctx.wk)+'_'+_expSlug(ctx.scopeName)+'.csv';
+    if(_expDownload(fn,csv,'text/csv;charset=utf-8;')) _toastS('✓ CSV esportato: '+fn);
+  };
+  window.exportPlannerJSON=function(){
+    var ctx=window._exportCtx();
+    if(!ctx){_toastS('⚠ Seleziona prima una settimana');return;}
+    if(!_expCount(ctx.pd)){_toastS('⚠ Nessuna sessione da esportare');return;}
+    var draft=_expIsDraft(ctx.wk);
+    var mon=draft?null:new Date(ctx.wk+'T00:00:00');
+    function dISO(di){ if(!mon)return null; var d=new Date(mon); d.setDate(mon.getDate()+di); return _expLocalISO(d); }
+    var conf=ctx.pd._config||{};
+    var days=[];
+    for(var i=0;i<7;i++){
+      var day=ctx.pd[String(i)]; var sessions=[];
+      if(day&&typeof day==='object'){
+        Object.keys(day).forEach(function(k){
+          if(k.charAt(0)==='_')return;
+          var s=day[k];
+          if(s&&typeof s==='object') sessions.push(s);
+        });
+      }
+      days.push({index:i, day:_EXP_DAYS[i], date:dISO(i), sessions:sessions});
+    }
+    var out={
+      _meta:{
+        app:'RSCoaching', format:'planner-week', version:1,
+        exportedAt:new Date().toISOString(),
+        week:draft?null:ctx.wk, draft:draft,
+        scope:ctx.scopeKind, scopeName:ctx.scopeName,
+        weekType:conf.weekType||null,
+        gameDay:(conf.gameDay!=null?conf.gameDay:null)
+      },
+      days:days
+    };
+    var json=JSON.stringify(out,null,2);
+    var fn='RSCoaching_'+(draft?'bozza':ctx.wk)+'_'+_expSlug(ctx.scopeName)+'.json';
+    if(_expDownload(fn,json,'application/json;charset=utf-8;')) _toastS('✓ JSON esportato: '+fn);
   };
 
   // ── ASSEGNA ATLETI via REST ──
