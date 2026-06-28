@@ -460,6 +460,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .mdl-row-main:hover .mdl-row-name{color:var(--teal);}
 .mdl-row-name{font-size:13px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .15s;}
 .mdl-row-meta{font-size:10px;color:var(--muted);margin-top:1px;text-transform:uppercase;letter-spacing:.5px;}
+.mdl-row-dup{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;flex-shrink:0;transition:color .15s;}
+.mdl-row-dup:hover{color:var(--teal);}
 .mdl-row-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;flex-shrink:0;transition:color .15s;}
 .mdl-row-del:hover{color:var(--red);}
 .mdl-empty{font-size:11px;color:var(--muted);padding:10px 4px;text-align:center;border:1px dashed var(--border);border-radius:8px;}
@@ -1985,6 +1987,7 @@ document.addEventListener('DOMContentLoaded',function(){
           +'<div class="mdl-row-main" onclick="applyWeekModel(\''+id+'\')" title="Carica questo piano nella settimana aperta">'
           +'<div class="mdl-row-name">'+_esc(m.name||'Senza nome')+'</div>'
           +'<div class="mdl-row-meta">'+_esc(meta.join(' · '))+'</div></div>'
+          +'<button class="mdl-row-dup" onclick="dupWeekModel(\''+id+'\')" title="Duplica piano">⧉</button>'
           +'<button class="mdl-row-del" onclick="delWeekModel(\''+id+'\')" title="Elimina piano">×</button></div>';
       }).join('');
     }catch(e){box.innerHTML='<div class="mdl-empty">Errore: '+_esc(e.message)+'</div>';}
@@ -2032,6 +2035,22 @@ document.addEventListener('DOMContentLoaded',function(){
     _loadWeekModels();
   };
 
+  window.dupWeekModel=async function(id){
+    try{
+      var r=await fetch(DB_URL+'/week_templates/'+id+'.json');
+      var m=r.ok?await r.json():null;
+      if(!m){_toastS('⚠ Piano non trovato');return;}
+      var name=((await _uiPrompt({title:'Duplica piano',label:'Nome della copia',message:'Crea una copia indipendente di questo piano salvato.',value:(m.name||'Senza nome')+' (copia)',okLabel:'Duplica'}))||'').trim();
+      if(!name)return;
+      _toastS('⏳ Duplico…');
+      var id2='wt_'+Date.now();
+      var rec={name:name,createdAt:Date.now(),weekType:m.weekType,gameDay:m.gameDay,count:m.count,days:m.days};
+      await fetch(DB_URL+'/week_templates/'+id2+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(rec)});
+      _toastS('✓ Copia "'+name+'" creata!');
+      _loadWeekModels();
+    }catch(e){_toastS('Errore: '+e.message);}
+  };
+
   // ── Mesociclo ──
   async function _loadMesoModels(){
     var box=document.getElementById('mdl-meso-list');if(!box)return;
@@ -2049,6 +2068,7 @@ document.addEventListener('DOMContentLoaded',function(){
           +'<div class="mdl-row-main" onclick="applyMesoModel(\''+id+'\')" title="Carica a partire dalla settimana aperta">'
           +'<div class="mdl-row-name">'+_esc(m.name||'Senza nome')+'</div>'
           +'<div class="mdl-row-meta">'+n+' settimane · '+sess+' sessioni</div></div>'
+          +'<button class="mdl-row-dup" onclick="dupMesoModel(\''+id+'\')" title="Duplica blocco">⧉</button>'
           +'<button class="mdl-row-del" onclick="delMesoModel(\''+id+'\')" title="Elimina blocco">×</button></div>';
       }).join('');
     }catch(e){box.innerHTML='<div class="mdl-empty">Errore: '+_esc(e.message)+'</div>';}
@@ -2105,6 +2125,22 @@ document.addEventListener('DOMContentLoaded',function(){
     await fetch(DB_URL+'/meso_templates/'+id+'.json',{method:'DELETE'});
     _toastS('✓ Blocco eliminato');
     _loadMesoModels();
+  };
+
+  window.dupMesoModel=async function(id){
+    try{
+      var r=await fetch(DB_URL+'/meso_templates/'+id+'.json');
+      var m=r.ok?await r.json():null;
+      if(!m){_toastS('⚠ Blocco non trovato');return;}
+      var name=((await _uiPrompt({title:'Duplica blocco',label:'Nome della copia',message:'Crea una copia indipendente di questo blocco salvato.',value:(m.name||'Senza nome')+' (copia)',okLabel:'Duplica'}))||'').trim();
+      if(!name)return;
+      _toastS('⏳ Duplico…');
+      var id2='mt_'+Date.now();
+      var rec={name:name,createdAt:Date.now(),weeks:m.weeks||[]};
+      await fetch(DB_URL+'/meso_templates/'+id2+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(rec)});
+      _toastS('✓ Copia "'+name+'" creata!');
+      _loadMesoModels();
+    }catch(e){_toastS('Errore: '+e.message);}
   };
   // ════════════════════════════════════════════════════════════════════
 
