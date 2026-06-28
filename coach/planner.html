@@ -650,6 +650,7 @@ document.addEventListener('DOMContentLoaded',function(){
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();_toggleVolPanel()">📊 Volume settimana</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerCSV()">📑 Esporta CSV (Excel)</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerJSON()">🗂 Esporta JSON (backup)</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();shareWeekLink()">🔗 Copia link sola lettura</button>
             </div>
           </div>
           <span class="ed-actions-sep"></span>
@@ -2556,6 +2557,29 @@ document.addEventListener('DOMContentLoaded',function(){
     var json=JSON.stringify(out,null,2);
     var fn='RSCoaching_'+(draft?'bozza':ctx.wk)+'_'+_expSlug(ctx.scopeName)+'.json';
     if(_expDownload(fn,json,'application/json;charset=utf-8;')) _toastS('✓ JSON esportato: '+fn);
+  };
+  function _shareB64url(str){
+    var b=btoa(unescape(encodeURIComponent(str)));
+    return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  window.shareWeekLink=function(){
+    var ctx=window._exportCtx();
+    if(!ctx){_toastS('⚠ Seleziona prima una settimana');return;}
+    if(_expIsDraft(ctx.wk)){_toastS('⚠ Assegna prima una data alla settimana');return;}
+    if(!_expCount(ctx.pd)){_toastS('⚠ Nessuna sessione da condividere');return;}
+    var payload={v:1,wk:ctx.wk,ctx:'grp'};
+    if(window._currentVersionId&&window._currentVersionData){payload.ctx='ver';payload.vid=window._currentVersionId;}
+    else if(window._athModeAid){payload.ctx='ath';payload.aid=window._athModeAid;}
+    var tok;
+    try{tok=_shareB64url(JSON.stringify(payload));}catch(e){_toastS('Errore generazione link');return;}
+    var href=location.href.split('#')[0].split('?')[0];
+    var url=href.replace(/[^/]*$/,'view.html')+'?t='+tok;
+    function _fallback(){
+      window._uiPrompt({title:'Link in sola lettura',message:'Copia questo link e invialo. Mostra solo questa settimana, in sola lettura.',label:'Link',value:url,maxLength:1000,okLabel:'Fatto'});
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){_toastS('✓ Link copiato: '+ctx.scopeName);}).catch(_fallback);
+    }else{_fallback();}
   };
 
   // ── ASSEGNA ATLETI via REST ──
