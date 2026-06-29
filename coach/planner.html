@@ -687,6 +687,8 @@ document.addEventListener('DOMContentLoaded',function(){
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();_toggleVolPanel()">📊 Volume settimana</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerCSV()">📑 Esporta CSV (Excel)</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerJSON()">🗂 Esporta JSON (backup)</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerBatchPDF()">📄 PDF per atleta (assegnati)</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerICS()">📅 Esporta calendario .ics</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();shareWeekLink()">🔗 Copia link sola lettura</button>
             </div>
           </div>
@@ -2503,7 +2505,7 @@ document.addEventListener('DOMContentLoaded',function(){
     var mon=new Date(wk+'T00:00:00');
     if(isNaN(mon.getTime())){_toastS('⚠ Settimana non valida');return;}
     var sun=new Date(mon);sun.setDate(mon.getDate()+6);
-    var gameDay=conf.gameDay!=null?parseInt(String(conf.gameDay),10):null;
+    var gameDay=(conf.gameDay!=null&&parseInt(String(conf.gameDay),10)>=0)?parseInt(String(conf.gameDay),10):null;
     function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
     function fmS(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});}
     function getDayHdrBg(di){
@@ -2815,6 +2817,256 @@ document.addEventListener('DOMContentLoaded',function(){
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(url).then(function(){_toastS('✓ Link copiato: '+ctx.scopeName);}).catch(_fallback);
     }else{_fallback();}
+  };
+
+  // ── ESPORTA PDF PER ATLETA (batch) + CALENDARIO .ics (sola lettura; nessuna scrittura su Firebase) ──
+  var _PDF_TYPE_COLOR={squadra:'#2563EB',forza:'#7C3AED',sprint:'#DC2626',plyo:'#D97706',rec:'#059669',priming:'#0891B2',riposo:'#64748B',conditioning:'#EA580C',z2:'#22C55E',lungo:'#0EA5E9',tempo:'#F59E0B',interval:'#EF4444',match:'#DC2626',test:'#D97706'};
+  var _PDF_TYPE_BG={squadra:'#EFF6FF',forza:'#F5F3FF',sprint:'#FFF1F2',plyo:'#FFFBEB',rec:'#F0FDF4',priming:'#ECFEFF',riposo:'#F8FAFC',conditioning:'#FFF7ED',z2:'#F0FDF4',lungo:'#F0F9FF',tempo:'#FFFBEB',interval:'#FFF1F2',match:'#FFF1F2',test:'#FFFBEB'};
+  var _PDF_DOC_STYLE=
+     '@page{size:A4 landscape;margin:10mm 8mm}*{box-sizing:border-box}'
+    +'body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:9px;color:#1a1a2e;margin:0;background:#fff}'
+    +'.pdf-page{page-break-after:always;break-after:page}'
+    +'.pdf-page:last-child{page-break-after:auto;break-after:auto}'
+    +'.pdf-athlete{font-size:12px;font-weight:900;color:#E2611C;letter-spacing:.3px;margin-bottom:1px}'
+    +'.pdf-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:7px;margin-bottom:5px;border-bottom:2px solid #E2611C}'
+    +'.logo-mark{font-size:20px;font-weight:900;letter-spacing:4px;color:#0A0E17}'
+    +'.logo-mark span{color:#E2611C}'
+    +'.logo-sub{font-size:7px;color:#64748b;letter-spacing:.5px;text-transform:uppercase;margin-top:1px}'
+    +'.week-info{text-align:right}'
+    +'.week-title{font-size:11px;font-weight:900;color:#0A0E17;letter-spacing:.3px}'
+    +'.week-sub{font-size:7.5px;color:#64748b;margin-top:2px}'
+    +'.stats-bar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px 0;margin-bottom:5px;border-bottom:1px solid #e2e8f0}'
+    +'.stats-lbl{font-size:8px;font-weight:700;color:#334155;margin-right:3px;white-space:nowrap}'
+    +'.stat-chip{font-size:7.5px;padding:2px 7px;border-radius:3px;color:#334155}'
+    +'.stat-chip .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}'
+    +'.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}'
+    +'.day-col{border-radius:5px;border:1px solid #e2e8f0;overflow:hidden;background:#f8fafc;page-break-inside:avoid;break-inside:avoid}'
+    +'.day-col.is-game{border:2px solid #991B1B;box-shadow:0 0 0 2px rgba(153,27,27,.15)}'
+    +'.day-hdr{padding:5px 6px;display:flex;justify-content:space-between;align-items:center;min-height:34px}'
+    +'.day-name{font-weight:800;font-size:8.5px;letter-spacing:.8px;color:#fff;text-transform:uppercase}'
+    +'.day-date{font-size:7.5px;color:rgba(255,255,255,.85);margin-top:1px}'
+    +'.rel-badge{font-size:7px;font-weight:700;background:rgba(255,255,255,.22);color:#fff;padding:2px 5px;border-radius:3px;white-space:nowrap;letter-spacing:.3px}'
+    +'.day-body{padding:4px;min-height:20px}'
+    +'.sess-block{margin-bottom:3px;border-radius:3px;overflow:hidden;border:1px solid #e2e8f0;background:#fff}'
+    +'.sess-type-name{font-weight:700;font-size:7.5px;letter-spacing:.4px;color:#fff}'
+    +'.sess-note{font-size:7px;color:#475569;font-style:italic;padding:2px 5px;background:#f6f8fa;border-bottom:1px solid #eef1f4}'
+    +'.sess-name-label{font-size:6.5px;font-weight:600;color:rgba(255,255,255,.85);margin-left:5px;opacity:.9}'
+    +'.sess-dur{font-size:6px;font-weight:600;color:rgba(255,255,255,.7);margin-left:auto;white-space:nowrap;padding-left:4px}'
+    +'.sess-hdr{padding:3px 6px;display:flex;align-items:center;flex-wrap:wrap;gap:2px}'
+    +'.ex-table{width:100%;border-collapse:collapse}'
+    +'.ex-table th{background:#eef1f5;font-size:6.5px;font-weight:700;text-transform:uppercase;padding:2px 3px;text-align:left;color:#5b6675;letter-spacing:.3px}'
+    +'.ex-table td{border-top:1px solid #eef1f4;padding:2px 3px;font-size:7.5px;vertical-align:top}'
+    +'.ex-name{font-weight:600;color:#1e293b}'
+    +'.num{text-align:center;color:#3f4a5a;white-space:nowrap}'
+    +'.note-cell{color:#475569;font-size:7px;font-style:italic;word-break:break-word;line-height:1.3}'
+    +'.rest-day{color:#64748b;font-size:7.5px;font-style:italic;padding:6px 4px;text-align:center}'
+    +'.pdf-footer{margin-top:6px;padding-top:4px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7px;color:#64748b}'
+    +'@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
+  function _pdfEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  // un giorno atleta può essere una singola seduta (ha .type) oppure una mappa di sedute {0:{...},1:{...}} (vedi _loadAthPlans)
+  function _pdfDayMap(raw){ if(raw&&typeof raw==='object'&&raw.type!==undefined) return {0:raw}; return (raw&&typeof raw==='object')?raw:{}; }
+  function _pdfWeekPageHTML(pd,wk,opts){
+    opts=opts||{}; pd=pd||{};
+    var esc=_pdfEsc, DAYS=_EXP_DAYS, TYPE_NAME=_EXP_TYPE_NAME;
+    var mon=new Date(wk+'T00:00:00');
+    var validMon=!isNaN(mon.getTime());
+    var sun=validMon?new Date(mon):null; if(sun)sun.setDate(mon.getDate()+6);
+    var gameDay=(opts.gameDay!=null&&parseInt(String(opts.gameDay),10)>=0)?parseInt(String(opts.gameDay),10):null;
+    function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
+    function fmS(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'short'});}
+    function getDayHdrBg(di){
+      if(gameDay===null)return '#0F172A';
+      var diff=di-gameDay;
+      if(diff===0)return '#991B1B';
+      if(diff===-1)return '#6D28D9';
+      if(diff===-2)return '#5B21B6';
+      if(diff===-3)return '#1E40AF';
+      if(diff===1)return '#065F46';
+      if(diff===2)return '#047857';
+      return '#0F172A';
+    }
+    function getDayRel(di){
+      if(gameDay===null)return '';
+      var diff=di-gameDay;
+      if(diff===0)return '⚽ GARA';
+      if(diff===-1)return 'G-1';if(diff===-2)return 'G-2';if(diff===-3)return 'G-3';
+      if(diff===1)return 'G+1';if(diff===2)return 'G+2';if(diff===3)return 'G+3';
+      return '';
+    }
+    var totalSessions=0;var typeCounts={};
+    for(var si=0;si<7;si++){
+      Object.values(_pdfDayMap(pd[String(si)])).forEach(function(s){
+        if(s&&s.type&&s.type!=='riposo'){totalSessions++;typeCounts[s.type]=(typeCounts[s.type]||0)+1;}
+      });
+    }
+    var weekLabel=validMon?(fm(mon)+' - '+fm(sun)):'Bozza senza data';
+    if(opts.weekType)weekLabel+=' · '+esc(String(opts.weekType).toUpperCase());
+    var dayBlocks='';
+    for(var di=0;di<7;di++){
+      var dayData=_pdfDayMap(pd[String(di)]);
+      var daySess=Object.values(dayData).filter(function(s){return s&&s.type&&s.type!=='riposo';});
+      var hasRiposo=Object.values(dayData).some(function(s){return s&&s.type==='riposo';});
+      var dayDate=validMon?new Date(mon):null; if(dayDate)dayDate.setDate(mon.getDate()+di);
+      var isGame=gameDay!=null&&String(gameDay)===String(di);
+      var hdrBg=getDayHdrBg(di);
+      var rel=getDayRel(di);
+      var relBadge=rel?'<span class="rel-badge"'+(isGame?' style="background:#fff;color:#991B1B;font-weight:900;"':'')+'>'+ rel+'</span>':'';
+      var sessHtml='';
+      if(!daySess.length&&!hasRiposo){sessHtml='<div class="rest-day">- non pianificato</div>';}
+      else if(hasRiposo&&!daySess.length){sessHtml='<div class="rest-day">😴 Riposo</div>';}
+      daySess.forEach(function(s){
+        var col=_PDF_TYPE_COLOR[s.type]||'#6B7280';
+        var exs=s.exercises?Object.values(s.exercises).filter(function(e){return e&&e.name;}):[];
+        var exArr=Array.isArray(exs)?exs:Object.values(exs);
+        exArr.sort(function(a,b){return(a.order||0)-(b.order||0);});
+        var hasNotes=exArr.some(function(e){return e.cue||e.notes||e.note;});
+        var exHtml='';
+        if(exArr.length){
+          exHtml='<table class="ex-table"><thead><tr><th>Esercizio</th><th>S</th><th>R</th><th>Carico</th><th>Rec</th>'+(hasNotes?'<th>Note</th>':'')+'</tr></thead><tbody>';
+          exArr.forEach(function(e){
+            if(!e.name)return;
+            var load=e.pct?'@'+esc(e.pct)+'%'+(e.rpe?' RPE '+esc(e.rpe):''):e.rpe?'RPE '+esc(e.rpe):esc(e.carico||e.load||'-');
+            var noteCell=hasNotes?'<td class="note-cell">'+esc(e.cue||e.notes||e.note||'')+'</td>':'';
+            exHtml+='<tr><td class="ex-name">'+esc(e.name)+'</td><td class="num">'+esc(e.sets||'-')+'</td><td class="num">'+esc(e.reps||'-')+'</td><td class="num">'+load+'</td><td class="num">'+esc(e.rest||'')+'</td>'+noteCell+'</tr>';
+          });
+          exHtml+='</tbody></table>';
+        }
+        var note=s.note?'<div class="sess-note">'+esc(s.note)+'</div>':'';
+        var sessName=s.name&&s.name!==(TYPE_NAME[s.type]||s.type)?'<span class="sess-name-label">'+esc(s.name)+'</span>':'';
+        var durChip=s.duration?'<span class="sess-dur">'+esc(s.duration)+'</span>':'';
+        sessHtml+='<div class="sess-block"><div class="sess-hdr" style="background:'+col+';"><span class="sess-type-name">'+esc(TYPE_NAME[s.type]||s.type)+'</span>'+sessName+durChip+'</div>'+note+exHtml+'</div>';
+      });
+      dayBlocks+='<div class="day-col'+(isGame?' is-game':'')+'"><div class="day-hdr" style="background:'+hdrBg+';"><div><div class="day-name">'+DAYS[di].substring(0,3).toUpperCase()+'</div>'+(dayDate?'<div class="day-date">'+fmS(dayDate)+'</div>':'')+'</div>'+relBadge+'</div><div class="day-body">'+sessHtml+'</div></div>';
+    }
+    var statChips=Object.entries(typeCounts).map(function(kv){
+      return '<span class="stat-chip" style="background:'+(_PDF_TYPE_BG[kv[0]]||'#f1f5f9')+'"><i class="dot" style="background:'+(_PDF_TYPE_COLOR[kv[0]]||'#888')+'"></i>'+esc(TYPE_NAME[kv[0]]||kv[0])+' <b>'+kv[1]+'</b></span>';
+    }).join('');
+    var statsBar=totalSessions?'<div class="stats-bar"><span class="stats-lbl">'+totalSessions+' session'+(totalSessions===1?'e':'i')+'</span>'+statChips+'</div>':'';
+    var scopeLine=opts.scopeName?'<div class="pdf-athlete">'+esc(opts.scopeName)+'</div>':'';
+    return '<div class="pdf-page">'
+      +'<div class="pdf-header">'
+      +'<div><div class="logo-mark">RS<span>C</span></div><div class="logo-sub">RS Coaching · Strength &amp; Conditioning</div></div>'
+      +'<div class="week-info">'+scopeLine+'<div class="week-title">'+weekLabel+'</div><div class="week-sub">Esportato il '+new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</div></div>'
+      +'</div>'
+      +statsBar
+      +'<div class="week-grid">'+dayBlocks+'</div>'
+      +'<div class="pdf-footer"><span>RS Coaching · Strength &amp; Conditioning · Piano Settimanale</span><span>'+esc(opts.scopeName||wk)+'</span></div>'
+      +'</div>';
+  }
+  // Un PDF multi-pagina (1 pagina per atleta assegnato) della settimana corrente di gruppo.
+  window.exportPlannerBatchPDF=async function(){
+    var wk=window._currentPlanWk||_eWk;
+    if(!wk){_toastS('⚠ Seleziona prima una settimana');return;}
+    if(_expIsDraft(wk)){_toastS('⚠ Assegna prima una data alla settimana (📅 Assegna)');return;}
+    var wData=(window._plansCache||{})[wk]||{};
+    var assigned=wData._athletes||{};
+    var aids=Object.keys(assigned);
+    if(!aids.length){_toastS('⚠ Nessun atleta assegnato. Usa prima "👥 Invia atleti".');return;}
+    var aths=window._restAths||{};
+    if(!Object.keys(aths).length){
+      try{var ar=await fetch(DB_URL+'/athletes.json');if(ar.ok){var _j=await ar.json();aths=_j||{};}window._restAths=aths;}catch(_e){}
+    }
+    var conf=wData._config||{};
+    _toastS('⏳ Genero i PDF per '+aids.length+' atlet'+(aids.length>1?'i':'a')+'...');
+    var plansArr;
+    try{
+      plansArr=await Promise.all(aids.map(async function(aid){
+        var days={};
+        try{var pr=await fetch(DB_URL+'/athlete_plans/'+aid+'/'+wk+'.json');if(pr.ok){var p=await pr.json();days=(p&&p.days)||{};}}catch(_e){}
+        return {aid:aid,name:((aths[aid]||{}).name||aid),days:days};
+      }));
+    }catch(e){_toastS('Errore caricamento piani: '+e.message);return;}
+    plansArr.sort(function(a,b){return String(a.name).localeCompare(String(b.name),'it');});
+    var pages=plansArr.map(function(p){
+      return _pdfWeekPageHTML(p.days,wk,{scopeName:p.name,gameDay:conf.gameDay,weekType:conf.weekType});
+    }).join('');
+    var html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Piani atleti - '+_pdfEsc(wk)+'</title><style>'+_PDF_DOC_STYLE+'</style></head><body>'+pages+'</body></html>';
+    var pw=window.open('','_blank','width=1200,height=800');
+    if(!pw){_toastS('⚠ Popup bloccato. Abilita i popup per esportare i PDF.');return;}
+    pw.document.write(html);
+    pw.document.close();
+    pw.focus();
+    setTimeout(function(){pw.print();},700);
+    _toastS('✓ '+plansArr.length+' piani atleta pronti per la stampa');
+  };
+
+  // ── CALENDARIO .ics (RFC 5545): eventi tutto-il-giorno per la settimana corrente (gruppo/atleta/versione) ──
+  function _icsEsc(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');}
+  function _icsFold(line){
+    if(line.length<=73)return line;
+    var out=line.slice(0,73),i=73;
+    while(i<line.length){out+='\r\n '+line.slice(i,i+72);i+=72;}
+    return out;
+  }
+  function _icsStamp(d){function p(n){return String(n).padStart(2,'0');}return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z';}
+  window.exportPlannerICS=function(){
+    var ctx=window._exportCtx();
+    if(!ctx){_toastS('⚠ Seleziona prima una settimana');return;}
+    if(_expIsDraft(ctx.wk)){_toastS('⚠ Assegna prima una data alla settimana');return;}
+    if(!_expCount(ctx.pd)){_toastS('⚠ Nessuna sessione da esportare');return;}
+    var mon=new Date(ctx.wk+'T00:00:00');
+    function ymd(d){return _expLocalISO(d).replace(/-/g,'');}
+    function slug(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');}
+    var stamp=_icsStamp(new Date());
+    var lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//RS Coaching//Planner//IT','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:'+_icsEsc('RS Coaching - '+ctx.scopeName)];
+    var nEvt=0;
+    for(var i=0;i<7;i++){
+      var day=ctx.pd[String(i)]; if(!day||typeof day!=='object')continue;
+      var dStart=new Date(mon);dStart.setDate(mon.getDate()+i);
+      var dEnd=new Date(dStart);dEnd.setDate(dStart.getDate()+1);
+      var dS=ymd(dStart), dE=ymd(dEnd);
+      Object.keys(day).forEach(function(k){
+        if(k.charAt(0)==='_')return;
+        var s=day[k]; if(!s||typeof s!=='object')return;
+        if(!s.type||s.type==='riposo')return;
+        var tName=_EXP_TYPE_NAME[s.type]||s.type;
+        var sName=(s.name&&s.name!==tName)?s.name:'';
+        var summary=tName+(sName?' · '+sName:'');
+        var descLines=[];
+        if(s.note)descLines.push(s.note);
+        var exs=s.exercises;
+        if(exs&&typeof exs==='object'){
+          var exArr=Array.isArray(exs)?exs:Object.values(exs);
+          exArr=exArr.filter(function(e){return e&&e.name;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+          exArr.forEach(function(e){
+            var load=e.pct?('@'+e.pct+'%'+(e.rpe?(' RPE '+e.rpe):'')):(e.rpe?('RPE '+e.rpe):(e.carico||e.load||''));
+            var parts=[];
+            if(e.sets||e.reps)parts.push((e.sets||'?')+'x'+(e.reps||'?'));
+            if(load)parts.push(load);
+            if(e.rest)parts.push('rec '+e.rest);
+            descLines.push('• '+e.name+(parts.length?' '+parts.join(' '):''));
+          });
+        }
+        var cf=s.corsaFasi;
+        if(cf){
+          var farr=Array.isArray(cf)?cf:Object.values(cf);
+          farr.forEach(function(f){
+            if(!f||typeof f!=='object')return;
+            var isIntv=f.reps||f.repDist||f.repPace;
+            var label=f.tipo||(isIntv?'Interval':'Steady');
+            var body=isIntv?((f.reps||'')+'x '+(f.repDist||'')+(f.repPace?' @'+f.repPace:'')):((f.dist||'')+(f.pace?' @'+f.pace:''));
+            var rec=f.rec||f.recDist||f.recTime||f.recPace||'';
+            descLines.push('• '+label+(body?': '+body:'')+(rec?' rec '+rec:'')+(f.zona?' ['+f.zona+']':''));
+          });
+        }
+        var desc=descLines.join('\n');
+        var uid=ctx.wk+'-'+i+'-'+slug(k)+'-'+slug(ctx.scopeName)+'-'+nEvt+'@rscoaching';
+        lines.push('BEGIN:VEVENT');
+        lines.push('UID:'+uid);
+        lines.push('DTSTAMP:'+stamp);
+        lines.push('DTSTART;VALUE=DATE:'+dS);
+        lines.push('DTEND;VALUE=DATE:'+dE);
+        lines.push('SUMMARY:'+_icsEsc(summary));
+        if(desc)lines.push('DESCRIPTION:'+_icsEsc(desc));
+        lines.push('END:VEVENT');
+        nEvt++;
+      });
+    }
+    if(!nEvt){_toastS('⚠ Nessuna sessione da esportare');return;}
+    lines.push('END:VCALENDAR');
+    var ics=lines.map(_icsFold).join('\r\n')+'\r\n';
+    var fn='RSCoaching_'+ctx.wk+'_'+_expSlug(ctx.scopeName)+'.ics';
+    if(_expDownload(fn,ics,'text/calendar;charset=utf-8;')) _toastS('✓ Calendario .ics ('+nEvt+' eventi): '+fn);
   };
 
   // ── ASSEGNA ATLETI via REST ──
