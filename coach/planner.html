@@ -688,6 +688,7 @@ document.addEventListener('DOMContentLoaded',function(){
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerCSV()">📑 Esporta CSV (Excel)</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerJSON()">🗂 Esporta JSON (backup)</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerBatchPDF()">📄 PDF per atleta (assegnati)</button>
+              <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerMultiPDF()">📄 PDF multi-settimana (tutto il blocco)</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();exportPlannerICS()">📅 Esporta calendario .ics</button>
               <button class="act-menu-item" role="menuitem" onclick="closeActionsMenu();shareWeekLink()">🔗 Copia link sola lettura</button>
             </div>
@@ -2632,6 +2633,35 @@ document.addEventListener('DOMContentLoaded',function(){
     pw.document.close();
     pw.focus();
     _pdfPrintWhenReady(pw,600);
+  };
+
+  // ── ESPORTA PDF MULTI-SETTIMANA (tutte le settimane pianificate; 1 pagina per settimana; sola lettura) ──
+  window.exportPlannerMultiPDF=function(){
+    var cacheA=window._plansCache||{}, cacheB=window.plans||{};
+    function getPd(wk){return cacheA[wk]||cacheB[wk]||{};}
+    var seen={};
+    Object.keys(cacheA).forEach(function(k){seen[k]=1;});
+    Object.keys(cacheB).forEach(function(k){seen[k]=1;});
+    var weeks=Object.keys(seen).filter(function(k){return /^\d{4}-\d{2}-\d{2}$/.test(k);}).filter(function(k){
+      var pd=getPd(k);
+      for(var i=0;i<7;i++){
+        if(Object.values(_pdfDayMap(pd[String(i)])).some(function(s){return s&&s.type;}))return true;
+      }
+      return false;
+    }).sort();
+    if(!weeks.length){_toastS('⚠ Nessuna settimana pianificata da esportare');return;}
+    var pages=weeks.map(function(wk){
+      var pd=getPd(wk), conf=pd._config||{};
+      return _pdfWeekPageHTML(pd,wk,{gameDay:conf.gameDay,weekType:conf.weekType});
+    }).join('');
+    var html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Piani multi-settimana ('+weeks.length+')</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>'+_PDF_DOC_STYLE+'</style></head><body>'+pages+'</body></html>';
+    var pw=window.open('','_blank','width=1200,height=800');
+    if(!pw){_toastS('⚠ Popup bloccato. Abilita i popup per esportare il PDF.');return;}
+    pw.document.write(html);
+    pw.document.close();
+    pw.focus();
+    _pdfPrintWhenReady(pw,700);
+    _toastS('✓ '+weeks.length+' settiman'+(weeks.length>1?'e':'a')+' pront'+(weeks.length>1?'e':'a')+' per la stampa');
   };
 
   // ── ESPORTA WHATSAPP ──
