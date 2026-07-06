@@ -2031,7 +2031,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
         </div>
         ${extra?`<div style="border-top:1px solid var(--border);padding:10px 16px;font-size:12px;color:var(--muted);white-space:pre-line;">${extra}</div>`:'<div style="padding:12px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);">Stretching · Foam rolling · Idratazione · Sonno</div>'}
-        <div class="sess-action"><button class="start-btn-soft" style="color:var(--green);border-color:var(--green);" onclick="showToast('✅ Recupero registrato')">🔄 RECUPERO COMPLETATO</button></div>
+        <div class="sess-action">${_quickBtn(type,'Recupero','🔄 RECUPERO COMPLETATO','✅ Recupero registrato')}</div>
       </div>`;
     }
 
@@ -2048,7 +2048,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           ${window._todayReadinessSemaforo?`<span class="sess-readiness-chip">${window._todayReadinessSemaforo}</span>`:'<span id="sess-readiness-live" class="sess-readiness-chip"></span>'}
         </div>
         ${runBody}
-        <div class="sess-action"><button class="start-btn-soft" style="color:var(--green);border-color:var(--green);" onclick="showToast('✅ Corsa registrata')">🏃 ALLENAMENTO COMPLETATO</button></div>
+        <div class="sess-action">${_quickBtn(type,'Corsa','🏃 ALLENAMENTO COMPLETATO','✅ Corsa registrata')}</div>
       </div>`;
     }
 
@@ -2970,6 +2970,44 @@ window.openLiveQuick=(type)=>{
   const day=window._quickSessionDay||{type:type||'pesi',exercises:{}};
   sessionStorage.setItem(`rsc_quick_${aid}`,JSON.stringify({day,exs:Object.values(day.exercises||{})}));
   location.href=`./session.html?id=${aid}&quick=1`;
+};
+
+// ── QUICK COMPLETE (recupero / corsa) — persiste un session_log leggero così contano come "fatto"
+function _quickDoneToday(marker){
+  const logs=window._weekLogs||[];
+  const today=new Date().toDateString();
+  return logs.some(l=>l&&l.sessName===marker&&new Date(l.ts).toDateString()===today);
+}
+function _quickBtn(type,marker,label,toastMsg){
+  if(_quickDoneToday(marker)){
+    return `<button class="start-btn-soft quick-done" disabled style="color:var(--green);border-color:var(--green);background:rgba(16,185,129,.14);cursor:default;">✓ FATTO</button>`;
+  }
+  return `<button class="start-btn-soft" style="color:var(--green);border-color:var(--green);" onclick="logQuickSession('${type}','${marker}','${toastMsg}',this)">${label}</button>`;
+}
+function _markQuickBtnDone(btn){
+  if(!btn)return;
+  btn.dataset.saving='';
+  btn.disabled=true;
+  btn.style.opacity='1';
+  btn.style.cursor='default';
+  btn.style.background='rgba(16,185,129,.14)';
+  btn.classList.add('quick-done');
+  btn.textContent='✓ FATTO';
+}
+window.logQuickSession=async function(type,marker,toastMsg,btn){
+  if(btn&&btn.dataset.saving==='1')return;
+  if(_quickDoneToday(marker)){_markQuickBtnDone(btn);showToast('✓ Già registrato');return;}
+  if(btn){btn.dataset.saving='1';btn.style.opacity='0.6';}
+  const log={ts:Date.now(),type:type||'rec',sessName:marker,source:'quick'};
+  try{
+    await push(ref(db,`session_logs/${aid}`),log);
+    _markQuickBtnDone(btn);
+    showToast(toastMsg||'✓ Registrato');
+  }catch(e){
+    console.error(e);
+    if(btn){btn.dataset.saving='';btn.style.opacity='';}
+    showToast('⚠ Errore salvataggio');
+  }
 };
 
 // ── MATCH LOG SHEET
