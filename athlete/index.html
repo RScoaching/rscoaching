@@ -1123,6 +1123,13 @@ select option{background:#10101E;}
         <div class="card-title">RPE — ultime sedute</div>
         <div class="chart-wrap"><canvas id="athlete-rpe-chart"></canvas></div>
       </div>
+      <div class="card" style="padding:14px 16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+          <div class="card-title" style="margin-bottom:0;">Allenamenti — storico</div>
+          <span id="wstorico-count" style="font-size:11px;color:var(--muted);font-weight:600;"></span>
+        </div>
+        <div id="wstorico-list"></div>
+      </div>
       <div style="margin:0 18px 12px;"><div id="history-list-prof"></div></div>
     </div>
 
@@ -1716,6 +1723,7 @@ window.saveQuickCheckin=saveQuickCheckin;
 function renderWorkoutLogs(logs){
   window._weekLogs=logs;
   updateWeekProgress(logs);
+  renderWorkoutStorico(logs);
   const el=document.getElementById('wlog-list');
   const lbl=document.getElementById('wlog-lbl');
   if(!logs.length){if(lbl)lbl.style.display='none';return;}
@@ -1745,6 +1753,45 @@ function renderWorkoutLogs(logs){
             +(l.newPRs?.length?`<span class="wlog-chip" style="background:rgba(255,176,32,.1);color:var(--gold);">🏆 ${l.newPRs.length} PR</span>`:'')
           )}
         </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── WORKOUT STORICO (storico completo allenamenti nel profilo → Storico; con PR reali)
+function renderWorkoutStorico(logs){
+  const el=document.getElementById('wstorico-list');
+  if(!el)return;
+  const cnt=document.getElementById('wstorico-count');
+  if(!logs||!logs.length){el.innerHTML='<div class="empty">Nessun allenamento registrato.</div>';if(cnt)cnt.textContent='';return;}
+  if(cnt)cnt.textContent=logs.length+(logs.length===1?' seduta':' sedute');
+  el.innerHTML=logs.slice(0,40).map(l=>{
+    const d=new Date(l.ts);
+    const rpeC=l.avgRpe?(l.avgRpe>=9?'var(--red)':l.avgRpe>=7?'var(--amber)':'var(--green)'):'var(--muted)';
+    let chips='';
+    if(l.type==='match'){
+      chips=(l.minuti?`<span class="wlog-chip" style="background:rgba(239,68,68,.1);color:var(--red);">⏱ ${l.minuti}'</span>`:'')
+        +(l.gol!=null&&l.gol>0?`<span class="wlog-chip" style="background:rgba(255,176,32,.1);color:var(--gold);">⚽ ${l.gol} gol</span>`:'')
+        +(l.assist!=null&&l.assist>0?`<span class="wlog-chip" style="background:rgba(255,106,46,.1);color:var(--blue);">${l.assist} assist</span>`:'')
+        +(l.avgRpe?`<span class="wlog-chip" style="background:rgba(0,0,0,.2);color:${rpeC};">RPE ${l.avgRpe}</span>`:'');
+    }else if(l.type==='test'){
+      chips=(l.sprint10?`<span class="wlog-chip" style="background:rgba(251,191,36,.1);color:var(--amber);">10m ${l.sprint10}s</span>`:'')
+        +(l.sprint30?`<span class="wlog-chip" style="background:rgba(251,191,36,.1);color:var(--amber);">30m ${l.sprint30}s</span>`:'')
+        +(l.salto?`<span class="wlog-chip" style="background:rgba(255,106,46,.1);color:var(--blue);">↑ ${l.salto}cm</span>`:'')
+        +(l.avgRpe?`<span class="wlog-chip" style="background:rgba(0,0,0,.2);color:${rpeC};">RPE ${l.avgRpe}</span>`:'');
+    }else{
+      chips=(l.duration?`<span class="wlog-chip" style="background:rgba(255,106,46,.1);color:var(--blue);">⏱ ${l.duration}'</span>`:'')
+        +(l.totalSets?`<span class="wlog-chip" style="background:rgba(255,106,46,.1);color:var(--orange);">${l.totalSets} set</span>`:'')
+        +(l.avgRpe?`<span class="wlog-chip" style="background:rgba(0,0,0,.2);color:${rpeC};">RPE ${l.avgRpe}</span>`:'')
+        +(l.source==='quick'?`<span class="wlog-chip" style="background:rgba(16,185,129,.12);color:var(--green);">✓ completato</span>`:'');
+    }
+    const prChips=(l.newPRs&&l.newPRs.length)?l.newPRs.map(pr=>`<span class="wlog-chip" style="background:rgba(255,176,32,.1);color:var(--gold);">🏆 ${pr.name} ${pr.value}kg</span>`).join(''):'';
+    return `<div class="wlog-card">
+      <div class="wlog-date-box"><div class="wlog-d">${d.getDate().toString().padStart(2,'0')}</div><div class="wlog-m">${d.toLocaleDateString('it-IT',{month:'short'}).replace('.','')}</div></div>
+      <div class="wlog-body">
+        <div class="wlog-name">${l.sessName||'Sessione'}</div>
+        <div class="wlog-chips">${chips}${prChips}</div>
+        ${l.note?`<div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5;">"${String(l.note).slice(0,120)}"</div>`:''}
       </div>
     </div>`;
   }).join('');
