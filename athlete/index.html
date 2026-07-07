@@ -1844,7 +1844,8 @@ function updateWeekProgress(logs){
       const dot=document.getElementById('wdot-'+di);
       if(dot&&!dot.classList.contains('done-dot')){
         dot.classList.add('done-dot');
-        if(!dot.querySelector('.done-check'))dot.innerHTML='<span class="done-check">✓</span>';
+        dot.style.borderColor='';
+        dot.innerHTML='<span class="done-check">✓</span>';
       }
     });
   }
@@ -1878,6 +1879,44 @@ function renderWeekDots(){
     </div>`;
   }).join('');
   window._weekDotsRendered=true;
+  decorateWeekDotsPlan();
+}
+
+// ── WEEK DOTS · tint each day with its planned session type (color-coded week glance)
+function decorateWeekDotsPlan(){
+  const plan=window._weekPlanMap;
+  if(!plan||!window._weekDotsRendered)return;
+  const done=window._weekDoneDays||new Set();
+  for(let i=0;i<7;i++){
+    const dot=document.getElementById('wdot-'+i);
+    const day=document.getElementById('wday-'+i);
+    if(!dot)continue;
+    const dayRaw=plan[String(i)]||plan[i]||{};
+    const sess=dayRaw.type!==undefined?[dayRaw]:Object.values(dayRaw).filter(s=>s&&s.type).sort((a,b)=>(a.ts||0)-(b.ts||0));
+    const active=sess.filter(s=>s&&s.type&&s.type!=='riposo');
+    const first=active[0];
+    const isDone=done.has(i)||dot.classList.contains('done-dot');
+    // Done day (teal wins) or no planned session: strip any planned tint
+    if(isDone||!first){
+      dot.style.borderColor='';
+      const pd=dot.querySelector('.wd-plan-dot');if(pd)pd.remove();
+      if(day)day.removeAttribute('title');
+      continue;
+    }
+    const c=SESS_COLORS[first.type]||'var(--primary2)';
+    dot.style.borderColor=c;
+    // Empty tiles (no orange today marker, no done check) get a small centered planned-type dot
+    let inner=dot.querySelector('.wd-plan-dot');
+    if(inner){inner.style.background=c;}
+    else if(!dot.children.length){
+      inner=document.createElement('span');
+      inner.className='wd-plan-dot';
+      inner.style.cssText='width:7px;height:7px;border-radius:50%;display:block;';
+      inner.style.background=c;
+      dot.appendChild(inner);
+    }
+    if(day)day.title=active.map(s=>SESS_LABELS[s.type]||s.type).join(' + ');
+  }
 }
 
 // ── SELECT DAY
@@ -2247,6 +2286,7 @@ async function loadWeekPlan(athlete){
     const gSnap=await get(ref(db,`plans/${wk}/${athlete.group}`));
     planData=gSnap.val()||null;
   }
+  window._weekPlanMap=planData||{};decorateWeekDotsPlan();
   if(!planData){wrap.innerHTML='<div class="empty">Nessun piano per questa settimana.</div>';return;}
   wrap.innerHTML=DAYS.map((d,i)=>{
     const date=new Date(monday);date.setDate(date.getDate()+i);
