@@ -624,7 +624,7 @@ document.addEventListener('DOMContentLoaded',function(){
       <select class="cal-ctx-sel" id="global-ctx-sel" onchange="switchAthMode(this.value)">
         <option value="">👥 Piano del gruppo</option>
       </select>
-      <div class="cal-ctx-hint"><b>Gruppo</b>: base condivisa. Scegli un atleta per un piano personale.</div>
+      <div class="cal-ctx-hint"><b>Gruppo</b>: base per tutti. <b>Fascia</b>: piano condiviso del sottogruppo. <b>Atleta</b>: piano personale.</div>
     </div>
     <div class="cal-step-lbl">② Da dove parti</div>
     <button class="cal-newplan-btn" id="cal-newplan-btn" onclick="newEmptyPlan()" title="Apri una settimana vuota del gruppo: costruisci il piano da zero, poi salvalo con un nome (📂 I miei piani) per ritrovarlo e assegnarlo agli atleti.">
@@ -2718,7 +2718,7 @@ document.addEventListener('DOMContentLoaded',function(){
       scopeKind='versione'; scopeName=window._currentVersionData.name||'versione';
     } else if(window._athModeAid){
       pd=(window._athPlanCache||{})[window._athModeAid+'_'+wk]||{};
-      scopeKind='atleta'; scopeName=((window._restAths||{})[window._athModeAid]||{}).name||window._athModeAid;
+      scopeKind=(window._ctxIsFascia&&window._ctxIsFascia(window._athModeAid))?'fascia':'atleta'; scopeName=window._ctxDisplayName?window._ctxDisplayName(window._athModeAid):(((window._restAths||{})[window._athModeAid]||{}).name||window._athModeAid);
     } else {
       pd=(window._plansCache||{})[wk]||{};
       scopeKind='gruppo'; scopeName='Gruppo';
@@ -3837,7 +3837,7 @@ const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("PIN:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#4A5568;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
 // ── STATE
-let plans={}, athletes={};
+let plans={}, athletes={}, groups={};
 let currentWk=null;         // "2026-05-26" (monday ISO)
 let currentMonthDate=new Date();
 let editingDay=null, editingKey=null, currentType=null;
@@ -3891,7 +3891,9 @@ onValue(ref(db,'plans'),s=>{
   if(_viewMode==='month')renderMonth();
   else if(currentWk)renderGrid();
 });
-onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};renderAssignedChips();if(window._populateGlobalCtx)window._populateGlobalCtx();});
+onValue(ref(db,'athletes'),s=>{athletes=s.val()||{};window._athletesCache=athletes;renderAssignedChips();if(window._populateGlobalCtx)window._populateGlobalCtx();if(window._populateAthSel)window._populateAthSel(currentWk);});
+// Fasce (gruppi): stesso nodo usato dalla home coach. Servono per il contesto "piano di fascia".
+onValue(ref(db,'groups'),s=>{groups=s.val()||{};window._groupsCache=groups;if(window._populateGlobalCtx)window._populateGlobalCtx();if(window._populateAthSel)window._populateAthSel(currentWk);});
 
 // Wire week-selection: standalone clicks → wizard (se settimana vuota) o editor (se già ha sessioni)
 window._onWkSelect=function(wk){if(window.openWeekOrWiz)window.openWeekOrWiz(wk);};
@@ -4072,9 +4074,8 @@ function renderEditor(){
   // In modalità atleta: prefetch del piano individuale + stato dedicato
   if(_ctxAid){
     if(window._prefetchAthWeeks) window._prefetchAthWeeks(_ctxAid,[currentWk]).then(()=>renderGrid());
-    const _nm=(athletes[_ctxAid]||{}).name||_ctxAid;
     const _st=document.getElementById('ed-status');
-    if(_st){ _st.textContent='🎯 Piano di '+_nm; _st.style.color='var(--amber)'; }
+    if(_st){ _st.textContent=window._ctxStatusLabel(_ctxAid); _st.style.color='var(--amber)'; }
   }
   // Carica versioni salvate per questa settimana
   if(window._loadVersions) window._loadVersions(currentWk);
@@ -4337,7 +4338,7 @@ function renderMonth(){
   }
   const today=new Date(); today.setHours(0,0,0,0);
   const monthLbl=_monthViewDate.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());
-  const ctxName=window._athModeAid?('🎯 '+((athletes[window._athModeAid]||{}).name||window._athModeAid)):'👥 Piano del gruppo';
+  const ctxName=window._athModeAid?window._ctxStatusLabel(window._athModeAid):'👥 Piano del gruppo';
   const hasCopied=!!_fbCopiedWeek;
 
   // Finestra di settimane visibili in base allo span (1 / 2 / 4)
@@ -5015,7 +5016,7 @@ window.switchAthMode=function(aid){
   const st=document.getElementById('ed-status');
   if(st){
     if(aid){
-      st.textContent='🎯 Piano di '+((athletes[aid]||{}).name||aid);
+      st.textContent=window._ctxStatusLabel(aid);
       st.style.color='var(--amber)';
     } else if(currentWk){
       const pub=plans[currentWk]?._published;
@@ -5089,32 +5090,53 @@ window.confirmAssignWeek=async function(){
   }catch(e){showToast('❌ '+e.message);}
 };
 
-window._populateAthSel=function(wk){
-  const sel=document.getElementById('ath-mode-sel');
+// ── Helper contesto: un id può essere una FASCIA (nodo groups) o un ATLETA.
+// Le fasce e gli atleti usano push-key Firebase disgiunte: nessuna collisione.
+window._groupsCache=window._groupsCache||{};
+window._ctxIsFascia=function(id){ return !!(id && (window._groupsCache||{})[id]); };
+window._ctxDisplayName=function(id){
+  if(!id) return 'Gruppo';
+  const g=(window._groupsCache||{})[id]; if(g) return (g.name||id);
+  const a=(window._athletesCache||window._restAths||{})[id]; return (a&&a.name)||id;
+};
+window._ctxStatusLabel=function(id){
+  if(!id) return '';
+  return (window._ctxIsFascia(id)?'👥 Fascia · ':'🎯 Piano di ')+window._ctxDisplayName(id);
+};
+// Riempie un <select> di contesto con optgroup Fasce + Atleti (mantiene l'opzione[0] "Gruppo").
+function _fillCtxSelect(sel){
   if(!sel) return;
-  // Rebuild options using Firebase athletes data
-  while(sel.options.length>1) sel.remove(1);
-  Object.entries(athletes||{}).forEach(([id,a])=>{
-    const opt=document.createElement('option');
-    opt.value=id;
-    opt.textContent=(a||{}).name||id;
-    sel.appendChild(opt);
-  });
+  while(sel.children.length>1) sel.removeChild(sel.lastElementChild);
+  const gEntries=Object.entries(window._groupsCache||groups||{});
+  if(gEntries.length){
+    const og=document.createElement('optgroup'); og.label='Fasce';
+    gEntries.forEach(([id,g])=>{
+      const o=document.createElement('option');
+      o.value=id; o.textContent='👥 '+((g||{}).name||id);
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  }
+  const aEntries=Object.entries(athletes||{});
+  if(aEntries.length){
+    const oa=document.createElement('optgroup'); oa.label='Atleti';
+    aEntries.forEach(([id,a])=>{
+      const o=document.createElement('option');
+      o.value=id; o.textContent='🏃 '+((a||{}).name||id);
+      oa.appendChild(o);
+    });
+    sel.appendChild(oa);
+  }
   sel.value=window._athModeAid||'';
+}
+
+window._populateAthSel=function(wk){
+  _fillCtxSelect(document.getElementById('ath-mode-sel'));
 };
 
-// Popola il selettore di contesto globale (Gruppo + atleti)
+// Popola il selettore di contesto globale (Gruppo + fasce + atleti)
 window._populateGlobalCtx=function(){
-  const sel=document.getElementById('global-ctx-sel');
-  if(!sel) return;
-  while(sel.options.length>1) sel.remove(1);
-  Object.entries(athletes||{}).forEach(([id,a])=>{
-    const opt=document.createElement('option');
-    opt.value=id;
-    opt.textContent='🏃 '+((a||{}).name||id);
-    sel.appendChild(opt);
-  });
-  sel.value=window._athModeAid||'';
+  _fillCtxSelect(document.getElementById('global-ctx-sel'));
 };
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
