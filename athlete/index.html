@@ -2208,12 +2208,12 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   }
   if(progCards.length){wrap.innerHTML=progCards.join('');if(dayIdx===todayIdx){window._whSessType=_firstPT;updateWHMetaRow();updateWeekDotToday();}return;}
 
-  // ── Priority 3: Group plan (planner legacy path)
+  // ── Priority 3: Piano di fascia condiviso (il preparatore lo scrive una volta per tutta la fascia)
   if(athlete.group){
-    const planSnap=await get(ref(db,`plans/${wk}/${athlete.group}/${dayIdx}`));
+    const planSnap=await get(ref(db,`athlete_plans/${athlete.group}/${wk}/days/${dayIdx}`));
     if(planSnap.exists()){
       const raw=planSnap.val()||{};
-      const daySess=Object.entries(raw).filter(([k])=>k!=='_published').map(([,v])=>v).sort((a,b)=>a.ts-b.ts);
+      const daySess=Object.entries(raw).filter(([k])=>k!=='_published').map(([,v])=>v).filter(v=>v&&v.type).sort((a,b)=>(a.ts||0)-(b.ts||0));
       if(daySess.length){
         window._quickSessionDay={type:daySess[0].type,note:daySess[0].note,exercises:daySess[0].exercises||{}};
         wrap.innerHTML=daySess.map(s=>sessionCard(s.type,DAYS[dayIdx],s.note,Object.values(s.exercises||{}),null,null,null,null,null,s.corsaFasi)).join('');
@@ -2281,9 +2281,9 @@ async function loadWeekPlan(athlete){
   // Show current week's plan (athlete-specific, fallback to group plan)
   const athWeekSnap=await get(ref(db,`athlete_plans/${aid}/${wk}/days`));
   let planData=athWeekSnap.val()||null;
-  // Fallback: try group plan
+  // Fallback: piano di fascia condiviso (se l'atleta non ha un piano personale)
   if(!planData&&athlete.group){
-    const gSnap=await get(ref(db,`plans/${wk}/${athlete.group}`));
+    const gSnap=await get(ref(db,`athlete_plans/${athlete.group}/${wk}/days`));
     planData=gSnap.val()||null;
   }
   window._weekPlanMap=planData||{};decorateWeekDotsPlan();
