@@ -2088,7 +2088,10 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!window._currentVersionId||!window._currentVersionData) return;
     var wk=_eWk||window._currentPlanWk;
     if(!wk) return;
-    if(!confirm('Promuovere "'+window._currentVersionData.name+'" a piano principale?\nIl piano attuale verrà sovrascritto.')) return;
+    var _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Promuovi versione',message:'Promuovere "'+window._currentVersionData.name+'" a piano principale?\nIl piano attuale verrà sovrascritto.',okLabel:'Promuovi',danger:true})
+      : confirm('Promuovere "'+window._currentVersionData.name+'" a piano principale?\nIl piano attuale verrà sovrascritto.');
+    if(!_ok) return;
     _toastS('⏳ Promuovo versione…');
     try{
       // Cancella piano corrente
@@ -2125,7 +2128,10 @@ document.addEventListener('DOMContentLoaded',function(){
 
   window.deleteCurrentVersion=async function(){
     if(!window._currentVersionId) return;
-    if(!confirm('Eliminare questa versione?\nNon si può annullare.')) return;
+    var _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Elimina versione',message:'Eliminare questa versione?\nNon si può annullare.',okLabel:'Elimina',danger:true})
+      : confirm('Eliminare questa versione?\nNon si può annullare.');
+    if(!_ok) return;
     var wk=_eWk||window._currentPlanWk;
     await fetch(DB_URL+'/plan_versions/'+wk+'/'+window._currentVersionId+'.json',{method:'DELETE'});
     _toastS('✓ Versione eliminata');
@@ -2468,7 +2474,10 @@ document.addEventListener('DOMContentLoaded',function(){
   window.pasteWeek=async function(){
     if(!_copiedWeekData){_toastS('⚠ Nessuna settimana copiata');return;}
     if(!_eWk){_toastS('⚠ Apri prima la settimana di destinazione');return;}
-    if(!confirm('Incollare le sessioni nella settimana '+_eWk+'?\nLe sessioni esistenti vengono mantenute (si aggiungono).'))return;
+    var _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Incolla settimana',message:'Incollare le sessioni nella settimana '+_eWk+'?\nLe sessioni esistenti vengono mantenute (si aggiungono).',okLabel:'Incolla',danger:false})
+      : confirm('Incollare le sessioni nella settimana '+_eWk+'?\nLe sessioni esistenti vengono mantenute (si aggiungono).');
+    if(!_ok)return;
     _toastS('⏳ Incollo…');
     try{
       var t=Date.now();
@@ -3409,11 +3418,27 @@ document.addEventListener('DOMContentLoaded',function(){
 
   // Rimuovi un giorno dal piano atleta
   window._delAthDay=async function(aid,di){
-    if(!confirm('Rimuovere questo giorno dal piano di questo atleta?'))return;
-    await fetch(DB_URL+'/athlete_plans/'+aid+'/'+_eWk+'/days/'+di+'.json',{method:'DELETE'});
-    _toastS('✓ Giorno rimosso');
+    var _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Rimuovi giorno',message:'Rimuovere questo giorno dal piano di questo atleta?',okLabel:'Rimuovi',danger:true})
+      : confirm('Rimuovere questo giorno dal piano di questo atleta?');
+    if(!_ok)return;
+    var _wk=_eWk;
+    var _dayPath=DB_URL+'/athlete_plans/'+aid+'/'+_wk+'/days/'+di+'.json';
+    var _snap=null;
+    try{var r=await fetch(_dayPath);if(r.ok)_snap=await r.json();}catch(e){}
+    await fetch(_dayPath,{method:'DELETE'});
+    _toastS('✓ Giorno rimosso', _snap?{label:'Annulla',onClick:function(){_restoreAthDay(aid,_wk,di,_snap);}}:null);
     _loadAthPlans();
   };
+
+  async function _restoreAthDay(aid,wk,di,snap){
+    if(!snap)return;
+    try{
+      await fetch(DB_URL+'/athlete_plans/'+aid+'/'+wk+'/days/'+di+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)});
+      _toastS('✓ Giorno ripristinato');
+      _loadAthPlans();
+    }catch(e){_toastS('⚠ Errore ripristino');}
+  }
 
   // ════════════════════════════════
   // EXERCISE DATABASE (dal DB Firebase - exercise_db)
@@ -4932,7 +4957,12 @@ window.autoSuggest=async function(){
   // Check if week already has sessions and warn
   const existing=plans[currentWk]||{};
   const hasSessions=Object.entries(existing).some(([k,v])=>!k.startsWith('_')&&typeof v==='object'&&Object.keys(v).length>0);
-  if(hasSessions&&!confirm('Questa settimana ha già delle sessioni. Sovrascrivere con la settimana tipo?')){return;}
+  if(hasSessions){
+    const _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Sovrascrivi settimana',message:'Questa settimana ha già delle sessioni. Sovrascrivere con la settimana tipo?',okLabel:'Sovrascrivi',danger:true})
+      : confirm('Questa settimana ha già delle sessioni. Sovrascrivere con la settimana tipo?');
+    if(!_ok){return;}
+  }
   const suggestions=[
     {day:(gameDay+1)%7,type:'rec',   note:'Recupero attivo 25min · Bike Z1 + prevenzione'},
     {day:(gameDay+2)%7,type:'forza', note:'Forza neurale · Squat + Hip Thrust 4×4-5 @82%'},
@@ -5171,7 +5201,12 @@ window.confirmAssignWeek=async function(){
   if(!days.length){showToast('⚠ Il foglio è vuoto');return;}
   const target=plans[key]||{};
   const targetHas=Object.keys(target).some(k=>!k.startsWith('_'));
-  if(targetHas && !confirm('La settimana del '+mon.toLocaleDateString('it-IT',{day:'numeric',month:'long'})+' ha già delle sessioni. Vuoi unire il foglio a quella settimana?')) return;
+  if(targetHas){
+    const _ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Unisci foglio',message:'La settimana del '+mon.toLocaleDateString('it-IT',{day:'numeric',month:'long'})+' ha già delle sessioni. Vuoi unire il foglio a quella settimana?',okLabel:'Unisci',danger:false})
+      : confirm('La settimana del '+mon.toLocaleDateString('it-IT',{day:'numeric',month:'long'})+' ha già delle sessioni. Vuoi unire il foglio a quella settimana?');
+    if(!_ok) return;
+  }
   const upd={};
   if(draft._config && !target._config) upd['plans/'+key+'/_config']=draft._config;
   days.forEach(day=>{ Object.entries(draft[day]||{}).forEach(([sk,sv])=>{ upd['plans/'+key+'/'+day+'/'+sk]=sv; }); });
@@ -5334,7 +5369,10 @@ window.switchVersion=async function(vId){
 
 window.promoteCurrentVersion=async function(){
   if(!window._currentVersionId||!window._currentVersionData) return;
-  if(!confirm(`Promuovere "${window._currentVersionData.name}" a piano principale?\nIl piano attuale verrà sovrascritto.`)) return;
+  const _ok=(typeof window._uiConfirm==='function')
+    ? await window._uiConfirm({title:'Promuovi versione',message:`Promuovere "${window._currentVersionData.name}" a piano principale?\nIl piano attuale verrà sovrascritto.`,okLabel:'Promuovi',danger:true})
+    : confirm(`Promuovere "${window._currentVersionData.name}" a piano principale?\nIl piano attuale verrà sovrascritto.`);
+  if(!_ok) return;
   showToast('⏳ Promuovo versione…');
   // Cancella tutto il piano corrente (tranne _config e _published e _athletes)
   const wkData=plans[currentWk]||{};
@@ -5357,7 +5395,10 @@ window.promoteCurrentVersion=async function(){
 
 window.deleteCurrentVersion=async function(){
   if(!window._currentVersionId) return;
-  if(!confirm('Eliminare questa versione?\nNon si può annullare.')) return;
+  const _ok=(typeof window._uiConfirm==='function')
+    ? await window._uiConfirm({title:'Elimina versione',message:'Eliminare questa versione?\nNon si può annullare.',okLabel:'Elimina',danger:true})
+    : confirm('Eliminare questa versione?\nNon si può annullare.');
+  if(!_ok) return;
   await remove(ref(db,`plan_versions/${currentWk}/${window._currentVersionId}`));
   showToast('✓ Versione eliminata');
   document.getElementById('ver-sel').value='';
