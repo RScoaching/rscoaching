@@ -4366,6 +4366,42 @@ document.addEventListener('keydown',function(e){
   shiftWeek(_dir);
 },false);
 
+// Esc chiude la modale aperta più in alto (i dialoghi _uiPrompt/_uiConfirm gestiscono Esc da soli)
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  if(e.metaKey||e.ctrlKey||e.altKey||e.shiftKey)return;
+  // Un dialogo (_uiPrompt/_uiConfirm, z-index 1200) è sempre in cima e gestisce Esc da sé:
+  // non chiudere la modale sottostante quando un dialogo è impilato sopra.
+  var _dlgP=document.getElementById('ui-prompt'), _dlgC=document.getElementById('ui-confirm');
+  if((_dlgP&&_dlgP.classList.contains('open'))||(_dlgC&&_dlgC.classList.contains('open')))return;
+  // [id, funzione di chiusura] dalla più prioritaria (sopra) alla meno; late-binding su window.close*
+  var _modals=[
+    ['modal-models', window.closeModels],
+    ['wiz-overlay', window.closeWiz],
+    ['overlay-version', window.closeSaveVersionModal],
+    ['modal-mcopy', window.closeMonthCopy],
+    ['modal-assign', window.closeAssignWeek],
+    ['modal-send', function(){var m=document.getElementById('modal-send');if(m)m.classList.remove('open');}],
+    ['load-editor', window.closeLoadEditor],
+    ['modal', window.closeModal]
+  ];
+  for(var i=0;i<_modals.length;i++){
+    var el=document.getElementById(_modals[i][0]);
+    if(el&&el.classList.contains('open')){
+      e.preventDefault();
+      try{ if(typeof _modals[i][1]==='function') _modals[i][1](); else el.classList.remove('open'); }
+      catch(_err){ el.classList.remove('open'); }
+      return;
+    }
+  }
+  // modal-bulk usa style.display invece della classe .open
+  var mb=document.getElementById('modal-bulk');
+  if(mb&&mb.style.display&&mb.style.display!=='none'){
+    e.preventDefault();
+    try{ window.closeBulkApply(); }catch(_err){ mb.style.display='none'; }
+  }
+},false);
+
 // Riavvia l'animazione di crossfade sul contenitore appena mostrato
 function _triggerViewFade(el){
   if(!el) return;
