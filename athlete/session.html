@@ -1147,13 +1147,31 @@ let cur=0, startTs=Date.now();
 // localStorage key for this session
 const _sessKey=`rsc_prog_${AID}_${PROG||'quick'}_${WEEK}_${SESS||'0'}`;
 
-// Exit session: confirm, clear saved progress, go back
-window.exitSession=function(){
-  if(confirm('Uscire? I progressi di questa sessione saranno cancellati.')){
-    try{localStorage.removeItem(_sessKey);}catch(e){}
-    history.back();
+// Esci dalla sessione. Se ci sono dati inseriti li salva (diventano "Prec." la prossima volta),
+// altrimenti pulisce i progressi locali e torna indietro.
+window.exitSession=async function(){
+  if(sessionHasData()){
+    if(confirm('Terminare l\'allenamento? I dati inseriti verranno salvati.')){
+      await finish();
+    }
+    return; // Annulla: resta nella sessione
   }
+  // Nessun dato: pulisci e blocca il flush automatico così i progressi non vengono ripristinati
+  _sessionFinished=true;
+  if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}
+  try{localStorage.removeItem(_sessKey);}catch(e){}
+  history.back();
 };
+// True se l'atleta ha completato almeno una serie o inserito un carico (o barrato un esercizio a campo).
+function sessionHasData(){
+  const scan=o=>{
+    if(!o||typeof o!=='object')return false;
+    if(o.done===true)return true;
+    if(o.kg!=null&&o.kg!=='')return true;
+    return Object.values(o).some(scan);
+  };
+  return scan(setData)||Object.values(campoChecked).some(Boolean);
+}
 
 function saveProgress(){
   try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs}));}catch(e){}
@@ -1175,7 +1193,12 @@ function loadProgress(){
     const saved=JSON.parse(raw);
     if(saved.setData)setData=saved.setData;
     if(saved.campoChecked)campoChecked=saved.campoChecked;
-    if(saved.startTs)startTs=saved.startTs;
+    // Ripristina il cronometro solo se la sessione è recente (< 6h); altrimenti riparte da adesso
+    // così un vecchio startTs rimasto in memoria non gonfia il tempo trascorso e la durata finale.
+    if(saved.startTs){
+      const age=Date.now()-saved.startTs;
+      startTs=(age>0&&age<21600000)?saved.startTs:Date.now();
+    }
   }catch(e){}
 }
 // History: {exName: [{kg, reps}, ...]} from last session containing each exercise
@@ -1684,18 +1707,6 @@ function renderPesi(ex,ei){
               oninput="setKg(${ei},${s},this.value,this)">
             <button class="done-btn${d.done?' d':isSug?' ready':''}" onclick="toggleDone(${ei},${s})">${d.done?'✓':isSug?'▶':'○'}</button>
           </div>
-          ${isCur?`<div class="quick-strip">
-            <div class="qs-step">
-              <button class="qs-btn" onclick="nudgeKg(${ei},${s},-2.5)">-2.5</button>
-              <button class="qs-btn" onclick="nudgeKg(${ei},${s},2.5)">+2.5</button>
-            </div>
-            <div class="rpe-mini">
-              <span class="rpe-compact-lbl">RPE</span>
-              <div class="rpe-compact-dots">
-                ${[6,7,8,9,10].map(r=>`<div class="rpe-compact-dot r${r}${d.rpe==r?' sel':''}" onclick="setRpe(${ei},${s},${r})">${r}</div>`).join('')}
-              </div>
-            </div>
-          </div>`:''}
           <div class="set-row-delete" onclick="event.stopPropagation();window.deleteSet(${ei},${s})">
             <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </div>
