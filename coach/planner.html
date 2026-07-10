@@ -409,8 +409,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .ath-send-item:has(input:checked){border-color:var(--purple);background:rgba(167,139,250,.06);}
 .ath-send-item input{width:15px;height:15px;accent-color:var(--purple);}
 
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:rgba(255,255,255,.04);border:1px solid var(--teal);color:var(--teal);padding:10px 18px;border-radius:50px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .3s;z-index:9999;white-space:nowrap;}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.04);border:1px solid var(--teal);color:var(--teal);padding:10px 12px 10px 18px;border-radius:50px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .3s;z-index:9999;white-space:nowrap;}
 #toast.show{transform:translateX(-50%) translateY(0);}
+#toast:not(:has(.toast-action)){padding:10px 18px;}
+#toast .toast-action{background:var(--violet);color:#fff;border:none;border-radius:40px;padding:8px 16px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:transform .12s cubic-bezier(.16,1,.3,1),background .15s;flex-shrink:0;}
+#toast .toast-action:hover{background:var(--violet2);}
+#toast .toast-action:active{transform:scale(.97);}
 
 /* ── EXERCISE EDITOR ── */
 .ex-section{border-top:1px solid var(--border);margin-top:14px;padding-top:12px;}
@@ -1830,17 +1834,60 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 
   // Toast (anche il modulo Firebase definirà la sua versione - questa è il fallback)
-  function _toastS(msg){var t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
+  function _toastS(msg,action){
+    var t=document.getElementById('toast');if(!t)return;
+    if(window._toastTimer){clearTimeout(window._toastTimer);window._toastTimer=null;}
+    t.innerHTML='';
+    var span=document.createElement('span');span.textContent=msg;t.appendChild(span);
+    var dur=3200;
+    if(action&&typeof action.onClick==='function'){
+      var btn=document.createElement('button');
+      btn.className='toast-action';btn.type='button';
+      btn.textContent=action.label||'Annulla';
+      btn.addEventListener('click',function(){
+        if(window._toastTimer){clearTimeout(window._toastTimer);window._toastTimer=null;}
+        t.classList.remove('show');
+        try{action.onClick();}catch(e){}
+      });
+      t.appendChild(btn);
+      dur=action.duration||6500;
+    }
+    t.classList.add('show');
+    window._toastTimer=setTimeout(function(){t.classList.remove('show');window._toastTimer=null;},dur);
+  }
 
   window._delSessR=async function(di,key){
-    if(!confirm('Eliminare questa sessione?')) return;
-    var delPath=window._athModeAid
-      ?DB_URL+'/athlete_plans/'+window._athModeAid+'/'+_eWk+'/days/'+di+'/'+key+'.json'
-      :DB_URL+'/plans/'+_eWk+'/'+di+'/'+key+'.json';
+    var ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Elimina sessione',message:'Eliminare questa sessione dal giorno?',okLabel:'Elimina',danger:true})
+      : confirm('Eliminare questa sessione?');
+    if(!ok) return;
+    var wk=_eWk, aid=window._athModeAid;
+    // Cattura la sessione PRIMA di eliminare, così si può annullare
+    var pd=aid
+      ?(window._athPlanCache||{})[aid+'_'+wk]||{}
+      :(window._plansCache||{})[wk]||{};
+    var orig=(pd[String(di)]||{})[key];
+    var snap=orig?JSON.parse(JSON.stringify(orig)):null;
+    var delPath=aid
+      ?DB_URL+'/athlete_plans/'+aid+'/'+wk+'/days/'+di+'/'+key+'.json'
+      :DB_URL+'/plans/'+wk+'/'+di+'/'+key+'.json';
     await fetch(delPath,{method:'DELETE'});
-    _restRefresh(_eWk);
-    _toastS('✓ Sessione eliminata');
+    _restRefresh(wk);
+    _toastS('✓ Sessione eliminata', snap?{label:'Annulla',onClick:function(){_restoreSessR(aid,wk,di,key,snap);}}:null);
   };
+
+  // Ripristina una sessione eliminata da _delSessR (annulla)
+  async function _restoreSessR(aid,wk,di,key,snap){
+    if(!snap)return;
+    var putPath=aid
+      ?DB_URL+'/athlete_plans/'+aid+'/'+wk+'/days/'+di+'/'+key+'.json'
+      :DB_URL+'/plans/'+wk+'/'+di+'/'+key+'.json';
+    try{
+      await fetch(putPath,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)});
+      _restRefresh(wk);
+      _toastS('✓ Ripristinata');
+    }catch(e){_toastS('⚠ Errore ripristino');}
+  }
 
   // Funzioni del modale (il modulo le sovrascriverà se carica)
   window.openAdd=function(di){
@@ -2444,31 +2491,50 @@ document.addEventListener('DOMContentLoaded',function(){
 
   window.clearWeek=async function(){
     if(!_eWk){_toastS('⚠ Nessuna settimana aperta');return;}
-    if(!confirm('Svuotare TUTTE le sessioni di questa settimana?\nNon si può annullare.'))return;
+    var ok=(typeof window._uiConfirm==='function')
+      ? await window._uiConfirm({title:'Svuota settimana',message:'Svuotare TUTTE le sessioni di questa settimana?',okLabel:'Svuota',danger:true})
+      : confirm('Svuotare TUTTE le sessioni di questa settimana?');
+    if(!ok)return;
+    var wk=_eWk;
     _toastS('⏳ Svuoto…');
     try{
-      var r=await fetch(DB_URL+'/plans/'+_eWk+'.json');
+      var r=await fetch(DB_URL+'/plans/'+wk+'.json');
       var pd=r.ok?await r.json():null;
       if(!pd){_toastS('Settimana già vuota');return;}
-      var dels=[];
+      var dels=[],restore=[];
       for(var i=0;i<7;i++){
         var day=pd[String(i)]; if(!day||typeof day!=='object')continue;
         Object.keys(day).forEach(function(k){
-          if(!k.startsWith('_'))
-            dels.push(fetch(DB_URL+'/plans/'+_eWk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
+          if(!k.startsWith('_')){
+            dels.push(fetch(DB_URL+'/plans/'+wk+'/'+i+'/'+k+'.json',{method:'DELETE'}));
+            restore.push({i:i,k:k,val:day[k]});
+          }
         });
       }
       if(!dels.length){_toastS('Settimana già vuota');return;}
       await Promise.all(dels);
       // Aggiorna cache locale se esiste
-      if(window._plansCache&&window._plansCache[_eWk]){
-        for(var i=0;i<7;i++) delete window._plansCache[_eWk][String(i)];
+      if(window._plansCache&&window._plansCache[wk]){
+        for(var i=0;i<7;i++) delete window._plansCache[wk][String(i)];
       }
-      _restGrid(_eWk);
+      _restGrid(wk);
       window._calRender();
-      _toastS('✓ Settimana svuotata!');
+      _toastS('✓ Settimana svuotata ('+restore.length+' sedute)',{label:'Annulla',onClick:function(){_restoreWeek(wk,restore);}});
     }catch(e){_toastS('Errore svuota: '+e.message);}
   };
+
+  // Ripristina le sessioni svuotate da clearWeek (annulla)
+  async function _restoreWeek(wk,restore){
+    if(!restore||!restore.length)return;
+    _toastS('⏳ Ripristino…');
+    try{
+      await Promise.all(restore.map(function(o){
+        return fetch(DB_URL+'/plans/'+wk+'/'+o.i+'/'+o.k+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(o.val)});
+      }));
+      await _restRefresh(wk);
+      _toastS('✓ Settimana ripristinata');
+    }catch(e){_toastS('Errore ripristino: '+e.message);}
+  }
   // ───────────────────────────────────────────────────────────────────
 
   window.saveConfig=async function(){
@@ -4685,18 +4751,49 @@ window.saveSession=async function(){
 window.delCurrentSess=function(){if(editingKey)delSess(editingDay,editingKey);closeModal();};
 
 window.delSess=async function(dayIdx,key){
-  if(!confirm('Eliminare questa sessione?')) return;
-  if(window._athModeAid){
+  const ok=(typeof window._uiConfirm==='function')
+    ? await window._uiConfirm({title:'Elimina sessione',message:'Eliminare questa sessione dal giorno?',okLabel:'Elimina',danger:true})
+    : confirm('Eliminare questa sessione?');
+  if(!ok) return;
+  const wk=currentWk;
+  const _aid=window._athModeAid;
+  // Cattura la sessione PRIMA di eliminare, così si può annullare
+  const _pd=_aid
+    ?(window._athPlanCache||{})[_aid+'_'+wk]||{}
+    :(typeof plans!=='undefined'&&plans[wk])||(window._plansCache||{})[wk]||{};
+  const _orig=(_pd[String(dayIdx)]||{})[key];
+  const _snap=_orig?JSON.parse(JSON.stringify(_orig)):null;
+  if(_aid){
     const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
-    await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days/${dayIdx}/${key}.json`,{method:'DELETE'});
-    const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${currentWk}/days.json`);
-    if(r.ok) window._athPlanCache[window._athModeAid+'_'+currentWk]=await r.json()||{};
+    await fetch(_dbUrl+`/athlete_plans/${_aid}/${wk}/days/${dayIdx}/${key}.json`,{method:'DELETE'});
+    const r=await fetch(_dbUrl+`/athlete_plans/${_aid}/${wk}/days.json`);
+    if(r.ok) window._athPlanCache[_aid+'_'+wk]=await r.json()||{};
     if(_viewMode==='month')renderMonth(); else renderGrid();
   } else {
-    await remove(ref(db,`plans/${currentWk}/${dayIdx}/${key}`));
+    await remove(ref(db,`plans/${wk}/${dayIdx}/${key}`));
   }
-  showToast('✓ Eliminata');
+  showToast('✓ Eliminata', _snap?{label:'Annulla',onClick:function(){_restoreSess(_aid,wk,dayIdx,key,_snap);}}:null);
 };
+
+// Ripristina una sessione eliminata sulla stessa chiave (annulla di delSess)
+async function _restoreSess(aid,wk,dayIdx,key,snap){
+  if(!snap) return;
+  const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
+  try{
+    if(aid){
+      await fetch(_dbUrl+`/athlete_plans/${aid}/${wk}/days/${dayIdx}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)});
+      const r=await fetch(_dbUrl+`/athlete_plans/${aid}/${wk}/days.json`);
+      if(r.ok) window._athPlanCache[aid+'_'+wk]=await r.json()||{};
+      if(_viewMode==='month')renderMonth(); else renderGrid();
+    } else if(typeof set!=='undefined'&&typeof db!=='undefined'){
+      await set(ref(db,`plans/${wk}/${dayIdx}/${key}`),snap);
+    } else {
+      await fetch(_dbUrl+`/plans/${wk}/${dayIdx}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(snap)});
+      if(window._restRefresh) window._restRefresh(wk);
+    }
+    showToast('✓ Ripristinata');
+  }catch(e){showToast('⚠ Errore ripristino');}
+}
 
 window.closeModal=()=>document.getElementById('modal').classList.remove('open');
 
@@ -5139,7 +5236,27 @@ window._populateGlobalCtx=function(){
   _fillCtxSelect(document.getElementById('global-ctx-sel'));
 };
 
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
+function showToast(msg,action){
+  const t=document.getElementById('toast');if(!t)return;
+  if(window._toastTimer){clearTimeout(window._toastTimer);window._toastTimer=null;}
+  t.innerHTML='';
+  const span=document.createElement('span');span.textContent=msg;t.appendChild(span);
+  let dur=3200;
+  if(action&&typeof action.onClick==='function'){
+    const btn=document.createElement('button');
+    btn.className='toast-action';btn.type='button';
+    btn.textContent=action.label||'Annulla';
+    btn.addEventListener('click',function(){
+      if(window._toastTimer){clearTimeout(window._toastTimer);window._toastTimer=null;}
+      t.classList.remove('show');
+      try{action.onClick();}catch(e){}
+    });
+    t.appendChild(btn);
+    dur=action.duration||6500;
+  }
+  t.classList.add('show');
+  window._toastTimer=setTimeout(function(){t.classList.remove('show');window._toastTimer=null;},dur);
+}
 
 // ── Bridge: editor e Firebase write richiamati dallo standalone wizard
 window._openEditor=function(wk){currentWk=wk;window._currentPlanWk=wk;window._selWk=wk;window._calRender();renderEditor();};
