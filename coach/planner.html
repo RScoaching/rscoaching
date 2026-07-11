@@ -4994,7 +4994,7 @@ window.pasteDay=async function(dayIdx){
 };
 
 // ── DRAG-AND-DROP: MOVE SESSION BETWEEN DAYS (e tra settimane in vista mese)
-window.moveSess=async function(fromDay,key,toDay,fromWk,toWk){
+window.moveSess=async function(fromDay,key,toDay,fromWk,toWk,_isUndo){
   if(window._currentVersionId){showToast('⚠ Modalità sola lettura');return;}
   fromWk=fromWk||currentWk||window._currentPlanWk;
   toWk=toWk||fromWk;
@@ -5008,22 +5008,26 @@ window.moveSess=async function(fromDay,key,toDay,fromWk,toWk){
   const _dbUrl=window._DB_URL||'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app';
   try{
     if(window._athModeAid){
-      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${toWk}/days/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
-      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${fromWk}/days/${fromDay}/${key}.json`,{method:'DELETE'});
+      // Spostamento atomico: un solo PATCH scrive la nuova posizione ed elimina la vecchia insieme (niente doppioni)
+      await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}.json`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({[`${toWk}/days/${toDay}/${key}`]:entry,[`${fromWk}/days/${fromDay}/${key}`]:null})});
       for(const wk of new Set([fromWk,toWk])){
         const r=await fetch(_dbUrl+`/athlete_plans/${window._athModeAid}/${wk}/days.json`);
         if(r.ok) window._athPlanCache[window._athModeAid+'_'+wk]=await r.json()||{};
       }
       if(_viewMode==='month')renderMonth(); else renderGrid();
-    } else if(typeof set!=='undefined'&&typeof db!=='undefined'){
-      await set(ref(db,`plans/${toWk}/${toDay}/${key}`),entry);
-      await remove(ref(db,`plans/${fromWk}/${fromDay}/${key}`));
+    } else if(typeof update!=='undefined'&&typeof db!=='undefined'){
+      // Spostamento atomico via SDK: update multi-path (scrive la destinazione e azzera l'origine in un'unica operazione)
+      await update(ref(db),{[`plans/${toWk}/${toDay}/${key}`]:entry,[`plans/${fromWk}/${fromDay}/${key}`]:null});
     } else {
-      await fetch(_dbUrl+`/plans/${toWk}/${toDay}/${key}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
-      await fetch(_dbUrl+`/plans/${fromWk}/${fromDay}/${key}.json`,{method:'DELETE'});
+      // Spostamento atomico via REST: un solo PATCH multi-path
+      await fetch(_dbUrl+`/plans.json`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({[`${toWk}/${toDay}/${key}`]:entry,[`${fromWk}/${fromDay}/${key}`]:null})});
       if(window._restRefresh){window._restRefresh(fromWk);if(toWk!==fromWk)window._restRefresh(toWk);}
     }
-    showToast('✓ Sessione spostata');
+    if(_isUndo){
+      showToast('✓ Spostamento annullato');
+    } else {
+      showToast('✓ Sessione spostata',{label:'Annulla',onClick:function(){window.moveSess(toDay,key,fromDay,toWk,fromWk,true);}});
+    }
   }catch(err){showToast('⚠ Errore spostamento: '+err.message);}
 };
 
