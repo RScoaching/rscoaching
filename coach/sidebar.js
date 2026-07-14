@@ -37,10 +37,6 @@ window.SIDEBAR_HTML = `
     <a class="nav-item" aria-label="Planner Settimanale" href="./planner.html" data-page="planner">
       <span class="nav-icon">📅</span><span class="nav-lbl-text">Planner Settimanale</span>
     </a>
-    <div class="nav-lbl">Fiorentina</div>
-    <a class="nav-item" aria-label="Carico Fiorentina" href="./carico.html" data-page="carico">
-      <span class="nav-icon">📈</span><span class="nav-lbl-text">Carico Fiorentina</span>
-    </a>
     <div class="nav-lbl">Comunicazione</div>
     <a class="nav-item" aria-label="Chat" href="./index.html?goto=chat-global" data-page="chat">
       <span class="nav-icon">💬</span><span class="nav-lbl-text">Chat</span>
