@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Fiorentina · RS Coaching</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='8' fill='%230E0B11'/%3E%3Cpath d='M11 5h9l5 5v21a0 0 0 0 1 0 0H11a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z' fill='none' stroke='%23FF7A3D' stroke-width='2'/%3E%3Cpath d='M20 5v6h5' fill='none' stroke='%23FF8A57' stroke-width='2'/%3E%3Cpath d='M13 20h10M13 24h7' stroke='%23FF7A3D' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RS Coaching · Report Fiorentina
+   Stesso design system di Carico/Atlete/Esercitazioni/Forza/
+   Calendario: dark + ember + viola, Bebas Neue (display) + Inter.
+   Sidebar condivisa (fio_sidebar.js). Solo numeri calcolati.
+   Genera una sintesi per Squadra o singola atleta, sull'intera
+   stagione o su un mese: indicatori chiave allenamento vs gara
+   vs modello, andamento mensile, partite. Esporta in PDF
+   (stampa) o CSV. Nessun file grezzo pubblicato.
+   ============================================================ */
+:root{
+  --bg:      oklch(8.5% 0.014 38);
+  --surface: oklch(12%  0.016 38);
+  --surface2:oklch(15%  0.018 38);
+  --surface3:oklch(18%  0.020 38);
+  --orange:  oklch(68% 0.19 42);
+  --orange2: oklch(74% 0.15 50);
+  --primary: oklch(68% 0.19 42);
+  --violet:  oklch(62% 0.22 280);
+  --violet2: oklch(68% 0.18 285);
+  --violet-bg: oklch(62% 0.22 280 / 0.10);
+  --violet-border: oklch(62% 0.22 280 / 0.22);
+  --ember-bg: oklch(68% 0.19 42 / 0.10);
+  --ember-border: oklch(68% 0.19 42 / 0.24);
+  --text:    oklch(78% 0.012 38);
+  --ink:     oklch(93% 0.010 38);
+  --muted:   oklch(58% 0.014 38);
+  --faint:   oklch(46% 0.014 38);
+  --green:   oklch(70% 0.18 152);
+  --green-bg:oklch(70% 0.18 152 / 0.10);
+  --green-border:oklch(70% 0.18 152 / 0.24);
+  --red:     oklch(62% 0.22 25);
+  --red-bg:  oklch(62% 0.22 25 / 0.10);
+  --red-border:oklch(62% 0.22 25 / 0.24);
+  --red2:    oklch(72% 0.18 30);
+  --border:  oklch(22% 0.016 38 / 0.70);
+  --border2: oklch(28% 0.018 38 / 0.80);
+  --border3: oklch(36% 0.020 38 / 0.90);
+  --shadow-sm:   0 1px 4px oklch(0% 0 0 / 0.45);
+  --shadow-card: 0 4px 20px oklch(0% 0 0 / 0.45), 0 1px 3px oklch(0% 0 0 / 0.55);
+  --shadow-md:   0 12px 40px oklch(0% 0 0 / 0.60);
+  --shadow-btn:  0 4px 18px oklch(68% 0.19 42 / 0.35);
+  --r-sm: 8px; --r: 12px; --r-lg: 16px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --z-nav: 40; --z-tooltip: 80;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background: var(--bg);
+  color: var(--text);
+  font-family:'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100dvh;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(60% 45% at 82% -5%, oklch(68% 0.19 42 / 0.10), transparent 60%),
+    radial-gradient(55% 40% at -8% 8%, oklch(62% 0.22 280 / 0.08), transparent 62%);
+}
+a{ color:inherit; text-decoration:none; }
+:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; border-radius:4px; }
+.tnum{ font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
+
+/* ---------- layout shell ---------- */
+.app{ display:flex; min-height:100dvh; position:relative; z-index:1; }
+.main{ flex:1 1 auto; min-width:0; padding:0 0 64px; }
+.topbar{
+  position:sticky; top:0; z-index:var(--z-nav);
+  display:flex; align-items:center; gap:14px;
+  padding:16px 28px; background:oklch(8.5% 0.014 38 / 0.82);
+  backdrop-filter:saturate(160%) blur(12px); border-bottom:1px solid var(--border);
+}
+.crest{ width:42px; height:42px; flex:0 0 42px; object-fit:contain;
+  filter: drop-shadow(0 2px 8px oklch(62% 0.22 280 / 0.35)); }
+.crest-fallback{ width:42px; height:42px; border-radius:10px; background:var(--violet-bg);
+  border:1px solid var(--violet-border); display:grid; place-items:center; color:var(--violet2);
+  font-family:'Bebas Neue',sans-serif; font-size:16px; }
+.title-wrap{ display:flex; flex-direction:column; min-width:0; }
+.title-wrap h1{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400;
+  font-size:30px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.title-wrap .sub{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+.title-wrap .sub b{ color:var(--text); font-weight:600; }
+.top-right{ margin-left:auto; display:flex; align-items:center; gap:10px; text-align:right; }
+.gen-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--surface2); border:1px solid var(--border2); font-size:11.5px; color:var(--muted); white-space:nowrap;
+}
+.gen-pill svg{ width:13px; height:13px; color:var(--green); }
+.privacy-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); font-size:11.5px; color:var(--violet2); white-space:nowrap;
+}
+.privacy-pill svg{ width:13px; height:13px; }
+
+.wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 0; }
+
+/* ---------- controls ---------- */
+.controls{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 14px; margin-bottom:22px; }
+.fg{ display:flex; flex-direction:column; gap:6px; }
+.fg label{ font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+.fg select{
+  appearance:none; font-family:inherit; font-size:13.5px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px;
+  padding:9px 34px 9px 12px; min-height:42px; width:100%; cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A0938C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 11px center;
+}
+.fg select:focus{ border-color:var(--border3); }
+.fg.w-scope select{ width:240px; }
+.fg.w-month select{ width:196px; }
+.fg.w-kind select{ width:170px; }
+.spacer{ flex:1 1 auto; }
+.btn{
+  appearance:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600;
+  padding:9px 15px; border-radius:9px; min-height:42px; display:inline-flex; align-items:center; gap:8px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease), color .18s var(--ease);
+}
+.btn svg{ width:15px; height:15px; }
+.btn:hover{ border-color:var(--border3); color:var(--ink); }
+.btn:active{ transform:scale(.97); }
+.btn.primary{ background:var(--orange); color:#1a0d05; border-color:transparent; box-shadow: var(--shadow-btn); }
+.btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
+
+/* ---------- report document ---------- */
+.rdoc{ background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  box-shadow: var(--shadow-card); overflow:hidden; }
+.rdoc-head{ display:flex; align-items:flex-start; gap:16px; padding:22px 24px 20px;
+  border-bottom:1px solid var(--border); background:
+    linear-gradient(120deg, oklch(68% 0.19 42 / 0.05), transparent 46%),
+    linear-gradient(300deg, oklch(62% 0.22 280 / 0.05), transparent 42%); }
+.rh-mark{ width:46px; height:46px; flex:0 0 46px; object-fit:contain;
+  filter: drop-shadow(0 2px 8px oklch(62% 0.22 280 / 0.35)); }
+.rh-mark-fb{ width:46px; height:46px; border-radius:11px; background:var(--violet-bg);
+  border:1px solid var(--violet-border); display:grid; place-items:center; color:var(--violet2);
+  font-family:'Bebas Neue',sans-serif; font-size:17px; }
+.rh-txt{ min-width:0; flex:1 1 auto; }
+.rh-txt h2{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:30px;
+  letter-spacing:.5px; color:var(--ink); line-height:1; }
+.rh-txt .rh-sub{ font-size:13px; color:var(--muted); margin-top:5px; }
+.rh-txt .rh-sub b{ color:var(--text); font-weight:600; }
+.rh-role{ display:inline-flex; align-items:center; margin-left:8px; padding:2px 9px; border-radius:999px;
+  font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); vertical-align:middle; }
+.rh-meta{ text-align:right; font-size:11.5px; color:var(--faint); line-height:1.7; white-space:nowrap; }
+.rh-meta b{ color:var(--muted); font-weight:600; }
+
+.rbody{ padding:22px 24px 24px; }
+
+/* ---------- report KPIs ---------- */
+.rkpis{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:24px; }
+.rkpi{ position:relative; overflow:hidden; background:var(--surface2); border:1px solid var(--border2);
+  border-radius:var(--r); padding:15px 16px; }
+.rkpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:3px 0 0 3px;
+  background:linear-gradient(180deg, var(--orange), var(--orange2)); }
+.rkpi.v::before{ background:linear-gradient(180deg, var(--violet), var(--violet2)); }
+.rkpi.g::before{ background:linear-gradient(180deg, var(--green), oklch(74% 0.16 152)); }
+.rkpi.b::before{ background:linear-gradient(180deg, oklch(70% 0.15 230), oklch(76% 0.12 235)); }
+.rkpi .k-label{ font-size:11px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+.rkpi .k-val{ font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:6px; }
+.rkpi .k-val small{ font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
+.rkpi .k-sub{ font-size:11px; color:var(--faint); margin-top:3px; }
+
+/* ---------- section blocks ---------- */
+.rsec{ margin-top:26px; }
+.rsec:first-child{ margin-top:0; }
+.rsec-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:12px; }
+.rsec-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:21px;
+  letter-spacing:.5px; color:var(--ink); line-height:1; }
+.rsec-head .rsec-n{ font-size:11.5px; color:var(--faint); }
+
+/* ---------- data table ---------- */
+.tbl-wrap{ border:1px solid var(--border2); border-radius:var(--r); overflow:hidden; }
+table.dt{ width:100%; border-collapse:collapse; font-size:13px; }
+table.dt thead th{ background:var(--surface2); color:var(--muted); font-weight:600; font-size:11px;
+  text-transform:uppercase; letter-spacing:.04em; text-align:right; padding:10px 14px; border-bottom:1px solid var(--border2); white-space:nowrap; }
+table.dt thead th:first-child{ text-align:left; }
+table.dt tbody td{ padding:11px 14px; border-bottom:1px solid var(--border); text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--text); white-space:nowrap; }
+table.dt tbody td:first-child{ text-align:left; color:var(--ink); font-weight:500; white-space:normal; }
+table.dt tbody tr:last-child td{ border-bottom:0; }
+table.dt tbody tr:hover td{ background:var(--surface2); }
+.mu{ color:var(--faint); font-size:11px; font-weight:600; margin-left:2px; }
+.big{ font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:.3px; color:var(--ink); font-weight:400; }
+.pct-chip{ display:inline-flex; align-items:center; gap:7px; justify-content:flex-end; }
+.pct-bar{ width:56px; height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; flex:0 0 auto; }
+.pct-bar > i{ display:block; height:100%; border-radius:999px;
+  background:linear-gradient(90deg, var(--violet), var(--violet2)); }
+.pct-num{ min-width:38px; text-align:right; color:var(--violet2); font-weight:600; }
+.cell-na{ color:var(--faint); }
+
+/* ---------- monthly trend ---------- */
+.trend{ display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:10px; align-items:end;
+  border:1px solid var(--border2); border-radius:var(--r); padding:18px 18px 14px; min-height:172px; }
+.tcol{ display:flex; flex-direction:column; align-items:center; gap:8px; justify-content:flex-end; height:100%; min-width:0; }
+.tcol .tval{ font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.tcol .tbar{ width:64%; max-width:34px; min-height:4px; border-radius:6px 6px 3px 3px;
+  background:linear-gradient(180deg, var(--orange), oklch(62% 0.20 42)); box-shadow: inset 0 0 0 1px oklch(74% 0.15 50 / 0.35); }
+.tcol.mt .tbar{ background:linear-gradient(180deg, var(--violet), var(--violet2)); box-shadow: inset 0 0 0 1px var(--violet-border); }
+.tcol .tlab{ font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+.trend-legend{ display:flex; gap:16px; margin-top:10px; font-size:11.5px; color:var(--muted); }
+.trend-legend .lg{ display:inline-flex; align-items:center; gap:7px; }
+.trend-legend .sw{ width:12px; height:12px; border-radius:4px; }
+.trend-legend .sw.a{ background:linear-gradient(180deg, var(--orange), oklch(62% 0.20 42)); }
+
+/* ---------- empty ---------- */
+.rempty{ text-align:center; padding:44px 16px; color:var(--muted); }
+.rempty svg{ width:34px; height:34px; color:var(--faint); margin-bottom:10px; }
+.rempty .t{ font-size:15px; color:var(--text); font-weight:600; }
+.rempty .d{ font-size:12.5px; color:var(--faint); margin-top:4px; }
+
+/* ---------- footnote / toast / reveal ---------- */
+.foot-note{ max-width:1180px; margin:20px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
+.toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px);
+  background:var(--surface3); border:1px solid var(--border3); border-radius:10px; box-shadow: var(--shadow-md);
+  padding:11px 16px; font-size:13px; color:var(--ink); opacity:0; pointer-events:none;
+  transition: opacity .2s var(--ease), transform .2s var(--ease); z-index:var(--z-tooltip); }
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.reveal{ opacity:0; transform:translateY(10px); animation:rv .5s var(--ease) forwards; animation-delay:calc(var(--i,0) * 55ms); }
+@keyframes rv{ to{ opacity:1; transform:none; } }
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px){
+  .main{ padding-top:52px; }
+  .topbar{ position:static; padding:12px 16px; }
+  .title-wrap h1{ font-size:25px; }
+  .wrap{ padding:20px 16px 0; }
+  .privacy-pill{ display:none; }
+  .foot-note{ padding:0 16px; }
+  .rkpis{ grid-template-columns:repeat(2, 1fr); }
+  .fg.w-scope select, .fg.w-month select, .fg.w-kind select{ width:100%; }
+  .fg{ flex:1 1 160px; }
+  .rh-meta{ display:none; }
+}
+@media (max-width: 560px){
+  .rkpis{ grid-template-columns:1fr 1fr; gap:10px; }
+  .rkpi .k-val{ font-size:27px; }
+  .top-right .gen-pill{ display:none; }
+  .tcol .tval{ display:none; }
+  .pct-bar{ display:none; }
+  table.dt{ font-size:12px; }
+  table.dt thead th, table.dt tbody td{ padding:9px 10px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .reveal{ animation:none; opacity:1; transform:none; }
+  *{ transition:none !important; }
+}
+
+/* ---------- print (PDF) : tema chiaro, solo il report ---------- */
+@media print{
+  @page{ margin:14mm; }
+  body{ background:#fff !important; color:#1a1a1a !important; }
+  body::before{ display:none !important; }
+  #sidebar-mount, .sidebar, .sb-mob-bar, .sb-mob-overlay,
+  .topbar, .controls, .foot-note, .toast{ display:none !important; }
+  .app{ display:block; }
+  .main{ padding:0 !important; }
+  .wrap{ max-width:none; padding:0 !important; }
+  .reveal{ animation:none !important; opacity:1 !important; transform:none !important; }
+  .rdoc{ border:1px solid #d8d3cc; border-radius:10px; box-shadow:none; }
+  .rdoc-head{ background:#faf8f5; border-bottom:1px solid #e2ddd6; }
+  .rh-txt h2, .rh-txt .big, .big, .rkpi .k-val, .rsec-head h3{ color:#141414 !important; }
+  .rh-txt .rh-sub, .rh-txt .rh-sub b, .rh-meta, .rh-meta b{ color:#555 !important; }
+  .rh-role{ background:#efe9fb; border-color:#d8ccf5; color:#5b3fb0 !important; }
+  .rbody{ color:#1a1a1a; }
+  .rkpi, .rkpis .rkpi{ background:#f7f5f2 !important; border:1px solid #e2ddd6; }
+  .rkpi .k-label, .rkpi .k-sub{ color:#666 !important; }
+  .tbl-wrap, .trend{ border:1px solid #e2ddd6; }
+  table.dt thead th{ background:#f4f1ec; color:#555; border-bottom:1px solid #e2ddd6; }
+  table.dt tbody td{ color:#222 !important; border-bottom:1px solid #ece7e0; }
+  table.dt tbody td:first-child{ color:#111 !important; }
+  table.dt tbody tr:hover td{ background:transparent; }
+  .mu, .cell-na, .tcol .tlab{ color:#8a847c !important; }
+  .tcol .tval{ color:#555 !important; }
+  .pct-num{ color:#5b3fb0 !important; }
+  .pct-bar{ background:#e7e2da; }
+  .pct-bar > i{ background:#7a5bd0 !important; }
+  .tcol .tbar{ background:#e6763a !important; box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .tcol.mt .tbar{ background:#7a5bd0 !important; }
+  .rsec{ break-inside:avoid; }
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR condivisa area Fiorentina (fio_sidebar.js) ============ -->
+  <div id="sidebar-mount"></div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <img class="crest" id="crest" alt="Stemma Fiorentina">
+      <div class="title-wrap">
+        <h1>Report</h1>
+        <div class="sub"><b>Fiorentina Primavera U19W</b> · sintesi carico squadra e atlete</div>
+      </div>
+      <div class="top-right">
+        <span class="privacy-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6z"/></svg>Solo numeri calcolati</span>
+        <span class="gen-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="gen-txt">·</span></span>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- controls -->
+      <div class="controls reveal" style="--i:0">
+        <div class="fg w-scope">
+          <label for="sel-scope">Ambito</label>
+          <select id="sel-scope"></select>
+        </div>
+        <div class="fg w-month">
+          <label for="sel-month">Periodo</label>
+          <select id="sel-month"></select>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn" id="btn-print">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>
+          Stampa / PDF
+        </button>
+        <button class="btn primary" id="btn-export">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
+          Esporta CSV
+        </button>
+      </div>
+
+      <!-- report document -->
+      <div class="rdoc reveal" id="rdoc" style="--i:1"></div>
+    </div>
+
+    <p class="foot-note">
+      Sezione coach · report di sintesi del carico esterno (dati GPS). Indicatori chiave a confronto tra
+      allenamento, gara e modello prestativo di riferimento; andamento mensile della distanza; partite del
+      periodo. Esporta in PDF con "Stampa / PDF" o in CSV per Excel. Solo numeri calcolati, nessun file grezzo.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- snapshot carico (window.SNAP) -->
+<script src="./carico_data.js"></script>
+<script>
+window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
+  metrics_short:[],metrics_full:[],metrics_unit:[],sum_flags:[],key_idx:[],model:[],
+  team:{months:[],matches:[]},players:{}};
+</script>
+
+<!-- sidebar area Fiorentina -->
+<script src="./fio_sidebar.js"></script>
+<script>
+(function(){
+  if(window.SIDEBAR_CSS){ const s=document.createElement('style'); s.textContent=window.SIDEBAR_CSS; document.head.appendChild(s); }
+  const mount=document.getElementById('sidebar-mount');
+  if(window.SIDEBAR_HTML && mount){ mount.outerHTML=window.SIDEBAR_HTML; }
+  if(window.markActiveNav) window.markActiveNav('report');
+  if(window.initSidebarToggle) window.initSidebarToggle();
+})();
+</script>
+
+<!-- logica pagina -->
+<script>
+(function(){
+  "use strict";
+  const S = window.SNAP;
+  const TEAM = '__team__';
+
+  const MS   = Array.isArray(S.metrics_short) ? S.metrics_short : [];
+  const MU   = Array.isArray(S.metrics_unit)  ? S.metrics_unit  : [];
+  const SUMF = Array.isArray(S.sum_flags)     ? S.sum_flags     : [];
+  const MODEL= Array.isArray(S.model)         ? S.model         : [];
+  const KEYI = Array.isArray(S.key_idx) && S.key_idx.length ? S.key_idx : [1,2,5,13,6,9];
+  const TEAM_MONTHS = (S.team && Array.isArray(S.team.months)) ? S.team.months : [];
+  const TEAM_MATCHES= (S.team && Array.isArray(S.team.matches))? S.team.matches: [];
+  const PLAYERS = (S.players && typeof S.players==='object') ? S.players : {};
+  const SEASON = S.stagione || '2025-26';
+  const IDX_MIN = 0, IDX_DIST = 1;   // colonne fisse: Minuti, Dist tot
+
+  const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function niceRole(r){ r=(r==null?'':String(r)).trim(); return (r && r.toLowerCase()!=='nan') ? r : ''; }
+  function decForUnit(u){ if(u==='m'||u==='n'||u==='min') return 0; return 1; }
+  function fmtVal(v,u){ if(v==null||Number.isNaN(v)) return null; const d=decForUnit(u); return (d?NF1:NF0).format(v); }
+  function fmtKm(m){ m=Number(m)||0; return NF1.format(m/1000); }
+
+  // ---------- popolamento controlli ----------
+  function fillControls(){
+    const sc = document.getElementById('sel-scope');
+    const mo = document.getElementById('sel-month');
+    // ambito: squadra + atlete (ordine alfabetico)
+    const names = Object.keys(PLAYERS).sort((a,b)=> a.localeCompare(b,'it'));
+    let scHtml = '<option value="'+TEAM+'">Squadra (intera rosa)</option>';
+    scHtml += '<optgroup label="Atlete">' + names.map(n=>{
+      const role = niceRole(PLAYERS[n] && PLAYERS[n].role);
+      return '<option value="'+esc(n)+'">'+esc(n)+(role?' · '+esc(role):'')+'</option>';
+    }).join('') + '</optgroup>';
+    sc.innerHTML = scHtml;
+    // periodo: stagione intera + mesi
+    let moHtml = '<option value="">Stagione '+esc(SEASON)+'</option>';
+    moHtml += TEAM_MONTHS.map(m=> '<option value="'+esc(m.key)+'">'+esc(capTitle(m.title))+'</option>').join('');
+    mo.innerHTML = moHtml;
+  }
+  function capTitle(t){ t=String(t||''); return t.charAt(0)+t.slice(1).toLowerCase(); }
+
+  // ---------- raccolta righe (allenamenti + partite) ----------
+  function srcForScope(scope){
+    if(scope===TEAM) return { months: TEAM_MONTHS };
+    const p = PLAYERS[scope];
+    return { months: (p && Array.isArray(p.months)) ? p.months : [] };
+  }
+  function collect(scope, monthKey){
+    const src = srcForScope(scope);
+    const months = src.months.filter(m=> !monthKey || m.key===monthKey);
+    const train=[], matches=[];
+    months.forEach(m=> (m.rows||[]).forEach(r=>{
+      if(r.type==='day' && Array.isArray(r.v)) train.push(r.v);
+      else if(r.type==='match' && Array.isArray(r.v)) matches.push(r.v);
+    }));
+    return { months, train, matches };
+  }
+  // media (ignora null) e somma per un indice metrica
+  function agg(rows, idx){
+    let sum=0, cnt=0;
+    for(const v of rows){ const x=v[idx]; if(x!=null && !Number.isNaN(x)){ sum+=x; cnt++; } }
+    return { sum, cnt, mean: cnt? sum/cnt : null };
+  }
+
+  // ---------- rendering report ----------
+  function scopeLabel(scope){
+    if(scope===TEAM) return { name:'Squadra', role:'', sub:'Fiorentina Primavera U19W · intera rosa' };
+    const role = niceRole(PLAYERS[scope] && PLAYERS[scope].role);
+    return { name:scope, role:role, sub:'Fiorentina Primavera U19W' };
+  }
+  function periodLabel(monthKey){
+    if(!monthKey) return 'Stagione '+SEASON;
+    const m = TEAM_MONTHS.find(x=> x.key===monthKey);
+    return m ? capTitle(m.title) : monthKey;
+  }
+
+  function keyTableHTML(train, matches){
+    const rows = KEYI.map(idx=>{
+      const u = MU[idx] || '';
+      const at = agg(train, idx).mean;
+      const ga = agg(matches, idx).mean;
+      const md = (MODEL[idx]!=null ? MODEL[idx] : null);
+      const pct = (at!=null && md) ? (at/md*100) : null;
+      const atS = fmtVal(at,u), gaS = fmtVal(ga,u), mdS = fmtVal(md,u);
+      const pctCell = (pct!=null)
+        ? '<div class="pct-chip"><span class="pct-bar"><i style="width:'+Math.max(2,Math.min(100,pct)).toFixed(0)+'%"></i></span><span class="pct-num tnum">'+NF0.format(pct)+'%</span></div>'
+        : '<span class="cell-na">-</span>';
+      return '<tr>'+
+        '<td>'+esc(MS[idx]||('m'+idx))+'</td>'+
+        '<td>'+(atS!=null?('<span class="big">'+atS+'</span><span class="mu">'+esc(u)+'</span>'):'<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(gaS!=null?(gaS+'<span class="mu">'+esc(u)+'</span>'):'<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(mdS!=null?(mdS+'<span class="mu">'+esc(u)+'</span>'):'<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+pctCell+'</td>'+
+      '</tr>';
+    }).join('');
+    return '<div class="tbl-wrap"><table class="dt">'+
+      '<thead><tr><th>Indicatore</th><th>Allenamento</th><th>Gara</th><th>Modello</th><th>Carico vs mod.</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table></div>';
+  }
+
+  function trendHTML(scope){
+    // distanza totale di allenamento per mese (barre ember) + gara (viola sottile)
+    const src = srcForScope(scope);
+    const per = src.months.map(m=>{
+      let dtr=0, dga=0;
+      (m.rows||[]).forEach(r=>{
+        if(!Array.isArray(r.v)) return;
+        const x=r.v[IDX_DIST]; if(x==null||Number.isNaN(x)) return;
+        if(r.type==='day') dtr+=x; else if(r.type==='match') dga+=x;
+      });
+      return { key:m.key, title:m.title, dtr, dga };
+    }).filter(x=> x.dtr>0 || x.dga>0);
+    if(!per.length) return '';
+    const max = Math.max.apply(null, per.map(x=> x.dtr + x.dga)) || 1;
+    const H = 118; // px area barre
+    const cols = per.map(x=>{
+      const mlab = (x.title||'').split(' ')[0].slice(0,3);
+      const trH = Math.max(4, Math.round(H * x.dtr / max));
+      const gaH = x.dga>0 ? Math.max(3, Math.round(H * x.dga / max)) : 0;
+      const gaBar = gaH ? '<div class="tbar" style="height:'+gaH+'px;background:linear-gradient(180deg,var(--violet),var(--violet2));box-shadow:inset 0 0 0 1px var(--violet-border)"></div>' : '';
+      return '<div class="tcol">'+
+        '<div class="tval tnum">'+fmtKm(x.dtr+x.dga)+' km</div>'+
+        gaBar+
+        '<div class="tbar" style="height:'+trH+'px"></div>'+
+        '<div class="tlab">'+esc(mlab)+'</div>'+
+      '</div>';
+    }).join('');
+    return '<div class="trend">'+cols+'</div>'+
+      '<div class="trend-legend">'+
+        '<span class="lg"><span class="sw a"></span>Allenamento</span>'+
+        '<span class="lg"><span class="sw" style="background:linear-gradient(180deg,var(--violet),var(--violet2))"></span>Gara</span>'+
+        '<span class="lg" style="margin-left:auto;color:var(--faint)">Distanza totale per mese</span>'+
+      '</div>';
+  }
+
+  function matchesTableHTML(scope, monthKey){
+    // squadra: usa team.matches (con sigla + data); atleta: usa le sue righe 'match'
+    const cols = [IDX_MIN, IDX_DIST, 5, 6]; // Min, Dist, >23km/h, Az.int/min
+    if(scope===TEAM){
+      const list = TEAM_MATCHES.filter(mt=> !monthKey || itMonth(mt.data)===monthKey);
+      if(!list.length) return null;
+      const body = list.map(mt=>{
+        const v = mt.v||[];
+        const tds = cols.map(i=>{ const s=fmtVal(v[i], MU[i]||''); return '<td>'+(s!=null? s+'<span class="mu">'+esc(MU[i]||'')+'</span>':'<span class="cell-na">-</span>')+'</td>'; }).join('');
+        return '<tr><td>'+esc(mt.sigla||'-')+'</td><td style="text-align:left;color:var(--muted);font-weight:400">'+esc(mt.data||'')+'</td>'+tds+'</tr>';
+      }).join('');
+      return { n:list.length, html:'<div class="tbl-wrap"><table class="dt">'+
+        '<thead><tr><th>Partita</th><th style="text-align:left">Data</th>'+cols.map(i=>'<th>'+esc(MS[i]||'')+'</th>').join('')+'</tr></thead>'+
+        '<tbody>'+body+'</tbody></table></div>' };
+    }else{
+      const c = collect(scope, monthKey);
+      if(!c.matches.length) return null;
+      const body = c.matches.map((v,i)=>{
+        const tds = cols.map(k=>{ const s=fmtVal(v[k], MU[k]||''); return '<td>'+(s!=null? s+'<span class="mu">'+esc(MU[k]||'')+'</span>':'<span class="cell-na">-</span>')+'</td>'; }).join('');
+        return '<tr><td>Gara '+(i+1)+'</td>'+tds+'</tr>';
+      }).join('');
+      return { n:c.matches.length, html:'<div class="tbl-wrap"><table class="dt">'+
+        '<thead><tr><th>Partita</th>'+cols.map(k=>'<th>'+esc(MS[k]||'')+'</th>').join('')+'</tr></thead>'+
+        '<tbody>'+body+'</tbody></table></div>' };
+    }
+  }
+  function itMonth(d){ const m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(d||'')); return m? m[3]+'-'+m[2] : ''; }
+
+  function render(){
+    const scope = document.getElementById('sel-scope').value || TEAM;
+    const monthKey = document.getElementById('sel-month').value || '';
+    const host = document.getElementById('rdoc');
+    const lab = scopeLabel(scope);
+    const per = periodLabel(monthKey);
+    const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+
+    const c = collect(scope, monthKey);
+    const nTrain = c.train.length, nMatch = c.matches.length;
+
+    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
+    const headHTML =
+      '<div class="rdoc-head">'+
+        '<img class="rh-mark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+
+          'onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'rh-mark-fb\',textContent:\'ACF\'}))">'+
+        '<div class="rh-txt">'+
+          '<h2>Report · '+esc(lab.name)+(lab.role?'<span class="rh-role">'+esc(lab.role)+'</span>':'')+'</h2>'+
+          '<div class="rh-sub"><b>'+esc(per)+'</b> · '+esc(lab.sub)+'</div>'+
+        '</div>'+
+        '<div class="rh-meta"><div>Stagione <b>'+esc(SEASON)+'</b></div><div>'+esc(genTxt)+'</div></div>'+
+      '</div>';
+
+    if(!nTrain && !nMatch){
+      host.innerHTML = headHTML +
+        '<div class="rbody"><div class="rempty">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>'+
+          '<div class="t">Nessun dato per questo periodo</div>'+
+          '<div class="d">'+esc(lab.name)+' non ha sedute o partite registrate in '+esc(per.toLowerCase())+'.</div>'+
+        '</div></div>';
+      return;
+    }
+
+    // KPI
+    const minTot  = agg(c.train, IDX_MIN).sum + agg(c.matches, IDX_MIN).sum;
+    const distTot = agg(c.train, IDX_DIST).sum + agg(c.matches, IDX_DIST).sum;
+    const kpis =
+      '<div class="rkpis">'+
+        '<div class="rkpi"><div class="k-label">Allenamenti</div><div class="k-val tnum">'+NF0.format(nTrain)+'</div><div class="k-sub">sedute di campo</div></div>'+
+        '<div class="rkpi v"><div class="k-label">Partite</div><div class="k-val tnum">'+NF0.format(nMatch)+'</div><div class="k-sub">gare disputate</div></div>'+
+        '<div class="rkpi g"><div class="k-label">Minuti totali</div><div class="k-val tnum">'+NF0.format(Math.round(minTot))+'<small>min</small></div><div class="k-sub">allenamento + gara</div></div>'+
+        '<div class="rkpi b"><div class="k-label">Distanza totale</div><div class="k-val tnum">'+fmtKm(distTot)+'<small>km</small></div><div class="k-sub">allenamento + gara</div></div>'+
+      '</div>';
+
+    // indicatori chiave
+    const keyTbl = '<div class="rsec"><div class="rsec-head"><h3>Indicatori chiave</h3>'+
+      '<span class="rsec-n">media per seduta · confronto con modello prestativo</span></div>'+
+      keyTableHTML(c.train, c.matches)+'</div>';
+
+    // trend
+    const tr = trendHTML(scope);
+    const trSec = tr ? '<div class="rsec"><div class="rsec-head"><h3>Andamento mensile</h3>'+
+      '<span class="rsec-n">distanza totale per mese</span></div>'+tr+'</div>' : '';
+
+    // partite
+    const mt = matchesTableHTML(scope, monthKey);
+    const mtSec = mt ? '<div class="rsec"><div class="rsec-head"><h3>Partite del periodo</h3>'+
+      '<span class="rsec-n">'+mt.n+(mt.n===1?' partita':' partite')+'</span></div>'+mt.html+'</div>' : '';
+
+    host.innerHTML = headHTML + '<div class="rbody">'+kpis+keyTbl+trSec+mtSec+'</div>';
+  }
+
+  // ---------- export CSV ----------
+  function csvVal(x){ return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'; }
+  function numIt(v){ return (v==null||Number.isNaN(v))?'':NF1.format(v).replace(/\./g,'').replace(',', ','); }
+  function rawIt(v){ return (v==null||Number.isNaN(v))?'':String(Math.round(v*100)/100).replace('.',','); }
+  function exportCSV(){
+    const scope = document.getElementById('sel-scope').value || TEAM;
+    const monthKey = document.getElementById('sel-month').value || '';
+    const lab = scopeLabel(scope);
+    const per = periodLabel(monthKey);
+    const c = collect(scope, monthKey);
+
+    const lines = [];
+    lines.push(['Report', lab.name].map(csvVal).join(';'));
+    if(lab.role) lines.push(['Ruolo', lab.role].map(csvVal).join(';'));
+    lines.push(['Periodo', per].map(csvVal).join(';'));
+    lines.push(['Stagione', SEASON].map(csvVal).join(';'));
+    lines.push(['Allenamenti', c.train.length].map(csvVal).join(';'));
+    lines.push(['Partite', c.matches.length].map(csvVal).join(';'));
+    lines.push('');
+    lines.push(['indicatore','unita','media_allenamento','media_gara','modello','carico_vs_modello_pct'].map(csvVal).join(';'));
+    KEYI.forEach(idx=>{
+      const u = MU[idx]||'';
+      const at = agg(c.train, idx).mean;
+      const ga = agg(c.matches, idx).mean;
+      const md = (MODEL[idx]!=null? MODEL[idx] : null);
+      const pct = (at!=null && md) ? Math.round(at/md*100) : null;
+      lines.push([MS[idx]||('m'+idx), u, rawIt(at), rawIt(ga), rawIt(md), (pct==null?'':pct)].map(csvVal).join(';'));
+    });
+
+    const csv = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const slug = (scope===TEAM?'squadra':scope).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    const per2 = monthKey || 'stagione';
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    a.href = url; a.download = 'report_'+slug+'_'+per2+'_'+stamp+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('CSV esportato');
+  }
+
+  // ---------- toast ----------
+  let toastT;
+  function toast(msg){
+    const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(()=> el.classList.remove('show'), 2600);
+  }
+
+  // ---------- crest + gen ----------
+  (function(){
+    const c = document.getElementById('crest');
+    c.src = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
+    c.addEventListener('error', function(){
+      const f = document.createElement('div'); f.className='crest-fallback'; f.textContent='ACF'; c.replaceWith(f);
+    });
+  })();
+  document.getElementById('gen-txt').textContent = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+
+  // ---------- listeners ----------
+  document.getElementById('sel-scope').addEventListener('change', render);
+  document.getElementById('sel-month').addEventListener('change', render);
+  document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('btn-print').addEventListener('click', ()=> window.print());
+
+  // ---------- init ----------
+  fillControls();
+  render();
+})();
+</script>
+</body>
+</html>
