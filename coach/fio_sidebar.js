@@ -45,10 +45,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-lbl-text">Calendario</span>
     </a>
     <div class="nav-lbl">Output</div>
-    <span class="nav-item soon" aria-disabled="true" data-page="report">
+    <a class="nav-item" aria-label="Report" href="./report.html" data-page="report">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg></span>
-      <span class="nav-lbl-text">Report</span><span class="soon-pill">presto</span>
-    </span>
+      <span class="nav-lbl-text">Report</span>
+    </a>
   </div>
   <div class="sb-foot">
     <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
