@@ -36,10 +36,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4v-.8A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2V4"/><path d="M9 10h6"/><path d="M9 14h6"/><path d="M9 18h4"/></svg></span>
       <span class="nav-lbl-text">Esercitazioni</span>
     </a>
-    <span class="nav-item soon" aria-disabled="true" data-page="forza">
+    <a class="nav-item" aria-label="Forza" href="./forza.html" data-page="forza">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6"/><path d="M6 7v10"/><path d="M18 7v10"/><path d="M21 9v6"/><path d="M6 12h12"/></svg></span>
-      <span class="nav-lbl-text">Forza</span><span class="soon-pill">presto</span>
-    </span>
+      <span class="nav-lbl-text">Forza</span>
+    </a>
     <span class="nav-item soon" aria-disabled="true" data-page="calendario">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M4 10h16"/></svg></span>
       <span class="nav-lbl-text">Calendario</span><span class="soon-pill">presto</span>
