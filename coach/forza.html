@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forza Fiorentina · RS Coaching</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='8' fill='%230E0B11'/%3E%3Crect x='6' y='16' width='3' height='4' rx='1.5' fill='%23FF8A57'/%3E%3Crect x='27' y='16' width='3' height='4' rx='1.5' fill='%23FF8A57'/%3E%3Crect x='9' y='13.5' width='3' height='9' rx='1.5' fill='%23FF7A3D'/%3E%3Crect x='24' y='13.5' width='3' height='9' rx='1.5' fill='%23FF7A3D'/%3E%3Crect x='12' y='16.6' width='12' height='2.8' rx='1.4' fill='%23FF6A2E'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RS Coaching · Forza Fiorentina
+   Stesso design system di Carico/Atlete/Esercitazioni:
+   dark + ember + viola, Bebas Neue (display) + Inter (body).
+   Sidebar condivisa (fio_sidebar.js). Solo numeri calcolati.
+   Volume-load, 1RM stimato (Epley), zona, pattern motorio, storico.
+   ============================================================ */
+:root{
+  --bg:      oklch(8.5% 0.014 38);
+  --surface: oklch(12%  0.016 38);
+  --surface2:oklch(15%  0.018 38);
+  --surface3:oklch(18%  0.020 38);
+  --orange:  oklch(68% 0.19 42);
+  --orange2: oklch(74% 0.15 50);
+  --primary: oklch(68% 0.19 42);
+  --violet:  oklch(62% 0.22 280);
+  --violet2: oklch(68% 0.18 285);
+  --violet-bg: oklch(62% 0.22 280 / 0.10);
+  --violet-border: oklch(62% 0.22 280 / 0.22);
+  --ember-bg: oklch(68% 0.19 42 / 0.10);
+  --ember-border: oklch(68% 0.19 42 / 0.24);
+  --text:    oklch(78% 0.012 38);
+  --ink:     oklch(93% 0.010 38);
+  --muted:   oklch(58% 0.014 38);
+  --faint:   oklch(46% 0.014 38);
+  --green:   oklch(70% 0.18 152);
+  --green-bg:oklch(70% 0.18 152 / 0.10);
+  --green-border:oklch(70% 0.18 152 / 0.24);
+  --red:     oklch(62% 0.22 25);
+  --red-bg:  oklch(62% 0.22 25 / 0.10);
+  --red-border:oklch(62% 0.22 25 / 0.24);
+  --red2:    oklch(72% 0.18 30);
+  --border:  oklch(22% 0.016 38 / 0.70);
+  --border2: oklch(28% 0.018 38 / 0.80);
+  --border3: oklch(36% 0.020 38 / 0.90);
+  --shadow-sm:   0 1px 4px oklch(0% 0 0 / 0.45);
+  --shadow-card: 0 4px 20px oklch(0% 0 0 / 0.45), 0 1px 3px oklch(0% 0 0 / 0.55);
+  --shadow-md:   0 12px 40px oklch(0% 0 0 / 0.60);
+  --shadow-btn:  0 4px 18px oklch(68% 0.19 42 / 0.35);
+  --r-sm: 8px; --r: 12px; --r-lg: 16px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --z-nav: 40; --z-tooltip: 80;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background: var(--bg);
+  color: var(--text);
+  font-family:'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100dvh;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(60% 45% at 82% -5%, oklch(68% 0.19 42 / 0.10), transparent 60%),
+    radial-gradient(55% 40% at -8% 8%, oklch(62% 0.22 280 / 0.08), transparent 62%);
+}
+a{ color:inherit; text-decoration:none; }
+:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; border-radius:4px; }
+.tnum{ font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
+
+/* ---------- layout shell ---------- */
+.app{ display:flex; min-height:100dvh; position:relative; z-index:1; }
+.main{ flex:1 1 auto; min-width:0; padding:0 0 64px; }
+.topbar{
+  position:sticky; top:0; z-index:var(--z-nav);
+  display:flex; align-items:center; gap:14px;
+  padding:16px 28px; background:oklch(8.5% 0.014 38 / 0.82);
+  backdrop-filter:saturate(160%) blur(12px); border-bottom:1px solid var(--border);
+}
+.crest{ width:42px; height:42px; flex:0 0 42px; object-fit:contain;
+  filter: drop-shadow(0 2px 8px oklch(62% 0.22 280 / 0.35)); }
+.crest-fallback{ width:42px; height:42px; border-radius:10px; background:var(--violet-bg);
+  border:1px solid var(--violet-border); display:grid; place-items:center; color:var(--violet2);
+  font-family:'Bebas Neue',sans-serif; font-size:16px; }
+.title-wrap{ display:flex; flex-direction:column; min-width:0; }
+.title-wrap h1{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400;
+  font-size:30px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.title-wrap .sub{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+.title-wrap .sub b{ color:var(--text); font-weight:600; }
+.top-right{ margin-left:auto; display:flex; align-items:center; gap:10px; text-align:right; }
+.gen-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--surface2); border:1px solid var(--border2); font-size:11.5px; color:var(--muted); white-space:nowrap;
+}
+.gen-pill svg{ width:13px; height:13px; color:var(--green); }
+.privacy-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); font-size:11.5px; color:var(--violet2); white-space:nowrap;
+}
+.privacy-pill svg{ width:13px; height:13px; }
+
+.wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 0; }
+
+/* ---------- KPI strip ---------- */
+.kpis{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:22px; }
+.kpi{
+  position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); padding:16px 18px; box-shadow: var(--shadow-card);
+}
+.kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:3px 0 0 3px;
+  background:linear-gradient(180deg, var(--orange), var(--orange2)); }
+.kpi.v::before{ background:linear-gradient(180deg, var(--violet), var(--violet2)); }
+.kpi.g::before{ background:linear-gradient(180deg, var(--green), oklch(74% 0.16 152)); }
+.kpi .k-label{ font-size:11.5px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+.kpi .k-val{ font-family:'Bebas Neue',sans-serif; font-size:34px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:6px; }
+.kpi .k-val small{ font-family:'Inter',sans-serif; font-size:13px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
+
+/* ---------- controls ---------- */
+.controls{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:20px; }
+.search{ position:relative; flex:1 1 240px; max-width:340px; }
+.search svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--faint); pointer-events:none; }
+.search input{
+  width:100%; appearance:none; font-family:inherit; font-size:13.5px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px;
+  padding:10px 12px 10px 36px; min-height:42px;
+}
+.search input::placeholder{ color:var(--faint); }
+.search input:hover{ border-color:var(--border3); }
+.pills{ display:flex; gap:7px; flex-wrap:wrap; }
+.pill{
+  appearance:none; border:1px solid var(--border2); background:var(--surface);
+  color:var(--muted); cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  padding:8px 14px; border-radius:999px; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:7px;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease);
+}
+.pill:hover{ color:var(--text); border-color:var(--border3); }
+.pill:active{ transform:scale(.96); }
+.pill.on{ background:var(--ember-bg); color:var(--orange2); border-color:var(--ember-border); }
+.pill .cnt{ font-size:11px; color:var(--faint); font-weight:600; }
+.pill.on .cnt{ color:var(--orange2); }
+.spacer{ flex:1 1 auto; }
+.btn{
+  appearance:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600;
+  padding:9px 15px; border-radius:9px; min-height:42px; display:inline-flex; align-items:center; gap:8px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease), color .18s var(--ease);
+}
+.btn svg{ width:15px; height:15px; }
+.btn:hover{ border-color:var(--border3); color:var(--ink); }
+.btn:active{ transform:scale(.97); }
+.btn.primary{ background:var(--orange); color:#1a0d05; border-color:transparent; box-shadow: var(--shadow-btn); }
+.btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
+
+/* ---------- add form ---------- */
+.addform{ display:none; gap:12px 14px; flex-wrap:wrap; align-items:flex-end;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  box-shadow: var(--shadow-card); padding:16px 18px; margin-bottom:22px; }
+.addform.open{ display:flex; }
+.fg{ display:flex; flex-direction:column; gap:6px; }
+.fg label{ font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+.fg input, .fg select{
+  appearance:none; font-family:inherit; font-size:13.5px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px;
+  padding:9px 12px; min-height:42px; width:100%;
+}
+.fg input:focus, .fg select:focus{ border-color:var(--border3); }
+.fg.w-date input{ width:150px; }
+.fg.w-atl select{ width:180px; }
+.fg.w-ex{ flex:1 1 240px; min-width:190px; }
+.fg.w-n input{ width:78px; }
+.fg.w-note{ flex:1 1 200px; min-width:160px; }
+.addform .fg-actions{ display:flex; gap:10px; align-items:flex-end; }
+.addform .err{ flex-basis:100%; font-size:12px; color:var(--red2); display:none; }
+.addform .err.show{ display:block; }
+.addform .hint{ flex-basis:100%; font-size:11.5px; color:var(--faint); margin-top:-2px; }
+
+/* ---------- athlete cards ---------- */
+.sessions{ display:flex; flex-direction:column; gap:16px; }
+.acard{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  box-shadow: var(--shadow-card); overflow:hidden;
+}
+.acard-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:15px 18px 13px; border-bottom:1px solid var(--border); }
+.aname-wrap{ display:flex; align-items:center; gap:10px; min-width:0; }
+.aname{ font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.role-chip{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:600;
+  background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); white-space:nowrap; }
+.role-chip.spor{ background:var(--surface2); border-color:var(--border2); color:var(--muted); }
+.astats{ display:flex; gap:20px; }
+.astat{ display:flex; flex-direction:column; align-items:flex-end; }
+.astat .asv{ font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.astat .asv small{ font-family:'Inter'; font-size:11px; font-weight:600; color:var(--muted); margin-left:3px; }
+.astat .asv.vi{ color:var(--violet2); }
+.astat .asl{ font-size:10.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; margin-top:3px; }
+.acard-body{ padding:14px 18px 18px; }
+
+/* pattern balance */
+.pbal{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+.pbal-cap{ font-size:10.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px; }
+.pbrow{ display:grid; grid-template-columns:130px 1fr auto; align-items:center; gap:10px; }
+.pbrow .pl{ font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pbrow .track{ height:8px; background:var(--surface2); border-radius:999px; overflow:hidden; border:1px solid var(--border2); }
+.pbrow .fill{ height:100%; border-radius:999px; background:linear-gradient(90deg, var(--violet), var(--violet2)); }
+.pbrow .pv{ font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.4px; color:var(--ink); white-space:nowrap; min-width:64px; text-align:right; }
+.pbrow .pv small{ font-family:'Inter'; font-size:10px; font-weight:600; color:var(--muted); margin-left:2px; }
+
+/* date subgroup */
+.dgroup{ margin-top:4px; }
+.dgroup + .dgroup{ margin-top:10px; }
+.dhead{ display:flex; align-items:center; gap:10px; padding:8px 0 4px; }
+.dhead .dh-date{ font-size:12px; font-weight:700; color:var(--text); text-transform:capitalize; }
+.dhead .dh-line{ flex:1 1 auto; height:1px; background:var(--border); }
+.dhead .dh-n{ font-size:11px; color:var(--faint); }
+
+/* entries list */
+.entries{ list-style:none; margin:0; padding:0; }
+.entry{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.entry:last-child{ border-bottom:0; }
+.pdot{ flex:0 0 30px; width:30px; height:30px; display:grid; place-items:center; border-radius:8px;
+  font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:.5px; }
+.rep-low{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.rep-up{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+.rep-core{ background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); }
+.rep-plio{ background:oklch(74% 0.15 50 / 0.12); border:1px solid oklch(74% 0.15 50 / 0.26); color:var(--orange2); }
+.rep-oly{ background:var(--red-bg); border:1px solid var(--red-border); color:var(--red2); }
+.rep-gen{ background:var(--surface2); border:1px solid var(--border2); color:var(--muted); }
+.etext{ flex:1 1 auto; min-width:0; }
+.ename{ color:var(--ink); font-weight:600; font-size:14px; }
+.emeta{ font-size:12px; color:var(--muted); margin-top:2px; }
+.emeta .dot{ color:var(--faint); margin:0 5px; }
+.badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase; margin-left:8px; vertical-align:middle; }
+.badge.pat{ background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
+.badge.man{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.ecalc{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.chip{ display:inline-flex; align-items:baseline; gap:4px; padding:5px 10px; border-radius:8px;
+  background:var(--surface2); border:1px solid var(--border2); font-size:10.5px; color:var(--muted);
+  font-weight:600; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+.chip b{ font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.4px; color:var(--ink); font-weight:400; }
+.zbadge{ display:inline-flex; align-items:center; padding:5px 10px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap; }
+.z-max{ background:var(--red-bg); border:1px solid var(--red-border); color:var(--red2); }
+.z-forza{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.z-iper{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+.z-res{ background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); }
+.z-none{ background:var(--surface2); border:1px solid var(--border2); color:var(--muted); }
+.enote{ font-size:11.5px; color:var(--faint); font-style:italic; margin-top:2px; }
+.edel{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:5px;
+  border-radius:6px; display:inline-flex; transition: color .15s var(--ease), background .15s var(--ease); flex:0 0 auto; }
+.edel:hover{ color:var(--red); background:var(--red-bg); }
+.edel svg{ width:15px; height:15px; }
+
+/* empty */
+.empty{ padding:54px 20px; text-align:center; color:var(--muted);
+  background:var(--surface); border:1px dashed var(--border2); border-radius:var(--r-lg); }
+.empty svg{ width:34px; height:34px; color:var(--faint); margin-bottom:10px; }
+.empty .t{ font-size:15px; color:var(--text); font-weight:600; margin-bottom:4px; }
+
+/* footnote */
+.foot-note{ max-width:1180px; margin:20px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
+
+/* toast */
+.toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px);
+  background:var(--surface3); border:1px solid var(--border3); border-radius:10px; box-shadow: var(--shadow-md);
+  padding:11px 16px; font-size:13px; color:var(--ink); opacity:0; pointer-events:none;
+  transition: opacity .2s var(--ease), transform .2s var(--ease); z-index:var(--z-tooltip); }
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* reveal */
+.reveal{ opacity:0; transform:translateY(10px); animation:rv .5s var(--ease) forwards; animation-delay:calc(var(--i,0) * 55ms); }
+@keyframes rv{ to{ opacity:1; transform:none; } }
+
+/* responsive */
+@media (max-width: 900px){
+  .main{ padding-top:52px; }
+  .topbar{ position:static; padding:12px 16px; }
+  .kpis{ grid-template-columns:repeat(2, 1fr); }
+  .title-wrap h1{ font-size:25px; }
+  .wrap{ padding:20px 16px 0; }
+  .privacy-pill{ display:none; }
+  .entry{ flex-wrap:wrap; }
+  .ecalc{ justify-content:flex-start; padding-left:42px; width:100%; }
+  .pbrow{ grid-template-columns:110px 1fr auto; }
+}
+@media (max-width: 560px){
+  .kpis{ grid-template-columns:1fr 1fr; gap:10px; }
+  .kpi .k-val{ font-size:28px; }
+  .top-right .gen-pill{ display:none; }
+  .search{ max-width:none; }
+  .astats{ gap:14px; }
+  .pbrow{ grid-template-columns:92px 1fr auto; }
+  .pbrow .pl{ font-size:11px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .reveal{ animation:none; opacity:1; transform:none; }
+  *{ transition:none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR condivisa area Fiorentina (fio_sidebar.js) ============ -->
+  <div id="sidebar-mount"></div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <img class="crest" id="crest" alt="Stemma Fiorentina">
+      <div class="title-wrap">
+        <h1>Forza</h1>
+        <div class="sub"><b>Fiorentina Primavera U19W</b> · lavoro in palestra per atleta</div>
+      </div>
+      <div class="top-right">
+        <span class="privacy-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6z"/></svg>Solo numeri calcolati</span>
+        <span class="gen-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="gen-txt">·</span></span>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- KPIs -->
+      <div class="kpis reveal" id="kpis" style="--i:0"></div>
+
+      <!-- controls -->
+      <div class="controls reveal" style="--i:1">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="search" placeholder="Cerca esercizio o atleta..." aria-label="Cerca esercizio o atleta">
+        </div>
+        <div class="pills" id="pills" role="tablist" aria-label="Filtro pattern"></div>
+        <span class="spacer"></span>
+        <button class="btn" id="btn-add" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Aggiungi
+        </button>
+        <button class="btn primary" id="btn-export">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
+          Esporta CSV
+        </button>
+      </div>
+
+      <!-- add form -->
+      <form class="addform reveal" id="addform" style="--i:2" autocomplete="off">
+        <div class="fg w-date">
+          <label for="af-date">Data</label>
+          <input id="af-date" type="date" required>
+        </div>
+        <div class="fg w-atl">
+          <label for="af-atl">Atleta</label>
+          <select id="af-atl" required></select>
+        </div>
+        <div class="fg w-ex">
+          <label for="af-ex">Esercizio</label>
+          <input id="af-ex" type="text" list="ex-list" placeholder="es. Back squat" required>
+          <datalist id="ex-list">
+            <option value="Back squat"></option>
+            <option value="Front squat"></option>
+            <option value="Stacco rumeno"></option>
+            <option value="Hip thrust"></option>
+            <option value="Bulgarian split squat"></option>
+            <option value="Affondi camminati"></option>
+            <option value="Nordic hamstring"></option>
+            <option value="Panca piana"></option>
+            <option value="Military press"></option>
+            <option value="Trazioni"></option>
+            <option value="Rematore"></option>
+            <option value="Core plank"></option>
+            <option value="Box jump"></option>
+            <option value="CMJ"></option>
+            <option value="Power clean"></option>
+          </datalist>
+        </div>
+        <div class="fg w-n">
+          <label for="af-serie">Serie</label>
+          <input id="af-serie" type="number" min="1" step="1" inputmode="numeric" placeholder="4" required>
+        </div>
+        <div class="fg w-n">
+          <label for="af-rip">Ripetizioni</label>
+          <input id="af-rip" type="number" min="1" step="1" inputmode="numeric" placeholder="5" required>
+        </div>
+        <div class="fg w-n">
+          <label for="af-kg">Carico kg</label>
+          <input id="af-kg" type="number" min="0" step="0.5" inputmode="decimal" placeholder="60">
+        </div>
+        <div class="fg w-n">
+          <label for="af-pct">%1RM</label>
+          <input id="af-pct" type="number" min="0" max="100" step="1" inputmode="numeric" placeholder="opz.">
+        </div>
+        <div class="fg w-n">
+          <label for="af-rpe">RPE</label>
+          <input id="af-rpe" type="number" min="1" max="10" step="0.5" inputmode="decimal" placeholder="opz.">
+        </div>
+        <div class="fg w-n">
+          <label for="af-rec">Rec s</label>
+          <input id="af-rec" type="number" min="0" step="5" inputmode="numeric" placeholder="opz.">
+        </div>
+        <div class="fg w-note">
+          <label for="af-note">Note</label>
+          <input id="af-note" type="text" placeholder="opzionale">
+        </div>
+        <div class="fg-actions">
+          <button class="btn primary" type="submit">Salva</button>
+          <button class="btn" type="button" id="af-cancel">Annulla</button>
+        </div>
+        <div class="hint">Carico-volume, 1RM stimato (Epley), zona e pattern motorio vengono calcolati in automatico.</div>
+        <div class="err" id="af-err"></div>
+      </form>
+
+      <!-- athletes -->
+      <div class="sessions reveal" id="sessions" style="--i:3"></div>
+    </div>
+
+    <p class="foot-note">
+      Sezione coach · lavoro di forza in palestra per atleta. Il carico-volume (serie x ripetizioni x kg),
+      il massimale stimato con la formula di Epley, la zona di intensita' e il pattern motorio sono calcolati
+      dai dati inseriti. Le voci aggiunte a mano sono salvate su questo dispositivo.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- snapshot forza (window.FORZA) -->
+<script src="./forza_data.js"></script>
+<script>
+window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
+  patterns:[],pattern_keys:[],zone:[],roster:[],entries:[]};
+</script>
+
+<!-- sidebar area Fiorentina -->
+<script src="./fio_sidebar.js"></script>
+<script>
+(function(){
+  if(window.SIDEBAR_CSS){ const s=document.createElement('style'); s.textContent=window.SIDEBAR_CSS; document.head.appendChild(s); }
+  const mount=document.getElementById('sidebar-mount');
+  if(window.SIDEBAR_HTML && mount){ mount.outerHTML=window.SIDEBAR_HTML; }
+  if(window.markActiveNav) window.markActiveNav('forza');
+  if(window.initSidebarToggle) window.initSidebarToggle();
+})();
+</script>
+
+<!-- logica pagina -->
+<script>
+(function(){
+  "use strict";
+  const F = window.FORZA;
+  const LS_KEY = 'rs_fio_forza';
+  const PATTERNS = F.patterns || [];
+  const PKEYS = F.pattern_keys || [];
+  const ROSTER = F.roster || [];
+  const NF = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
+  const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  const DTF = new Intl.DateTimeFormat('it-IT', { weekday:'short', day:'numeric', month:'short' });
+  const DTFY = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'short' });
+
+  const state = { pat:'all', q:'' };
+
+  // roster lookup
+  const ROLE = {};
+  ROSTER.forEach(r=>{ ROLE[r.name] = { role:r.role||'', tipo:r.tipo||'' }; });
+
+  // pattern label + reparto lookup
+  const PLABEL = {}, PREP = {};
+  PATTERNS.forEach(p=>{ PLABEL[p.key]=p.label; PREP[p.key]=p.reparto; });
+  const PSHORT = { squat:'SQ', hinge:'HI', affondo:'AF', spinta:'SP', tirata:'TI', core:'CO', pliometria:'PL', olimpici:'OL', altro:'AL' };
+  const REPCLASS = { 'arti inferiori':'rep-low', 'parte superiore':'rep-up', 'core':'rep-core',
+                     'pliometria':'rep-plio', 'olimpici':'rep-oly', 'generico':'rep-gen' };
+  const ZCLASS = { 'Forza max (neurale)':'z-max', 'Forza':'z-forza', 'Ipertrofia':'z-iper', 'Resistenza / metabolico':'z-res' };
+  const ZSHORT = { 'Forza max (neurale)':'Forza max', 'Forza':'Forza', 'Ipertrofia':'Ipertrofia', 'Resistenza / metabolico':'Resistenza' };
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+
+  // ---------- calcoli (allineati a tl_forza.py) ----------
+  function est1rm(w, r){
+    w = Number(w); r = Number(r);
+    if(!(w>0) || !(r>0)) return null;
+    if(r===1) return w;
+    return w * (1 + r/30);            // Epley
+  }
+  function zona(pct, reps){
+    const p = (pct===''||pct==null) ? NaN : Number(pct);
+    if(Number.isFinite(p) && p>0){
+      if(p>=90) return 'Forza max (neurale)';
+      if(p>=80) return 'Forza';
+      if(p>=65) return 'Ipertrofia';
+      return 'Resistenza / metabolico';
+    }
+    const r = Number(reps);
+    if(!Number.isFinite(r)) return '-';
+    if(r<=3) return 'Forza max (neurale)';
+    if(r<=6) return 'Forza';
+    if(r<=12) return 'Ipertrofia';
+    return 'Resistenza / metabolico';
+  }
+  function classify(nome){
+    const t = String(nome||'').toLowerCase();
+    for(const row of PKEYS){ const pat=row[0], rep=row[1], keys=row[2]||[];
+      if(keys.some(k=> t.includes(k))) return [pat, rep];
+    }
+    return ['altro','generico'];
+  }
+
+  // ---------- localStorage manual entries ----------
+  function loadManual(){
+    try{ const a=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+    catch(e){ return []; }
+  }
+  function saveManual(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch(e){} }
+
+  // ---------- normalizza entry ----------
+  function normalize(e, manual, id){
+    const serie = Number(e.serie)||0;
+    const rip   = Number(e.ripetizioni)||0;
+    const kgRaw = e.carico_kg;
+    const kg    = (kgRaw===''||kgRaw==null) ? null : Number(kgRaw);
+    let vl = (e.volume_load!=null) ? Number(e.volume_load) : null;
+    if(vl==null && serie>0 && rip>0 && Number.isFinite(kg)) vl = Math.round(serie*rip*kg);
+    let rm = (e.rm_stim!=null) ? Number(e.rm_stim) : null;
+    if(rm==null){ const v=est1rm(kg, rip); rm = (v==null)?null:Math.round(v*10)/10; }
+    let z = e.zona || zona(e.pct1rm, rip);
+    let pat = e.pattern, rep = e.reparto;
+    if(!pat){ const c=classify(e.esercizio); pat=c[0]; rep=c[1]; }
+    if(!rep){ rep = PREP[pat] || 'generico'; }
+    return {
+      data: e.data||'', atleta: e.atleta||'', esercizio: e.esercizio||'',
+      serie, ripetizioni:rip, carico_kg:(Number.isFinite(kg)?kg:null),
+      pct1rm:(e.pct1rm===''||e.pct1rm==null)?null:Number(e.pct1rm),
+      rpe:(e.rpe===''||e.rpe==null)?null:Number(e.rpe),
+      recupero_s:(e.recupero_s===''||e.recupero_s==null)?null:Number(e.recupero_s),
+      note:e.note||'', volume_load:vl, rm_stim:rm, zona:z, pattern:pat, reparto:rep,
+      manual:!!manual, id
+    };
+  }
+
+  function buildEntries(){
+    const out = [];
+    (F.entries||[]).forEach((e,i)=> out.push(normalize(e, false, 's'+i)));
+    loadManual().forEach(m=> out.push(normalize(m, true, m.id)));
+    return out;
+  }
+
+  function matches(e){
+    if(state.pat!=='all' && e.pattern!==state.pat) return false;
+    const q = state.q.trim().toLowerCase();
+    if(q){ const hay=(e.esercizio+' '+e.atleta).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  }
+
+  // group filtered entries by atleta
+  function groupByAthlete(entries){
+    const map = new Map();
+    entries.filter(matches).forEach(e=>{
+      if(!map.has(e.atleta)) map.set(e.atleta, []);
+      map.get(e.atleta).push(e);
+    });
+    const arr = [];
+    map.forEach((list, name)=>{
+      const ton = list.reduce((a,e)=> a + (e.volume_load||0), 0);
+      const sedute = new Set(list.map(e=> e.data)).size;
+      arr.push({ name, list, ton, sedute });
+    });
+    arr.sort((a,b)=> b.ton - a.ton || a.name.localeCompare(b.name,'it'));
+    return arr;
+  }
+
+  // ---------- KPIs ----------
+  function renderKPIs(all){
+    const host = document.getElementById('kpis');
+    const nAtl = new Set(all.map(e=> e.atleta)).size;
+    const nSed = new Set(all.map(e=> e.atleta+'|'+e.data)).size;
+    const ton  = all.reduce((a,e)=> a + (e.volume_load||0), 0);
+    const dates = all.map(e=> parseDate(e.data)).filter(Boolean);
+    const last = dates.length ? new Date(Math.max.apply(null, dates.map(d=> d.getTime()))) : null;
+    const cards = [
+      { c:'',  label:'Atlete allenate', val: NF0.format(nAtl), unit:'' },
+      { c:'',  label:'Sedute forza',    val: NF0.format(nSed), unit:'' },
+      { c:'v', label:'Tonnellaggio',    val: ton? NF.format(ton/1000):'0', unit:'t' },
+      { c:'g', label:'Ultima',          val: last? DTF.format(last).replace('.',''):'–', unit:'' },
+    ];
+    host.innerHTML = cards.map(k=>
+      '<div class="kpi '+k.c+'"><div class="k-label">'+esc(k.label)+'</div>'+
+      '<div class="k-val tnum" style="text-transform:capitalize">'+k.val+(k.unit?'<small>'+k.unit+'</small>':'')+'</div></div>'
+    ).join('');
+  }
+
+  // ---------- pattern pills ----------
+  function renderPills(all){
+    const host = document.getElementById('pills');
+    const counts = {};
+    all.forEach(e=>{ counts[e.pattern]=(counts[e.pattern]||0)+1; });
+    const present = PATTERNS.filter(p=> counts[p.key]>0);
+    const defs = [{ k:'all', lbl:'Tutti', cnt: all.length }]
+      .concat(present.map(p=> ({ k:p.key, lbl:p.label, cnt:counts[p.key] })));
+    host.innerHTML = defs.map(d=>
+      '<button class="pill'+(state.pat===d.k?' on':'')+'" data-k="'+esc(d.k)+'" role="tab" aria-selected="'+(state.pat===d.k)+'">'+
+      esc(d.lbl)+' <span class="cnt">'+d.cnt+'</span></button>'
+    ).join('');
+    host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
+      state.pat = b.getAttribute('data-k'); render();
+    }));
+  }
+
+  // ---------- pattern balance ----------
+  function patternBalance(list){
+    const sum = {};
+    list.forEach(e=>{ sum[e.pattern]=(sum[e.pattern]||0)+(e.volume_load||0); });
+    const rows = Object.keys(sum).map(k=> ({ key:k, v:sum[k] })).filter(r=> r.v>0)
+      .sort((a,b)=> b.v-a.v);
+    if(!rows.length) return '';
+    const tot = rows.reduce((a,r)=> a+r.v, 0);
+    const max = rows[0].v || 1;
+    const body = rows.map(r=>{
+      const w = Math.max(4, Math.round(r.v/max*100));
+      const pct = tot? Math.round(r.v/tot*100):0;
+      return '<div class="pbrow"><span class="pl">'+esc(PLABEL[r.key]||r.key)+'</span>'+
+        '<span class="track"><span class="fill" style="width:'+w+'%"></span></span>'+
+        '<span class="pv tnum">'+NF0.format(Math.round(r.v))+'<small>kg · '+pct+'%</small></span></div>';
+    }).join('');
+    return '<div class="pbal"><div class="pbal-cap">Distribuzione carico-volume per pattern</div>'+body+'</div>';
+  }
+
+  // ---------- one athlete card ----------
+  function athleteCard(a, idx){
+    const meta = ROLE[a.name] || { role:'', tipo:'' };
+    const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
+    const roleCls = (meta.role ? 'role-chip' : 'role-chip spor');
+    const roleHtml = roleTxt ? '<span class="'+roleCls+'">'+esc(roleTxt)+'</span>' : '';
+
+    // group entries by date desc
+    const byDate = new Map();
+    a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0))
+      .forEach(e=>{ if(!byDate.has(e.data)) byDate.set(e.data, []); byDate.get(e.data).push(e); });
+
+    let groups = '';
+    byDate.forEach((items, d)=>{
+      const dt = parseDate(d);
+      const dLabel = dt ? DTF.format(dt).replace('.','') : (d||'senza data');
+      const rows = items.map(e=>{
+        const repCls = REPCLASS[e.reparto] || 'rep-gen';
+        const short = PSHORT[e.pattern] || 'AL';
+        const patBadge = '<span class="badge pat">'+esc(PLABEL[e.pattern]||e.pattern)+'</span>';
+        const manBadge = e.manual ? '<span class="badge man">manuale</span>' : '';
+        const parts = [];
+        parts.push(e.serie+'×'+e.ripetizioni);
+        if(e.carico_kg!=null) parts.push(NF.format(e.carico_kg)+' kg');
+        if(e.pct1rm!=null) parts.push(NF0.format(e.pct1rm)+'% 1RM');
+        if(e.rpe!=null) parts.push('RPE '+NF.format(e.rpe));
+        if(e.recupero_s!=null) parts.push('rec '+NF0.format(e.recupero_s)+'s');
+        const metaLine = parts.join('<span class="dot">·</span>');
+        const chips = [];
+        if(e.volume_load!=null) chips.push('<span class="chip">VL <b class="tnum">'+NF0.format(e.volume_load)+'</b> kg</span>');
+        if(e.rm_stim!=null && e.carico_kg!=null) chips.push('<span class="chip">1RM <b class="tnum">'+NF.format(e.rm_stim)+'</b> kg</span>');
+        const zc = ZCLASS[e.zona] || 'z-none';
+        const zt = ZSHORT[e.zona] || (e.zona==='-'?'':e.zona);
+        if(zt) chips.push('<span class="zbadge '+zc+'">'+esc(zt)+'</span>');
+        const del = e.manual ? '<button class="edel" data-id="'+esc(e.id)+'" aria-label="Rimuovi voce"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>' : '';
+        const note = e.note ? '<div class="enote">'+esc(e.note)+'</div>' : '';
+        return '<li class="entry">'+
+          '<span class="pdot '+repCls+'" title="'+esc(PLABEL[e.pattern]||e.pattern)+'">'+short+'</span>'+
+          '<div class="etext"><span class="ename">'+esc(e.esercizio)+'</span>'+patBadge+manBadge+
+            '<div class="emeta tnum">'+metaLine+'</div>'+note+'</div>'+
+          '<div class="ecalc">'+chips.join('')+del+'</div>'+
+        '</li>';
+      }).join('');
+      groups += '<div class="dgroup"><div class="dhead"><span class="dh-date">'+esc(dLabel)+
+        '</span><span class="dh-line"></span><span class="dh-n">'+items.length+(items.length===1?' esercizio':' esercizi')+
+        '</span></div><ul class="entries">'+rows+'</ul></div>';
+    });
+
+    return '<section class="acard reveal" style="--i:'+Math.min(idx+4,16)+'">'+
+      '<div class="acard-head">'+
+        '<div class="aname-wrap"><span class="aname">'+esc(a.name)+'</span>'+roleHtml+'</div>'+
+        '<span class="spacer"></span>'+
+        '<div class="astats">'+
+          '<div class="astat"><span class="asv vi tnum">'+NF.format(a.ton/1000)+'<small>t</small></span><span class="asl">tonnellaggio</span></div>'+
+          '<div class="astat"><span class="asv tnum">'+a.sedute+'</span><span class="asl">'+(a.sedute===1?'seduta':'sedute')+'</span></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="acard-body">'+ patternBalance(a.list) + groups +'</div>'+
+    '</section>';
+  }
+
+  function renderAthletes(all){
+    const host = document.getElementById('sessions');
+    const groups = groupByAthlete(all);
+    if(!groups.length){
+      const anyData = all.length>0;
+      const msg = anyData
+        ? 'Nessun risultato per il filtro attivo. Cambia pattern o ricerca.'
+        : 'Registra il lavoro in palestra con "Aggiungi", oppure importa i dati forza dal foglio compilato: qui vedrai carico-volume, massimale stimato e bilanciamento per pattern.';
+      host.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'+
+        '<path d="M3 9v6"/><path d="M6 7v10"/><path d="M18 7v10"/><path d="M21 9v6"/><path d="M6 12h12"/></svg>'+
+        '<div class="t">'+(anyData?'Nessun risultato':'Ancora nessun dato di forza')+'</div><div>'+msg+'</div></div>';
+      return;
+    }
+    host.innerHTML = groups.map((a,i)=> athleteCard(a,i)).join('');
+    host.querySelectorAll('.edel').forEach(b=> b.addEventListener('click', ()=>{
+      const id = b.getAttribute('data-id');
+      const a = loadManual().filter(m=> String(m.id)!==String(id));
+      saveManual(a); toast('Voce rimossa'); render();
+    }));
+  }
+
+  // ---------- toast ----------
+  let toastT;
+  function toast(msg){
+    const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(()=> el.classList.remove('show'), 3000);
+  }
+
+  // ---------- export CSV ----------
+  function csvVal(x){ return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'; }
+  function numIt(v){ return (v==null||Number.isNaN(v))?'':String(v).replace('.',','); }
+  function exportCSV(){
+    const all = buildEntries();
+    const head = ['data','atleta','esercizio','serie','ripetizioni','carico_kg','%1RM','RPE','recupero_s',
+                  'volume_load','1RM_stim','zona','pattern','reparto','manuale','note'];
+    const lines = [head.join(';')];
+    all.slice().sort((a,b)=> (a.data===b.data ? a.atleta.localeCompare(b.atleta,'it') : (a.data<b.data?1:-1)))
+      .forEach(e=>{
+        lines.push([
+          e.data, e.atleta, e.esercizio, numIt(e.serie), numIt(e.ripetizioni), numIt(e.carico_kg),
+          numIt(e.pct1rm), numIt(e.rpe), numIt(e.recupero_s), numIt(e.volume_load), numIt(e.rm_stim),
+          e.zona||'', e.pattern||'', e.reparto||'', e.manual?'si':'no', e.note||''
+        ].map(csvVal).join(';'));
+      });
+    const csv = '﻿'+lines.join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    a.href = url; a.download = 'forza_'+stamp+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('CSV esportato');
+  }
+
+  // ---------- populate atleta select ----------
+  (function(){
+    const sel = document.getElementById('af-atl');
+    if(!sel) return;
+    const opts = ROSTER.length
+      ? ROSTER.map(r=> '<option value="'+esc(r.name)+'">'+esc(r.name)+'</option>').join('')
+      : '<option value="">(nessun roster)</option>';
+    sel.innerHTML = opts;
+  })();
+
+  // ---------- add form ----------
+  (function(){
+    const btn = document.getElementById('btn-add');
+    const form = document.getElementById('addform');
+    const cancel = document.getElementById('af-cancel');
+    const err = document.getElementById('af-err');
+    const $ = id=> document.getElementById(id);
+    function open(){ form.classList.add('open'); btn.setAttribute('aria-expanded','true');
+      const dt=$('af-date'); if(!dt.value) dt.value=new Date().toISOString().slice(0,10);
+      $('af-ex').focus(); }
+    function close(){ form.classList.remove('open'); btn.setAttribute('aria-expanded','false'); err.classList.remove('show'); form.reset(); }
+    btn.addEventListener('click', ()=> form.classList.contains('open')?close():open());
+    cancel.addEventListener('click', close);
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const date=$('af-date').value, atl=$('af-atl').value, ex=$('af-ex').value.trim();
+      const serie=$('af-serie').value, rip=$('af-rip').value;
+      if(!date || !atl || !ex || !serie || !rip){
+        err.textContent='Compila data, atleta, esercizio, serie e ripetizioni.'; err.classList.add('show'); return;
+      }
+      const rec = { id:'m'+Date.now()+Math.random().toString(36).slice(2,6),
+        data:date, atleta:atl, esercizio:ex,
+        serie:serie, ripetizioni:rip, carico_kg:$('af-kg').value,
+        pct1rm:$('af-pct').value, rpe:$('af-rpe').value, recupero_s:$('af-rec').value,
+        note:$('af-note').value.trim() };
+      const a = loadManual(); a.push(rec); saveManual(a);
+      close(); toast('Voce di forza aggiunta'); render();
+    });
+  })();
+
+  document.getElementById('btn-export').addEventListener('click', exportCSV);
+
+  // ---------- search (debounced) ----------
+  (function(){
+    let t; const inp=document.getElementById('search');
+    inp.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>{ state.q=inp.value; renderAthletes(buildEntries()); }, 120); });
+  })();
+
+  // ---------- crest + gen ----------
+  (function(){
+    const c=document.getElementById('crest');
+    c.src = (window.SNAP&&window.SNAP.logo) || './fiorentina.png';
+    c.addEventListener('error', function(){
+      const f=document.createElement('div'); f.className='crest-fallback'; f.textContent='ACF'; c.replaceWith(f);
+    });
+  })();
+  document.getElementById('gen-txt').textContent = F.generato ? ('agg. '+F.generato.slice(0,10)) : 'anteprima';
+
+  // ---------- render ----------
+  function render(){
+    const all = buildEntries();
+    renderKPIs(all);
+    renderPills(all);
+    renderAthletes(all);
+  }
+  render();
+})();
+</script>
+</body>
+</html>
