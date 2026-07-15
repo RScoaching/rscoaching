@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendario Fiorentina · RS Coaching</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='8' fill='%230E0B11'/%3E%3Crect x='7' y='9' width='22' height='20' rx='3' fill='none' stroke='%23FF7A3D' stroke-width='2'/%3E%3Cpath d='M7 15h22' stroke='%23FF7A3D' stroke-width='2'/%3E%3Cpath d='M12 6v5M24 6v5' stroke='%23FF8A57' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RS Coaching · Calendario Fiorentina
+   Stesso design system di Carico/Atlete/Esercitazioni/Forza:
+   dark + ember + viola, Bebas Neue (display) + Inter (body).
+   Sidebar condivisa (fio_sidebar.js). Solo numeri calcolati.
+   Partite, sedute di campo, carico per giornata. La seduta di
+   campo e' inserita in automatico dai dati; il coach segna
+   "svolto" e cosa si e' fatto. Voci extra salvate su questo
+   dispositivo. Nessun file grezzo pubblicato.
+   ============================================================ */
+:root{
+  --bg:      oklch(8.5% 0.014 38);
+  --surface: oklch(12%  0.016 38);
+  --surface2:oklch(15%  0.018 38);
+  --surface3:oklch(18%  0.020 38);
+  --orange:  oklch(68% 0.19 42);
+  --orange2: oklch(74% 0.15 50);
+  --primary: oklch(68% 0.19 42);
+  --violet:  oklch(62% 0.22 280);
+  --violet2: oklch(68% 0.18 285);
+  --violet-bg: oklch(62% 0.22 280 / 0.10);
+  --violet-border: oklch(62% 0.22 280 / 0.22);
+  --ember-bg: oklch(68% 0.19 42 / 0.10);
+  --ember-border: oklch(68% 0.19 42 / 0.24);
+  --text:    oklch(78% 0.012 38);
+  --ink:     oklch(93% 0.010 38);
+  --muted:   oklch(58% 0.014 38);
+  --faint:   oklch(46% 0.014 38);
+  --green:   oklch(70% 0.18 152);
+  --green-bg:oklch(70% 0.18 152 / 0.10);
+  --green-border:oklch(70% 0.18 152 / 0.24);
+  --red:     oklch(62% 0.22 25);
+  --red-bg:  oklch(62% 0.22 25 / 0.10);
+  --red-border:oklch(62% 0.22 25 / 0.24);
+  --red2:    oklch(72% 0.18 30);
+  --border:  oklch(22% 0.016 38 / 0.70);
+  --border2: oklch(28% 0.018 38 / 0.80);
+  --border3: oklch(36% 0.020 38 / 0.90);
+  --shadow-sm:   0 1px 4px oklch(0% 0 0 / 0.45);
+  --shadow-card: 0 4px 20px oklch(0% 0 0 / 0.45), 0 1px 3px oklch(0% 0 0 / 0.55);
+  --shadow-md:   0 12px 40px oklch(0% 0 0 / 0.60);
+  --shadow-btn:  0 4px 18px oklch(68% 0.19 42 / 0.35);
+  --r-sm: 8px; --r: 12px; --r-lg: 16px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --z-nav: 40; --z-tooltip: 80;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background: var(--bg);
+  color: var(--text);
+  font-family:'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100dvh;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(60% 45% at 82% -5%, oklch(68% 0.19 42 / 0.10), transparent 60%),
+    radial-gradient(55% 40% at -8% 8%, oklch(62% 0.22 280 / 0.08), transparent 62%);
+}
+a{ color:inherit; text-decoration:none; }
+:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; border-radius:4px; }
+.tnum{ font-variant-numeric: tabular-nums; font-feature-settings:"tnum" 1; }
+
+/* ---------- layout shell ---------- */
+.app{ display:flex; min-height:100dvh; position:relative; z-index:1; }
+.main{ flex:1 1 auto; min-width:0; padding:0 0 64px; }
+.topbar{
+  position:sticky; top:0; z-index:var(--z-nav);
+  display:flex; align-items:center; gap:14px;
+  padding:16px 28px; background:oklch(8.5% 0.014 38 / 0.82);
+  backdrop-filter:saturate(160%) blur(12px); border-bottom:1px solid var(--border);
+}
+.crest{ width:42px; height:42px; flex:0 0 42px; object-fit:contain;
+  filter: drop-shadow(0 2px 8px oklch(62% 0.22 280 / 0.35)); }
+.crest-fallback{ width:42px; height:42px; border-radius:10px; background:var(--violet-bg);
+  border:1px solid var(--violet-border); display:grid; place-items:center; color:var(--violet2);
+  font-family:'Bebas Neue',sans-serif; font-size:16px; }
+.title-wrap{ display:flex; flex-direction:column; min-width:0; }
+.title-wrap h1{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400;
+  font-size:30px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.title-wrap .sub{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+.title-wrap .sub b{ color:var(--text); font-weight:600; }
+.top-right{ margin-left:auto; display:flex; align-items:center; gap:10px; text-align:right; }
+.gen-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--surface2); border:1px solid var(--border2); font-size:11.5px; color:var(--muted); white-space:nowrap;
+}
+.gen-pill svg{ width:13px; height:13px; color:var(--green); }
+.privacy-pill{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); font-size:11.5px; color:var(--violet2); white-space:nowrap;
+}
+.privacy-pill svg{ width:13px; height:13px; }
+
+.wrap{ max-width:1180px; margin:0 auto; padding:26px 28px 0; }
+
+/* ---------- KPI strip ---------- */
+.kpis{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:22px; }
+.kpi{
+  position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); padding:16px 18px; box-shadow: var(--shadow-card);
+}
+.kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:3px 0 0 3px;
+  background:linear-gradient(180deg, var(--orange), var(--orange2)); }
+.kpi.v::before{ background:linear-gradient(180deg, var(--violet), var(--violet2)); }
+.kpi.g::before{ background:linear-gradient(180deg, var(--green), oklch(74% 0.16 152)); }
+.kpi .k-label{ font-size:11.5px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+.kpi .k-val{ font-family:'Bebas Neue',sans-serif; font-size:34px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:6px; }
+.kpi .k-val small{ font-family:'Inter',sans-serif; font-size:13px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
+.kpi .k-sub{ font-size:11.5px; color:var(--faint); margin-top:3px; }
+
+/* ---------- controls ---------- */
+.controls{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:18px; }
+.monthnav{ display:inline-flex; align-items:center; gap:8px; }
+.mn-btn{
+  appearance:none; cursor:pointer; width:42px; height:42px; border-radius:9px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+  display:inline-flex; align-items:center; justify-content:center;
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease), color .18s var(--ease);
+}
+.mn-btn svg{ width:17px; height:17px; }
+.mn-btn:hover{ border-color:var(--border3); color:var(--ink); }
+.mn-btn:active{ transform:scale(.95); }
+.mn-lbl{ font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.6px; color:var(--ink);
+  min-width:184px; text-align:center; text-transform:capitalize; line-height:1; }
+.spacer{ flex:1 1 auto; }
+.btn{
+  appearance:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600;
+  padding:9px 15px; border-radius:9px; min-height:42px; display:inline-flex; align-items:center; gap:8px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease), color .18s var(--ease);
+}
+.btn svg{ width:15px; height:15px; }
+.btn:hover{ border-color:var(--border3); color:var(--ink); }
+.btn:active{ transform:scale(.97); }
+.btn.primary{ background:var(--orange); color:#1a0d05; border-color:transparent; box-shadow: var(--shadow-btn); }
+.btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
+
+/* ---------- add form ---------- */
+.addform{ display:none; gap:12px 14px; flex-wrap:wrap; align-items:flex-end;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  box-shadow: var(--shadow-card); padding:16px 18px; margin-bottom:22px; }
+.addform.open{ display:flex; }
+.fg{ display:flex; flex-direction:column; gap:6px; }
+.fg label{ font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+.fg input, .fg select{
+  appearance:none; font-family:inherit; font-size:13.5px; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px;
+  padding:9px 12px; min-height:42px; width:100%;
+}
+.fg input:focus, .fg select:focus{ border-color:var(--border3); }
+.fg.w-date input{ width:150px; }
+.fg.w-slot select{ width:110px; }
+.fg.w-kind select{ width:150px; }
+.fg.w-note{ flex:1 1 220px; min-width:180px; }
+.addform .fg-actions{ display:flex; gap:10px; align-items:flex-end; }
+.addform .err{ flex-basis:100%; font-size:12px; color:var(--red2); display:none; }
+.addform .err.show{ display:block; }
+.addform .hint{ flex-basis:100%; font-size:11.5px; color:var(--faint); margin-top:-2px; }
+
+/* ---------- legend ---------- */
+.legend{ display:flex; flex-wrap:wrap; gap:16px; margin-bottom:16px; font-size:12px; color:var(--muted); }
+.lg{ display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
+.lg .sw{ width:16px; height:16px; border-radius:5px; flex:0 0 auto; }
+.sw.train{ background:oklch(62% 0.22 280 / 0.30); border:1px solid var(--violet-border); }
+.sw.match{ background:var(--ember-bg); border:1px solid var(--ember-border); }
+.sw.dashed{ background:transparent; border:1px dashed var(--border3); }
+.lg .dotx{ width:8px; height:8px; border-radius:50%; background:var(--green); flex:0 0 auto; }
+.lg .chk{ width:14px; height:14px; color:var(--green); flex:0 0 auto; }
+
+/* ---------- calendar grid ---------- */
+.calgrid-wrap{ display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:18px; align-items:start; }
+.calcard{ background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  box-shadow: var(--shadow-card); overflow:hidden; }
+.calweek{ display:grid; grid-template-columns:repeat(7,1fr); border-bottom:1px solid var(--border); background:var(--surface2); }
+.calweek span{ padding:9px 6px; font-size:10.5px; font-weight:600; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.04em; text-align:center; }
+.calbody{ display:grid; grid-template-columns:repeat(7,1fr); }
+.cell{ min-height:80px; border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+  padding:6px 7px 7px; position:relative; cursor:pointer; display:flex; flex-direction:column; gap:4px;
+  transition: box-shadow .15s var(--ease); }
+.cell:nth-child(7n){ border-right:0; }
+.cell.blank{ cursor:default; background:oklch(10% 0.014 38 / 0.5); }
+.cell.match{ background:var(--ember-bg); }
+.cell.today{ box-shadow: inset 0 0 0 2px var(--orange); }
+.cell.sel{ box-shadow: inset 0 0 0 2px var(--violet); }
+.cell.today.sel{ box-shadow: inset 0 0 0 2px var(--violet), inset 0 0 0 4px oklch(68% 0.19 42 / 0.4); }
+.cell:hover:not(.blank){ box-shadow: inset 0 0 0 1px var(--border3); }
+.cell.today:hover, .cell.sel:hover{ box-shadow: inset 0 0 0 2px var(--violet); }
+.cell-top{ display:flex; align-items:center; gap:5px; }
+.cell .dn{ font-size:12px; font-weight:700; color:var(--text); font-variant-numeric:tabular-nums; }
+.cell.match .dn{ color:var(--orange2); }
+.cell .sigchip{ margin-left:auto; display:inline-flex; align-items:center; padding:2px 7px; border-radius:6px;
+  font-family:'Bebas Neue',sans-serif; font-size:12px; letter-spacing:.4px; line-height:1.15;
+  background:oklch(68% 0.19 42 / 0.18); border:1px solid var(--ember-border); color:var(--orange2); }
+.cell-chips{ display:flex; flex-direction:column; gap:3px; }
+.cchip{ display:inline-flex; align-items:center; gap:4px; align-self:flex-start; padding:2px 6px; border-radius:6px;
+  font-size:9.5px; font-weight:600; letter-spacing:.02em; white-space:nowrap;
+  background:oklch(62% 0.22 280 / 0.16); border:1px solid var(--violet-border); color:var(--violet2);
+  font-variant-numeric:tabular-nums; }
+.cchip.man{ background:transparent; border:1px dashed var(--border3); color:var(--muted); }
+.cell-marks{ display:flex; align-items:center; gap:5px; margin-top:auto; }
+.cell-marks .exdot{ width:7px; height:7px; border-radius:50%; background:var(--green); }
+.cell-marks .svk{ width:13px; height:13px; color:var(--green); margin-left:auto; }
+
+/* ---------- day panel ---------- */
+.daypanel{ position:sticky; top:86px; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow: var(--shadow-card); padding:16px 16px 18px; }
+.dp-head{ display:flex; align-items:baseline; gap:8px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+.dp-date{ font-family:'Bebas Neue',sans-serif; font-size:23px; letter-spacing:.5px; color:var(--ink); text-transform:capitalize; line-height:1; }
+.dp-cnt{ font-size:11.5px; color:var(--faint); margin-left:auto; }
+.ssns{ display:flex; flex-direction:column; gap:10px; }
+.ssn{ background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:12px 13px; }
+.ssn.match{ background:var(--ember-bg); border-color:var(--ember-border); }
+.ssn-head{ display:flex; align-items:center; gap:8px; }
+.slotb{ display:inline-flex; align-items:center; padding:3px 9px; border-radius:7px; font-size:10.5px; font-weight:700;
+  letter-spacing:.04em; background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
+.ssn.match .slotb{ background:oklch(68% 0.19 42 / 0.16); border-color:var(--ember-border); color:var(--orange2); }
+.ssn-kind{ font-weight:600; font-size:13.5px; color:var(--ink); }
+.badge{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase; }
+.badge.man{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.ssn-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.chip{ display:inline-flex; align-items:baseline; gap:4px; padding:5px 10px; border-radius:8px;
+  background:var(--surface3); border:1px solid var(--border2); font-size:10.5px; color:var(--muted);
+  font-weight:600; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
+.chip b{ font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.4px; color:var(--ink); font-weight:400; }
+.chip.ex{ background:var(--green-bg); border-color:var(--green-border); color:var(--green); }
+.ssn-note{ width:100%; margin-top:10px; appearance:none; font-family:inherit; font-size:13px; color:var(--text);
+  background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:8px 11px; min-height:40px; }
+.ssn-note:focus{ border-color:var(--border3); }
+.ssn-note::placeholder{ color:var(--faint); }
+.ssn-foot{ display:flex; align-items:center; gap:8px; margin-top:10px; }
+.svbtn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  padding:7px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:6px;
+  border:1px solid var(--border2); background:var(--surface3); color:var(--muted);
+  transition: background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease), transform .1s var(--ease); }
+.svbtn svg{ width:14px; height:14px; }
+.svbtn:hover{ border-color:var(--border3); color:var(--text); }
+.svbtn:active{ transform:scale(.97); }
+.svbtn.on{ background:var(--green-bg); border-color:var(--green-border); color:var(--green); }
+.ssn-del{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:5px;
+  border-radius:6px; display:inline-flex; margin-left:auto; transition: color .15s var(--ease), background .15s var(--ease); }
+.ssn-del:hover{ color:var(--red); background:var(--red-bg); }
+.ssn-del svg{ width:15px; height:15px; }
+.dp-empty{ text-align:center; padding:30px 12px; color:var(--muted); }
+.dp-empty svg{ width:30px; height:30px; color:var(--faint); margin-bottom:8px; }
+.dp-empty .t{ font-size:14px; color:var(--text); font-weight:600; margin-bottom:12px; }
+
+/* ---------- fixtures section ---------- */
+.fixwrap{ margin-top:26px; }
+.sec-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.sec-head h2{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:22px;
+  letter-spacing:.5px; color:var(--ink); line-height:1; }
+.sec-head .sec-n{ font-size:11.5px; color:var(--faint); }
+.fxlist{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+.fxrow{ display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); box-shadow: var(--shadow-sm); padding:11px 14px; cursor:pointer;
+  transition: border-color .16s var(--ease), background .16s var(--ease); }
+.fxrow:hover{ border-color:var(--border3); background:var(--surface2); }
+.fx-date{ flex:0 0 62px; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:.4px;
+  color:var(--orange2); text-transform:capitalize; line-height:1.05; }
+.fx-teams{ flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); }
+.fx-teams span{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fx-teams .fx-fio{ color:var(--ink); font-weight:700; }
+.fx-teams .fx-vs{ color:var(--faint); font-size:11px; font-weight:600; flex:0 0 auto; }
+.fx-tags{ display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.fx-tag{ display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:10px; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.fx-tag.casa{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+.fx-tag.via{ background:var(--surface2); border:1px solid var(--border2); color:var(--muted); }
+.fx-tag.done{ background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); }
+.fx-tag.plan{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+
+/* ---------- footnote / toast / reveal ---------- */
+.foot-note{ max-width:1180px; margin:20px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
+.toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px);
+  background:var(--surface3); border:1px solid var(--border3); border-radius:10px; box-shadow: var(--shadow-md);
+  padding:11px 16px; font-size:13px; color:var(--ink); opacity:0; pointer-events:none;
+  transition: opacity .2s var(--ease), transform .2s var(--ease); z-index:var(--z-tooltip); }
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.reveal{ opacity:0; transform:translateY(10px); animation:rv .5s var(--ease) forwards; animation-delay:calc(var(--i,0) * 55ms); }
+@keyframes rv{ to{ opacity:1; transform:none; } }
+
+/* ---------- responsive ---------- */
+@media (max-width: 980px){
+  .calgrid-wrap{ grid-template-columns:1fr; }
+  .daypanel{ position:static; }
+  .fxlist{ grid-template-columns:1fr; }
+}
+@media (max-width: 900px){
+  .main{ padding-top:52px; }
+  .topbar{ position:static; padding:12px 16px; }
+  .kpis{ grid-template-columns:repeat(2, 1fr); }
+  .title-wrap h1{ font-size:25px; }
+  .wrap{ padding:20px 16px 0; }
+  .privacy-pill{ display:none; }
+  .foot-note{ padding:0 16px; }
+}
+@media (max-width: 560px){
+  .kpis{ grid-template-columns:1fr 1fr; gap:10px; }
+  .kpi .k-val{ font-size:28px; }
+  .top-right .gen-pill{ display:none; }
+  .mn-lbl{ min-width:0; flex:1 1 auto; font-size:19px; }
+  .monthnav{ flex:1 1 100%; }
+  .cell{ min-height:64px; }
+  .cchip{ font-size:9px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .reveal{ animation:none; opacity:1; transform:none; }
+  *{ transition:none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR condivisa area Fiorentina (fio_sidebar.js) ============ -->
+  <div id="sidebar-mount"></div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <img class="crest" id="crest" alt="Stemma Fiorentina">
+      <div class="title-wrap">
+        <h1>Calendario</h1>
+        <div class="sub"><b>Fiorentina Primavera U19W</b> · partite e sedute di campo</div>
+      </div>
+      <div class="top-right">
+        <span class="privacy-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6z"/></svg>Solo numeri calcolati</span>
+        <span class="gen-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="gen-txt">·</span></span>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- KPIs -->
+      <div class="kpis reveal" id="kpis" style="--i:0"></div>
+
+      <!-- controls -->
+      <div class="controls reveal" style="--i:1">
+        <div class="monthnav">
+          <button class="mn-btn" id="mn-prev" aria-label="Mese precedente">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <span class="mn-lbl" id="mn-lbl">·</span>
+          <button class="mn-btn" id="mn-next" aria-label="Mese successivo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <button class="btn" id="btn-today">Oggi</button>
+        <span class="spacer"></span>
+        <button class="btn" id="btn-add" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Aggiungi seduta
+        </button>
+        <button class="btn primary" id="btn-export">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
+          Esporta CSV
+        </button>
+      </div>
+
+      <!-- add form -->
+      <form class="addform reveal" id="addform" style="--i:2" autocomplete="off">
+        <div class="fg w-date">
+          <label for="af-date">Data</label>
+          <input id="af-date" type="date" required>
+        </div>
+        <div class="fg w-slot">
+          <label for="af-slot">Slot</label>
+          <select id="af-slot">
+            <option value="PM">PM</option>
+            <option value="AM">AM</option>
+            <option value="">-</option>
+          </select>
+        </div>
+        <div class="fg w-kind">
+          <label for="af-kind">Tipo</label>
+          <select id="af-kind">
+            <option value="training">Allenamento</option>
+            <option value="match">Partita</option>
+            <option value="amichevole">Amichevole</option>
+          </select>
+        </div>
+        <div class="fg w-note">
+          <label for="af-note">Note</label>
+          <input id="af-note" type="text" placeholder="es. campo, obiettivo della seduta">
+        </div>
+        <div class="fg-actions">
+          <button class="btn primary" type="submit">Salva</button>
+          <button class="btn" type="button" id="af-cancel">Annulla</button>
+        </div>
+        <div class="hint">La seduta di campo dei giorni gia' registrati compare in automatico dai dati. Qui aggiungi sedute pianificate: le segni "svolto" e scrivi cosa si e' fatto.</div>
+        <div class="err" id="af-err"></div>
+      </form>
+
+      <!-- legend -->
+      <div class="legend reveal" style="--i:3">
+        <span class="lg"><span class="sw train"></span>Allenamento (intensita' carico)</span>
+        <span class="lg"><span class="sw match"></span>Partita</span>
+        <span class="lg"><span class="sw dashed"></span>Seduta pianificata</span>
+        <span class="lg"><span class="dotx"></span>Esercitazioni</span>
+        <span class="lg"><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Svolto</span>
+      </div>
+
+      <!-- calendar + day panel -->
+      <div class="calgrid-wrap reveal" style="--i:4">
+        <div class="calcard">
+          <div class="calweek">
+            <span>Lun</span><span>Mar</span><span>Mer</span><span>Gio</span><span>Ven</span><span>Sab</span><span>Dom</span>
+          </div>
+          <div class="calbody" id="calbody"></div>
+        </div>
+        <aside class="daypanel" id="daypanel"></aside>
+      </div>
+
+      <!-- fixtures -->
+      <section class="fixwrap reveal" style="--i:5">
+        <div class="sec-head">
+          <h2>Calendario partite</h2>
+          <span class="sec-n" id="fix-n"></span>
+        </div>
+        <div class="fxlist" id="fixlist"></div>
+      </section>
+    </div>
+
+    <p class="foot-note">
+      Sezione coach · partite di campionato e sedute di campo della stagione. Le sedute registrate arrivano dai
+      dati di allenamento (distanza totale come indice di carico); le partite dal calendario ufficiale. Segna
+      "svolto" e annota cosa si e' fatto: le note e le sedute aggiunte a mano sono salvate su questo dispositivo.
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- snapshot calendario (window.CAL) -->
+<script src="./calendario_data.js"></script>
+<script>
+window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
+  metric:'Dist tot',scale:7793,range:{min:'',max:''},n_sedute:0,n_partite_giocate:0,n_fixtures:0,days:[],fixtures:[]};
+</script>
+
+<!-- sidebar area Fiorentina -->
+<script src="./fio_sidebar.js"></script>
+<script>
+(function(){
+  if(window.SIDEBAR_CSS){ const s=document.createElement('style'); s.textContent=window.SIDEBAR_CSS; document.head.appendChild(s); }
+  const mount=document.getElementById('sidebar-mount');
+  if(window.SIDEBAR_HTML && mount){ mount.outerHTML=window.SIDEBAR_HTML; }
+  if(window.markActiveNav) window.markActiveNav('calendario');
+  if(window.initSidebarToggle) window.initSidebarToggle();
+})();
+</script>
+
+<!-- logica pagina -->
+<script>
+(function(){
+  "use strict";
+  const C = window.CAL;
+  const LS_KEY = 'rs_fio_calendario';
+  const SCALE = Number(C.scale) || 7793;
+  const DAYS = Array.isArray(C.days) ? C.days : [];
+  const FIX  = Array.isArray(C.fixtures) ? C.fixtures : [];
+
+  const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
+  const DTF_LONG  = new Intl.DateTimeFormat('it-IT', { weekday:'long', day:'numeric', month:'long' });
+  const DTF_MONTH = new Intl.DateTimeFormat('it-IT', { month:'long', year:'numeric' });
+  const DTF_SHORT = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'short' });
+
+  const KIND_LABEL = { training:'Allenamento', match:'Partita', amichevole:'Amichevole' };
+  const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>';
+  const XSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+  // ---------- helpers ----------
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function pad(n){ return (n<10?'0':'')+n; }
+  function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+  function keyOfDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function cap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+  function fmtK(v){ v=Number(v)||0; return v>=1000 ? (NF1.format(v/1000)+'k') : NF0.format(v); }
+
+  const TODAY_KEY = keyOfDate(new Date());
+  const MAXD = parseDate((C.range && C.range.max) || '') || (DAYS.length ? parseDate(DAYS[DAYS.length-1].data) : new Date());
+
+  const state = { year: MAXD.getFullYear(), month0: MAXD.getMonth(), selDate: keyOfDate(MAXD) };
+  let DAYMAP = {}; // id -> session, per il giorno selezionato
+
+  // ---------- localStorage ----------
+  function loadStore(){
+    try{
+      const o = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      return { comp: (o && o.comp) || {}, manual: Array.isArray(o && o.manual) ? o.manual : [] };
+    }catch(e){ return { comp:{}, manual:[] }; }
+  }
+  function saveStore(s){ try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){} }
+
+  function recKey(d){ return 'r|'+d.data+'|'+(d.slot||'')+'|'+d.kind+'|'+(d.sigla||''); }
+
+  // ---------- costruzione sedute (registrate + manuali) ----------
+  function buildSessions(){
+    const store = loadStore();
+    const out = [];
+    DAYS.forEach((d, i)=>{
+      const key = recKey(d);
+      const comp = store.comp[key] || {};
+      out.push({
+        id: 'r'+i, key: key, manual: false,
+        data: d.data, slot: d.slot||'', kind: d.kind,
+        is_match: !!d.is_match, load: (d.load==null?null:Number(d.load)),
+        sigla: d.sigla||'', has_ex: !!d.has_ex,
+        svolto: (comp.svolto!==undefined ? !!comp.svolto : true),   // storico: gia' svolto
+        note: comp.note || ''
+      });
+    });
+    store.manual.forEach(m=>{
+      const kind = m.kind || 'training';
+      out.push({
+        id: m.id, key: null, manual: true,
+        data: m.data, slot: m.slot||'', kind: kind,
+        is_match: (kind==='match' || kind==='amichevole'),
+        load: null, sigla: '', has_ex: false,
+        svolto: !!m.svolto,
+        note: m.note || ''
+      });
+    });
+    return out;
+  }
+  function sessionsByDate(list){
+    const map = new Map();
+    list.forEach(s=>{ if(!map.has(s.data)) map.set(s.data, []); map.get(s.data).push(s); });
+    map.forEach(arr => arr.sort((a,b)=> (a.slot||'zz').localeCompare(b.slot||'zz')));
+    return map;
+  }
+
+  // ---------- mutazioni ----------
+  function setSvolto(sess, val){
+    const s = loadStore();
+    if(sess.manual){ const m = s.manual.find(x=> String(x.id)===String(sess.id)); if(m) m.svolto = val; }
+    else{ const c = s.comp[sess.key] || {}; c.svolto = val; s.comp[sess.key] = c; }
+    saveStore(s);
+  }
+  function setNote(sess, note){
+    const s = loadStore();
+    if(sess.manual){ const m = s.manual.find(x=> String(x.id)===String(sess.id)); if(m) m.note = note; }
+    else{ const c = s.comp[sess.key] || {}; c.note = note; s.comp[sess.key] = c; }
+    saveStore(s);
+  }
+  function delManual(id){
+    const s = loadStore();
+    s.manual = s.manual.filter(x=> String(x.id)!==String(id));
+    saveStore(s);
+  }
+
+  // ---------- KPIs ----------
+  function renderKPIs(){
+    const host = document.getElementById('kpis');
+    const train = DAYS.filter(d=> d.kind==='training');
+    const nTrain = train.length;
+    const nMatch = C.n_partite_giocate!=null ? Number(C.n_partite_giocate) : DAYS.filter(d=> d.is_match).length;
+    const meanLoad = nTrain ? Math.round(train.reduce((a,d)=> a+(Number(d.load)||0), 0) / nTrain) : 0;
+
+    // prossima / ultima partita (oggi e' oltre fine stagione -> fallback ultima)
+    const fxSorted = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+    const future = fxSorted.filter(f=> f.data >= TODAY_KEY);
+    let k4label, k4val, k4sub;
+    if(future.length){
+      const nx = future[0]; const dt = parseDate(nx.data);
+      k4label = 'Prossima partita'; k4val = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : nx.data;
+      k4sub = esc(nx.avversario || '');
+    }else if(fxSorted.length){
+      const lastf = fxSorted[fxSorted.length-1]; const dt = parseDate(lastf.data);
+      k4label = 'Ultima partita'; k4val = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : lastf.data;
+      k4sub = esc(lastf.avversario || '');
+    }else{ k4label='Partite'; k4val='-'; k4sub=''; }
+
+    const cards = [
+      { c:'',  label:'Allenamenti',  val: NF0.format(nTrain), unit:'', sub:'sedute di campo' },
+      { c:'v', label:'Partite giocate', val: NF0.format(nMatch), unit:'', sub:'campionato + amichevoli' },
+      { c:'g', label:'Carico medio',  val: NF0.format(meanLoad), unit:'m', sub:'distanza per seduta' },
+      { c:'',  label:k4label, val:k4val, unit:'', sub:k4sub, cap:true }
+    ];
+    host.innerHTML = cards.map(k=>
+      '<div class="kpi '+k.c+'"><div class="k-label">'+esc(k.label)+'</div>'+
+      '<div class="k-val tnum"'+(k.cap?' style="text-transform:capitalize"':'')+'>'+k.val+(k.unit?'<small>'+k.unit+'</small>':'')+'</div>'+
+      (k.sub?'<div class="k-sub">'+k.sub+'</div>':'')+'</div>'
+    ).join('');
+  }
+
+  // ---------- calendar grid ----------
+  function renderGrid(){
+    const byDate = sessionsByDate(buildSessions());
+    document.getElementById('mn-lbl').textContent = cap(DTF_MONTH.format(new Date(state.year, state.month0, 1)));
+
+    const first = new Date(state.year, state.month0, 1);
+    const startW = (first.getDay() + 6) % 7;               // lunedi = 0
+    const dim = new Date(state.year, state.month0+1, 0).getDate();
+    const cells = [];
+    for(let i=0;i<startW;i++) cells.push(null);
+    for(let d=1; d<=dim; d++) cells.push(d);
+    while(cells.length % 7 !== 0) cells.push(null);
+
+    const body = cells.map(d=>{
+      if(d==null) return '<div class="cell blank"></div>';
+      const key = state.year+'-'+pad(state.month0+1)+'-'+pad(d);
+      const list = byDate.get(key) || [];
+      const trainLoad = list.filter(s=> s.kind==='training').reduce((a,s)=> a+(s.load||0), 0);
+      const matchS = list.find(s=> s.is_match);
+      const hasMatch = !!matchS;
+      const hasEx = list.some(s=> s.has_ex);
+      const anySv = list.length && list.every(s=> s.svolto);
+      const anyMan = list.some(s=> s.manual);
+
+      let cls = 'cell', style = '';
+      if(hasMatch){ cls += ' match'; }
+      else if(trainLoad > 0){
+        const frac = Math.min(1, trainLoad / SCALE);
+        const a = (0.08 + 0.32*frac).toFixed(3);
+        style = 'background:oklch(62% 0.22 280 / '+a+');';
+      }
+      if(key === TODAY_KEY) cls += ' today';
+      if(key === state.selDate) cls += ' sel';
+      if(anyMan) cls += ' hasman';
+
+      const sigTop = (hasMatch && matchS.sigla) ? '<span class="sigchip">'+esc(matchS.sigla)+'</span>' : '';
+      const chips = list.filter(s=> !s.is_match).map(s=>{
+        const parts = [];
+        if(s.slot) parts.push(s.slot);
+        if(s.load!=null) parts.push(fmtK(s.load));
+        const t = parts.join(' ') || KIND_LABEL[s.kind] || '·';
+        return '<span class="cchip'+(s.manual?' man':'')+'">'+esc(t)+'</span>';
+      }).join('');
+      const marks = [];
+      if(hasEx) marks.push('<span class="exdot" title="Esercitazioni"></span>');
+      if(anySv) marks.push('<span class="svk" title="Svolto">'+CHK+'</span>');
+
+      return '<div class="'+cls+'" data-date="'+key+'" role="button" tabindex="0" aria-label="'+key+'"'+(style?' style="'+style+'"':'')+'>'+
+        '<div class="cell-top"><span class="dn">'+d+'</span>'+sigTop+'</div>'+
+        (chips? '<div class="cell-chips">'+chips+'</div>' : '')+
+        (marks.length? '<div class="cell-marks">'+marks.join('')+'</div>' : '')+
+      '</div>';
+    }).join('');
+
+    const host = document.getElementById('calbody');
+    host.innerHTML = body;
+    host.querySelectorAll('.cell[data-date]').forEach(c=>{
+      const sel = ()=>{ state.selDate = c.getAttribute('data-date'); renderGrid(); renderDay(); };
+      c.addEventListener('click', sel);
+      c.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); sel(); } });
+    });
+  }
+
+  // ---------- day panel ----------
+  function sessionCard(s){
+    const kl = KIND_LABEL[s.kind] || s.kind;
+    const slotBadge = s.slot ? '<span class="slotb">'+esc(s.slot)+'</span>' : '<span class="slotb">-</span>';
+    const chips = [];
+    if(s.load!=null) chips.push('<span class="chip">Carico <b class="tnum">'+NF0.format(s.load)+'</b> m</span>');
+    if(s.sigla) chips.push('<span class="chip">'+esc(s.sigla)+'</span>');
+    if(s.has_ex) chips.push('<span class="chip ex">Esercitazioni</span>');
+    const manBadge = s.manual ? '<span class="badge man">manuale</span>' : '';
+    const del = s.manual ? '<button class="ssn-del" data-act="del" data-id="'+esc(s.id)+'" aria-label="Rimuovi seduta">'+XSVG+'</button>' : '';
+    const svBtn = '<button class="svbtn'+(s.svolto?' on':'')+'" data-act="sv" data-id="'+esc(s.id)+'">'+
+      (s.svolto ? CHK+'<span>Svolto</span>' : '<span>Da fare</span>')+'</button>';
+    const note = '<input class="ssn-note" data-act="note" data-id="'+esc(s.id)+'" value="'+esc(s.note)+'" placeholder="Cosa si e\' fatto...">';
+    return '<div class="ssn'+(s.is_match?' match':'')+'">'+
+      '<div class="ssn-head">'+slotBadge+'<span class="ssn-kind">'+esc(kl)+'</span>'+manBadge+del+'</div>'+
+      (chips.length? '<div class="ssn-chips">'+chips.join('')+'</div>' : '')+
+      note+
+      '<div class="ssn-foot">'+svBtn+'</div>'+
+    '</div>';
+  }
+
+  function renderDay(){
+    const host = document.getElementById('daypanel');
+    const key = state.selDate;
+    const dt = parseDate(key);
+    const title = dt ? cap(DTF_LONG.format(dt)) : key;
+    const list = buildSessions().filter(s=> s.data===key).sort((a,b)=> (a.slot||'zz').localeCompare(b.slot||'zz'));
+
+    DAYMAP = {};
+    list.forEach(s=> DAYMAP[s.id] = s);
+
+    let inner;
+    if(!list.length){
+      inner = '<div class="dp-empty">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>'+
+        '<div class="t">Nessuna seduta registrata</div>'+
+        '<button class="btn" id="dp-quickadd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Aggiungi seduta di campo</button>'+
+      '</div>';
+    }else{
+      inner = '<div class="ssns">'+list.map(sessionCard).join('')+'</div>';
+    }
+
+    host.innerHTML = '<div class="dp-head"><span class="dp-date">'+esc(title)+'</span>'+
+      (list.length? '<span class="dp-cnt">'+list.length+(list.length===1?' seduta':' sedute')+'</span>':'')+'</div>'+inner;
+
+    // handlers
+    const qa = document.getElementById('dp-quickadd');
+    if(qa) qa.addEventListener('click', ()=> openAddForm(key));
+
+    host.querySelectorAll('[data-act]').forEach(el=>{
+      const act = el.getAttribute('data-act');
+      const id  = el.getAttribute('data-id');
+      const sess = DAYMAP[id];
+      if(!sess) return;
+      if(act==='sv'){
+        el.addEventListener('click', ()=>{ const nv=!sess.svolto; setSvolto(sess, nv); toast(nv?'Segnato: svolto':'Segnato: da fare'); renderGrid(); renderDay(); });
+      }else if(act==='note'){
+        el.addEventListener('change', ()=>{ setNote(sess, el.value.trim()); toast('Nota salvata'); });
+      }else if(act==='del'){
+        el.addEventListener('click', ()=>{ delManual(id); toast('Seduta rimossa'); renderGrid(); renderDay(); });
+      }
+    });
+  }
+
+  // ---------- fixtures ----------
+  function renderFixtures(){
+    const host = document.getElementById('fixlist');
+    const fx = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+    document.getElementById('fix-n').textContent = fx.length + (fx.length===1?' partita':' partite');
+    host.innerHTML = fx.map(f=>{
+      const dt = parseDate(f.data);
+      const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : f.data;
+      const casa = !!f.casa;
+      const homeName = f.home || (casa ? (f.squadra||'Fiorentina') : (f.avversario||''));
+      const awayName = f.away || (casa ? (f.avversario||'') : (f.squadra||'Fiorentina'));
+      const played = f.data < TODAY_KEY;
+      return '<div class="fxrow" data-date="'+esc(f.data)+'" role="button" tabindex="0">'+
+        '<span class="fx-date">'+esc(dlab)+'</span>'+
+        '<span class="fx-teams">'+
+          '<span class="'+(casa?'fx-fio':'')+'">'+esc(homeName)+'</span>'+
+          '<span class="fx-vs">vs</span>'+
+          '<span class="'+(!casa?'fx-fio':'')+'">'+esc(awayName)+'</span>'+
+        '</span>'+
+        '<span class="fx-tags">'+
+          '<span class="fx-tag '+(casa?'casa':'via')+'">'+(casa?'casa':'trasferta')+'</span>'+
+          '<span class="fx-tag '+(played?'done':'plan')+'">'+(played?'giocata':'in programma')+'</span>'+
+        '</span>'+
+      '</div>';
+    }).join('');
+
+    host.querySelectorAll('.fxrow[data-date]').forEach(r=>{
+      const go = ()=> gotoDate(r.getAttribute('data-date'));
+      r.addEventListener('click', go);
+      r.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+    });
+  }
+
+  function gotoDate(iso){
+    const dt = parseDate(iso); if(!dt) return;
+    state.year = dt.getFullYear(); state.month0 = dt.getMonth(); state.selDate = iso;
+    renderGrid(); renderDay();
+    document.querySelector('.calgrid-wrap').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  // ---------- toast ----------
+  let toastT;
+  function toast(msg){
+    const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(()=> el.classList.remove('show'), 2600);
+  }
+
+  // ---------- export CSV ----------
+  function csvVal(x){ return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'; }
+  function numIt(v){ return (v==null||Number.isNaN(v))?'':String(v).replace('.',','); }
+  function exportCSV(){
+    const list = buildSessions().slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:(a.slot||'').localeCompare(b.slot||''));
+    const head = ['data','slot','tipo','partita','carico_m','sigla','esercitazioni','svolto','manuale','note'];
+    const lines = [head.join(';')];
+    list.forEach(s=>{
+      lines.push([
+        s.data, s.slot||'', KIND_LABEL[s.kind]||s.kind, s.is_match?'si':'no',
+        numIt(s.load), s.sigla||'', s.has_ex?'si':'no', s.svolto?'si':'no', s.manual?'si':'no', s.note||''
+      ].map(csvVal).join(';'));
+    });
+    const csv = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    a.href = url; a.download = 'calendario_'+stamp+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('CSV esportato');
+  }
+
+  // ---------- add form ----------
+  function openAddForm(prefillDate){
+    const form = document.getElementById('addform');
+    const btn = document.getElementById('btn-add');
+    form.classList.add('open'); btn.setAttribute('aria-expanded','true');
+    const dt = document.getElementById('af-date');
+    dt.value = prefillDate || state.selDate || new Date().toISOString().slice(0,10);
+    document.getElementById('af-note').focus();
+    form.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+  (function(){
+    const btn = document.getElementById('btn-add');
+    const form = document.getElementById('addform');
+    const cancel = document.getElementById('af-cancel');
+    const err = document.getElementById('af-err');
+    const $ = id=> document.getElementById(id);
+    function close(){ form.classList.remove('open'); btn.setAttribute('aria-expanded','false'); err.classList.remove('show'); form.reset(); }
+    btn.addEventListener('click', ()=> form.classList.contains('open') ? close() : openAddForm());
+    cancel.addEventListener('click', close);
+    form.addEventListener('submit', e=>{
+      e.preventDefault();
+      const date = $('af-date').value;
+      if(!date){ err.textContent='Inserisci la data.'; err.classList.add('show'); return; }
+      const rec = {
+        id: 'm'+Date.now()+Math.random().toString(36).slice(2,6),
+        data: date, slot: $('af-slot').value, kind: $('af-kind').value,
+        note: $('af-note').value.trim(), svolto: false
+      };
+      const s = loadStore(); s.manual.push(rec); saveStore(s);
+      close(); toast('Seduta aggiunta');
+      gotoDate(date);
+    });
+  })();
+
+  document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('mn-prev').addEventListener('click', ()=>{
+    let m = state.month0-1, y = state.year; if(m<0){ m=11; y--; } state.month0=m; state.year=y; renderGrid();
+  });
+  document.getElementById('mn-next').addEventListener('click', ()=>{
+    let m = state.month0+1, y = state.year; if(m>11){ m=0; y++; } state.month0=m; state.year=y; renderGrid();
+  });
+  document.getElementById('btn-today').addEventListener('click', ()=>{
+    const t = new Date(); state.year=t.getFullYear(); state.month0=t.getMonth(); state.selDate=keyOfDate(t);
+    renderGrid(); renderDay();
+  });
+
+  // ---------- crest + gen ----------
+  (function(){
+    const c = document.getElementById('crest');
+    c.src = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
+    c.addEventListener('error', function(){
+      const f = document.createElement('div'); f.className='crest-fallback'; f.textContent='ACF'; c.replaceWith(f);
+    });
+  })();
+  document.getElementById('gen-txt').textContent = C.generato ? ('agg. '+String(C.generato).slice(0,10)) : 'anteprima';
+
+  // ---------- init ----------
+  renderKPIs();
+  renderGrid();
+  renderDay();
+  renderFixtures();
+})();
+</script>
+</body>
+</html>
