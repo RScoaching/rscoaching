@@ -40,10 +40,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6"/><path d="M6 7v10"/><path d="M18 7v10"/><path d="M21 9v6"/><path d="M6 12h12"/></svg></span>
       <span class="nav-lbl-text">Forza</span>
     </a>
-    <span class="nav-item soon" aria-disabled="true" data-page="calendario">
+    <a class="nav-item" aria-label="Calendario" href="./calendario.html" data-page="calendario">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M4 10h16"/></svg></span>
-      <span class="nav-lbl-text">Calendario</span><span class="soon-pill">presto</span>
-    </span>
+      <span class="nav-lbl-text">Calendario</span>
+    </a>
     <div class="nav-lbl">Output</div>
     <span class="nav-item soon" aria-disabled="true" data-page="report">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg></span>
