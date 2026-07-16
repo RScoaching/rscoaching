@@ -324,6 +324,38 @@ a{ color:inherit; text-decoration:none; }
   .reveal{ animation:none; opacity:1; transform:none; }
   *{ transition:none !important; }
 }
+
+/* ---------- tabella solo-stampa (PDF calendario: sedute per mese + partite) ---------- */
+#print-only{ display:none; }
+#print-only .pc-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 12px; }
+#print-only .pc-sec{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:16px 0 6px; }
+#print-only table.pctbl{ width:100%; border-collapse:collapse; font-size:10.5px; margin-bottom:2px; }
+#print-only table.pctbl th, #print-only table.pctbl td{ border:1px solid #d9d2e6; padding:4px 7px; text-align:center; vertical-align:top; }
+#print-only table.pctbl th.l, #print-only table.pctbl td.l{ text-align:left; }
+#print-only table.pctbl thead th{ background:#5b2d90; color:#fff; }
+#print-only tr.mon td{ background:#efe7f7; color:#5b2d90; font-weight:700; text-align:left; }
+#print-only tr.brk{ page-break-inside:avoid; }
+
+/* ---------- print (PDF pulito, tema chiaro) ---------- */
+@media print{
+  @page{ margin:13mm; }
+  html,body{ background:#fff !important; color:#14110f !important; }
+  body::before{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .addform, .legend, .calgrid-wrap,
+  .fixwrap, .toast, .top-right, .foot-note{ display:none !important; }
+  .app{ display:block !important; } .main{ padding:0 !important; }
+  .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
+    backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
+  .title-wrap h1{ color:#14110f !important; }
+  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
+  .wrap{ max-width:none !important; padding:0 !important; }
+  .kpis{ margin:0 0 14px !important; }
+  .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
+  .kpi::before{ background:#5b2d90 !important; }
+  .kpi .k-label{ color:#5a524c !important; } .kpi .k-val{ color:#14110f !important; } .kpi .k-val small{ color:#5a524c !important; }
+  #print-only{ display:block !important; }
+  #print-only tr.mon td, #print-only table.pctbl thead th{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 </style>
 </head>
 <body>
@@ -367,9 +399,17 @@ a{ color:inherit; text-decoration:none; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           Aggiungi seduta
         </button>
-        <button class="btn primary" id="btn-export">
+        <button class="btn" id="btn-print" title="Stampa o salva il calendario in PDF: sedute per mese e partite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>
+          PDF
+        </button>
+        <button class="btn" id="btn-export" title="Esporta il calendario in CSV (una riga per seduta)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
-          Esporta CSV
+          CSV
+        </button>
+        <button class="btn primary" id="btn-xls" title="Esporta in Excel (.xls): sedute per mese, carico e partite, con colori">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+          Excel
         </button>
       </div>
 
@@ -435,6 +475,9 @@ a{ color:inherit; text-decoration:none; }
         </div>
         <div class="fxlist" id="fixlist"></div>
       </section>
+
+      <!-- tabella solo-stampa (PDF) -->
+      <div id="print-only" aria-hidden="true"></div>
     </div>
 
     <p class="foot-note">
@@ -799,6 +842,151 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     toast('CSV esportato');
   }
 
+  // ---------- tabella solo-stampa (PDF: sedute per mese + partite) ----------
+  function monthKey(iso){ const d=parseDate(iso); return d ? (d.getFullYear()+'-'+pad(d.getMonth()+1)) : '0000-00'; }
+
+  function buildPrintTable(){
+    const host = document.getElementById('print-only'); if(!host) return;
+    const list = buildSessions().slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:(a.slot||'').localeCompare(b.slot||''));
+    const gen  = C.generato ? ('agg. '+String(C.generato).slice(0,10)) : 'anteprima';
+    const nTrain = list.filter(s=> s.kind==='training').length;
+    const nMatch = list.filter(s=> s.is_match).length;
+
+    // sedute raggruppate per mese
+    let rows = '', curMon = null;
+    list.forEach(s=>{
+      const mk = monthKey(s.data);
+      if(mk !== curMon){
+        curMon = mk; const md = parseDate(s.data);
+        rows += '<tr class="mon brk"><td colspan="8">'+esc(md ? cap(DTF_MONTH.format(md)) : mk)+'</td></tr>';
+      }
+      const dt = parseDate(s.data);
+      const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : s.data;
+      rows += '<tr class="brk">'+
+        '<td class="l">'+esc(dlab)+'</td>'+
+        '<td>'+esc(s.slot||'-')+'</td>'+
+        '<td class="l">'+esc(KIND_LABEL[s.kind]||s.kind)+(s.manual?' (man)':'')+'</td>'+
+        '<td>'+(s.load!=null?NF0.format(s.load):'-')+'</td>'+
+        '<td>'+esc(s.sigla||'-')+'</td>'+
+        '<td>'+(s.has_ex?'si':'-')+'</td>'+
+        '<td>'+(s.svolto?'si':'-')+'</td>'+
+        '<td class="l">'+esc(s.note||'')+'</td>'+
+      '</tr>';
+    });
+    if(!rows) rows = '<tr><td colspan="8" class="l">Nessuna seduta registrata.</td></tr>';
+
+    // partite
+    const fx = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+    let frows = '';
+    fx.forEach(f=>{
+      const dt = parseDate(f.data);
+      const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : f.data;
+      const casa = !!f.casa;
+      const homeName = f.home || (casa ? (f.squadra||'Fiorentina') : (f.avversario||''));
+      const awayName = f.away || (casa ? (f.avversario||'') : (f.squadra||'Fiorentina'));
+      const played = f.data < TODAY_KEY;
+      frows += '<tr class="brk">'+
+        '<td class="l">'+esc(dlab)+'</td>'+
+        '<td>'+(casa?'casa':'trasferta')+'</td>'+
+        '<td class="l">'+esc(homeName)+'</td>'+
+        '<td class="l">'+esc(awayName)+'</td>'+
+        '<td>'+(played?'giocata':'in programma')+'</td>'+
+      '</tr>';
+    });
+    if(!frows) frows = '<tr><td colspan="5" class="l">Nessuna partita.</td></tr>';
+
+    host.innerHTML =
+      '<div class="pc-h">Calendario Fiorentina Primavera U19W &#183; '+nTrain+' allenamenti &#183; '+nMatch+' partite giocate &#183; Stagione '+esc(C.stagione||'2025-26')+' &#183; '+gen+'</div>'+
+      '<div class="pc-sec">Sedute e allenamenti</div>'+
+      '<table class="pctbl"><thead><tr><th class="l">Data</th><th>Slot</th><th class="l">Tipo</th><th>Carico m</th><th>Sigla</th><th>Eserc</th><th>Svolto</th><th class="l">Note</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div class="pc-sec">Calendario partite</div>'+
+      '<table class="pctbl"><thead><tr><th class="l">Data</th><th>Campo</th><th class="l">Casa</th><th class="l">Trasferta</th><th>Stato</th></tr></thead><tbody>'+frows+'</tbody></table>';
+  }
+
+  // ---------- export Excel (.xls, Office XML, con colori) ----------
+  function exportXLS(){
+    const list = buildSessions().slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:(a.slot||'').localeCompare(b.slot||''));
+    const fx   = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+    const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472';
+    const gen = C.generato ? ('agg. '+String(C.generato).slice(0,10)) : 'anteprima';
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+
+    const th  = 'style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';padding:5px 8px;font-weight:700;text-align:left;"';
+    const tdC = 'style="border:1px solid '+BRD+';padding:4px 8px;text-align:center;"';
+    const tdL = 'style="border:1px solid '+BRD+';padding:4px 8px;text-align:left;"';
+    const tdR = 'style="border:1px solid '+BRD+';padding:4px 8px;text-align:right;"';
+    const band= 'style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+';padding:4px 8px;text-align:left;"';
+
+    let body = '';
+    body += '<tr><td colspan="10" style="background:'+VIO+';color:#fff;font-size:15px;font-weight:700;padding:8px;">Calendario Fiorentina Primavera U19W</td></tr>';
+    body += '<tr><td colspan="10" style="background:'+VIOL+';color:'+VIO+';padding:5px;border:1px solid '+BRD+';">'+
+      esc(list.filter(s=>s.kind==='training').length+' allenamenti · '+list.filter(s=>s.is_match).length+' partite giocate · Stagione '+(C.stagione||'2025-26')+' · '+gen)+'</td></tr>';
+    body += '<tr><td colspan="10" style="height:6px;"></td></tr>';
+
+    // sezione sedute
+    body += '<tr><td colspan="10" '+band+'>Sedute e allenamenti</td></tr>';
+    const sh = ['Data','Slot','Tipo','Partita','Carico m','Sigla','Eserc','Svolto','Manuale','Note'];
+    body += '<tr>'+sh.map(h=> '<td '+th+'>'+esc(h)+'</td>').join('')+'</tr>';
+    let curMon = null;
+    list.forEach(s=>{
+      const mk = monthKey(s.data);
+      if(mk !== curMon){
+        curMon = mk; const md = parseDate(s.data);
+        body += '<tr><td colspan="10" '+band+'>'+esc(md ? cap(DTF_MONTH.format(md)) : mk)+'</td></tr>';
+      }
+      const dt = parseDate(s.data);
+      const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : s.data;
+      body += '<tr>'+
+        '<td '+tdL+'>'+esc(dlab)+'</td>'+
+        '<td '+tdC+'>'+esc(s.slot||'')+'</td>'+
+        '<td '+tdL+'>'+esc(KIND_LABEL[s.kind]||s.kind)+'</td>'+
+        '<td '+tdC+'>'+(s.is_match?'si':'no')+'</td>'+
+        '<td '+tdR+'>'+(s.load!=null?NF0.format(s.load):'')+'</td>'+
+        '<td '+tdC+'>'+esc(s.sigla||'')+'</td>'+
+        '<td '+tdC+'>'+(s.has_ex?'si':'no')+'</td>'+
+        '<td '+tdC+'>'+(s.svolto?'si':'no')+'</td>'+
+        '<td '+tdC+'>'+(s.manual?'si':'no')+'</td>'+
+        '<td '+tdL+'>'+esc(s.note||'')+'</td>'+
+      '</tr>';
+    });
+
+    body += '<tr><td colspan="10" style="height:6px;"></td></tr>';
+    // sezione partite
+    body += '<tr><td colspan="10" '+band+'>Calendario partite</td></tr>';
+    const fh = ['Data','Campo','Casa','Trasferta','Stato'];
+    body += '<tr>'+fh.map(h=> '<td '+th+'>'+esc(h)+'</td>').join('')+'</tr>';
+    fx.forEach(f=>{
+      const dt = parseDate(f.data);
+      const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : f.data;
+      const casa = !!f.casa;
+      const homeName = f.home || (casa ? (f.squadra||'Fiorentina') : (f.avversario||''));
+      const awayName = f.away || (casa ? (f.avversario||'') : (f.squadra||'Fiorentina'));
+      const played = f.data < TODAY_KEY;
+      body += '<tr>'+
+        '<td '+tdL+'>'+esc(dlab)+'</td>'+
+        '<td '+tdC+'>'+(casa?'casa':'trasferta')+'</td>'+
+        '<td '+tdL+'>'+esc(homeName)+'</td>'+
+        '<td '+tdL+'>'+esc(awayName)+'</td>'+
+        '<td '+tdC+'>'+(played?'giocata':'in programma')+'</td>'+
+      '</tr>';
+    });
+
+    const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+      '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+      '<x:Name>Calendario</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>'+
+      '</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>'+
+      '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11px">'+
+      body+'</table></body></html>';
+    const blob = new Blob(['﻿'+html], {type:'application/vnd.ms-excel;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'calendario_'+stamp+'.xls';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('Excel esportato ('+list.length+' sedute · '+fx.length+' partite)');
+  }
+
   // ---------- add form ----------
   function openAddForm(prefillDate){
     const form = document.getElementById('addform');
@@ -834,6 +1022,9 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
   })();
 
   document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('btn-xls').addEventListener('click', exportXLS);
+  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintTable(); window.print(); });
+  window.addEventListener('beforeprint', buildPrintTable);
   document.getElementById('mn-prev').addEventListener('click', ()=>{
     let m = state.month0-1, y = state.year; if(m<0){ m=11; y--; } state.month0=m; state.year=y; renderGrid();
   });
@@ -860,6 +1051,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
   renderGrid();
   renderDay();
   renderFixtures();
+  buildPrintTable();
 })();
 </script>
 </body>
