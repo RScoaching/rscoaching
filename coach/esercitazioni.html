@@ -254,6 +254,43 @@ a{ color:inherit; text-decoration:none; }
   .reveal{ animation:none; opacity:1; transform:none; }
   *{ transition:none !important; }
 }
+
+/* ---------- tabella solo-stampa (PDF esercitazioni per seduta) ---------- */
+#print-only{ display:none; }
+#print-only .pe-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 10px; }
+#print-only table.petbl{ width:100%; border-collapse:collapse; font-size:11px; }
+#print-only table.petbl th, #print-only table.petbl td{ border:1px solid #d9d2e6; padding:5px 8px; text-align:left; vertical-align:top; }
+#print-only table.petbl td.n{ text-align:right; width:34px; color:#5a524c; }
+#print-only table.petbl thead th{ background:#5b2d90; color:#fff; }
+#print-only tr.ses td{ background:#efe7f7; color:#5b2d90; font-weight:700; }
+#print-only tr.ld td{ background:#f7f4fb; color:#5a524c; font-size:10px; }
+#print-only tr.brk{ page-break-inside:avoid; }
+
+/* ---------- print (PDF pulito, tema chiaro) ---------- */
+@media print{
+  @page{ margin:13mm; }
+  html,body{ background:#fff !important; color:#14110f !important; }
+  body::before{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .addform, .sessions, .toast,
+  .top-right, .foot-note{ display:none !important; }
+  .app{ display:block !important; }
+  .main{ padding:0 !important; }
+  .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
+    backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
+  .title-wrap h1{ color:#14110f !important; }
+  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
+  .wrap{ max-width:none !important; padding:0 !important; }
+  .kpis{ margin:0 0 14px !important; }
+  .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
+  .kpi::before{ background:#5b2d90 !important; }
+  .kpi.v::before, .kpi.g::before{ background:#5b2d90 !important; }
+  .kpi .k-label{ color:#5a524c !important; }
+  .kpi .k-val{ color:#14110f !important; }
+  .kpi .k-val small{ color:#5a524c !important; }
+  #print-only{ display:block !important; }
+  #print-only tr.ses td, #print-only tr.ld td, #print-only table.petbl thead th{
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 </style>
 </head>
 <body>
@@ -292,9 +329,17 @@ a{ color:inherit; text-decoration:none; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           Aggiungi
         </button>
-        <button class="btn primary" id="btn-export">
+        <button class="btn" id="btn-print" title="Stampa o salva le esercitazioni in PDF, raggruppate per seduta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          PDF
+        </button>
+        <button class="btn" id="btn-export" title="Esporta le esercitazioni in CSV (una riga per esercitazione)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
-          Esporta CSV
+          CSV
+        </button>
+        <button class="btn primary" id="btn-xls" title="Esporta in Excel (.xls) con seduta, carico GPS e colori">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+          Excel
         </button>
       </div>
 
@@ -319,6 +364,9 @@ a{ color:inherit; text-decoration:none; }
 
       <!-- sessions -->
       <div class="sessions reveal" id="sessions" style="--i:3"></div>
+
+      <!-- tabella solo-stampa (PDF pulito, raggruppato per seduta) -->
+      <div id="print-only" aria-hidden="true"></div>
     </div>
 
     <p class="foot-note">
@@ -532,6 +580,101 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     toast('CSV esportato');
   }
 
+  // ---------- carico come testo (per PDF ed Excel) ----------
+  function loadText(load){
+    if(!load) return '';
+    const parts = LOAD.map(c=>{
+      const v = load[c];
+      if(v===null||v===undefined||Number.isNaN(v)) return null;
+      return esc(c)+' '+fmtLoad(c, v)+(UNIT[c]?' '+esc(UNIT[c]):'');
+    }).filter(Boolean);
+    return parts.join(' · ');
+  }
+
+  // ---------- tabella solo-stampa (PDF pulito, raggruppato per seduta) ----------
+  function buildPrintTable(){
+    const host = document.getElementById('print-only'); if(!host) return;
+    const all = buildSessions();
+    const nSess = all.length;
+    const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
+    let rows = '';
+    all.forEach(s=>{
+      const dt = parseDate(s.date);
+      const dLabel = dt ? DTFY.format(dt) : esc(s.date);
+      const kind = s.kind ? ' &#183; '+esc(s.kind) : '';
+      const nd = s.drills.length + (s.drills.length===1?' esercitazione':' esercitazioni');
+      rows += '<tr class="ses brk"><td colspan="2">'+esc(s.slot||'--')+' &#183; '+dLabel+kind+' &#183; '+nd+
+        (s.planned?' &#183; pianificata':'')+'</td></tr>';
+      const lt = s.load ? loadText(s.load) : 'nessun GPS collegato';
+      rows += '<tr class="ld"><td colspan="2">Carico: '+lt+'</td></tr>';
+      s.drills.forEach((d,i)=>{
+        const badges = (d.dup?' [doppione]':'') + (d.manual?' [manuale]':'');
+        rows += '<tr><td class="n">'+(i+1)+'</td><td>'+esc(d.descrizione)+esc(badges)+'</td></tr>';
+      });
+    });
+    const gen = E.generato ? ('agg. '+esc(E.generato.slice(0,10))) : 'anteprima';
+    host.innerHTML =
+      '<div class="pe-h">Esercitazioni Fiorentina Primavera U19W &#183; '+nSess+' sedute &#183; '+nDrills+' esercitazioni &#183; Stagione '+esc(E.stagione||'2025-26')+' &#183; '+gen+'</div>'+
+      '<table class="petbl"><thead><tr><th class="n">#</th><th>Esercitazione (raggruppata per seduta)</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+
+  // ---------- export Excel (.xls, colori viola, raggruppato per seduta) ----------
+  function exportXLS(){
+    const all = buildSessions();
+    const nSess = all.length;
+    const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
+    const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472';
+    const ncols = 4 + LOAD.length;
+    let body = '';
+    all.forEach(s=>{
+      const dt = parseDate(s.date);
+      const dLabel = dt ? DTFY.format(dt) : s.date;
+      const kind = s.kind ? ' · '+s.kind : '';
+      const nd = s.drills.length + ' eserc.';
+      const bandLabel = (s.slot||'--')+' · '+dLabel+kind+' · '+nd+(s.planned?' · pianificata':'');
+      const loadCells = LOAD.map(c=>{
+        const v = s.load ? s.load[c] : null;
+        const txt = (v==null||Number.isNaN(v)) ? '' : fmtLoad(c, v);
+        return '<td style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+';text-align:right">'+esc(txt)+'</td>';
+      }).join('');
+      body += '<tr><td colspan="4" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(bandLabel)+'</td>'+loadCells+'</tr>';
+      s.drills.forEach((d,i)=>{
+        const empties = LOAD.map(()=> '<td style="border:1px solid '+BRD+'"></td>').join('');
+        body += '<tr>'+
+          '<td style="border:1px solid '+BRD+';text-align:right;color:'+MUT+'">'+(i+1)+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(d.descrizione)+'</td>'+
+          '<td style="border:1px solid '+BRD+';text-align:center">'+(d.dup?'si':'')+'</td>'+
+          '<td style="border:1px solid '+BRD+';text-align:center">'+(d.manual?'si':'')+'</td>'+
+          empties+'</tr>';
+      });
+    });
+    const loadHead = LOAD.map(c=> '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:right">'+esc(c)+(UNIT[c]?' ('+esc(UNIT[c])+')':'')+'</th>').join('');
+    const gen = E.generato ? ('agg. '+E.generato.slice(0,10)) : 'anteprima';
+    const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+      '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+      '<x:Name>Esercitazioni</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>'+
+      '</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>'+
+      '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11px">'+
+      '<tr><td colspan="'+ncols+'" style="background:'+VIO+';color:#fff;font-size:15px;font-weight:700;padding:8px">'+
+        'Esercitazioni Fiorentina Primavera U19W</td></tr>'+
+      '<tr><td colspan="'+ncols+'" style="background:'+VIOL+';color:'+VIO+';padding:5px;border:1px solid '+BRD+'">'+
+        esc(nSess+' sedute · '+nDrills+' esercitazioni · Stagione '+(E.stagione||'2025-26')+' · '+gen)+'</td></tr>'+
+      '<tr><th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">#</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Esercitazione</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">Doppione</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">Manuale</th>'+loadHead+'</tr>'+
+      body+'</table></body></html>';
+    const blob = new Blob(['﻿'+html], {type:'application/vnd.ms-excel;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    a.href = url; a.download = 'esercitazioni_'+stamp+'.xls';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('Excel esportato ('+nDrills+' esercitazioni)');
+  }
+
   // ---------- add form ----------
   (function(){
     const btn = document.getElementById('btn-add');
@@ -557,6 +700,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   })();
 
   document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('btn-xls').addEventListener('click', exportXLS);
+  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintTable(); window.print(); });
+  window.addEventListener('beforeprint', buildPrintTable);
 
   // ---------- search (debounced) ----------
   (function(){
@@ -580,6 +726,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderKPIs(all);
     renderPills(all);
     renderSessions(filtered(all));
+    buildPrintTable();
   }
   render();
 })();
