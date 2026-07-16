@@ -299,6 +299,36 @@ a{ color:inherit; text-decoration:none; }
   .reveal{ animation:none; opacity:1; transform:none; }
   *{ transition:none !important; }
 }
+
+/* ---------- tabella solo-stampa (PDF forza per atleta) ---------- */
+#print-only{ display:none; }
+#print-only .pf-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 10px; }
+#print-only table.pftbl{ width:100%; border-collapse:collapse; font-size:10.5px; }
+#print-only table.pftbl th, #print-only table.pftbl td{ border:1px solid #d9d2e6; padding:4px 7px; text-align:right; vertical-align:top; }
+#print-only table.pftbl th.l, #print-only table.pftbl td.l{ text-align:left; }
+#print-only table.pftbl thead th{ background:#5b2d90; color:#fff; }
+#print-only tr.atl td{ background:#efe7f7; color:#5b2d90; font-weight:700; text-align:left; }
+#print-only tr.brk{ page-break-inside:avoid; }
+/* ---------- print (PDF pulito, tema chiaro) ---------- */
+@media print{
+  @page{ margin:13mm; }
+  html,body{ background:#fff !important; color:#14110f !important; }
+  body::before{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .addform, .sessions, .toast,
+  .top-right, .foot-note{ display:none !important; }
+  .app{ display:block !important; } .main{ padding:0 !important; }
+  .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
+    backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
+  .title-wrap h1{ color:#14110f !important; }
+  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
+  .wrap{ max-width:none !important; padding:0 !important; }
+  .kpis{ margin:0 0 14px !important; }
+  .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
+  .kpi::before{ background:#5b2d90 !important; }
+  .kpi .k-label{ color:#5a524c !important; } .kpi .k-val{ color:#14110f !important; } .kpi .k-val small{ color:#5a524c !important; }
+  #print-only{ display:block !important; }
+  #print-only tr.atl td, #print-only table.pftbl thead th{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 </style>
 </head>
 <body>
@@ -337,9 +367,17 @@ a{ color:inherit; text-decoration:none; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           Aggiungi
         </button>
-        <button class="btn primary" id="btn-export">
+        <button class="btn" id="btn-print" title="Stampa o salva la forza in PDF, raggruppata per atleta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>
+          PDF
+        </button>
+        <button class="btn" id="btn-export" title="Esporta la forza in CSV (una riga per esercizio)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>
-          Esporta CSV
+          CSV
+        </button>
+        <button class="btn primary" id="btn-xls" title="Esporta in Excel (.xls) con carico-volume, 1RM, zona e colori">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+          Excel
         </button>
       </div>
 
@@ -412,6 +450,9 @@ a{ color:inherit; text-decoration:none; }
 
       <!-- athletes -->
       <div class="sessions reveal" id="sessions" style="--i:3"></div>
+
+      <!-- tabella solo-stampa (PDF pulito, raggruppato per atleta) -->
+      <div id="print-only" aria-hidden="true"></div>
     </div>
 
     <p class="foot-note">
@@ -740,6 +781,122 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     toast('CSV esportato');
   }
 
+  // ---------- raggruppa TUTTE le voci per atleta (per PDF/Excel, no filtri) ----------
+  function groupAllByAthlete(entries){
+    const map = new Map();
+    entries.forEach(e=>{
+      if(!map.has(e.atleta)) map.set(e.atleta, []);
+      map.get(e.atleta).push(e);
+    });
+    const arr = [];
+    map.forEach((list, name)=>{
+      const ton = list.reduce((a,e)=> a + (e.volume_load||0), 0);
+      const sedute = new Set(list.map(e=> e.data)).size;
+      arr.push({ name, list, ton, sedute });
+    });
+    arr.sort((a,b)=> b.ton - a.ton || a.name.localeCompare(b.name,'it'));
+    return arr;
+  }
+
+  // ---------- tabella solo-stampa (PDF pulito, raggruppato per atleta) ----------
+  function buildPrintTable(){
+    const host = document.getElementById('print-only'); if(!host) return;
+    const all = buildEntries();
+    const groups = groupAllByAthlete(all);
+    const ncols = 8;
+    let rows = '';
+    groups.forEach(a=>{
+      const meta = ROLE[a.name] || { role:'', tipo:'' };
+      const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
+      const band = esc(a.name) + (roleTxt?' &#183; '+esc(roleTxt):'') + ' &#183; ' + NF.format(a.ton/1000) + ' t &#183; ' + a.sedute + (a.sedute===1?' seduta':' sedute');
+      rows += '<tr class="atl brk"><td class="l" colspan="'+ncols+'">'+band+'</td></tr>';
+      a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
+        const dt = parseDate(e.data);
+        const dLabel = dt ? DTFY.format(dt).replace('.','') : (e.data||'-');
+        const sr = e.serie+'&#215;'+e.ripetizioni;
+        const kg = e.carico_kg!=null ? NF.format(e.carico_kg) : '-';
+        const pct = e.pct1rm!=null ? NF0.format(e.pct1rm)+'%' : '-';
+        const vl = e.volume_load!=null ? NF0.format(e.volume_load) : '-';
+        const rm = e.rm_stim!=null ? NF.format(e.rm_stim) : '-';
+        const zt = ZSHORT[e.zona] || (e.zona==='-'?'-':e.zona);
+        rows += '<tr>'+
+          '<td class="l">'+esc(dLabel)+'</td>'+
+          '<td class="l">'+esc(e.esercizio)+'</td>'+
+          '<td>'+sr+'</td>'+
+          '<td>'+kg+'</td>'+
+          '<td>'+pct+'</td>'+
+          '<td>'+vl+'</td>'+
+          '<td>'+rm+'</td>'+
+          '<td class="l">'+esc(zt)+'</td></tr>';
+      });
+    });
+    const nAtl = groups.length;
+    const nSed = new Set(all.map(e=> e.atleta+'|'+e.data)).size;
+    const ton = all.reduce((a,e)=> a + (e.volume_load||0), 0);
+    const gen = F.generato ? ('agg. '+esc(F.generato.slice(0,10))) : 'anteprima';
+    host.innerHTML =
+      '<div class="pf-h">Forza Fiorentina Primavera U19W &#183; '+nAtl+' atlete &#183; '+nSed+' sedute &#183; '+NF.format(ton/1000)+' t &#183; Stagione '+esc(F.stagione||'2025-26')+' &#183; '+gen+'</div>'+
+      '<table class="pftbl"><thead><tr><th class="l">Data</th><th class="l">Esercizio</th><th>S&#215;R</th><th>Kg</th><th>%1RM</th><th>VL kg</th><th>1RM kg</th><th class="l">Zona</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+
+  // ---------- export Excel (.xls, colori viola, raggruppato per atleta) ----------
+  function exportXLS(){
+    const all = buildEntries();
+    const groups = groupAllByAthlete(all);
+    const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472';
+    const headCols = ['Data','Esercizio','Serie×Rip','Kg','%1RM','RPE','Rec s','VL kg','1RM kg','Zona','Pattern','Note'];
+    const ncols = headCols.length;
+    const nSed = new Set(all.map(e=> e.atleta+'|'+e.data)).size;
+    const ton = all.reduce((a,e)=> a + (e.volume_load||0), 0);
+    let body = '';
+    groups.forEach(a=>{
+      const meta = ROLE[a.name] || { role:'', tipo:'' };
+      const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
+      const band = a.name + (roleTxt?' · '+roleTxt:'') + ' · ' + NF.format(a.ton/1000) + ' t · ' + a.sedute + (a.sedute===1?' seduta':' sedute');
+      body += '<tr><td colspan="'+ncols+'" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(band)+'</td></tr>';
+      a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
+        const cells = [
+          e.data||'',
+          e.esercizio||'',
+          e.serie+'×'+e.ripetizioni,
+          e.carico_kg!=null?NF.format(e.carico_kg):'',
+          e.pct1rm!=null?NF0.format(e.pct1rm):'',
+          e.rpe!=null?NF.format(e.rpe):'',
+          e.recupero_s!=null?NF0.format(e.recupero_s):'',
+          e.volume_load!=null?NF0.format(e.volume_load):'',
+          e.rm_stim!=null?NF.format(e.rm_stim):'',
+          ZSHORT[e.zona]||(e.zona==='-'?'':e.zona),
+          PLABEL[e.pattern]||e.pattern||'',
+          e.note||''
+        ];
+        const align = ['left','left','right','right','right','right','right','right','right','left','left','left'];
+        body += '<tr>'+cells.map((c,i)=> '<td style="border:1px solid '+BRD+';text-align:'+align[i]+'">'+esc(c)+'</td>').join('')+'</tr>';
+      });
+    });
+    const headHtml = headCols.map(h=> '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">'+esc(h)+'</th>').join('');
+    const gen = F.generato ? ('agg. '+F.generato.slice(0,10)) : 'anteprima';
+    const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+      '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+      '<x:Name>Forza</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>'+
+      '</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>'+
+      '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11px">'+
+      '<tr><td colspan="'+ncols+'" style="background:'+VIO+';color:#fff;font-size:15px;font-weight:700;padding:8px">'+
+        'Forza Fiorentina Primavera U19W</td></tr>'+
+      '<tr><td colspan="'+ncols+'" style="background:'+VIOL+';color:'+VIO+';padding:5px;border:1px solid '+BRD+'">'+
+        esc(groups.length+' atlete · '+nSed+' sedute · '+NF.format(ton/1000)+' t · Stagione '+(F.stagione||'2025-26')+' · '+gen)+'</td></tr>'+
+      '<tr>'+headHtml+'</tr>'+
+      body+'</table></body></html>';
+    const blob = new Blob(['﻿'+html], {type:'application/vnd.ms-excel;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    a.href = url; a.download = 'forza_'+stamp+'.xls';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('Excel esportato ('+all.length+' voci)');
+  }
+
   // ---------- populate atleta select ----------
   (function(){
     const sel = document.getElementById('af-atl');
@@ -781,6 +938,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   })();
 
   document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('btn-xls').addEventListener('click', exportXLS);
+  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintTable(); window.print(); });
+  window.addEventListener('beforeprint', buildPrintTable);
 
   // ---------- search (debounced) ----------
   (function(){
@@ -804,6 +964,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderKPIs(all);
     renderPills(all);
     renderAthletes(all);
+    buildPrintTable();
   }
   render();
 })();
