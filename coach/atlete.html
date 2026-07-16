@@ -254,6 +254,40 @@ select.picker:hover{ border-color:var(--border3); }
   .pcard:hover{ transform:none; }
   *{ transition:none !important; }
 }
+
+/* ---------- tabella solo-stampa (PDF rosa per reparto) ---------- */
+#print-only{ display:none; }
+#print-only .proster-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 10px; }
+#print-only table.ptbl{ width:100%; border-collapse:collapse; font-size:11px; }
+#print-only table.ptbl th, #print-only table.ptbl td{ border:1px solid #d9d2e6; padding:5px 8px; text-align:right; }
+#print-only table.ptbl th.l, #print-only table.ptbl td.l{ text-align:left; }
+#print-only table.ptbl thead th{ background:#5b2d90; color:#fff; }
+#print-only tr.rep td{ background:#efe7f7; color:#5b2d90; font-weight:700; text-align:left; }
+#print-only tr.na td.l{ color:#9f2f2d; font-style:italic; }
+
+/* ---------- print (PDF pulito, tema chiaro) ---------- */
+@media print{
+  @page{ margin:13mm; }
+  html,body{ background:#fff !important; color:#14110f !important; }
+  body::before{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .pills, .grid, .toast,
+  .top-right, .foot-note{ display:none !important; }
+  .app{ display:block !important; }
+  .main{ padding:0 !important; }
+  .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
+    backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
+  .title-wrap h1{ color:#14110f !important; }
+  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
+  .wrap{ max-width:none !important; padding:0 !important; }
+  .kpis{ margin:0 0 14px !important; }
+  .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
+  .kpi::before{ background:#5b2d90 !important; }
+  .kpi .k-label{ color:#5a524c !important; }
+  .kpi .k-val{ color:#14110f !important; }
+  .kpi .k-val small{ color:#5a524c !important; }
+  #print-only{ display:block !important; }
+  #print-only tr.rep td, #print-only table.ptbl thead th{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 </style>
 </head>
 <body>
@@ -298,9 +332,17 @@ select.picker:hover{ border-color:var(--border3); }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
           Azzera modifiche
         </button>
-        <button class="btn primary" id="btn-export">
+        <button class="btn ghost" id="btn-print" title="Stampa o salva la rosa in PDF, raggruppata per reparto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          PDF
+        </button>
+        <button class="btn ghost" id="btn-export" title="Esporta i ruoli in CSV per il database della rosa">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 21h16"/></svg>
-          Esporta CSV ruoli
+          CSV
+        </button>
+        <button class="btn primary" id="btn-xls" title="Esporta la rosa in Excel (.xls) con reparti e statistiche di stagione">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8l8 8M16 8l-8 8"/></svg>
+          Excel
         </button>
       </div>
 
@@ -309,6 +351,9 @@ select.picker:hover{ border-color:var(--border3); }
 
       <!-- roster grid -->
       <div class="grid" id="grid"></div>
+
+      <!-- tabella solo-stampa (PDF rosa per reparto) -->
+      <div id="print-only" aria-hidden="true"></div>
     </div>
 
     <p class="foot-note">
@@ -576,6 +621,93 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
   }
 
+  // ---------- raggruppa la rosa per reparto (ordine ROLES, ordinata per minuti) ----------
+  function groupByReparto(){
+    const order = ROLES.slice();
+    const groups = {}; order.forEach(r=> groups[r]=[]);
+    const none = [];
+    PLAYERS.forEach(pl=>{ const r=effRole(pl); if(r && groups[r]) groups[r].push(pl); else none.push(pl); });
+    const byMin = arr=> arr.slice().sort((a,b)=> b.min-a.min || a.name.localeCompare(b.name,'it'));
+    order.forEach(r=> groups[r]=byMin(groups[r]));
+    return { order, groups, none: byMin(none) };
+  }
+
+  // ---------- tabella solo-stampa (PDF) ----------
+  function buildPrintRoster(){
+    const host = document.getElementById('print-only');
+    if(!host) return;
+    const { order, groups, none } = groupByReparto();
+    let rows='';
+    const emit = (label, arr, na)=>{
+      if(!arr.length) return;
+      rows += '<tr class="rep"><td class="l" colspan="5">'+esc(label)+' &#183; '+arr.length+'</td></tr>';
+      arr.forEach(pl=>{
+        rows += '<tr'+(na?' class="na"':'')+'><td class="l">'+esc(pl.name)+'</td>'+
+          '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
+          '<td>'+NF0.format(pl.sedute)+'</td>'+
+          '<td>'+NF0.format(pl.partite)+'</td>'+
+          '<td>'+NF1.format(pl.dist/1000)+'</td></tr>';
+      });
+    };
+    order.forEach(r=> emit(r, groups[r], false));
+    emit(UNASSIGNED, none, true);
+    const assigned = PLAYERS.length - none.length;
+    const gen = S.generato ? ('agg. '+esc(S.generato)) : 'anteprima';
+    host.innerHTML =
+      '<div class="proster-h">Rosa Fiorentina Primavera U19W &#183; '+PLAYERS.length+' atlete ('+assigned+' assegnate, '+none.length+' da assegnare) &#183; Stagione '+esc(S.stagione||'2025-26')+' &#183; '+gen+'</div>'+
+      '<table class="ptbl"><thead><tr><th class="l">Atleta</th><th>Min</th><th>Sedute</th><th>Partite</th><th>Km</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table>';
+  }
+
+  // ---------- export XLS (Excel vero, con colori, per reparto) ----------
+  function exportXLS(){
+    const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472', REDBG='#fdebec', REDT='#9f2f2d';
+    const { order, groups, none } = groupByReparto();
+    let body='';
+    const emit = (label, arr, na)=>{
+      if(!arr.length) return;
+      body += '<tr class="rep"><td class="lbl" colspan="6">'+esc(label)+' &#183; '+arr.length+'</td></tr>';
+      arr.forEach(pl=>{
+        body += '<tr'+(na?' class="na"':'')+'><td class="lbl">'+esc(pl.name)+'</td>'+
+          '<td class="lbl">'+esc(effRole(pl)||UNASSIGNED)+'</td>'+
+          '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
+          '<td>'+NF0.format(pl.sedute)+'</td>'+
+          '<td>'+NF0.format(pl.partite)+'</td>'+
+          '<td>'+NF1.format(pl.dist/1000)+'</td></tr>';
+      });
+    };
+    order.forEach(r=> emit(r, groups[r], false));
+    emit(UNASSIGNED, none, true);
+    const assigned = PLAYERS.length - none.length;
+
+    let h = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">'+
+      '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+      '<x:Name>Rosa</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>'+
+      '</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->'+
+      '<style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt}'+
+      'td,th{border:1px solid '+BRD+';padding:5px 9px;text-align:right}'+
+      'th{background:'+VIO+';color:#fff;font-weight:700;text-align:center}'+
+      'td.lbl,th.lbl{text-align:left}td.lbl{font-weight:500}'+
+      'tr.rep td{background:'+VIOL+';font-weight:700;color:'+VIO+';text-align:left}'+
+      'tr.na td{background:'+REDBG+'}tr.na td.lbl{color:'+REDT+'}'+
+      '.ttl{font-size:15pt;font-weight:700;color:'+VIO+';border:none;text-align:left}'+
+      '.sub{color:'+MUT+';border:none;text-align:left}</style></head><body>';
+    h += '<table><tr><td class="ttl" colspan="6">Rosa Fiorentina Primavera U19W</td></tr>'+
+      '<tr><td class="sub" colspan="6">'+PLAYERS.length+' atlete &#183; '+assigned+' assegnate &#183; '+none.length+' da assegnare &#183; Stagione '+esc(S.stagione||'2025-26')+'</td></tr>'+
+      (S.generato?'<tr><td class="sub" colspan="6">Aggiornato: '+esc(S.generato)+'</td></tr>':'')+
+      '</table>';
+    h += '<table><tr><th class="lbl">Atleta</th><th class="lbl">Ruolo</th><th>Minuti</th><th>Sedute</th><th>Partite</th><th>Km</th></tr>'+body+'</table>';
+    h += '</body></html>';
+
+    const blob = new Blob(['﻿'+h], { type:'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'rosa_ruoli_'+dateStamp()+'.xls';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+    toast('Excel rosa esportato ('+PLAYERS.length+' atlete)');
+  }
+
   // ---------- reset overrides ----------
   function resetOverrides(){
     if(!Object.keys(overrides).length) return;
@@ -613,10 +745,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   });
   document.getElementById('sort').addEventListener('change', e=>{ state.sort=e.target.value; renderGrid(); });
   document.getElementById('btn-export').addEventListener('click', exportCSV);
+  document.getElementById('btn-xls').addEventListener('click', exportXLS);
+  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintRoster(); window.print(); });
   document.getElementById('btn-reset').addEventListener('click', resetOverrides);
+  window.addEventListener('beforeprint', buildPrintRoster);
 
   // ---------- init ----------
-  renderKPIs(); renderPills(); renderGrid(); updateResetBtn();
+  renderKPIs(); renderPills(); renderGrid(); updateResetBtn(); buildPrintRoster();
 })();
 </script>
 </body>
