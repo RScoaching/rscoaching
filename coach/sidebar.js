@@ -53,7 +53,11 @@ window.SIDEBAR_HTML = `
     </a>
   </div>
   <div class="sb-foot">
-    <strong>Raoul Simon</strong>Preparatore Atletico
+    <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Cambia area</span>
+    </a>
+    <div class="sb-cred"><strong>Raoul Simon</strong>Preparatore Atletico</div>
   </div>
 </div>`;
 
@@ -134,11 +138,23 @@ window.SIDEBAR_CSS = `
 .nav-icon{font-size:14px;opacity:.55;flex-shrink:0;transition:opacity .2s;}
 .nav-item.active .nav-icon,.nav-item:hover .nav-icon{opacity:1;}
 .sb-foot{
-  padding:12px 18px;
+  padding:12px 14px 14px;
   border-top:1px solid rgba(255,255,255,.05);
-  font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;flex-shrink:0;
+  flex-shrink:0;display:flex;flex-direction:column;gap:10px;
 }
-.sb-foot strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}
+.sb-switch{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 11px;border-radius:10px;
+  font-size:12px;font-weight:600;color:rgba(248,250,255,.6);
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  text-decoration:none;
+  transition:color .18s ease,background .18s ease,border-color .18s ease;
+}
+.sb-switch svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
+.sb-switch:hover{color:#F4F1EC;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);}
+.sb-switch:active{transform:scale(.98);}
+.sb-cred{font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;padding:0 4px;}
+.sb-cred strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}
 /* ── Mobile sidebar bar (shared pages) ── */
 .sb-mob-bar{
   display:none;position:fixed;top:0;left:0;right:0;height:52px;
