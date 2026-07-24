@@ -284,6 +284,22 @@ tr.r-teamref td.num{ color:var(--ink); }
 .sess-item.is-match .sess-tag{ color:var(--orange); }
 .sess-item .sess-wk{ font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
 .sess-empty{ font-size:12.5px; color:var(--faint); font-style:italic; padding:16px 2px; }
+/* workspace sedute: rail a sinistra + dettaglio a destra */
+.sess-layout{ display:grid; grid-template-columns:262px minmax(0,1fr); gap:18px; align-items:start; }
+.sess-rail{ position:sticky; top:12px; align-self:start; }
+.sess-rail .sess-search{ margin-top:0; margin-bottom:10px; }
+.sess-rail-list{ max-height:min(70vh,620px); overflow:auto; padding-right:4px; }
+.sess-rail .sess-mgroup{ background:var(--surface); }
+.sess-rail .sess-item{ grid-template-columns:34px 1fr auto; gap:8px; padding:8px 10px; margin-bottom:6px; }
+.sess-rail .sess-item .sess-wk{ display:none; }
+.sess-rail .sess-item.is-active{ border-color:var(--orange); background:var(--ember-bg); }
+.sess-rail .sess-item.is-active .sess-lb{ color:var(--orange2); }
+.sess-main{ min-width:0; }
+@media (max-width:860px){
+  .sess-layout{ grid-template-columns:1fr; gap:12px; }
+  .sess-rail{ position:static; }
+  .sess-rail-list{ max-height:280px; }
+}
 .seg.cmp-seg{ padding:2px; }
 .seg.cmp-seg button{ font-size:12px; padding:6px 12px; }
 .cmp-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin:2px 2px 12px; font-size:11.5px; color:var(--muted); }
@@ -594,8 +610,16 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           </button>
         </div>
         <div class="card-body" style="padding-top:6px">
-          <div class="cmp-legend" id="cmp-legend" hidden></div>
-          <div class="tscroll" id="session-scroll"></div>
+          <div class="sess-layout">
+            <aside class="sess-rail" aria-label="Elenco sedute">
+              <input class="sess-search" id="sess-rail-search" type="search" placeholder="Cerca seduta..." autocomplete="off">
+              <div class="sess-rail-list" id="sess-rail-list"></div>
+            </aside>
+            <div class="sess-main">
+              <div class="cmp-legend" id="cmp-legend" hidden></div>
+              <div class="tscroll" id="session-scroll"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1111,12 +1135,34 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function openSessionView(monthKey, label){
     state.session = { monthKey, label };
     renderSession();
+    const rail = document.getElementById('sess-rail-list');
+    if(rail && !rail.children.length){ const rs=document.getElementById('sess-rail-search'); renderSessRail(rs?rs.value:''); }
+    highlightRail();
     const card = document.getElementById('session-card');
     if(card){ card.style.display=''; card.scrollIntoView({ block:'start', behavior: REDUCE?'auto':'smooth' }); }
   }
   function closeSession(){
     state.session = null;
     const card = document.getElementById('session-card'); if(card) card.style.display='none';
+  }
+  // apre il workspace sedute (rail a sinistra + dettaglio a destra)
+  function openSessWorkspace(){
+    if(!state.session){
+      const all = allSessions();
+      if(all.length){ const s = all[all.length-1]; state.session = { monthKey:s.monthKey, label:s.label }; }
+    }
+    const card = document.getElementById('session-card'); if(card) card.style.display='';
+    renderSessRail('');
+    const rs = document.getElementById('sess-rail-search'); if(rs) rs.value='';
+    if(state.session){ renderSession(); highlightRail(); }
+    if(card) card.scrollIntoView({ block:'start', behavior: REDUCE?'auto':'smooth' });
+  }
+  function highlightRail(){
+    const host = document.getElementById('sess-rail-list'); if(!host || !state.session) return;
+    const key = state.session.monthKey+'|'+state.session.label;
+    host.querySelectorAll('.sess-item').forEach(b=>{
+      b.classList.toggle('is-active', (b.getAttribute('data-k')+'|'+b.getAttribute('data-l'))===key);
+    });
   }
   function renderSession(){
     if(!state.session) return;
@@ -1213,8 +1259,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       renderSession();
     }));
   }
-  function renderSessList(filter){
-    const host = document.getElementById('sess-list'); if(!host) return;
+  // costruisce l'elenco sedute raggruppato per mese (condiviso tra rail e dialog)
+  function buildSessList(filter, activeKey){
     const q = (filter||'').trim().toLowerCase();
     const all = allSessions().reverse();
     let html='', curMonth='', n=0;
@@ -1223,14 +1269,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(q && hay.indexOf(q)<0) return;
       if(s.monthTitle!==curMonth){ curMonth=s.monthTitle; html += '<div class="sess-mgroup">'+esc(curMonth)+'</div>'; }
       n++;
-      html += '<button class="sess-item'+(s.type==='match'?' is-match':'')+'" type="button" data-k="'+esc(s.monthKey)+'" data-l="'+esc(s.label)+'">'+
+      const act = (activeKey && (s.monthKey+'|'+s.label)===activeKey) ? ' is-active' : '';
+      html += '<button class="sess-item'+(s.type==='match'?' is-match':'')+act+'" type="button" data-k="'+esc(s.monthKey)+'" data-l="'+esc(s.label)+'">'+
         '<span class="sess-wd">'+esc(s.wd||'-')+'</span>'+
         '<span class="sess-lb">'+esc(s.label)+'</span>'+
         '<span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span>'+
         '<span class="sess-wk">'+esc(s.week||'')+'</span></button>';
     });
     if(!n) html = '<div class="sess-empty">Nessuna seduta trovata</div>';
-    host.innerHTML = html;
+    return html;
+  }
+  function renderSessRail(filter){
+    const host = document.getElementById('sess-rail-list'); if(!host) return;
+    const active = state.session ? (state.session.monthKey+'|'+state.session.label) : '';
+    host.innerHTML = buildSessList(filter, active);
+    host.querySelectorAll('.sess-item').forEach(b=> b.addEventListener('click', ()=>{
+      openSessionView(b.getAttribute('data-k'), b.getAttribute('data-l'));
+    }));
+  }
+  function renderSessList(filter){
+    const host = document.getElementById('sess-list'); if(!host) return;
+    host.innerHTML = buildSessList(filter, '');
     host.querySelectorAll('.sess-item').forEach(b=> b.addEventListener('click', ()=>{
       openSessionView(b.getAttribute('data-k'), b.getAttribute('data-l'));
       closeSessDialog();
@@ -1401,7 +1460,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   });
 
   // ---------- vista seduta / ricerca sedute ----------
-  { const b=document.getElementById('btn-sess'); if(b) b.addEventListener('click', openSessDialog); }
+  { const b=document.getElementById('btn-sess'); if(b) b.addEventListener('click', openSessWorkspace); }
+  { const i=document.getElementById('sess-rail-search'); if(i) i.addEventListener('input', e=>{ renderSessRail(e.target.value); highlightRail(); }); }
   { const b=document.getElementById('session-close'); if(b) b.addEventListener('click', closeSession); }
   { const b=document.getElementById('sess-done'); if(b) b.addEventListener('click', closeSessDialog); }
   { const seg=document.getElementById('cmp-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
