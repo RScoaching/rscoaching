@@ -254,6 +254,36 @@ tr.r-model td{ background:oklch(62% 0.22 280 / 0.08); font-weight:600; }
 tr.r-model td.col-day{ background:oklch(62% 0.22 280 / 0.08); }
 tr.r-model td.col-day .lb{ color:var(--violet2); }
 tr.r-model td.num{ color:var(--ink); }
+/* riferimenti dentro la vista seduta singola */
+tr.r-teamref td{ background:oklch(70% 0.18 152 / 0.10); font-weight:600; }
+tr.r-teamref td.col-day .lb{ color:var(--green); }
+tr.r-teamref td.num{ color:var(--ink); }
+/* etichetta seduta cliccabile nella griglia mensile */
+.grid td.col-day .lb-open{ appearance:none; font-family:inherit; font-size:inherit; font-weight:inherit;
+  color:var(--ink); background:transparent; border:0; padding:0; cursor:pointer; text-align:left;
+  border-bottom:1px dashed var(--border3); transition: color .15s var(--ease), border-color .15s var(--ease); }
+.grid td.col-day .lb-open:hover{ color:var(--orange); border-color:var(--orange); }
+.grid td.col-day .role-inline{ font-size:11px; color:var(--muted); margin-left:8px; }
+/* dialog cerca seduta */
+.sess-search{ display:block; width:100%; margin-top:12px; box-sizing:border-box; font-family:inherit; font-size:13px;
+  color:var(--ink); background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:9px 12px;
+  transition: border-color .16s var(--ease), background .16s var(--ease); }
+.sess-search:focus{ outline:none; border-color:var(--orange); background:var(--surface); }
+.sess-search::placeholder{ color:var(--faint); }
+.sess-mgroup{ position:sticky; top:0; z-index:1; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; padding:10px 2px 6px; background:var(--surface); }
+.sess-item{ display:grid; grid-template-columns:40px 68px 1fr auto; align-items:center; gap:10px; width:100%;
+  appearance:none; cursor:pointer; text-align:left; font-family:inherit; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:9px 12px; margin-bottom:7px;
+  transition: border-color .15s var(--ease), background .15s var(--ease), transform .1s var(--ease); }
+.sess-item:hover{ border-color:var(--border3); background:var(--surface3); }
+.sess-item:active{ transform:scale(.99); }
+.sess-item .sess-wd{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; }
+.sess-item .sess-lb{ font-size:13.5px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.sess-item .sess-tag{ font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+.sess-item.is-match .sess-tag{ color:var(--orange); }
+.sess-item .sess-wk{ font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.sess-empty{ font-size:12.5px; color:var(--faint); font-style:italic; padding:16px 2px; }
 tr.wkband td{
   text-align:left; background:linear-gradient(90deg, var(--violet-bg), transparent);
   color:var(--violet2); font-weight:700; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
@@ -407,6 +437,8 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   tr.r-month td.col-day .lb{ color:#5b3f8a !important; }
   tr.r-model td, tr.r-model td.col-day{ background:#efe9f6 !important; }
   tr.r-model td.col-day .lb{ color:#5b3f8a !important; }
+  tr.r-teamref td, tr.r-teamref td.col-day{ background:#eaf4ea !important; }
+  tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
   tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td{ color:#6a625c !important; }
   tr.wkband td{ background:#efe9f6 !important; color:#5b3f8a !important; }
   table.partite td.sigla{ color:#14110f !important; }
@@ -468,6 +500,10 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           <select class="picker" id="player-select" aria-label="Seleziona atleta"></select>
         </div>
         <span class="role-badge hide" id="role-badge"></span>
+        <button class="btn" id="btn-sess" title="Cerca e apri una singola seduta: tutte le atlete piu la media squadra">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          Sedute
+        </button>
         <span class="grow"></span>
         <button class="btn" id="btn-cols" title="Scegli, ordina e salva i parametri (sinottiche)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
@@ -523,6 +559,22 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
         </div>
       </section>
 
+      <!-- seduta singola -->
+      <section class="card reveal" id="session-card" style="display:none">
+        <div class="card-head">
+          <h2 id="session-title">Seduta</h2>
+          <span class="hint" id="session-hint"></span>
+          <span class="spacer"></span>
+          <button class="btn" id="session-close" title="Chiudi la vista seduta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            Chiudi
+          </button>
+        </div>
+        <div class="card-body" style="padding-top:6px">
+          <div class="tscroll" id="session-scroll"></div>
+        </div>
+      </section>
+
       <!-- partite -->
       <section class="card reveal" id="matches-card" style="--i:3">
         <div class="card-head">
@@ -544,6 +596,22 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 
 <div class="chart-tooltip" id="tooltip" role="status" aria-live="polite"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- cerca seduta -->
+<dialog id="sess-dialog" class="cols-dialog" aria-label="Cerca seduta">
+  <div class="cols-panel">
+    <div class="cols-head">
+      <h2>Sedute</h2>
+      <span class="hint">Cerca e apri una singola seduta: vedrai tutte le atlete piu la media squadra dentro quel giorno.</span>
+      <input class="sess-search" id="sess-search" type="search" placeholder="Cerca per giorno, settimana, tipo (allenamento o partita)..." autocomplete="off">
+    </div>
+    <div class="cols-scroll" id="sess-list"></div>
+    <div class="cols-foot">
+      <span class="grow"></span>
+      <button class="btn primary" id="sess-done" type="button">Chiudi</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- parametri e sinottiche -->
 <dialog id="cols-dialog" class="cols-dialog" aria-label="Parametri e sinottiche">
@@ -605,7 +673,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- state ----------
-  const state = { level:'team', player:null, monthKey:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
+  const state = { level:'team', player:null, monthKey:null, session:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
+  const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
 
   // ---------- parametri visibili + ordine (sinottiche) ----------
   const COLS_KEY = 'rs_fio_carico_cols';
@@ -881,13 +950,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         return;
       }
       const cls = ROWCLS[r.type] || 'r-day';
-      body += '<tr class="'+cls+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+'<span class="lb">'+esc(r.label)+'</span></td>';
+      const clickable = (r.type==='day' || r.type==='match');
+      const lb = clickable
+        ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(r.label)+'</button>'
+        : '<span class="lb">'+esc(r.label)+'</span>';
+      body += '<tr class="'+cls+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
       body += '</tr>';
     });
     body += '</tbody>';
     host.innerHTML = '<table class="grid">'+headHTML()+body+'</table>';
+    const mk = mon.key;
+    host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> openSessionView(mk, b.getAttribute('data-l'))));
   }
 
   // ---------- partite ----------
@@ -939,6 +1014,134 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(msort.col===c) msort.dir*=-1; else { msort.col=c; msort.dir = (c==='sigla'?1:-1); }
       renderMatches();
     }));
+  }
+
+  // ---------- vista seduta singola ----------
+  function teamMonth(key){ return ((S.team&&S.team.months)||[]).find(m=> m.key===key) || null; }
+  function findDayRow(mon, label){ return (mon&&mon.rows||[]).find(r=> (r.type==='day'||r.type==='match') && r.label===label) || null; }
+  function allSessions(){
+    const out = [];
+    ((S.team&&S.team.months)||[]).forEach(mon=>{
+      let wk = '';
+      (mon.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ wk = r.label; return; }
+        if(r.type==='day' || r.type==='match')
+          out.push({ monthKey:mon.key, monthTitle:mon.title, label:r.label, wd:r.wd||'', type:r.type, week:wk });
+      });
+    });
+    return out;
+  }
+  function sessionAthletes(monthKey, label){
+    const out = [];
+    Object.keys(S.players||{}).forEach(name=>{
+      const p = S.players[name];
+      const mon = (p.months||[]).find(m=> m.key===monthKey);
+      const row = findDayRow(mon, label);
+      if(row) out.push({ name, role:(p.role||''), v:row.v||[] });
+    });
+    return out;
+  }
+  function openSessionView(monthKey, label){
+    state.session = { monthKey, label };
+    renderSession();
+    const card = document.getElementById('session-card');
+    if(card){ card.style.display=''; card.scrollIntoView({ block:'start', behavior: REDUCE?'auto':'smooth' }); }
+  }
+  function closeSession(){
+    state.session = null;
+    const card = document.getElementById('session-card'); if(card) card.style.display='none';
+  }
+  function renderSession(){
+    if(!state.session) return;
+    const host = document.getElementById('session-scroll'); if(!host) return;
+    const { monthKey, label } = state.session;
+    const mon = teamMonth(monthKey);
+    const sess = allSessions().find(s=> s.monthKey===monthKey && s.label===label);
+    const teamRow = findDayRow(mon, label);
+    const ath = sessionAthletes(monthKey, label);
+    const V = VIS();
+    const isMatch = sess && sess.type==='match';
+    const wd = sess ? sess.wd : '';
+    document.getElementById('session-title').textContent = (isMatch?'Partita ':'Seduta ')+label;
+    document.getElementById('session-hint').textContent =
+      (mon?mon.title:'') + (sess&&sess.week?(' &#183; '+sess.week):'').replace('&#183;','·') + (wd?(' · '+wd):'') + ' · ' + ath.length + ' atlete';
+    const rows = ath.slice().sort((a,b)=>{
+      if(ssort.col==='name') return ssort.dir*a.name.localeCompare(b.name,'it');
+      if(ssort.col==='role') return ssort.dir*String(a.role).localeCompare(String(b.role),'it');
+      let va=(a.v||[])[ssort.col], vb=(b.v||[])[ssort.col];
+      va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
+      return ssort.dir*(va-vb);
+    });
+    const arw = k=> ssort.col===k ? (ssort.dir>0?'▲':'▼') : '▴';
+    const ariaSort = k=> ssort.col===k ? (ssort.dir>0?'ascending':'descending') : 'none';
+    let h = '<table class="grid"><thead><tr>';
+    h += '<th class="col-day sortable" data-c="name" aria-sort="'+ariaSort('name')+'">Atleta <span class="arw">'+arw('name')+'</span></th>';
+    V.forEach(i=>{
+      const k = KEY.has(i)?' key':'';
+      h += '<th class="sortable'+k+'" data-c="'+i+'" aria-sort="'+ariaSort(i)+'" title="'+esc(M[i])+'">'+esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span> <span class="arw">'+arw(i)+'</span></th>';
+    });
+    h += '</tr></thead><tbody>';
+    if(teamRow){
+      h += '<tr class="r-teamref"><td class="col-day"><span class="lb">Media squadra</span></td>';
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt((teamRow.v||[])[i])+'</td>');
+      h += '</tr>';
+    }
+    if(S.model && S.model.length){
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita</span></td>';
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(S.model[i])+'</td>');
+      h += '</tr>';
+    }
+    if(!rows.length){
+      h += '<tr class="r-day"><td class="col-day" colspan="'+(V.length+1)+'">Nessuna atleta con dati per questa seduta</td></tr>';
+    }
+    rows.forEach(r=>{
+      h += '<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
+      const rv = r.v||[];
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+    host.innerHTML = h;
+    host.querySelectorAll('th.sortable').forEach(th=> th.addEventListener('click', ()=>{
+      const raw = th.getAttribute('data-c');
+      const c = (raw==='name'||raw==='role') ? raw : +raw;
+      if(ssort.col===c) ssort.dir*=-1; else { ssort.col=c; ssort.dir=(c==='name'||c==='role')?1:-1; }
+      renderSession();
+    }));
+  }
+  function renderSessList(filter){
+    const host = document.getElementById('sess-list'); if(!host) return;
+    const q = (filter||'').trim().toLowerCase();
+    const all = allSessions().reverse();
+    let html='', curMonth='', n=0;
+    all.forEach(s=>{
+      const hay = (s.label+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
+      if(q && hay.indexOf(q)<0) return;
+      if(s.monthTitle!==curMonth){ curMonth=s.monthTitle; html += '<div class="sess-mgroup">'+esc(curMonth)+'</div>'; }
+      n++;
+      html += '<button class="sess-item'+(s.type==='match'?' is-match':'')+'" type="button" data-k="'+esc(s.monthKey)+'" data-l="'+esc(s.label)+'">'+
+        '<span class="sess-wd">'+esc(s.wd||'-')+'</span>'+
+        '<span class="sess-lb">'+esc(s.label)+'</span>'+
+        '<span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span>'+
+        '<span class="sess-wk">'+esc(s.week||'')+'</span></button>';
+    });
+    if(!n) html = '<div class="sess-empty">Nessuna seduta trovata</div>';
+    host.innerHTML = html;
+    host.querySelectorAll('.sess-item').forEach(b=> b.addEventListener('click', ()=>{
+      openSessionView(b.getAttribute('data-k'), b.getAttribute('data-l'));
+      closeSessDialog();
+    }));
+  }
+  function openSessDialog(){
+    const d=document.getElementById('sess-dialog'); if(!d) return;
+    renderSessList('');
+    const i=document.getElementById('sess-search'); if(i) i.value='';
+    if(typeof d.showModal==='function' && !d.open) d.showModal(); else d.setAttribute('open','');
+    if(i) setTimeout(()=> i.focus(), 40);
+  }
+  function closeSessDialog(){
+    const d=document.getElementById('sess-dialog'); if(!d) return;
+    if(typeof d.close==='function' && d.open) d.close(); else d.removeAttribute('open');
   }
 
   // ---------- toast ----------
@@ -1092,6 +1295,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.getElementById('subtitle').innerHTML = '<b>'+esc(state.player)+'</b> · Fiorentina Primavera U19W';
     renderMonths(); renderKPIs(); renderChart(); renderGrid();
   });
+
+  // ---------- vista seduta / ricerca sedute ----------
+  { const b=document.getElementById('btn-sess'); if(b) b.addEventListener('click', openSessDialog); }
+  { const b=document.getElementById('session-close'); if(b) b.addEventListener('click', closeSession); }
+  { const b=document.getElementById('sess-done'); if(b) b.addEventListener('click', closeSessDialog); }
+  { const i=document.getElementById('sess-search'); if(i) i.addEventListener('input', e=> renderSessList(e.target.value)); }
+  { const d=document.getElementById('sess-dialog'); if(d){ d.addEventListener('click', e=>{ if(e.target===d) closeSessDialog(); }); d.addEventListener('cancel', e=>{ e.preventDefault(); closeSessDialog(); }); } }
 
   // ---------- resize (re-render chart width) ----------
   let rz; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(renderChart, 160); });
