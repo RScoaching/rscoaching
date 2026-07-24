@@ -284,6 +284,24 @@ tr.r-teamref td.num{ color:var(--ink); }
 .sess-item.is-match .sess-tag{ color:var(--orange); }
 .sess-item .sess-wk{ font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
 .sess-empty{ font-size:12.5px; color:var(--faint); font-style:italic; padding:16px 2px; }
+.seg.cmp-seg{ padding:2px; }
+.seg.cmp-seg button{ font-size:12px; padding:6px 12px; }
+.cmp-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin:2px 2px 12px; font-size:11.5px; color:var(--muted); }
+.cmp-legend b{ color:var(--ink); font-weight:700; }
+.cmp-legend .lg{ display:inline-flex; align-items:center; gap:6px; }
+.cmp-legend .dot{ width:11px; height:11px; border-radius:3px; display:inline-block; }
+.cmp-legend .dot.over{ background:var(--orange); }
+.cmp-legend .dot.near{ background:var(--green); }
+.cmp-legend .dot.under{ background:oklch(65% 0.13 250); }
+.md-badge{ display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.04em;
+  background:var(--violet-bg); color:var(--violet2); border:1px solid var(--violet-border); }
+td.num.cmp{ font-variant-numeric:tabular-nums; }
+td.num.cmp .pct{ font-weight:700; }
+td.num.cmp .raw{ display:block; font-size:10px; color:var(--faint); font-weight:400; margin-top:1px; }
+td.num.cmp.over .pct{ color:var(--orange2); }
+td.num.cmp.near .pct{ color:var(--green); }
+td.num.cmp.under .pct{ color:oklch(66% 0.13 250); }
+td.num.cmp.na{ color:var(--faint); }
 tr.wkband td{
   text-align:left; background:linear-gradient(90deg, var(--violet-bg), transparent);
   color:var(--violet2); font-weight:700; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
@@ -565,12 +583,18 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           <h2 id="session-title">Seduta</h2>
           <span class="hint" id="session-hint"></span>
           <span class="spacer"></span>
+          <div class="seg cmp-seg" id="cmp-seg" role="group" aria-label="Modalita confronto">
+            <button class="on" data-cmp="val" type="button" title="Mostra i valori assoluti">Valori</button>
+            <button data-cmp="match" type="button" title="Quanto ogni dato dista dalla partita (modello AVG)">vs Partita</button>
+            <button data-cmp="md" type="button" title="Confronto con la media delle sedute dello stesso match day">vs MD</button>
+          </div>
           <button class="btn" id="session-close" title="Chiudi la vista seduta">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             Chiudi
           </button>
         </div>
         <div class="card-body" style="padding-top:6px">
+          <div class="cmp-legend" id="cmp-legend" hidden></div>
           <div class="tscroll" id="session-scroll"></div>
         </div>
       </section>
@@ -673,7 +697,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- state ----------
-  const state = { level:'team', player:null, monthKey:null, session:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
+  const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
   const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
 
   // ---------- parametri visibili + ordine (sinottiche) ----------
@@ -1031,6 +1055,49 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return out;
   }
+  const WDX = { 'Lun':0,'Mar':1,'Mer':2,'Gio':3,'Ven':4,'Sab':5,'Dom':6 };
+  // mappa MD per ogni seduta: dentro un blocco settimana trova la partita e calcola la distanza in giorni
+  function buildMDMap(){
+    const map = {}; // "monthKey|label" -> { md, matchLabel, matchWd }
+    ((S.team&&S.team.months)||[]).forEach(mon=>{
+      let block = [];
+      const flush = ()=>{
+        const match = block.find(r=> r.type==='match');
+        block.forEach(r=>{
+          if(r.type!=='day' && r.type!=='match') return;
+          let md=null;
+          if(match && WDX[r.wd]!=null && WDX[match.wd]!=null) md = WDX[match.wd]-WDX[r.wd];
+          if(r.type==='match') md=0;
+          map[mon.key+'|'+r.label] = { md, matchLabel: match?match.label:'', matchWd: match?match.wd:'' };
+        });
+        block = [];
+      };
+      (mon.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ flush(); return; }
+        block.push(r);
+      });
+      flush();
+    });
+    return map;
+  }
+  let MDMAP = null;
+  function mdOf(monthKey,label){ if(!MDMAP) MDMAP=buildMDMap(); return MDMAP[monthKey+'|'+label]||null; }
+  function mdLabel(md){ if(md==null) return ''; if(md===0) return 'Partita (MD)'; return 'MD-'+md; }
+  // media squadra di tutte le sedute con lo stesso MD (baseline session-compare)
+  function mdAverage(md){
+    if(md==null) return null;
+    if(!MDMAP) MDMAP=buildMDMap();
+    const acc = new Array(M.length).fill(0), cnt = new Array(M.length).fill(0);
+    ((S.team&&S.team.months)||[]).forEach(mon=>{
+      (mon.rows||[]).forEach(r=>{
+        if(r.type!=='day' && r.type!=='match') return;
+        const info = MDMAP[mon.key+'|'+r.label];
+        if(!info || info.md!==md) return;
+        (r.v||[]).forEach((x,i)=>{ if(x!=null && isFinite(x)){ acc[i]+=x; cnt[i]++; } });
+      });
+    });
+    return acc.map((s,i)=> cnt[i]? s/cnt[i] : null);
+  }
   function sessionAthletes(monthKey, label){
     const out = [];
     Object.keys(S.players||{}).forEach(name=>{
@@ -1062,9 +1129,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const V = VIS();
     const isMatch = sess && sess.type==='match';
     const wd = sess ? sess.wd : '';
+    const mode = state.cmp || 'val';
+    const info = mdOf(monthKey, label);
+    const md = info ? info.md : null;
+    const mdAvg = (mode==='md') ? mdAverage(md) : null;
+    const base = mode==='match' ? (S.model||null) : mode==='md' ? mdAvg : null;
+    // se il confronto scelto non e applicabile, ripiega sui valori
+    const eff = (mode==='match' && !(S.model&&S.model.length)) ? 'val'
+              : (mode==='md' && !(mdAvg && md!=null)) ? 'val' : mode;
     document.getElementById('session-title').textContent = (isMatch?'Partita ':'Seduta ')+label;
+    const badge = (md!=null) ? '  ·  '+mdLabel(md)+(info&&info.matchLabel&&md!==0?(' ('+info.matchLabel+')'):'') : '';
     document.getElementById('session-hint').textContent =
-      (mon?mon.title:'') + (sess&&sess.week?(' &#183; '+sess.week):'').replace('&#183;','·') + (wd?(' · '+wd):'') + ' · ' + ath.length + ' atlete';
+      (mon?mon.title:'') + (sess&&sess.week?('  ·  '+sess.week):'') + (wd?('  ·  '+wd):'') + '  ·  ' + ath.length + ' atlete' + badge;
+    // legenda
+    const lg = document.getElementById('cmp-legend');
+    if(lg){
+      if(eff==='val'){ lg.hidden = true; lg.innerHTML=''; }
+      else {
+        const ref = eff==='match' ? 'partita modello' : ('media '+mdLabel(md)+' di stagione');
+        lg.hidden = false;
+        lg.innerHTML = '% rispetto alla <b>'+esc(ref)+'</b>'
+          + '<span class="lg"><span class="dot under"></span>&lt;95%</span>'
+          + '<span class="lg"><span class="dot near"></span>95-105%</span>'
+          + '<span class="lg"><span class="dot over"></span>&gt;105%</span>';
+      }
+    }
     const rows = ath.slice().sort((a,b)=>{
       if(ssort.col==='name') return ssort.dir*a.name.localeCompare(b.name,'it');
       if(ssort.col==='role') return ssort.dir*String(a.role).localeCompare(String(b.role),'it');
@@ -1072,6 +1161,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
       return ssort.dir*(va-vb);
     });
+    // rende una cella: valore o percentuale rispetto alla baseline
+    const cell = (v, i, cmp)=>{
+      const kc = KEY.has(i)?' key':'';
+      if(cmp!=='match' && cmp!=='md') return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
+      const b = base ? base[i] : null;
+      if(v==null || !isFinite(v) || b==null || !isFinite(b) || b===0) return '<td class="num cmp na'+kc+'">-</td>';
+      const r = v/b, pct = Math.round(r*100);
+      const cls = r>=1.05 ? 'over' : r>=0.95 ? 'near' : 'under';
+      return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
+    };
     const arw = k=> ssort.col===k ? (ssort.dir>0?'▲':'▼') : '▴';
     const ariaSort = k=> ssort.col===k ? (ssort.dir>0?'ascending':'descending') : 'none';
     let h = '<table class="grid"><thead><tr>';
@@ -1083,11 +1182,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     h += '</tr></thead><tbody>';
     if(teamRow){
       h += '<tr class="r-teamref"><td class="col-day"><span class="lb">Media squadra</span></td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt((teamRow.v||[])[i])+'</td>');
+      V.forEach(i=> h += cell((teamRow.v||[])[i], i, eff));
       h += '</tr>';
     }
-    if(S.model && S.model.length){
-      h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita</span></td>';
+    // riga di riferimento (baseline) mostrata come valori assoluti
+    if(eff==='md' && mdAvg){
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">Media '+esc(mdLabel(md))+' (rif.)</span></td>';
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(mdAvg[i])+'</td>');
+      h += '</tr>';
+    } else if(S.model && S.model.length){
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='match'?' (rif.)':'')+'</span></td>';
       V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(S.model[i])+'</td>');
       h += '</tr>';
     }
@@ -1097,7 +1201,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rows.forEach(r=>{
       h += '<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       const rv = r.v||[];
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
+      V.forEach(i=> h += cell(rv[i], i, eff));
       h += '</tr>';
     });
     h += '</tbody></table>';
@@ -1300,6 +1404,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const b=document.getElementById('btn-sess'); if(b) b.addEventListener('click', openSessDialog); }
   { const b=document.getElementById('session-close'); if(b) b.addEventListener('click', closeSession); }
   { const b=document.getElementById('sess-done'); if(b) b.addEventListener('click', closeSessDialog); }
+  { const seg=document.getElementById('cmp-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+      state.cmp = btn.getAttribute('data-cmp');
+      seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+      renderSession();
+    })); }
   { const i=document.getElementById('sess-search'); if(i) i.addEventListener('input', e=> renderSessList(e.target.value)); }
   { const d=document.getElementById('sess-dialog'); if(d){ d.addEventListener('click', e=>{ if(e.target===d) closeSessDialog(); }); d.addEventListener('cancel', e=>{ e.preventDefault(); closeSessDialog(); }); } }
 
