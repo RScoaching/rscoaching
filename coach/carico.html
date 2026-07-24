@@ -184,7 +184,10 @@ select.picker:hover{ border-color:var(--border3); }
 .legend{ display:flex; align-items:center; gap:16px; padding:2px 20px 10px; flex-wrap:wrap; }
 .legend span{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
 .lg-bar{ width:13px; height:13px; border-radius:3px; background:linear-gradient(180deg, var(--orange), var(--orange2)); }
+.lg-match{ width:13px; height:13px; border-radius:3px; background:linear-gradient(180deg, var(--violet), var(--violet2)); }
 .lg-line{ width:16px; height:0; border-top:2px dashed var(--violet2); }
+.seg.chart-scope{ padding:2px; }
+.seg.chart-scope button{ font-size:12px; padding:6px 11px; }
 .chart-wrap{ overflow-x:auto; padding:2px 6px 6px; scrollbar-width:thin; }
 .chart-wrap::-webkit-scrollbar{ height:6px; }
 .chart-wrap::-webkit-scrollbar-thumb{ background:var(--border3); border-radius:3px; }
@@ -566,24 +569,40 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
       <!-- chart -->
       <section class="card reveal" id="chart-card" style="--i:1">
         <div class="card-head">
-          <h2>Andamento settimanale</h2>
-          <span class="hint">totali per settimana · intera stagione</span>
+          <h2 id="chart-title">Andamento carico</h2>
+          <span class="hint" id="chart-hint"></span>
           <span class="spacer"></span>
           <div class="chart-tools">
+            <div class="seg chart-scope" id="chart-scope" role="group" aria-label="Ambito grafico">
+              <button class="on" data-scope="micro" type="button" title="Microciclo: giorno per giorno di una settimana">Microciclo</button>
+              <button data-scope="month" type="button" title="Totali per settimana del mese selezionato">Mese</button>
+              <button data-scope="season" type="button" title="Totali per settimana di tutta la stagione">Stagione</button>
+            </div>
+            <div class="field" id="chart-week-field" style="display:none">
+              <select class="picker" id="chart-week" aria-label="Settimana del microciclo"></select>
+            </div>
             <div class="field">
               <select class="picker" id="chart-metric" aria-label="Metrica del grafico"></select>
             </div>
           </div>
         </div>
-        <div class="legend">
-          <span><span class="lg-bar"></span> Totale settimana</span>
-          <span><span class="lg-line"></span> Media stagionale</span>
-        </div>
+        <div class="legend" id="chart-legend"></div>
         <div class="chart-wrap" id="chart-wrap"></div>
       </section>
 
+      <!-- partite -->
+      <section class="card reveal" id="matches-card" style="--i:2">
+        <div class="card-head">
+          <h2>Partite</h2>
+          <span class="hint" id="matches-hint">risultati gara a confronto con il modello AVG</span>
+        </div>
+        <div class="card-body" style="padding-top:6px">
+          <div class="tscroll" id="matches-scroll"></div>
+        </div>
+      </section>
+
       <!-- uguale identico grid -->
-      <section class="card reveal" id="grid-card" style="--i:2">
+      <section class="card reveal" id="grid-card" style="--i:3">
         <div class="card-head">
           <h2 id="grid-title">Monitoraggio</h2>
           <span class="hint" id="grid-hint">griglia mensile · giorno per giorno</span>
@@ -620,17 +639,6 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
               <div class="tscroll" id="session-scroll"></div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- partite -->
-      <section class="card reveal" id="matches-card" style="--i:3">
-        <div class="card-head">
-          <h2>Partite</h2>
-          <span class="hint" id="matches-hint">stagione · con modello AVG partita</span>
-        </div>
-        <div class="card-body" style="padding-top:6px">
-          <div class="tscroll" id="matches-scroll"></div>
         </div>
       </section>
     </div>
@@ -721,7 +729,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- state ----------
-  const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
+  const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1) };
   const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
 
   // ---------- parametri visibili + ordine (sinottiche) ----------
@@ -816,6 +824,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     sel.addEventListener('change', ()=>{ state.chartIdx = +sel.value; renderChart(); });
   })();
 
+  // ---------- chart scope (microciclo / mese / stagione) + settimana ----------
+  (function(){
+    const seg = document.getElementById('chart-scope');
+    if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+      state.chartScope = btn.getAttribute('data-scope');
+      seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+      renderChart();
+    }));
+    const wsel = document.getElementById('chart-week');
+    if(wsel) wsel.addEventListener('change', ()=>{ state.chartWeek = wsel.value; renderChart(); });
+  })();
+
   // ---------- month pills ----------
   function renderMonths(){
     const host = document.getElementById('months');
@@ -826,7 +846,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<button class="mpill'+(m.key===state.monthKey?' on':'')+'" data-k="'+esc(m.key)+'" role="tab" aria-selected="'+(m.key===state.monthKey)+'">'+esc(m.title)+'</button>'
     ).join('');
     host.querySelectorAll('.mpill').forEach(b=> b.addEventListener('click', ()=>{
-      state.monthKey = b.getAttribute('data-k'); renderMonths(); renderKPIs(); renderGrid();
+      state.monthKey = b.getAttribute('data-k'); state.chartWeek = null;
+      renderMonths(); renderKPIs(); renderGrid();
+      if(state.chartScope!=='season') renderChart();
       const on = host.querySelector('.mpill.on'); if(on) on.scrollIntoView({block:'nearest', inline:'center', behavior: REDUCE?'auto':'smooth'});
     }));
   }
@@ -856,42 +878,114 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   // ---------- chart ----------
-  function buildPoints(){
-    const ms = currentMonths(); const idx = state.chartIdx; const pts = [];
-    ms.forEach(m=>{
-      let wk = '';
-      (m.rows||[]).forEach(r=>{
-        if(r.type==='wk_header') wk = r.label;
-        else if(r.type==='tot_week'){ pts.push({ month:m.title, code:monthCode(m.title), week:wk, value:r.v[idx] }); }
-      });
+  function weekBlocks(mon){
+    const out = []; let cur = null;
+    (mon&&mon.rows||[]).forEach(r=>{
+      if(r.type==='wk_header'){ cur = { week:r.label, rows:[], tot:null }; out.push(cur); return; }
+      if(!cur){ cur = { week:'', rows:[], tot:null }; out.push(cur); }
+      if(r.type==='day' || r.type==='match') cur.rows.push(r);
+      else if(r.type==='tot_week') cur.tot = r;
     });
+    return out;
+  }
+  function microWeeks(){
+    const mon = activeMonth(); if(!mon) return [];
+    return weekBlocks(mon).filter(b=> b.rows.length);
+  }
+  function syncWeekSelect(){
+    const field = document.getElementById('chart-week-field');
+    const sel = document.getElementById('chart-week');
+    if(state.chartScope!=='micro'){ if(field) field.style.display='none'; return; }
+    const wks = microWeeks();
+    if(field) field.style.display = wks.length ? '' : 'none';
+    if(!sel){ return; }
+    if(!wks.length){ sel.innerHTML=''; return; }
+    if(!wks.some(b=> b.week===state.chartWeek)) state.chartWeek = wks[wks.length-1].week;
+    sel.innerHTML = wks.map(b=> '<option value="'+esc(b.week)+'"'+(b.week===state.chartWeek?' selected':'')+'>'+esc(b.week||'settimana')+'</option>').join('');
+    sel.value = state.chartWeek;
+  }
+  function setChartChrome(scope){
+    const t = document.getElementById('chart-title');
+    const hint = document.getElementById('chart-hint');
+    const leg = document.getElementById('chart-legend');
+    const mon = activeMonth();
+    if(scope==='micro'){
+      if(t) t.textContent = 'Microciclo';
+      if(hint) hint.textContent = (state.chartWeek? (state.chartWeek+' · ') : '') + (mon?mon.title:'') + ' · giorno per giorno';
+      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media microciclo</span>';
+    } else if(scope==='month'){
+      if(t) t.textContent = 'Carico settimanale';
+      if(hint) hint.textContent = (mon?mon.title:'') + ' · totali per settimana';
+      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media mese</span>';
+    } else {
+      if(t) t.textContent = 'Andamento stagione';
+      if(hint) hint.textContent = 'totali per settimana · intera stagione';
+      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media stagione</span>';
+    }
+  }
+  function buildPoints(){
+    const idx = state.chartIdx, scope = state.chartScope, pts = [];
+    if(scope==='season'){
+      currentMonths().forEach(m=>{
+        let wk = '';
+        (m.rows||[]).forEach(r=>{
+          if(r.type==='wk_header') wk = r.label;
+          else if(r.type==='tot_week') pts.push({ value:r.v[idx], group:monthCode(m.title), barLabel:null, kind:'week', ttTitle:m.title, ttSub:wk, md:null });
+        });
+      });
+    } else if(scope==='month'){
+      const mon = activeMonth(); if(!mon) return pts;
+      weekBlocks(mon).forEach(b=>{
+        if(!b.rows.length && !b.tot) return;
+        const v = b.tot ? b.tot.v[idx] : b.rows.reduce((a,r)=> a + ((r.v&&r.v[idx]!=null)? r.v[idx]:0), 0);
+        pts.push({ value:v, group:null, barLabel:(b.week||'sett.'), kind:'week', ttTitle:mon.title, ttSub:(b.week||'settimana'), md:null });
+      });
+    } else { // micro
+      const mon = activeMonth(); if(!mon) return pts;
+      const wks = microWeeks();
+      const blk = wks.find(b=> b.week===state.chartWeek) || wks[wks.length-1];
+      if(!blk) return pts;
+      blk.rows.forEach(r=>{
+        const info = mdOf(mon.key, r.label);
+        const md = r.type==='match' ? 0 : (info ? info.md : null);
+        pts.push({
+          value:(r.v?r.v[idx]:null), group:null, barLabel:(r.wd||r.label),
+          kind:(r.type==='match'?'match':'train'),
+          ttTitle:(r.label+(r.wd?(' · '+r.wd):'')),
+          ttSub:(mdLabel(md)||(r.type==='match'?'partita':'allenamento')), md:md
+        });
+      });
+    }
     return pts;
   }
   function renderChart(){
     const wrap = document.getElementById('chart-wrap');
+    const scope = state.chartScope;
+    syncWeekSelect();
+    setChartChrome(scope);
     const pts = buildPoints();
     const idx = state.chartIdx, unit = UNIT[idx]||'';
-    if(!pts.length){ wrap.innerHTML = emptyBlock('Nessun dato settimanale'); return; }
+    if(!pts.length){ wrap.innerHTML = emptyBlock(scope==='micro'?'Nessuna seduta in questa settimana':'Nessun dato disponibile'); return; }
 
-    const H = 260, padL = 52, padR = 14, padT = 14, padB = 42;
-    const slot = 26, gapMonth = 10;
-    // group widths (add a small gap between months)
-    let x = padL, xs = [];
-    let prev = null;
-    pts.forEach(p=>{ if(prev!==null && p.code!==prev) x += gapMonth; xs.push(x); x += slot; prev = p.code; });
+    const grouped = (scope==='season');
+    const H = 260, padL = 52, padR = 14, padT = 14, padB = grouped?42:52;
+    const slot = grouped?26:34, gapMonth = 10;
+    // posizioni x (gap solo tra mesi in vista stagione)
+    let x = padL, xs = [], prev = null;
+    pts.forEach(p=>{ if(grouped && prev!==null && p.group!==prev) x += gapMonth; xs.push(x); x += slot; prev = p.group; });
     const innerW = x + padR - padL;
     const W = Math.max(wrap.clientWidth||760, padL + innerW + padR);
-    // rescale xs if we have extra room (spread to full width)
     const usedW = padL + innerW + padR;
     const extra = Math.max(0, W - usedW);
-    const stretch = pts.length>1 ? extra/(pts.length) : 0;
-    const barW = slot - 8 + Math.min(stretch, 10);
+    const stretch = pts.length>1 ? extra/pts.length : 0;
+    const barW = Math.min(48, slot - 8 + Math.min(stretch, 12));
     xs = xs.map((xx,i)=> xx + stretch*i);
 
     const vals = pts.map(p=> (p.value==null?0:p.value));
+    const nz = pts.filter(p=> p.value!=null).map(p=> p.value);
     const maxV = Math.max(1, ...vals);
     const nice = niceMax(maxV);
-    const mean = vals.filter((v,i)=> pts[i].value!=null).reduce((a,b)=>a+b,0) / Math.max(1, vals.filter((v,i)=> pts[i].value!=null).length);
+    const mean = nz.length ? nz.reduce((a,b)=>a+b,0)/nz.length : 0;
     const yOf = v => padT + (H-padT-padB) * (1 - v/nice);
 
     let g = '';
@@ -902,23 +996,33 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(24% 0.016 38 / 0.7)" stroke-width="1"/>';
       g += '<text x="'+(padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+ (nice>=1000? NF0.format(Math.round(val)) : NF.format(val)) +'</text>';
     }
-    // month labels (centered under each month group) + faint separators
-    const groups = {};
-    pts.forEach((p,i)=>{ (groups[p.code] = groups[p.code] || []).push(i); });
-    Object.keys(groups).forEach(code=>{
-      const arr = groups[code]; const first = arr[0], last = arr[arr.length-1];
-      const cx = (xs[first] + xs[last] + barW)/2;
-      g += '<text x="'+cx.toFixed(1)+'" y="'+(H-padB+22)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--muted)">'+esc(code)+'</text>';
-      if(first>0){ const sx = xs[first]-gapMonth/2-2; g += '<line x1="'+sx.toFixed(1)+'" y1="'+padT+'" x2="'+sx.toFixed(1)+'" y2="'+(H-padB)+'" stroke="oklch(20% 0.016 38 / 0.6)" stroke-width="1"/>'; }
-    });
-    // bars
+    if(grouped){
+      // etichette mese (centrate sotto ogni gruppo) + separatori
+      const groups = {};
+      pts.forEach((p,i)=>{ (groups[p.group] = groups[p.group] || []).push(i); });
+      Object.keys(groups).forEach(code=>{
+        const arr = groups[code]; const first = arr[0], last = arr[arr.length-1];
+        const cx = (xs[first] + xs[last] + barW)/2;
+        g += '<text x="'+cx.toFixed(1)+'" y="'+(H-padB+22)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--muted)">'+esc(code)+'</text>';
+        if(first>0){ const sx = xs[first]-gapMonth/2-2; g += '<line x1="'+sx.toFixed(1)+'" y1="'+padT+'" x2="'+sx.toFixed(1)+'" y2="'+(H-padB)+'" stroke="oklch(20% 0.016 38 / 0.6)" stroke-width="1"/>'; }
+      });
+    } else {
+      // etichette per singola barra (+ tag MD nel microciclo)
+      pts.forEach((p,i)=>{
+        const cx = xs[i] + barW/2;
+        g += '<text x="'+cx.toFixed(1)+'" y="'+(H-padB+16)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--muted)">'+esc(p.barLabel||'')+'</text>';
+        if(scope==='micro' && p.md!=null)
+          g += '<text x="'+cx.toFixed(1)+'" y="'+(H-padB+31)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+esc(p.md===0?'MD':'MD-'+p.md)+'</text>';
+      });
+    }
+    // barre
     pts.forEach((p,i)=>{
-      const v = p.value==null?0:p.value; const y = yOf(v); const h = Math.max(0, (H-padB) - y);
+      const v = p.value==null?0:p.value; const y = yOf(Math.min(v,nice)); const h = Math.max(0, (H-padB) - y);
       const op = p.value==null? 0.18 : 0.9;
-      g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" '+
-           'fill="url(#barGrad)" opacity="'+op+'"></rect>';
+      const fill = (p.kind==='match') ? 'url(#barMatch)' : 'url(#barGrad)';
+      g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" fill="'+fill+'" opacity="'+op+'"></rect>';
     });
-    // mean line
+    // media
     if(isFinite(mean) && mean>0){
       const y = yOf(Math.min(mean, nice));
       g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--violet2)" stroke-width="1.6" stroke-dasharray="5 4"/>';
@@ -927,10 +1031,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const svg =
       '<svg class="chart" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" '+
-      'aria-label="Andamento settimanale di '+esc(M[idx]||'')+', '+pts.length+' settimane">'+
-      '<defs><linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">'+
-      '<stop offset="0" stop-color="oklch(74% 0.15 50)"/><stop offset="1" stop-color="oklch(64% 0.19 40)"/>'+
-      '</linearGradient></defs>'+ g +'</svg>';
+      'aria-label="'+esc(M[idx]||'')+' - '+pts.length+' voci">'+
+      '<defs>'+
+      '<linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(74% 0.15 50)"/><stop offset="1" stop-color="oklch(64% 0.19 40)"/></linearGradient>'+
+      '<linearGradient id="barMatch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(68% 0.18 285)"/><stop offset="1" stop-color="oklch(58% 0.22 280)"/></linearGradient>'+
+      '</defs>'+ g +'</svg>';
     wrap.innerHTML = svg;
 
     // reveal bars
@@ -948,7 +1053,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       b.addEventListener('mouseleave', ()=>{ b.classList.remove('hot'); tip.classList.remove('show'); });
       b.addEventListener('mousemove', ev=>{
         const p = pts[+b.getAttribute('data-i')];
-        tip.innerHTML = '<div class="tt-m">'+esc(p.month)+'</div><div class="tt-w">'+esc(p.week||'settimana')+'</div>'+
+        tip.innerHTML = '<div class="tt-m">'+esc(p.ttTitle||'')+'</div><div class="tt-w">'+esc(p.ttSub||'')+'</div>'+
           '<div class="tt-v tnum">'+fmt(p.value)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>';
         tip.style.left = ev.clientX+'px'; tip.style.top = ev.clientY+'px'; tip.classList.add('show');
       });
