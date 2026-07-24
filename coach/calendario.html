@@ -467,6 +467,44 @@ a{ color:inherit; text-decoration:none; }
 .pl-phz-tot{ font-size:11.5px; color:var(--muted); }
 .pl-phz-tot b{ color:var(--ink); font-variant-numeric:tabular-nums; }
 .pl-phz-add{ padding:7px 12px; font-size:12px; }
+/* filtro giocatrici planner */
+.pl-players{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:-4px 0 14px; }
+.pl-pfsel{ position:relative; display:inline-flex; align-items:center; }
+.pl-pfsel > svg{ position:absolute; left:9px; width:13px; height:13px; color:var(--faint); pointer-events:none; }
+.pl-pfsel select{ appearance:none; font-family:inherit; font-size:12px; font-weight:600; color:var(--ink);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:6px 28px 6px 28px; cursor:pointer;
+  transition:border-color .15s; max-width:210px; }
+.pl-pfsel select:hover{ border-color:var(--border3); }
+.pl-pfsel::after{ content:''; position:absolute; right:12px; width:6px; height:6px; border-right:2px solid var(--faint);
+  border-bottom:2px solid var(--faint); transform:rotate(45deg) translateY(-2px); pointer-events:none; }
+.pl-pfclear{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; color:var(--orange2);
+  background:var(--ember-bg); border:1px solid var(--ember-border); border-radius:999px; padding:4px 10px 4px 8px;
+  display:inline-flex; align-items:center; gap:4px; transition:transform .12s var(--ease), background .15s; }
+.pl-pfclear svg{ width:11px; height:11px; }
+.pl-pfclear:hover{ background:var(--ember-border); }
+.pl-pfclear:active{ transform:scale(.97); }
+.pl-pfhint{ font-size:11px; color:var(--faint); flex:1 1 180px; min-width:150px; line-height:1.4; }
+/* badge giocatrici sul chip */
+.pl-plbadge{ font-size:9px; font-weight:700; padding:2px 6px 2px 5px; border-radius:999px; background:var(--ember-bg);
+  border:1px solid var(--ember-border); color:var(--orange2); display:inline-flex; align-items:center; gap:3px; max-width:100%; }
+.pl-plbadge svg{ width:10px; height:10px; flex:0 0 auto; }
+.pl-plbadge span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* selezione giocatrici nel dialog */
+.pl-plpick{ display:flex; flex-direction:column; gap:10px; }
+.pl-plsel{ display:flex; flex-direction:column; gap:11px; max-height:236px; overflow:auto; padding:3px; }
+.pl-plgrp{ display:flex; flex-direction:column; gap:6px; }
+.pl-plgh{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
+.pl-plchips{ display:flex; flex-wrap:wrap; gap:5px; }
+.pl-plchip{ appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:600; color:var(--muted);
+  background:var(--surface); border:1px solid var(--border2); border-radius:999px; padding:5px 11px;
+  transition:transform .12s var(--ease), background .15s, border-color .15s, color .15s; }
+.pl-plchip:hover{ border-color:var(--border3); color:var(--ink); }
+.pl-plchip:active{ transform:scale(.96); }
+.pl-plchip.on{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
+.pl-plfoot{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.pl-plall{ padding:7px 12px; font-size:12px; }
+.pl-pltot{ font-size:11.5px; color:var(--muted); }
+.pl-pltot b{ color:var(--ink); font-variant-numeric:tabular-nums; }
 .pl-dactions{ display:flex; align-items:center; gap:10px; margin-top:2px; }
 .pl-ddel{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600; margin-right:auto;
   padding:9px 14px; border-radius:10px; border:1px solid var(--red-border); background:var(--red-bg); color:var(--red2);
@@ -687,6 +725,7 @@ a{ color:inherit; text-decoration:none; }
           </div>
         </div>
         <div class="pl-groups" id="pl-groups"></div>
+        <div class="pl-players" id="pl-pfbar"></div>
         <div class="pl-scroll">
           <div class="pl-grid week" id="pl-grid"></div>
         </div>
@@ -769,6 +808,16 @@ a{ color:inherit; text-decoration:none; }
       </div>
     </div>
     <div class="pl-drow">
+      <label>Giocatrici coinvolte</label>
+      <div class="pl-plpick">
+        <div class="pl-plsel" id="pl-eplayers"></div>
+        <div class="pl-plfoot">
+          <button type="button" class="btn pl-plall" id="pl-eplall">Tutta la squadra</button>
+          <span class="pl-pltot" id="pl-epltot"></span>
+        </div>
+      </div>
+    </div>
+    <div class="pl-drow">
       <label for="pl-enote">Note</label>
       <textarea id="pl-enote" placeholder="es. campo, obiettivo della seduta"></textarea>
     </div>
@@ -789,6 +838,45 @@ a{ color:inherit; text-decoration:none; }
 <script>
 window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
   metric:'Dist tot',scale:7793,range:{min:'',max:''},n_sedute:0,n_partite_giocate:0,n_fixtures:0,days:[],fixtures:[]};
+</script>
+
+<!-- roster giocatrici (nome + ruolo) - snapshot leggero per i filtri del planner -->
+<script>
+window.RS_ROSTER = window.RS_ROSTER || [
+  {n:"Andreoni",r:"Esterno"},
+  {n:"Baccaro",r:"Punta"},
+  {n:"Bastieri",r:""},
+  {n:"Bedini",r:"Mezzala"},
+  {n:"Bellani",r:"Mezzala"},
+  {n:"Benedettini",r:"Terzino"},
+  {n:"Bianchi",r:"Play"},
+  {n:"Boldrini",r:"Terzino"},
+  {n:"Casasanta",r:""},
+  {n:"Chackroun",r:""},
+  {n:"De Gregorio",r:"Esterno"},
+  {n:"Del conte",r:""},
+  {n:"El Miroun",r:"Mezzala"},
+  {n:"Faggioli Federica",r:""},
+  {n:"Fontana",r:"Punta"},
+  {n:"Giacobbo",r:""},
+  {n:"Giovannini",r:"Esterno"},
+  {n:"Ieva",r:"Mezzala"},
+  {n:"Iiriti",r:""},
+  {n:"Lisica",r:"Punta"},
+  {n:"Luciani",r:"Terzino"},
+  {n:"Magazzini",r:"Difensore centrale"},
+  {n:"Marini",r:""},
+  {n:"Miraldi",r:"Mezzala"},
+  {n:"Morabito",r:""},
+  {n:"Muka",r:""},
+  {n:"Orava",r:""},
+  {n:"Pensante",r:""},
+  {n:"Pieri Arianna",r:"Difensore centrale"},
+  {n:"Pieri Viola",r:"Difensore centrale"},
+  {n:"Poggi",r:"Mezzala"},
+  {n:"Sarti",r:"Esterno"},
+  {n:"Tomassoni",r:"Difensore centrale"}
+];
 </script>
 
 <!-- sidebar area Fiorentina -->
@@ -1627,7 +1715,8 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     return {
       view: (v && v.view==='month') ? 'month' : 'week',
       anchor: anchor,
-      group: (v && typeof v.group==='string') ? v.group : ''
+      group: (v && typeof v.group==='string') ? v.group : '',
+      player: (v && typeof v.player==='string') ? v.player : ''
     };
   })();
   function plSave(){ try{ localStorage.setItem(PL_KEY, JSON.stringify(PL)); }catch(e){} }
@@ -1649,6 +1738,39 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     { t:'rec',         l:'Recupero' },
     { t:'riposo',      l:'Riposo' }
   ];
+
+  const PL_PEOPLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20v-1.6a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.4V20"/><circle cx="10" cy="7.2" r="3.1"/><path d="M21 20v-1.6a3.6 3.6 0 0 0-2.7-3.5"/><path d="M15.5 4.3a3.1 3.1 0 0 1 0 6"/></svg>';
+
+  // ---- roster giocatrici (per filtri e assegnazioni) ----
+  const RS_ROLES_KEY = 'rs_fio_roles';
+  const PL_ROLE_ORDER = ['Portiere','Difensore centrale','Terzino','Play','Mezzala','Esterno','Punta','Da assegnare'];
+  function rosterOverrides(){
+    try{ const o = JSON.parse(localStorage.getItem(RS_ROLES_KEY)||'{}'); return (o && typeof o==='object') ? o : {}; }
+    catch(e){ return {}; }
+  }
+  function rosterList(){
+    const src = Array.isArray(window.RS_ROSTER) ? window.RS_ROSTER : [];
+    const ov = rosterOverrides();
+    return src.map(function(p){
+      let r = String(p.r||'').trim();
+      if(Object.prototype.hasOwnProperty.call(ov, p.n)){ r = String(ov[p.n]||'').trim(); }
+      if(r.toLowerCase()==='nan') r = '';
+      return { n:p.n, r:r };
+    });
+  }
+  function rosterNames(){ return rosterList().map(function(p){ return p.n; }); }
+  function plRoleGroups(list){
+    const g = {};
+    list.forEach(function(p){ const r = p.r || 'Da assegnare'; (g[r] = g[r] || []).push(p.n); });
+    Object.keys(g).forEach(function(k){ g[k].sort(function(a,b){ return a.localeCompare(b,'it'); }); });
+    return g;
+  }
+  function plRoleKeys(g){
+    const known = PL_ROLE_ORDER.filter(function(r){ return g[r] && g[r].length; });
+    const extra = Object.keys(g).filter(function(r){ return PL_ROLE_ORDER.indexOf(r)<0 && g[r].length; })
+      .sort(function(a,b){ return a.localeCompare(b,'it'); });
+    return known.concat(extra);
+  }
 
   // ---- gruppi ----
   function plGroups(){ return loadStore().groups; }
@@ -1709,7 +1831,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
       data: dateIso, slot: (type==='gara'||type==='riposo')?'':'PM',
       kind: meta.k, title:'', type: type,
       pct: null, load: null, note:'', svolto:false,
-      group: PL.group||'', diff:'', phases:[]
+      group: PL.group||'', diff:'', phases:[], players:[]
     };
     s.manual.push(rec); saveStore(s); return rec.id;
   }
@@ -1722,14 +1844,15 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     if(!m) return false;
     PL_CLIP = { slot:m.slot||'', kind:m.kind||'training', title:m.title||'', type:m.type||'',
       pct:(m.pct==null?null:m.pct), load:(m.load==null?null:m.load), note:m.note||'', group:m.group||'', diff:m.diff||'',
-      phases:clone(m.phases||[]) };
+      phases:clone(m.phases||[]), players:clone(m.players||[]) };
     return true;
   }
   function plPaste(dateIso){
     if(!PL_CLIP) return false;
     const s = loadStore();
     s.manual.push(Object.assign({}, PL_CLIP, {
-      id:'m'+Date.now()+Math.random().toString(36).slice(2,6), data:dateIso, svolto:false, phases:clone(PL_CLIP.phases||[])
+      id:'m'+Date.now()+Math.random().toString(36).slice(2,6), data:dateIso, svolto:false,
+      phases:clone(PL_CLIP.phases||[]), players:clone(PL_CLIP.players||[])
     }));
     saveStore(s); return true;
   }
@@ -1750,7 +1873,10 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     let cls = 'pl-chip';
     if(!manual) cls += ' st';
     if(isGara) cls += ' gara'; else if(isRiposo) cls += ' riposo';
-    if(PL.group && manual && s.group && s.group!==PL.group) cls += ' other';
+    let dim = false;
+    if(PL.group && manual && s.group && s.group!==PL.group) dim = true;
+    if(PL.player && manual && Array.isArray(s.players) && s.players.length && s.players.indexOf(PL.player)<0) dim = true;
+    if(dim) cls += ' other';
     let dot;
     if(isGara) dot = 'var(--orange)';
     else if(isRiposo) dot = 'var(--faint)';
@@ -1758,6 +1884,11 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     const slot = s.slot ? '<span class="pl-cslot">'+esc(s.slot)+'</span>' : '';
     let badges = '';
     if(manual && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
+    if(manual && Array.isArray(s.players) && s.players.length){
+      const np = s.players.length;
+      const lbl = compact ? String(np) : (np===1 ? s.players[0] : (np+' giocatrici'));
+      badges += '<span class="pl-plbadge">'+PL_PEOPLE_SVG+'<span>'+esc(lbl)+'</span></span>';
+    }
     if(manual && s.diff)  badges += '<span class="pl-diffbadge">Diff.</span>';
     if(!compact && pct!=null && !isRiposo) badges += '<span class="pl-cpct">'+NF0.format(pct)+'%</span>';
     const phases = Array.isArray(s.phases) ? s.phases : [];
@@ -1870,6 +2001,31 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     inp.addEventListener('blur', ()=> commit(true));
   }
 
+  // ---- render filtro giocatrici ----
+  function plRenderPlayers(){
+    const host = document.getElementById('pl-pfbar'); if(!host) return;
+    const list = rosterList();
+    if(!list.length){ host.innerHTML = ''; return; }
+    if(PL.player && !list.some(function(p){ return p.n===PL.player; })){ PL.player = ''; plSave(); }
+    const g = plRoleGroups(list);
+    let opts = '<option value="">Tutte le giocatrici</option>';
+    plRoleKeys(g).forEach(function(role){
+      opts += '<optgroup label="'+esc(role)+'">'+
+        g[role].map(function(n){ return '<option value="'+esc(n)+'"'+(PL.player===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
+      '</optgroup>';
+    });
+    host.innerHTML = '<span class="pl-glabel">Giocatrici</span>'+
+      '<span class="pl-pfsel">'+PL_PEOPLE_SVG+'<select id="pl-pfselect" aria-label="Filtra per giocatrice">'+opts+'</select></span>'+
+      (PL.player ? '<button class="pl-pfclear" type="button" id="pl-pfclear">'+PL_X_SVG+'<span>'+esc(PL.player)+'</span></button>' : '')+
+      '<span class="pl-pfhint">'+(PL.player
+        ? 'Evidenzia i blocchi con questa giocatrice. I blocchi per tutta la squadra restano sempre in chiaro.'
+        : 'Assegna le giocatrici a un blocco (aprilo per modificarlo), poi filtra qui.')+'</span>';
+    const sel = document.getElementById('pl-pfselect');
+    if(sel) sel.addEventListener('change', function(){ PL.player = sel.value; plSave(); plRender(); });
+    const clr = document.getElementById('pl-pfclear');
+    if(clr) clr.addEventListener('click', function(){ PL.player = ''; plSave(); plRender(); });
+  }
+
   // ---- render principale ----
   function plRender(){
     const grid = document.getElementById('pl-grid'); if(!grid) return;
@@ -1897,6 +2053,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
       vm.setAttribute('aria-selected', PL.view==='month'?'true':'false');
     }
     plRenderGroups();
+    plRenderPlayers();
     plBindGrid();
   }
 
@@ -1995,6 +2152,40 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     }
   }
 
+  // ---- selezione giocatrici del blocco ----
+  let plEditPlayers = [];
+  function plRenderPlayerPick(){
+    const host = document.getElementById('pl-eplayers'); if(!host) return;
+    const list = rosterList();
+    if(!list.length){ host.innerHTML = '<div class="pl-phz-empty">Nessuna giocatrice nel roster.</div>'; plUpdatePlayerTot(); return; }
+    const g = plRoleGroups(list);
+    host.innerHTML = plRoleKeys(g).map(function(role){
+      return '<div class="pl-plgrp"><span class="pl-plgh">'+esc(role)+'</span><div class="pl-plchips">'+
+        g[role].map(function(n){
+          const on = plEditPlayers.indexOf(n)>=0;
+          return '<button type="button" class="pl-plchip'+(on?' on':'')+'" data-n="'+esc(n)+'" aria-pressed="'+(on?'true':'false')+'">'+esc(n)+'</button>';
+        }).join('')+
+      '</div></div>';
+    }).join('');
+    plUpdatePlayerTot();
+  }
+  function plUpdatePlayerTot(){
+    const tot = document.getElementById('pl-epltot'); if(!tot) return;
+    const n = plEditPlayers.length;
+    tot.innerHTML = n ? ('<b>'+n+'</b> selezionate') : 'Tutta la squadra';
+  }
+  function plBindPlayerPick(){
+    const host = document.getElementById('pl-eplayers');
+    const all = document.getElementById('pl-eplall');
+    if(host) host.addEventListener('click', function(e){
+      const b = e.target.closest('.pl-plchip'); if(!b) return; e.preventDefault();
+      const n = b.getAttribute('data-n'); const i = plEditPlayers.indexOf(n);
+      if(i>=0) plEditPlayers.splice(i,1); else plEditPlayers.push(n);
+      plRenderPlayerPick();
+    });
+    if(all) all.addEventListener('click', function(){ plEditPlayers = []; plRenderPlayerPick(); });
+  }
+
   // ---- dialog modifica ----
   const plDialog = document.getElementById('pl-edit');
   let plEditId = null;
@@ -2015,6 +2206,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     document.getElementById('pl-enote').value = m.note||'';
     document.getElementById('pl-ediff').value = m.diff||'';
     plEditPhases = (m.phases||[]).map(phNorm); plRenderPhases();
+    plEditPlayers = Array.isArray(m.players) ? m.players.slice() : []; plRenderPlayerPick();
     const dt = parseDate(m.data);
     document.getElementById('pl-edate').textContent = dt ? cap(DTF_LONG.format(dt)) : (m.data||'');
     if(typeof plDialog.showModal==='function') plDialog.showModal(); else plDialog.setAttribute('open','');
@@ -2035,6 +2227,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     m.diff = document.getElementById('pl-ediff').value.trim();
     m.group = document.getElementById('pl-egroup').value;
     m.phases = phasesClean(plEditPhases);
+    m.players = plEditPlayers.slice();
     saveStore(s); plEditId = null; plAfterMutate();
   }
 
@@ -2060,6 +2253,7 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
       plDialog.addEventListener('cancel', ()=>{ plEditId = null; });
     }
     plBindPhases();
+    plBindPlayerPick();
     plRender();
   }
 
