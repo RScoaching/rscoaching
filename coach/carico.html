@@ -192,8 +192,8 @@ select.picker:hover{ border-color:var(--border3); }
 .chart-wrap::-webkit-scrollbar{ height:6px; }
 .chart-wrap::-webkit-scrollbar-thumb{ background:var(--border3); border-radius:3px; }
 svg.chart{ display:block; }
-svg.chart .bar{ transition: opacity .15s var(--ease); cursor:pointer; }
-svg.chart .bar:hover, svg.chart .bar.hot{ opacity:1 !important; }
+svg.chart .bar{ transform-box:fill-box; transform-origin:center bottom; transition: opacity .15s var(--ease), filter .15s var(--ease); cursor:pointer; }
+svg.chart .bar:hover, svg.chart .bar.hot{ opacity:1 !important; filter:brightness(1.12); }
 svg.chart text{ font-family:'Inter',sans-serif; }
 .chart-tooltip{
   position:fixed; z-index:var(--z-tooltip); pointer-events:none; opacity:0;
@@ -247,8 +247,8 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .acwr-legend .lg-dot.high{ background:oklch(64% 0.22 25); }
 .acwr-legend .lg-band{ width:14px; height:11px; border-radius:3px; background:oklch(70% 0.18 152 / 0.22); border:1px solid oklch(70% 0.18 152 / 0.4); }
 .acwr-legend .lg-vio{ width:16px; height:0; border-top:2.4px solid var(--violet2); }
-svg.chart .an-bar{ transform-box:fill-box; transform-origin:center bottom; cursor:pointer; transition:opacity .15s var(--ease); }
-svg.chart .an-bar:hover, svg.chart .an-bar.hot{ opacity:1 !important; }
+svg.chart .an-bar{ transform-box:fill-box; transform-origin:center bottom; cursor:pointer; transition:opacity .15s var(--ease), filter .15s var(--ease); }
+svg.chart .an-bar:hover, svg.chart .an-bar.hot{ opacity:1 !important; filter:brightness(1.12); }
 svg.chart .acwr-dot{ transition:r .12s var(--ease); cursor:pointer; }
 svg.chart .acwr-dot:hover{ r:6.5; }
 
@@ -1061,12 +1061,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           g += '<text x="'+cx.toFixed(1)+'" y="'+(H-padB+31)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+esc(p.md===0?'MD':'MD-'+p.md)+'</text>';
       });
     }
-    // barre
+    // asse di base pieno (le colonne si appoggiano qui)
+    g += '<line x1="'+padL+'" y1="'+(H-padB).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+(H-padB).toFixed(1)+'" stroke="oklch(32% 0.02 38)" stroke-width="1.5"/>';
+    // barre (angoli superiori arrotondati)
     pts.forEach((p,i)=>{
       const v = p.value==null?0:p.value; const y = yOf(Math.min(v,nice)); const h = Math.max(0, (H-padB) - y);
       const op = p.value==null? 0.18 : 0.9;
       const fill = (p.kind==='match') ? 'url(#barMatch)' : 'url(#barGrad)';
-      g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" fill="'+fill+'" opacity="'+op+'"></rect>';
+      const d = barPath(xs[i], y, barW, h, 4);
+      if(d) g += '<path class="bar" data-i="'+i+'" d="'+d+'" fill="'+fill+'" opacity="'+op+'"></path>';
+      else  g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+(H-padB-1).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="1" fill="'+fill+'" opacity="'+op+'"></rect>';
     });
     // media
     if(isFinite(mean) && mean>0){
@@ -1106,6 +1110,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
   function round1(v){ return Math.round(v*10)/10; }
+  // colonna con angoli superiori arrotondati (base piatta appoggiata all'asse)
+  function barPath(x,y,w,h,r){
+    if(h<=0.4) return '';
+    r = Math.max(0, Math.min(r, w/2, h));
+    const x2=x+w, yb=y+h;
+    return 'M '+x.toFixed(1)+' '+yb.toFixed(1)+
+      ' L '+x.toFixed(1)+' '+(y+r).toFixed(1)+
+      ' Q '+x.toFixed(1)+' '+y.toFixed(1)+' '+(x+r).toFixed(1)+' '+y.toFixed(1)+
+      ' L '+(x2-r).toFixed(1)+' '+y.toFixed(1)+
+      ' Q '+x2.toFixed(1)+' '+y.toFixed(1)+' '+x2.toFixed(1)+' '+(y+r).toFixed(1)+
+      ' L '+x2.toFixed(1)+' '+yb.toFixed(1)+' Z';
+  }
   function niceMax(v){
     const pow = Math.pow(10, Math.floor(Math.log10(v)));
     const n = v/pow;
@@ -1292,9 +1308,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       g += '<text x="'+(geo.padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+(nice>=1000?NF0.format(Math.round(val)):NF.format(val))+'</text>';
     }
     g += monthAxis(weeks, geo);
+    g += '<line x1="'+geo.padL+'" y1="'+(geo.padT+geo.plotH).toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+(geo.padT+geo.plotH).toFixed(1)+'" stroke="oklch(32% 0.02 38)" stroke-width="1.5"/>';
     const barW = Math.min(26, geo.slot-8);
     acwr.forEach((x,i)=>{ const v=x.acute||0, y=yOf(v), h=Math.max(0,(geo.padT+geo.plotH)-y);
-      g += '<rect class="an-bar" data-i="'+i+'" x="'+(geo.xs[i]-barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" fill="url(#anBar)" opacity="0.9"></rect>';
+      const d=barPath(geo.xs[i]-barW/2, y, barW, h, 3);
+      if(d) g += '<path class="an-bar" data-i="'+i+'" d="'+d+'" fill="url(#anBar)" opacity="0.9"></path>';
     });
     // linea cronico
     const cp = acwr.map((x,i)=> ({ x:geo.xs[i], y:yOf(x.chronic||0) }));
@@ -1334,10 +1352,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       g += '<line x1="'+geo.padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(24% 0.016 38 / 0.7)" stroke-width="1"/>';
       g += '<text x="'+(geo.padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+(nice>=1000?NF0.format(Math.round(val)):NF.format(val))+'</text>';
     }
+    g += '<line x1="'+geo.padL+'" y1="'+(geo.padT+geo.plotH).toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+(geo.padT+geo.plotH).toFixed(1)+'" stroke="oklch(32% 0.02 38)" stroke-width="1.5"/>';
     const barW = Math.min(46, geo.slot-14);
     rows.forEach((r,i)=>{ const y=yOf(r.v), h=Math.max(0,(geo.padT+geo.plotH)-y);
       const fill = r.md===0 ? 'url(#anViolet)' : 'url(#anBar)';
-      g += '<rect class="an-bar" data-i="'+i+'" x="'+(geo.xs[i]-barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" fill="'+fill+'" opacity="0.92"></rect>';
+      const d=barPath(geo.xs[i]-barW/2, y, barW, h, 4);
+      if(d) g += '<path class="an-bar" data-i="'+i+'" d="'+d+'" fill="'+fill+'" opacity="0.92"></path>';
       g += '<text x="'+geo.xs[i].toFixed(1)+'" y="'+(y-6).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--text)">'+fmtLoad(r.v)+'</text>';
       g += '<text x="'+geo.xs[i].toFixed(1)+'" y="'+(geo.H-geo.padB+18)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+(r.md===0?'var(--violet2)':'var(--muted)')+'">'+(r.md===0?'Partita':'MD-'+r.md)+'</text>';
     });
