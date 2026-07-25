@@ -22,6 +22,11 @@ window.SIDEBAR_HTML = `
     <div class="logo-sub">Primavera U19 Femminile</div>
   </div>
   <div class="nav-s">
+    <div class="nav-lbl">Giornata</div>
+    <a class="nav-item" aria-label="Oggi" href="./piano.html" data-page="oggi">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <span class="nav-lbl-text">Oggi</span>
+    </a>
     <div class="nav-lbl">Monitoraggio</div>
     <a class="nav-item" aria-label="Carico" href="./carico.html" data-page="carico">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>
