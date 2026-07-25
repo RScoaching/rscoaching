@@ -11,6 +11,7 @@ window.SIDEBAR_HTML = `
   </div>
 </div>
 <div class="sb-mob-overlay" id="sb-mob-ov"></div>
+<div class="sb-edge" id="sb-edge" aria-hidden="true"><span class="sb-edge-grip"></span></div>
 <div class="sidebar" id="sb-sidebar">
   <div class="sb-top">
     <div class="fio-brand">
@@ -201,5 +202,31 @@ window.SIDEBAR_CSS = `
 @media(min-width:901px){
   .sb-mob-bar{display:none !important;}
   .sb-mob-overlay{display:none !important;}
-  #sb-sidebar{display:flex !important;transform:none !important;}
+  /* dashboard a scomparsa: appare portando il mouse sul bordo sinistro */
+  .sb-edge{
+    display:block;position:fixed;left:0;top:0;width:20px;height:100vh;z-index:558;
+  }
+  .sb-edge-grip{
+    position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:5px;height:74px;border-radius:0 7px 7px 0;
+    background:linear-gradient(180deg,rgba(255,106,46,.85),rgba(139,92,246,.85));
+    box-shadow:0 0 16px rgba(255,106,46,.45);
+    opacity:.5;transition:opacity .2s ease,width .2s ease;
+  }
+  .sb-edge:hover .sb-edge-grip{opacity:.95;width:6px;}
+  #sb-sidebar{
+    display:flex !important;position:fixed !important;left:0;top:0;height:100vh;
+    transform:translateX(-102%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1),box-shadow .28s ease;
+    box-shadow:0 0 0 rgba(0,0,0,0);z-index:560;
+  }
+  .sb-edge:hover ~ #sb-sidebar,
+  #sb-sidebar:hover,
+  #sb-sidebar:focus-within{
+    transform:translateX(0);
+    box-shadow:16px 0 48px rgba(0,0,0,.5);
+  }
+}
+@media(max-width:900px){
+  .sb-edge{display:none !important;}
 }`;
