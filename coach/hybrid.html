@@ -198,11 +198,26 @@ tr.r-teamref td.num{ color:var(--ink); }
 .sess-item.is-active{ border-color:var(--orange); background:var(--ember-bg); }
 .sess-item.is-active .sess-lb{ color:var(--orange2); }
 .sess-empty{ font-size:12.5px; color:var(--faint); font-style:italic; padding:16px 2px; }
-.sess-layout{ display:grid; grid-template-columns:262px minmax(0,1fr); gap:18px; align-items:start; }
-.sess-rail{ position:sticky; top:12px; align-self:start; }
-.sess-rail .sess-search{ margin-bottom:10px; }
-.sess-rail-list{ max-height:min(70vh,620px); overflow:auto; padding-right:4px; }
+/* la tabella occupa sempre tutta la larghezza; l'elenco sedute e' un pannello a scomparsa */
+#sedute-view{ position:relative; overflow:hidden; }
 .sess-main{ min-width:0; }
+.sess-rail{
+  position:absolute; top:0; bottom:0; left:0; width:308px; max-width:88%;
+  display:flex; flex-direction:column; gap:10px; padding:16px; z-index:24;
+  background:var(--surface2); border-right:1px solid var(--border);
+  box-shadow:20px 0 54px rgba(0,0,0,.55);
+  transform:translateX(-112%); transition:transform .28s var(--ease);
+}
+#sedute-view.rail-open .sess-rail{ transform:translateX(0); }
+.sess-rail-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
+.sess-rail-head strong{ font-size:12px; letter-spacing:.4px; color:var(--ink); }
+.rail-x{ background:none; border:none; color:var(--muted); font-size:20px; line-height:1;
+  cursor:pointer; padding:2px 7px; border-radius:8px; transition:color .15s, background .15s; }
+.rail-x:hover{ color:var(--ink); background:var(--surface3); }
+.sess-rail .sess-search{ margin-bottom:2px; }
+.sess-rail-list{ flex:1; overflow:auto; padding-right:4px; }
+.sess-drawer-backdrop{ position:absolute; inset:0; z-index:22; background:rgba(0,0,0,.44); }
+#btn-rail .rail-i{ width:16px; height:16px; }
 
 /* ---------- confronto ---------- */
 .seg.cmp-seg{ padding:2px; }
@@ -250,8 +265,8 @@ table.partite td.data{ color:var(--muted); }
   @page{ margin:13mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
-  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .sess-rail, .cmp-seg, .toast,
-  .top-right, .foot-note{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sb-edge, .sidebar, .controls, .sess-rail, .sess-drawer-backdrop,
+  #btn-rail, .cmp-seg, .toast, .top-right, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
@@ -295,9 +310,6 @@ table.partite td.data{ color:var(--muted); }
   .wrap{ padding:20px 16px 0; }
   .privacy-pill{ display:none; }
   .sess-stats{ grid-template-columns:1fr 1fr; }
-  .sess-layout{ grid-template-columns:1fr; gap:12px; }
-  .sess-rail{ position:static; }
-  .sess-rail-list{ max-height:280px; }
 }
 @media (max-width: 560px){
   .sess-stats{ grid-template-columns:1fr 1fr; gap:10px; }
@@ -350,6 +362,10 @@ table.partite td.data{ color:var(--muted); }
       <!-- SEDUTE -->
       <section class="card reveal" id="sedute-view" style="--i:0">
         <div class="card-head">
+          <button class="btn" id="btn-rail" title="Scegli la seduta o la partita da analizzare">
+            <svg class="rail-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            Sedute
+          </button>
           <h2 id="session-title">Seduta</h2>
           <span class="hint" id="session-hint"></span>
           <span class="spacer"></span>
@@ -361,16 +377,19 @@ table.partite td.data{ color:var(--muted); }
         </div>
         <div class="card-body" style="padding-top:6px">
           <div class="sess-stats" id="sess-stats"></div>
-          <div class="sess-layout">
-            <aside class="sess-rail" aria-label="Elenco sedute">
-              <input class="sess-search" id="sess-rail-search" type="search" placeholder="Cerca seduta..." autocomplete="off">
-              <div class="sess-rail-list" id="sess-rail-list"></div>
-            </aside>
-            <div class="sess-main">
-              <div class="cmp-legend" id="cmp-legend" hidden></div>
-              <div class="tscroll" id="session-scroll"></div>
-            </div>
+          <div class="sess-main">
+            <div class="cmp-legend" id="cmp-legend" hidden></div>
+            <div class="tscroll" id="session-scroll"></div>
           </div>
+          <div class="sess-drawer-backdrop" id="sess-backdrop" hidden></div>
+          <aside class="sess-rail" id="sess-rail" aria-label="Elenco sedute">
+            <div class="sess-rail-head">
+              <strong>Scegli seduta</strong>
+              <button class="rail-x" id="rail-close" type="button" aria-label="Chiudi elenco">&#215;</button>
+            </div>
+            <input class="sess-search" id="sess-rail-search" type="search" placeholder="Cerca seduta o partita..." autocomplete="off">
+            <div class="sess-rail-list" id="sess-rail-list"></div>
+          </aside>
         </div>
       </section>
 
@@ -551,6 +570,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(state.view!=='sedute') setView('sedute');
     renderSession();
     highlightRail();
+    closeRail();
+  }
+  function openRail(){
+    const v=document.getElementById('sedute-view'), bd=document.getElementById('sess-backdrop');
+    if(v) v.classList.add('rail-open');
+    if(bd) bd.hidden=false;
+    const s=document.getElementById('sess-rail-search');
+    if(s) setTimeout(()=>{ try{ s.focus(); s.select(); }catch(e){} }, 60);
+  }
+  function closeRail(){
+    const v=document.getElementById('sedute-view'), bd=document.getElementById('sess-backdrop');
+    if(v) v.classList.remove('rail-open');
+    if(bd) bd.hidden=true;
+  }
+  function toggleRail(){
+    const v=document.getElementById('sedute-view');
+    if(v && v.classList.contains('rail-open')) closeRail(); else openRail();
   }
   function highlightRail(){
     const host = document.getElementById('sess-rail-list'); if(!host || !state.session) return;
@@ -792,6 +828,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       renderMatches();
     })); }
   { const i=document.getElementById('sess-rail-search'); if(i) i.addEventListener('input', e=>{ renderSessRail(e.target.value); highlightRail(); }); }
+  { const b=document.getElementById('btn-rail'); if(b) b.addEventListener('click', toggleRail); }
+  { const b=document.getElementById('rail-close'); if(b) b.addEventListener('click', closeRail); }
+  { const bd=document.getElementById('sess-backdrop'); if(bd) bd.addEventListener('click', closeRail); }
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeRail(); });
   { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{ toast('Preparo la stampa...'); setTimeout(()=> window.print(), 120); }); }
 
   // ---------- init ----------
