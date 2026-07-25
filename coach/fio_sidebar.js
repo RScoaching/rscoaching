@@ -41,6 +41,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M15 6.2a3 3 0 0 1 0 5.6"/><path d="M4 20c0-3.3 2.2-5.6 5-5.6s5 2.3 5 5.6"/><path d="M17 14.6c1.9.6 3 2.6 3 5.4"/></svg></span>
       <span class="nav-lbl-text">Atlete</span>
     </a>
+    <a class="nav-item" aria-label="Test" href="./piani.html" data-page="test">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></svg></span>
+      <span class="nav-lbl-text">Test</span>
+    </a>
     <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" aria-label="Esercitazioni" href="./esercitazioni.html" data-page="esercitazioni">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4v-.8A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2V4"/><path d="M9 10h6"/><path d="M9 14h6"/><path d="M9 18h4"/></svg></span>
