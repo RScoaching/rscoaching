@@ -26,6 +26,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span>
       <span class="nav-lbl-text">Carico</span>
     </a>
+    <a class="nav-item" aria-label="Sessioni" href="./hybrid.html" data-page="sessioni">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M9 12h6"/><path d="M9 16h4"/></svg></span>
+      <span class="nav-lbl-text">Sessioni</span>
+    </a>
     <div class="nav-lbl">Squadra</div>
     <a class="nav-item" aria-label="Atlete" href="./atlete.html" data-page="atlete">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M15 6.2a3 3 0 0 1 0 5.6"/><path d="M4 20c0-3.3 2.2-5.6 5-5.6s5 2.3 5 5.6"/><path d="M17 14.6c1.9.6 3 2.6 3 5.4"/></svg></span>
