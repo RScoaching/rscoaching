@@ -161,6 +161,17 @@ a{ color:inherit; text-decoration:none; }
 .lb-val small{ font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--muted); margin-left:3px; }
 .lb-val.vi{ color:var(--violet2); }
 .lb-empty{ text-align:center; padding:26px; color:var(--faint); font-size:13px; }
+/* riga cliccabile: porta alla seduta in cui il record e' stato registrato */
+a.lb-row{ cursor:pointer; }
+a.lb-row:hover .lb-name{ color:var(--orange2); }
+.lb-go{ flex:0 0 auto; width:16px; height:16px; color:var(--faint); opacity:0; transform:translateX(-3px);
+  transition: opacity .16s var(--ease), transform .16s var(--ease), color .16s var(--ease); }
+a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
+.lb-row.susp{ background:oklch(80% 0.15 75 / .06); }
+.lb-flag{ flex:0 0 auto; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--yellow); background:oklch(80% 0.15 75 / .12); border:1px solid oklch(80% 0.15 75 / .28);
+  border-radius:999px; padding:2px 8px; white-space:nowrap; }
+.lb-sess{ font-size:11px; color:var(--faint); }
 
 /* ---------- batteria test ---------- */
 .test-cats{ display:inline-flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; padding:4px;
@@ -204,6 +215,28 @@ a{ color:inherit; text-decoration:none; }
 .tb-unit{ font-size:12px; color:var(--muted); min-width:24px; }
 .tb-date{ font-size:11px; color:var(--faint); min-width:58px; text-align:right; }
 
+/* ---------- test bilaterali: dx e sx sulla stessa riga ---------- */
+.tb-dual{ display:flex; align-items:center; gap:9px; }
+.tb-side{ display:inline-flex; align-items:center; gap:5px; }
+.tb-sl{ font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--faint); min-width:16px; }
+.tb-side.low .tb-sl{ color:var(--orange2); }
+.tb-in.sm{ width:70px; }
+.tb-asym{ flex:0 0 auto; min-width:84px; text-align:center; font-size:11.5px; font-weight:700;
+  padding:5px 9px; border-radius:999px; border:1px solid var(--border2); background:var(--surface3);
+  color:var(--faint); font-variant-numeric:tabular-nums; }
+.tb-asym.ok{   color:var(--green);  background:oklch(70% 0.18 152 / .10); border-color:oklch(70% 0.18 152 / .24); }
+.tb-asym.warn{ color:var(--yellow); background:oklch(80% 0.15 75  / .10); border-color:oklch(80% 0.15 75  / .26); }
+.tb-asym.bad{  color:var(--red);    background:oklch(62% 0.22 25  / .12); border-color:oklch(62% 0.22 25  / .30); }
+.tb-row.alert{ background:oklch(62% 0.22 25 / .06); border-top-color:transparent; }
+.tb-row.watch{ background:oklch(80% 0.15 75 / .05); border-top-color:transparent; }
+.tb-legend{ display:flex; gap:14px; flex-wrap:wrap; margin:0 0 12px; font-size:11.5px; color:var(--faint); }
+.tb-legend span{ display:inline-flex; align-items:center; gap:6px; }
+.tb-legend i{ width:8px; height:8px; border-radius:999px; flex:0 0 8px; }
+.tb-legend i.ok{ background:var(--green); }
+.tb-legend i.warn{ background:var(--yellow); }
+.tb-legend i.bad{ background:var(--red); }
+
 /* ---------- bottoni ---------- */
 .btn{
   display:inline-flex; align-items:center; gap:7px; appearance:none; cursor:pointer;
@@ -236,6 +269,8 @@ a{ color:inherit; text-decoration:none; }
   .kpis{ grid-template-columns:repeat(2, 1fr); }
   .lb-bar{ display:none; }
   .tb-bar{ display:none; }
+  .tb-in.sm{ width:60px; }
+  .tb-asym{ min-width:70px; font-size:11px; padding:5px 7px; }
 }
 @media (max-width:560px){
   .kpis{ grid-template-columns:1fr; }
@@ -304,6 +339,7 @@ a{ color:inherit; text-decoration:none; }
           <div class="test-tabs" id="test-tabs"></div>
           <div class="tb-strip" id="tb-strip"></div>
           <div class="tb-dir" id="tb-dir"></div>
+          <div class="tb-legend" id="tb-legend"></div>
           <div id="tb-list"></div>
         </div>
       </section>
@@ -370,9 +406,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const PLAYERS = SNAP.players || {};
   const roster = Object.keys(PLAYERS).sort((a,b)=> a.localeCompare(b,'it'));
 
-  // ---- migliori GPS per atleta ----
+  // ---- migliori GPS per atleta, con la seduta in cui e' arrivato il record ----
   function bestsOf(pl){
     let smax=0, hs=0, nint=0, mmin=0, days=0;
+    let sMk='', sLb='', sWd='', sTt='';
     const months = (pl && pl.months) || [];
     months.forEach(m=>{
       (m.rows||[]).forEach(r=>{
@@ -381,36 +418,67 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const mins = +v[0]||0;
         if(mins<=0) return;
         days++;
-        if((+v[I_SMAX]||0)>smax) smax=+v[I_SMAX]||0;
+        const sm = +v[I_SMAX]||0;
+        if(sm>smax){ smax=sm; sMk=m.key||''; sLb=r.label||''; sWd=r.wd||''; sTt=m.title||''; }
         if((+v[I_HS]||0)>hs)     hs=+v[I_HS]||0;
         if((+v[I_INT]||0)>nint)  nint=+v[I_INT]||0;
         if((+v[I_MMIN]||0)>mmin) mmin=+v[I_MMIN]||0;
       });
     });
-    return {smax, hs, nint, mmin, days};
+    return {smax, hs, nint, mmin, days, smaxM:sMk, smaxL:sLb, smaxWd:sWd, smaxT:sTt};
   }
 
   const playersB = roster.map(name=>{
     const pl = PLAYERS[name];
     const b = bestsOf(pl);
-    return { name, role:(pl&&pl.role)||'', smax:b.smax, hs:b.hs, nint:b.nint, mmin:b.mmin, days:b.days };
+    return { name, role:(pl&&pl.role)||'', smax:b.smax, hs:b.hs, nint:b.nint, mmin:b.mmin, days:b.days,
+             smaxM:b.smaxM, smaxL:b.smaxL, smaxWd:b.smaxWd, smaxT:b.smaxT };
   });
   const monitored = playersB.filter(p=> p.days>0);
 
-  function topBy(key){
+  // ---- controllo di plausibilita sulla velocita massima ----
+  // Oltre i 34 km/h, o molto sopra la mediana di squadra, quasi sempre si tratta di un
+  // artefatto del GPS. Il valore resta visibile ma marcato: si apre la seduta e si verifica.
+  const SMAX_CEIL = 34;
+  const smaxMed = (function(){
+    const a = monitored.map(p=> p.smax||0).filter(v=> v>0).sort((x,y)=> x-y);
+    if(!a.length) return 0;
+    const h = Math.floor(a.length/2);
+    return a.length%2 ? a[h] : (a[h-1]+a[h])/2;
+  })();
+  monitored.forEach(p=>{
+    p.susp = (p.smax>0) && (p.smax>SMAX_CEIL || (smaxMed>0 && p.smax > smaxMed*1.3));
+  });
+  const smaxOk = monitored.filter(p=> !p.susp);
+  const nSusp  = monitored.length - smaxOk.length;
+
+  function topBy(key, list){
     let best=null;
-    monitored.forEach(p=>{ if(!best || (p[key]||0)>(best[key]||0)) best=p; });
+    (list||monitored).forEach(p=>{ if(!best || (p[key]||0)>(best[key]||0)) best=p; });
     return best;
   }
-  const topSmax = topBy('smax');
+  const topSmax = topBy('smax', smaxOk.length ? smaxOk : monitored);
   const topHs   = topBy('hs');
-  const avgSmax = monitored.length ? monitored.reduce((s,p)=>s+(p.smax||0),0)/monitored.length : 0;
+  const avgSmax = smaxOk.length ? smaxOk.reduce((s,p)=>s+(p.smax||0),0)/smaxOk.length : 0;
+
+  // link alla seduta in cui la velocita massima e' stata registrata
+  function sessHref(p){
+    if(!p || !p.smaxM || !p.smaxL) return '';
+    return 'hybrid.html?m='+encodeURIComponent(p.smaxM)+'&l='+encodeURIComponent(p.smaxL);
+  }
+  function sessLabel(p){
+    if(!p || !p.smaxL) return '';
+    const mk = String(p.smaxM||'');
+    const mm = mk.length===7 ? MO[(+mk.slice(5,7)||1)-1] : '';
+    return (p.smaxWd? p.smaxWd+' ' : '')+p.smaxL+(mm? ' '+mm : '');
+  }
 
   // ================= BATTERIA TEST =================
   const CATS = [
     { key:'salti', label:'Salti verticali' },
     { key:'oriz',  label:'Salti orizzontali' },
-    { key:'fms',   label:'FMS e stabilita' },
+    { key:'fms',   label:'FMS' },
+    { key:'yb',    label:'Y-balance' },
     { key:'campo', label:'Test da campo' }
   ];
   const TESTS = [
@@ -420,29 +488,81 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'cmj_af',   cat:'salti', label:'CMJ braccia libere',  short:'CMJ AF',    unit:'cm',   dir:'high', step:'0.5', ph:'es. 33',   note:'contromovimento con slancio delle braccia' },
     { key:'dj40',     cat:'salti', label:'Drop Jump 40 cm',     short:'DJ 40',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 27',   note:'caduta da 40 cm e rimbalzo immediato' },
     { key:'stiff',    cat:'salti', label:'Stiffness 10 salti',  short:'Stiffness', unit:'cm',   dir:'high', step:'0.5', ph:'es. 24',   note:'media altezza dei 10 rimbalzi consecutivi' },
-    { key:'slcmj_dx', cat:'salti', label:'SL-CMJ destro',       short:'SL dx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   note:'CMJ su singola gamba, arto destro' },
-    { key:'slcmj_sx', cat:'salti', label:'SL-CMJ sinistro',     short:'SL sx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   note:'CMJ su singola gamba, arto sinistro' },
+    { key:'slcmj_dx', cat:'salti', label:'SL-CMJ destro',       short:'SL dx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   side:'dx', pair:'slcmj', note:'CMJ su singola gamba, arto destro' },
+    { key:'slcmj_sx', cat:'salti', label:'SL-CMJ sinistro',     short:'SL sx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   side:'sx', pair:'slcmj', note:'CMJ su singola gamba, arto sinistro' },
     // salti orizzontali (cm)
-    { key:'broad_dx', cat:'oriz',  label:'Broad jump destro',    short:'Broad dx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  note:'salto in lungo da fermo, stacco arto destro' },
-    { key:'broad_sx', cat:'oriz',  label:'Broad jump sinistro',  short:'Broad sx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  note:'salto in lungo da fermo, stacco arto sinistro' },
-    { key:'triple_dx',cat:'oriz',  label:'Triplo broad destro',  short:'Triplo dx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  note:'triplo salto monopodalico, arto destro' },
-    { key:'triple_sx',cat:'oriz',  label:'Triplo broad sinistro',short:'Triplo sx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  note:'triplo salto monopodalico, arto sinistro' },
-    // FMS 7 test + Y-balance (punteggio 0-3 / %)
-    { key:'fms_squat',   cat:'fms', label:'Deep Squat',       short:'Squat',   unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'schema di squat profondo a corpo libero, punteggio 0-3' },
-    { key:'fms_hurdle',  cat:'fms', label:'Hurdle Step',      short:'Hurdle',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'passo sopra l ostacolo con controllo del bacino, 0-3' },
-    { key:'fms_lunge',   cat:'fms', label:'In-Line Lunge',    short:'Affondo', unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'affondo in linea, stabilita del tronco, 0-3' },
-    { key:'fms_shoulder',cat:'fms', label:'Mobilita spalle',  short:'Spalle',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'mobilita delle spalle, mani dietro la schiena, 0-3' },
-    { key:'fms_aslr',    cat:'fms', label:'Active SLR',       short:'ASLR',    unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'flessibilita catena posteriore ad arto teso, 0-3' },
-    { key:'fms_pushup',  cat:'fms', label:'Trunk Push-up',    short:'Push-up', unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'controllo del tronco in piegamento, 0-3' },
-    { key:'fms_rotary',  cat:'fms', label:'Rotary Stability', short:'Rotary',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'stabilita rotatoria in quadrupedia, 0-3' },
-    { key:'yb_dx',       cat:'fms', label:'Y-balance destro',   short:'Y-bal dx', unit:'%', dir:'high', step:'0.5', ph:'es. 95', note:'composite score arto destro' },
-    { key:'yb_sx',       cat:'fms', label:'Y-balance sinistro', short:'Y-bal sx', unit:'%', dir:'high', step:'0.5', ph:'es. 95', note:'composite score arto sinistro' },
+    { key:'broad_dx', cat:'oriz',  label:'Broad jump destro',    short:'Broad dx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  side:'dx', pair:'broad',  note:'salto in lungo da fermo, stacco arto destro' },
+    { key:'broad_sx', cat:'oriz',  label:'Broad jump sinistro',  short:'Broad sx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  side:'sx', pair:'broad',  note:'salto in lungo da fermo, stacco arto sinistro' },
+    { key:'triple_dx',cat:'oriz',  label:'Triplo broad destro',  short:'Triplo dx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  side:'dx', pair:'triple', note:'triplo salto monopodalico, arto destro' },
+    { key:'triple_sx',cat:'oriz',  label:'Triplo broad sinistro',short:'Triplo sx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  side:'sx', pair:'triple', note:'triplo salto monopodalico, arto sinistro' },
+    // FMS: 7 schemi, punteggio 0-3. Cinque sono bilaterali e vanno segnati dx e sx.
+    { key:'fms_squat',      cat:'fms', label:'Deep Squat',            short:'Squat',      unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, note:'squat profondo a corpo libero con asta sopra la testa, punteggio 0-3' },
+    { key:'fms_hurdle_dx',  cat:'fms', label:'Hurdle Step dx',        short:'Hurdle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza destro, 0-3' },
+    { key:'fms_hurdle_sx',  cat:'fms', label:'Hurdle Step sx',        short:'Hurdle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza sinistro, 0-3' },
+    { key:'fms_lunge_dx',   cat:'fms', label:'In-Line Lunge dx',      short:'Affondo dx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_lunge', note:'affondo in linea con arto destro avanti, 0-3' },
+    { key:'fms_lunge_sx',   cat:'fms', label:'In-Line Lunge sx',      short:'Affondo sx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_lunge', note:'affondo in linea con arto sinistro avanti, 0-3' },
+    { key:'fms_shoulder_dx',cat:'fms', label:'Mobilita spalle dx',    short:'Spalle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_shoulder', note:'mano destra sopra, mani dietro la schiena, 0-3' },
+    { key:'fms_shoulder_sx',cat:'fms', label:'Mobilita spalle sx',    short:'Spalle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_shoulder', note:'mano sinistra sopra, mani dietro la schiena, 0-3' },
+    { key:'fms_aslr_dx',    cat:'fms', label:'Active SLR dx',         short:'ASLR dx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_aslr', note:'sollevamento arto teso destro da supino, 0-3' },
+    { key:'fms_aslr_sx',    cat:'fms', label:'Active SLR sx',         short:'ASLR sx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_aslr', note:'sollevamento arto teso sinistro da supino, 0-3' },
+    { key:'fms_pushup',     cat:'fms', label:'Trunk Push-up',         short:'Push-up',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, note:'controllo del tronco in piegamento sulle braccia, 0-3' },
+    { key:'fms_rotary_dx',  cat:'fms', label:'Rotary Stability dx',   short:'Rotary dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato destro, 0-3' },
+    { key:'fms_rotary_sx',  cat:'fms', label:'Rotary Stability sx',   short:'Rotary sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato sinistro, 0-3' },
+    // Y-balance arto inferiore: tre direzioni, ognuna dx e sx (reach in cm)
+    { key:'yb_ant_dx', cat:'yb', label:'Y-bal anteriore dx',      short:'Ant dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 62',  side:'dx', pair:'yb_ant', note:'reach anteriore in appoggio sull arto destro' },
+    { key:'yb_ant_sx', cat:'yb', label:'Y-bal anteriore sx',      short:'Ant sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 62',  side:'sx', pair:'yb_ant', note:'reach anteriore in appoggio sull arto sinistro' },
+    { key:'yb_pm_dx',  cat:'yb', label:'Y-bal postero-mediale dx', short:'PM dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 105', side:'dx', pair:'yb_pm', note:'reach postero-mediale in appoggio sull arto destro' },
+    { key:'yb_pm_sx',  cat:'yb', label:'Y-bal postero-mediale sx', short:'PM sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 105', side:'sx', pair:'yb_pm', note:'reach postero-mediale in appoggio sull arto sinistro' },
+    { key:'yb_pl_dx',  cat:'yb', label:'Y-bal postero-laterale dx', short:'PL dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'dx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto destro' },
+    { key:'yb_pl_sx',  cat:'yb', label:'Y-bal postero-laterale sx', short:'PL sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'sx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto sinistro' },
     // test da campo (km/h)
     { key:'gacon',   cat:'campo', label:'Gacon 45-15', short:'Gacon', unit:'km/h', dir:'high', step:'0.5', ph:'es. 15.5', note:'test intermittente, velocita aerobica massima' },
     { key:'ift3015', cat:'campo', label:'30-15 IFT',   short:'30-15', unit:'km/h', dir:'high', step:'0.5', ph:'es. 18.5', note:'velocita finale intermittente (VIFT)' }
   ];
+
+  // Test bilaterali: dx e sx si compilano nella stessa vista e generano il badge asimmetria.
+  // Soglie: salti in percentuale, Y-balance in cm, FMS in punti.
+  const PAIRS = {
+    slcmj:        { cat:'salti', label:'SL-CMJ',                        short:'SL-CMJ',           asym:'pct', warn:10, bad:15, note:'CMJ monopodalico, asimmetria oltre il 10 per cento da attenzionare' },
+    broad:        { cat:'oriz',  label:'Broad jump',                    short:'Broad',            asym:'pct', warn:10, bad:15, note:'salto in lungo monopodalico, confronto fra i due arti' },
+    triple:       { cat:'oriz',  label:'Triplo broad',                  short:'Triplo',           asym:'pct', warn:10, bad:15, note:'triplo salto monopodalico, confronto fra i due arti' },
+    fms_hurdle:   { cat:'fms',   label:'Hurdle Step',                   short:'Hurdle',           asym:'pt',  warn:1,  bad:2,  note:'passo sopra l ostacolo con controllo del bacino, 0-3 per lato' },
+    fms_lunge:    { cat:'fms',   label:'In-Line Lunge',                 short:'Affondo',          asym:'pt',  warn:1,  bad:2,  note:'affondo in linea, stabilita del tronco, 0-3 per lato' },
+    fms_shoulder: { cat:'fms',   label:'Mobilita spalle',               short:'Spalle',           asym:'pt',  warn:1,  bad:2,  note:'mobilita delle spalle con mani dietro la schiena, 0-3 per lato' },
+    fms_aslr:     { cat:'fms',   label:'Active SLR',                    short:'ASLR',             asym:'pt',  warn:1,  bad:2,  note:'flessibilita catena posteriore ad arto teso, 0-3 per lato' },
+    fms_rotary:   { cat:'fms',   label:'Rotary Stability',              short:'Rotary',           asym:'pt',  warn:1,  bad:2,  note:'stabilita rotatoria in quadrupedia, 0-3 per lato' },
+    yb_ant:       { cat:'yb',    label:'Y-balance anteriore',           short:'Anteriore',        asym:'cm',  warn:4,  bad:6,  note:'reach anteriore, differenza fra i due arti oltre 4 cm da attenzionare' },
+    yb_pm:        { cat:'yb',    label:'Y-balance postero-mediale',     short:'Postero-mediale',  asym:'cm',  warn:4,  bad:6,  note:'reach postero-mediale, confronto fra i due arti' },
+    yb_pl:        { cat:'yb',    label:'Y-balance postero-laterale',    short:'Postero-laterale', asym:'cm',  warn:4,  bad:6,  note:'reach postero-laterale, confronto fra i due arti' }
+  };
+
+  // Viste della batteria: i test singoli restano soli, quelli con lato si uniscono.
+  const VIEWS = [];
+  (function(){
+    const done = {};
+    TESTS.forEach(t=>{
+      if(!t.pair){
+        VIEWS.push({ id:t.key, kind:'single', cat:t.cat, label:t.label, short:t.short||t.label,
+                     unit:t.unit, dir:t.dir, note:t.note, def:t });
+        return;
+      }
+      if(done[t.pair]) return;
+      done[t.pair] = true;
+      const p  = PAIRS[t.pair] || {};
+      const dx = TESTS.find(x=> x.pair===t.pair && x.side==='dx') || t;
+      const sx = TESTS.find(x=> x.pair===t.pair && x.side==='sx') || t;
+      VIEWS.push({ id:t.pair, kind:'pair', cat:p.cat||t.cat,
+                   label:p.label||t.pair, short:p.short||p.label||t.pair,
+                   unit:t.unit, dir:t.dir, note:p.note||t.note,
+                   asym:p.asym||'pct', warn:p.warn||10, bad:p.bad||15, dx:dx, sx:sx });
+    });
+  })();
+  function viewsIn(cat){ return VIEWS.filter(v=> v.cat===cat); }
+  function viewById(id){ return VIEWS.find(v=> v.id===id) || VIEWS[0]; }
+  function keysOf(v){ return v.kind==='pair' ? [v.dx.key, v.sx.key] : [v.def.key]; }
+
   let curCat  = CATS[0].key;
-  let curTest = (TESTS.find(t=> t.cat===curCat) || TESTS[0]).key;
+  let curView = (viewsIn(curCat)[0] || VIEWS[0]).id;
   let REG = loadReg();
 
   function seasonId(){ return (window.getStagione ? window.getStagione() : '25-26'); }
@@ -488,6 +608,54 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return s+' '+unit;
   }
 
+  // ---- test bilaterali: righe dx/sx con calcolo dell asimmetria ----
+  function valOf(bag, name){
+    const e = bag[name];
+    if(!e || e.v==null || e.v==='') return null;
+    const n = +e.v;
+    return isNaN(n) ? null : n;
+  }
+  function pairRows(v){
+    const bd = REG[v.dx.key]||{}, bs = REG[v.sx.key]||{};
+    return roster.map(name=>{
+      const d = valOf(bd, name), s = valOf(bs, name);
+      let gap=null, pct=null, amt=null, lev='', low='';
+      if(d!=null && s!=null){
+        gap = Math.abs(d-s);
+        const hi = Math.max(d,s);
+        pct = hi>0 ? (gap/hi*100) : 0;
+        amt = (v.asym==='pct') ? pct : gap;
+        lev = amt>=v.bad ? 'bad' : (amt>=v.warn ? 'warn' : 'ok');
+        low = d<s ? 'dx' : (s<d ? 'sx' : '');
+      }
+      return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', d:d, s:s,
+               gap:gap, pct:pct, amt:amt, lev:lev, low:low,
+               dd:(bd[name]?bd[name].d:''), ds:(bs[name]?bs[name].d:'') };
+    });
+  }
+  function asymText(v, r){
+    if(r.amt==null) return '-';
+    if(v.asym==='pct') return NF1.format(r.pct)+'%';
+    if(v.asym==='pt')  return (r.gap===0?'pari':NF.format(r.gap)+' pt');
+    return NF1.format(r.gap)+' cm';
+  }
+  function pairStats(v){
+    const rows = pairRows(v);
+    const both = rows.filter(r=> r.d!=null && r.s!=null);
+    const vd = rows.filter(r=> r.d!=null), vs = rows.filter(r=> r.s!=null);
+    const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+    return {
+      rows: rows,
+      n: both.length,
+      nD: vd.length,
+      nS: vs.length,
+      avgD: avg(vd.map(r=> r.d)),
+      avgS: avg(vs.map(r=> r.s)),
+      nWarn: both.filter(r=> r.lev==='warn').length,
+      nBad:  both.filter(r=> r.lev==='bad').length
+    };
+  }
+
   // ================= RENDER =================
   function seasonName(){ return window.stagioneLabel ? window.stagioneLabel() : 'Stagione 2025/26'; }
   function refreshSubtitle(){
@@ -509,13 +677,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     refreshSubtitle();
     renderKpis();
     buildCats();
+    buildTabs();
     renderBattery();
   });
 
   document.getElementById('tb-reset').addEventListener('click', ()=>{
-    const bag = REG[curTest];
-    if(!bag || !Object.keys(bag).length){ toast('Nessun dato da svuotare'); return; }
-    delete REG[curTest];
+    const v = viewById(curView);
+    const ks = keysOf(v).filter(k=> REG[k] && Object.keys(REG[k]).length);
+    if(!ks.length){ toast('Nessun dato da svuotare'); return; }
+    ks.forEach(k=> { delete REG[k]; });
     saveReg();
     renderBattery(); renderKpis(); buildCats();
     toast('Test svuotato');
@@ -528,7 +698,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         sub:'con dati GPS in stagione' },
       { cls:'', label:'Velocita top squadra',
         val:'<span class="k-val up">'+(topSmax?NF1.format(topSmax.smax):'-')+'<small>km/h</small></span>',
-        sub:(topSmax?esc(topSmax.name):'dati non disponibili') },
+        sub:(topSmax
+              ? esc(topSmax.name)+(nSusp?' &#183; '+nSusp+(nSusp===1?' dato':' dati')+' da verificare':'')
+              : 'dati non disponibili') },
       { cls:'v', label:'Alta velocita top',
         val:'<span class="k-val vi">'+(topHs?NF.format(topHs.hs):'-')+'<small>m</small></span>',
         sub:(topHs?esc(topHs.name):'oltre 23 km/h') },
@@ -545,7 +717,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const chips = document.getElementById('gps-chips');
     chips.innerHTML =
       '<div class="mchip em"><span class="ml">Top</span><b>'+(topSmax?NF1.format(topSmax.smax):'-')+'</b><span class="ml">km/h</span></div>'+
-      '<div class="mchip"><span class="ml">Media</span><b>'+(avgSmax?NF1.format(avgSmax):'-')+'</b><span class="ml">km/h</span></div>';
+      '<div class="mchip"><span class="ml">Media</span><b>'+(avgSmax?NF1.format(avgSmax):'-')+'</b><span class="ml">km/h</span></div>'+
+      (nSusp? '<div class="mchip"><span class="ml">Da verificare</span><b>'+nSusp+'</b></div>' : '');
 
     const holder = document.getElementById('gps-list');
     const ranked = monitored.slice().sort((a,b)=> (b.smax||0)-(a.smax||0));
@@ -553,18 +726,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       holder.innerHTML = '<div class="lb-empty">Nessun dato GPS disponibile nel monitoraggio del carico.</div>';
       return;
     }
-    const max = ranked[0].smax || 1;
+    // la scala delle barre usa il migliore valore plausibile, per non appiattire il grafico
+    const max = (topSmax && topSmax.smax) ? topSmax.smax : (ranked[0].smax || 1);
     holder.innerHTML = ranked.map((p,i)=>{
       const rk = i+1;
-      const cls = rk<=3 ? (' top'+rk) : '';
-      const fillCls = rk===1?'':(rk<=3?' vi':'');
-      return '<div class="lb-row'+cls+'">'+
+      const cls = (rk<=3 ? (' top'+rk) : '') + (p.susp ? ' susp' : '');
+      const fillCls = p.susp ? ' gr' : (rk===1?'':(rk<=3?' vi':''));
+      const href = sessHref(p);
+      const sl   = sessLabel(p);
+      const open = href
+        ? '<a class="lb-row'+cls+'" href="'+esc(href)+'" title="Apri la seduta del '+esc(sl||'record')+'">'
+        : '<div class="lb-row'+cls+'">';
+      return open+
         '<div class="lb-rank">'+rk+'</div>'+
-        '<div class="lb-main"><div class="lb-name">'+esc(p.name)+'</div>'+
-          (p.role?'<div class="lb-role">'+esc(p.role)+'</div>':'')+'</div>'+
-        '<div class="lb-bar"><div class="lb-fill'+fillCls+'" data-w="'+Math.max(6,Math.round(p.smax/max*100))+'"></div></div>'+
+        '<div class="lb-main"><div class="lb-name">'+esc(p.name)+
+            (p.susp?' <span class="lb-flag">da verificare</span>':'')+'</div>'+
+          '<div class="lb-role">'+(p.role?esc(p.role):'')+
+            (sl?(p.role?' &#183; ':'')+'<span class="lb-sess">'+esc(sl)+'</span>':'')+'</div></div>'+
+        '<div class="lb-bar"><div class="lb-fill'+fillCls+'" data-w="'+Math.max(6,Math.min(100,Math.round(p.smax/max*100)))+'"></div></div>'+
         '<div class="lb-val'+(rk>1&&rk<=3?' vi':'')+'">'+NF1.format(p.smax)+'<small>km/h</small></div>'+
-      '</div>';
+        '<svg class="lb-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'+
+        (href? '</a>' : '</div>');
     }).join('');
     requestAnimationFrame(()=>{
       holder.querySelectorAll('.lb-fill').forEach(el=>{ el.style.width = el.dataset.w+'%'; });
@@ -591,8 +773,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       btn.addEventListener('click', ()=>{
         if(btn.dataset.c===curCat) return;
         curCat = btn.dataset.c;
-        const first = TESTS.find(t=> t.cat===curCat);
-        if(first) curTest = first.key;
+        const first = viewsIn(curCat)[0];
+        if(first) curView = first.id;
         box.querySelectorAll('.cat-btn').forEach(b=> b.classList.toggle('active', b===btn));
         buildTabs();
         renderBattery();
@@ -601,39 +783,76 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function buildTabs(){
     const tabs = document.getElementById('test-tabs');
-    const inCat = TESTS.filter(t=> t.cat===curCat);
-    tabs.innerHTML = inCat.map(t=>(
-      '<button class="ttab'+(t.key===curTest?' active':'')+'" type="button" data-k="'+t.key+'">'+esc(t.short||t.label)+'</button>'
+    const inCat = viewsIn(curCat);
+    tabs.innerHTML = inCat.map(v=>(
+      '<button class="ttab'+(v.id===curView?' active':'')+'" type="button" data-k="'+esc(v.id)+'">'+esc(v.short)+'</button>'
     )).join('');
     tabs.querySelectorAll('.ttab').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        curTest = btn.dataset.k;
+        curView = btn.dataset.k;
         tabs.querySelectorAll('.ttab').forEach(b=> b.classList.toggle('active', b===btn));
         renderBattery();
       });
     });
   }
 
-  function renderBattery(){
-    const def = TESTS.find(t=> t.key===curTest) || TESTS[0];
-    const st = statsFor(curTest, def);
+  // scrive un valore nel registro e ridisegna
+  function writeVal(testKey, def, name, raw){
+    if(!REG[testKey]) REG[testKey] = {};
+    const s = String(raw==null?'':raw).trim();
+    if(s===''){ delete REG[testKey][name]; }
+    else {
+      let num = +s;
+      if(isNaN(num)){ delete REG[testKey][name]; }
+      else {
+        if(def && def.fms) num = Math.max(0, Math.min(3, Math.round(num)));
+        REG[testKey][name] = { v:num, d:todayShort() };
+      }
+    }
+    if(REG[testKey] && !Object.keys(REG[testKey]).length) delete REG[testKey];
+    saveReg();
+    renderBattery(); renderKpis(); buildCats();
+  }
+  function inputHtml(def, name, val, cls){
+    return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
+      (def.max?' max="'+def.max+'"':'')+' value="'+(val!=null?val:'')+'" placeholder="'+esc(def.ph)+'" '+
+      'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+name)+'">';
+  }
+  function bindInputs(list, defsByKey){
+    list.querySelectorAll('.tb-in').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        writeVal(inp.dataset.k, defsByKey[inp.dataset.k], inp.dataset.name, inp.value);
+      });
+    });
+  }
 
-    const strip = document.getElementById('tb-strip');
-    strip.innerHTML =
+  function renderBattery(){
+    const v = viewById(curView);
+    document.getElementById('tb-dir').textContent = v.note || '';
+    const list = document.getElementById('tb-list');
+    const leg  = document.getElementById('tb-legend');
+    if(!roster.length){
+      document.getElementById('tb-strip').innerHTML = '';
+      leg.innerHTML = '';
+      list.innerHTML = '<div class="lb-empty">Nessuna atleta nel roster.</div>';
+      return;
+    }
+    if(v.kind==='pair') renderPair(v, list, leg);
+    else                renderSingle(v, list, leg);
+  }
+
+  function renderSingle(v, list, leg){
+    const def = v.def;
+    const st  = statsFor(def.key, def);
+    leg.innerHTML = '';
+
+    document.getElementById('tb-strip').innerHTML =
       '<div class="mchip em"><span class="ml">Migliore</span><b>'+fmtNum(st.best,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
       '<div class="mchip"><span class="ml">Media</span><b>'+fmtNum(st.avg,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
       '<div class="mchip vi"><span class="ml">Top</span><b style="font-size:13px">'+(st.bestName?esc(st.bestName):'-')+'</b></div>'+
       '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
 
-    document.getElementById('tb-dir').textContent = def.note;
-
-    const list = document.getElementById('tb-list');
-    if(!roster.length){
-      list.innerHTML = '<div class="lb-empty">Nessuna atleta nel roster.</div>';
-      return;
-    }
-
-    const entries = entriesFor(curTest);
+    const entries = entriesFor(def.key);
     // ordina: prima chi ha un valore (per merito), poi i vuoti in ordine alfabetico
     const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> def.dir==='high' ? (b.v-a.v) : (a.v-b.v));
     const noVal   = entries.filter(e=> e.v==null);
@@ -653,35 +872,65 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="tb-right">'+
           '<div class="tb-bar"><div class="tb-barfill" data-w="'+(e.v!=null?Math.round(w):0)+'"></div></div>'+
           '<span class="tb-date">'+(e.d?esc(e.d):'')+'</span>'+
-          '<span class="tb-inwrap"><input class="tb-in" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+(def.max?' max="'+def.max+'"':'')+' '+
-            'value="'+(e.v!=null?e.v:'')+'" placeholder="'+esc(def.ph)+'" data-name="'+esc(e.name)+'" aria-label="'+esc(def.label+' '+e.name)+'">'+
+          '<span class="tb-inwrap">'+inputHtml(def, e.name, e.v)+
             '<span class="tb-unit">'+esc(def.unit)+'</span></span>'+
         '</div>'+
       '</div>';
     }).join('');
 
-    list.querySelectorAll('.tb-in').forEach(inp=>{
-      inp.addEventListener('change', ()=>{
-        const name = inp.dataset.name;
-        if(!REG[curTest]) REG[curTest] = {};
-        const raw = inp.value.trim();
-        if(raw===''){ delete REG[curTest][name]; }
-        else {
-          let num = +raw;
-          if(isNaN(num)){ delete REG[curTest][name]; }
-          else {
-            if(def && def.fms){ num = Math.max(0, Math.min(3, Math.round(num))); }
-            REG[curTest][name] = { v:num, d:todayShort() };
-          }
-        }
-        saveReg();
-        renderBattery(); renderKpis(); buildCats();
-      });
-    });
-
+    const map = {}; map[def.key] = def;
+    bindInputs(list, map);
     requestAnimationFrame(()=>{
       list.querySelectorAll('.tb-barfill').forEach(el=>{ el.style.width = el.dataset.w+'%'; });
     });
+  }
+
+  function renderPair(v, list, leg){
+    const st = pairStats(v);
+    const un = v.asym==='pct' ? '%' : (v.asym==='pt' ? 'pt' : 'cm');
+
+    document.getElementById('tb-strip').innerHTML =
+      '<div class="mchip em"><span class="ml">Media dx</span><b>'+fmtNum(st.avgD,v)+'</b><span class="ml">'+esc(v.unit)+'</span></div>'+
+      '<div class="mchip em"><span class="ml">Media sx</span><b>'+fmtNum(st.avgS,v)+'</b><span class="ml">'+esc(v.unit)+'</span></div>'+
+      '<div class="mchip vi"><span class="ml">Asimmetrie</span><b>'+(st.nWarn+st.nBad)+'</b><span class="ml">oltre '+NF1.format(v.warn)+' '+un+'</span></div>'+
+      '<div class="mchip"><span class="ml">Completi</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+
+    leg.innerHTML =
+      '<span><i class="ok"></i>sotto '+NF1.format(v.warn)+' '+un+', equilibrata</span>'+
+      '<span><i class="warn"></i>da '+NF1.format(v.warn)+' a '+NF1.format(v.bad)+' '+un+', da monitorare</span>'+
+      '<span><i class="bad"></i>oltre '+NF1.format(v.bad)+' '+un+', lavoro compensativo</span>';
+
+    // ordino per gravita dell asimmetria, poi chi ha un solo lato, poi i vuoti
+    const rows = st.rows.slice();
+    const rank = r => (r.amt!=null ? 0 : ((r.d!=null||r.s!=null) ? 1 : 2));
+    rows.sort((a,b)=>{
+      const ra=rank(a), rb=rank(b);
+      if(ra!==rb) return ra-rb;
+      if(ra===0) return b.amt-a.amt;
+      return a.name.localeCompare(b.name,'it');
+    });
+
+    list.innerHTML = rows.map(r=>{
+      const cls = r.lev==='bad' ? ' alert' : (r.lev==='warn' ? ' watch' : '');
+      const dt  = r.dd || r.ds || '';
+      return '<div class="tb-row'+cls+'">'+
+        '<div class="tb-nm"><span class="tb-name">'+esc(r.name)+'</span></div>'+
+        '<div class="tb-right">'+
+          '<span class="tb-date">'+(dt?esc(dt):'')+'</span>'+
+          '<span class="tb-dual">'+
+            '<span class="tb-side'+(r.low==='dx'?' low':'')+'"><span class="tb-sl">dx</span>'+
+              inputHtml(v.dx, r.name, r.d, 'sm')+'</span>'+
+            '<span class="tb-side'+(r.low==='sx'?' low':'')+'"><span class="tb-sl">sx</span>'+
+              inputHtml(v.sx, r.name, r.s, 'sm')+'</span>'+
+            '<span class="tb-unit">'+esc(v.unit)+'</span>'+
+          '</span>'+
+          '<span class="tb-asym'+(r.lev?' '+r.lev:'')+'">'+esc(asymText(v, r))+'</span>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+
+    const map = {}; map[v.dx.key] = v.dx; map[v.sx.key] = v.sx;
+    bindInputs(list, map);
   }
 
 })();
