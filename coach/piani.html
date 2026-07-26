@@ -162,7 +162,16 @@ a{ color:inherit; text-decoration:none; }
 .lb-val.vi{ color:var(--violet2); }
 .lb-empty{ text-align:center; padding:26px; color:var(--faint); font-size:13px; }
 
-/* ---------- batteria test sul campo ---------- */
+/* ---------- batteria test ---------- */
+.test-cats{ display:inline-flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; padding:4px;
+  background:var(--surface2); border:1px solid var(--border2); border-radius:12px; max-width:100%; }
+.cat-btn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); background:transparent; border:0; border-radius:8px; padding:8px 14px;
+  transition: background .16s var(--ease), color .16s var(--ease); }
+.cat-btn:hover{ color:var(--ink); }
+.cat-btn.active{ color:var(--ink); background:var(--surface3); box-shadow:var(--shadow-sm); }
+.cat-btn .cc{ margin-left:6px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.cat-btn.active .cc{ color:var(--orange2); }
 .test-tabs{ display:flex; gap:8px; flex-wrap:wrap; }
 .ttab{ appearance:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600;
   color:var(--text); background:var(--surface2); border:1px solid var(--border2); border-radius:999px;
@@ -282,8 +291,8 @@ a{ color:inherit; text-decoration:none; }
       <!-- Batteria test sul campo (localStorage) -->
       <section class="card reveal" id="tb-card" style="--i:2">
         <div class="card-head">
-          <h2>Batteria test sul campo</h2>
-          <span class="hint">registra le prove, i valori restano su questo dispositivo</span>
+          <h2>Batteria test</h2>
+          <span class="hint">salti, FMS e prove sul campo &#183; salvati per stagione su questo dispositivo</span>
           <span class="spacer"></span>
           <button class="btn" id="tb-reset" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -291,6 +300,7 @@ a{ color:inherit; text-decoration:none; }
           </button>
         </div>
         <div class="card-body">
+          <div class="test-cats" id="test-cats"></div>
           <div class="test-tabs" id="test-tabs"></div>
           <div class="tb-strip" id="tb-strip"></div>
           <div class="tb-dir" id="tb-dir"></div>
@@ -302,7 +312,7 @@ a{ color:inherit; text-decoration:none; }
 
     <p class="foot-note">
       Sezione coach &#183; la velocita massima usa i dati GPS gia' registrati nel monitoraggio del carico.
-      La batteria test sul campo e' una bozza salvata solo su questo dispositivo.
+      La batteria test e' salvata per stagione solo su questo dispositivo.
     </p>
   </div>
 </div>
@@ -336,6 +346,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const NF  = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
   const NF2 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
+  function fmtNum(v, def){ if(v==null) return '-'; return (def && def.unit==='pt' ? NF : NF1).format(v); }
 
   const MO = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
 
@@ -396,22 +407,56 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const avgSmax = monitored.length ? monitored.reduce((s,p)=>s+(p.smax||0),0)/monitored.length : 0;
 
   // ================= BATTERIA TEST =================
-  const TESTS = [
-    { key:'cmj',      label:'CMJ',          unit:'cm', dir:'high', step:'0.5',  ph:'es. 28',   note:'salto verticale, valore piu alto = migliore' },
-    { key:'sprint10', label:'Sprint 10 m',  unit:'s',  dir:'low',  step:'0.01', ph:'es. 1.85', note:'accelerazione, tempo piu basso = migliore' },
-    { key:'sprint30', label:'Sprint 30 m',  unit:'s',  dir:'low',  step:'0.01', ph:'es. 4.60', note:'velocita lanciata, tempo piu basso = migliore' },
-    { key:'yoyo',     label:'Yo-Yo IR1',    unit:'m',  dir:'high', step:'40',   ph:'es. 1080', note:'capacita aerobica, distanza piu alta = migliore' },
-    { key:'ttest',    label:'T-test',       unit:'s',  dir:'low',  step:'0.05', ph:'es. 10.2', note:'agilita e cambi direzione, tempo piu basso = migliore' }
+  const CATS = [
+    { key:'salti', label:'Salti verticali' },
+    { key:'oriz',  label:'Salti orizzontali' },
+    { key:'fms',   label:'FMS e stabilita' },
+    { key:'campo', label:'Test da campo' }
   ];
-  const REG_KEY = 'fio_test_register_v1';
+  const TESTS = [
+    // salti verticali (cm)
+    { key:'sj',       cat:'salti', label:'Squat Jump',          short:'SJ',        unit:'cm',   dir:'high', step:'0.5', ph:'es. 26',   note:'partenza da fermo a 90 gradi, senza contromovimento' },
+    { key:'cmj',      cat:'salti', label:'CMJ',                 short:'CMJ',       unit:'cm',   dir:'high', step:'0.5', ph:'es. 29',   note:'contromovimento con mani sui fianchi' },
+    { key:'cmj_af',   cat:'salti', label:'CMJ braccia libere',  short:'CMJ AF',    unit:'cm',   dir:'high', step:'0.5', ph:'es. 33',   note:'contromovimento con slancio delle braccia' },
+    { key:'dj40',     cat:'salti', label:'Drop Jump 40 cm',     short:'DJ 40',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 27',   note:'caduta da 40 cm e rimbalzo immediato' },
+    { key:'stiff',    cat:'salti', label:'Stiffness 10 salti',  short:'Stiffness', unit:'cm',   dir:'high', step:'0.5', ph:'es. 24',   note:'media altezza dei 10 rimbalzi consecutivi' },
+    { key:'slcmj_dx', cat:'salti', label:'SL-CMJ destro',       short:'SL dx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   note:'CMJ su singola gamba, arto destro' },
+    { key:'slcmj_sx', cat:'salti', label:'SL-CMJ sinistro',     short:'SL sx',     unit:'cm',   dir:'high', step:'0.5', ph:'es. 17',   note:'CMJ su singola gamba, arto sinistro' },
+    // salti orizzontali (cm)
+    { key:'broad_dx', cat:'oriz',  label:'Broad jump destro',    short:'Broad dx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  note:'salto in lungo da fermo, stacco arto destro' },
+    { key:'broad_sx', cat:'oriz',  label:'Broad jump sinistro',  short:'Broad sx',  unit:'cm',  dir:'high', step:'1',   ph:'es. 175',  note:'salto in lungo da fermo, stacco arto sinistro' },
+    { key:'triple_dx',cat:'oriz',  label:'Triplo broad destro',  short:'Triplo dx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  note:'triplo salto monopodalico, arto destro' },
+    { key:'triple_sx',cat:'oriz',  label:'Triplo broad sinistro',short:'Triplo sx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  note:'triplo salto monopodalico, arto sinistro' },
+    // FMS 7 test + Y-balance (punteggio 0-3 / %)
+    { key:'fms_squat',   cat:'fms', label:'Deep Squat',       short:'Squat',   unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'schema di squat profondo a corpo libero, punteggio 0-3' },
+    { key:'fms_hurdle',  cat:'fms', label:'Hurdle Step',      short:'Hurdle',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'passo sopra l ostacolo con controllo del bacino, 0-3' },
+    { key:'fms_lunge',   cat:'fms', label:'In-Line Lunge',    short:'Affondo', unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'affondo in linea, stabilita del tronco, 0-3' },
+    { key:'fms_shoulder',cat:'fms', label:'Mobilita spalle',  short:'Spalle',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'mobilita delle spalle, mani dietro la schiena, 0-3' },
+    { key:'fms_aslr',    cat:'fms', label:'Active SLR',       short:'ASLR',    unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'flessibilita catena posteriore ad arto teso, 0-3' },
+    { key:'fms_pushup',  cat:'fms', label:'Trunk Push-up',    short:'Push-up', unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'controllo del tronco in piegamento, 0-3' },
+    { key:'fms_rotary',  cat:'fms', label:'Rotary Stability', short:'Rotary',  unit:'pt', dir:'high', step:'1',   ph:'0-3', max:3, fms:true, note:'stabilita rotatoria in quadrupedia, 0-3' },
+    { key:'yb_dx',       cat:'fms', label:'Y-balance destro',   short:'Y-bal dx', unit:'%', dir:'high', step:'0.5', ph:'es. 95', note:'composite score arto destro' },
+    { key:'yb_sx',       cat:'fms', label:'Y-balance sinistro', short:'Y-bal sx', unit:'%', dir:'high', step:'0.5', ph:'es. 95', note:'composite score arto sinistro' },
+    // test da campo (km/h)
+    { key:'gacon',   cat:'campo', label:'Gacon 45-15', short:'Gacon', unit:'km/h', dir:'high', step:'0.5', ph:'es. 15.5', note:'test intermittente, velocita aerobica massima' },
+    { key:'ift3015', cat:'campo', label:'30-15 IFT',   short:'30-15', unit:'km/h', dir:'high', step:'0.5', ph:'es. 18.5', note:'velocita finale intermittente (VIFT)' }
+  ];
+  let curCat  = CATS[0].key;
+  let curTest = (TESTS.find(t=> t.cat===curCat) || TESTS[0]).key;
   let REG = loadReg();
-  let curTest = TESTS[0].key;
 
+  function seasonId(){ return (window.getStagione ? window.getStagione() : '25-26'); }
+  function regKey(){ return 'fio_test_register_v2_' + seasonId(); }
   function loadReg(){
-    try{ const v=JSON.parse(localStorage.getItem(REG_KEY)); if(v&&typeof v==='object') return v; }catch(e){}
+    const key = regKey();
+    try{ const v=JSON.parse(localStorage.getItem(key)); if(v&&typeof v==='object') return v; }catch(e){}
+    // migrazione una tantum dai vecchi dati nella stagione 25-26
+    if(seasonId()==='25-26'){
+      try{ const old=JSON.parse(localStorage.getItem('fio_test_register_v1')); if(old&&typeof old==='object') return old; }catch(e){}
+    }
     return {};
   }
-  function saveReg(){ try{ localStorage.setItem(REG_KEY, JSON.stringify(REG)); }catch(e){} }
+  function saveReg(){ try{ localStorage.setItem(regKey(), JSON.stringify(REG)); }catch(e){} }
 
   function entriesFor(testKey){
     const bag = REG[testKey]||{};
@@ -444,22 +489,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   // ================= RENDER =================
-  document.getElementById('subtitle').innerHTML =
-    '<b>'+esc(SNAP.squadra||'Fiorentina Primavera U19W')+'</b> &#183; '+
-    esc(SNAP.stagione||'')+' &#183; '+monitored.length+' atlete monitorate';
+  function seasonName(){ return window.stagioneLabel ? window.stagioneLabel() : 'Stagione 2025/26'; }
+  function refreshSubtitle(){
+    document.getElementById('subtitle').innerHTML =
+      '<b>'+esc(SNAP.squadra||'Fiorentina Primavera U19W')+'</b> &#183; '+
+      esc(seasonName())+' &#183; '+monitored.length+' atlete monitorate';
+  }
+  refreshSubtitle();
   document.getElementById('gen-txt').textContent = SNAP.generato ? ('dati '+SNAP.generato) : 'dati non disponibili';
 
   renderKpis();
   renderGps();
+  buildCats();
   buildTabs();
   renderBattery();
+
+  document.addEventListener('fio:stagione', function(){
+    REG = loadReg();
+    refreshSubtitle();
+    renderKpis();
+    buildCats();
+    renderBattery();
+  });
 
   document.getElementById('tb-reset').addEventListener('click', ()=>{
     const bag = REG[curTest];
     if(!bag || !Object.keys(bag).length){ toast('Nessun dato da svuotare'); return; }
     delete REG[curTest];
     saveReg();
-    renderBattery(); renderKpis();
+    renderBattery(); renderKpis(); buildCats();
     toast('Test svuotato');
   });
 
@@ -476,7 +534,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         sub:(topHs?esc(topHs.name):'oltre 23 km/h') },
       { cls:'g', label:'Test registrati',
         val:'<span class="k-val ok">'+NF.format(registeredCount())+'</span>',
-        sub:'prove sul campo salvate' }
+        sub:'prove salvate in stagione' }
     ];
     document.getElementById('kpis').innerHTML = kp.map(k=>(
       '<div class="kpi '+k.cls+'"><div class="k-label">'+k.label+'</div>'+k.val+'<div class="k-sub">'+k.sub+'</div></div>'
@@ -513,10 +571,39 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
 
+  function catCounts(){
+    const m = {};
+    CATS.forEach(c=> m[c.key] = 0);
+    TESTS.forEach(t=>{
+      const bag = REG[t.key]||{};
+      roster.forEach(n=>{ if(bag[n] && bag[n].v!=null && bag[n].v!=='' && m[t.cat]!=null) m[t.cat]++; });
+    });
+    return m;
+  }
+  function buildCats(){
+    const box = document.getElementById('test-cats');
+    const cc = catCounts();
+    box.innerHTML = CATS.map(c=>(
+      '<button class="cat-btn'+(c.key===curCat?' active':'')+'" type="button" data-c="'+c.key+'">'+
+        esc(c.label)+'<span class="cc">'+(cc[c.key]||0)+'</span></button>'
+    )).join('');
+    box.querySelectorAll('.cat-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(btn.dataset.c===curCat) return;
+        curCat = btn.dataset.c;
+        const first = TESTS.find(t=> t.cat===curCat);
+        if(first) curTest = first.key;
+        box.querySelectorAll('.cat-btn').forEach(b=> b.classList.toggle('active', b===btn));
+        buildTabs();
+        renderBattery();
+      });
+    });
+  }
   function buildTabs(){
     const tabs = document.getElementById('test-tabs');
-    tabs.innerHTML = TESTS.map(t=>(
-      '<button class="ttab'+(t.key===curTest?' active':'')+'" type="button" data-k="'+t.key+'">'+esc(t.label)+'</button>'
+    const inCat = TESTS.filter(t=> t.cat===curCat);
+    tabs.innerHTML = inCat.map(t=>(
+      '<button class="ttab'+(t.key===curTest?' active':'')+'" type="button" data-k="'+t.key+'">'+esc(t.short||t.label)+'</button>'
     )).join('');
     tabs.querySelectorAll('.ttab').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -533,8 +620,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const strip = document.getElementById('tb-strip');
     strip.innerHTML =
-      '<div class="mchip em"><span class="ml">Migliore</span><b>'+(st.best!=null?(def.unit==='s'?NF2.format(st.best):NF.format(st.best)):'-')+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
-      '<div class="mchip"><span class="ml">Media</span><b>'+(st.avg!=null?(def.unit==='s'?NF2.format(st.avg):NF.format(st.avg)):'-')+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
+      '<div class="mchip em"><span class="ml">Migliore</span><b>'+fmtNum(st.best,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
+      '<div class="mchip"><span class="ml">Media</span><b>'+fmtNum(st.avg,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
       '<div class="mchip vi"><span class="ml">Top</span><b style="font-size:13px">'+(st.bestName?esc(st.bestName):'-')+'</b></div>'+
       '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
 
@@ -566,7 +653,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="tb-right">'+
           '<div class="tb-bar"><div class="tb-barfill" data-w="'+(e.v!=null?Math.round(w):0)+'"></div></div>'+
           '<span class="tb-date">'+(e.d?esc(e.d):'')+'</span>'+
-          '<span class="tb-inwrap"><input class="tb-in" type="number" inputmode="decimal" step="'+def.step+'" min="0" '+
+          '<span class="tb-inwrap"><input class="tb-in" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+(def.max?' max="'+def.max+'"':'')+' '+
             'value="'+(e.v!=null?e.v:'')+'" placeholder="'+esc(def.ph)+'" data-name="'+esc(e.name)+'" aria-label="'+esc(def.label+' '+e.name)+'">'+
             '<span class="tb-unit">'+esc(def.unit)+'</span></span>'+
         '</div>'+
@@ -580,12 +667,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const raw = inp.value.trim();
         if(raw===''){ delete REG[curTest][name]; }
         else {
-          const num = +raw;
+          let num = +raw;
           if(isNaN(num)){ delete REG[curTest][name]; }
-          else { REG[curTest][name] = { v:num, d:todayShort() }; }
+          else {
+            if(def && def.fms){ num = Math.max(0, Math.min(3, Math.round(num))); }
+            REG[curTest][name] = { v:num, d:todayShort() };
+          }
         }
         saveReg();
-        renderBattery(); renderKpis();
+        renderBattery(); renderKpis(); buildCats();
       });
     });
 
