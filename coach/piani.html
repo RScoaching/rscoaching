@@ -237,6 +237,30 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
 .tb-legend i.warn{ background:var(--yellow); }
 .tb-legend i.bad{ background:var(--red); }
 
+/* ---------- indici calcolati dai test ---------- */
+.ix-row{ display:flex; align-items:center; gap:14px; padding:10px 12px; border-radius:var(--r-sm);
+  border-top:1px solid var(--border); }
+.ix-row:first-of-type{ border-top:0; }
+.ix-row.alert{ background:oklch(62% 0.22 25 / .06); border-top-color:transparent; }
+.ix-row.watch{ background:oklch(80% 0.15 75 / .05); border-top-color:transparent; }
+.ix-nm{ flex:0 0 210px; min-width:0; }
+.ix-name{ font-size:14px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ix-prio{ font-size:11px; color:var(--muted); margin-top:2px; }
+.ix-badges{ flex:1 1 auto; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.ix-b{ display:inline-flex; align-items:baseline; gap:7px; padding:5px 11px; border-radius:999px;
+  border:1px solid var(--border2); background:var(--surface3); color:var(--faint);
+  font-variant-numeric:tabular-nums; }
+.ix-b .bl{ font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--faint); }
+.ix-b b{ font-family:'Bebas Neue',sans-serif; font-size:16px; font-weight:400; letter-spacing:.4px; color:var(--ink); }
+.ix-b.ok{ background:oklch(70% 0.18 152 / .10); border-color:oklch(70% 0.18 152 / .24); }
+.ix-b.ok b, .ix-b.ok .bl{ color:var(--green); }
+.ix-b.warn{ background:oklch(80% 0.15 75 / .10); border-color:oklch(80% 0.15 75 / .26); }
+.ix-b.warn b, .ix-b.warn .bl{ color:var(--yellow); }
+.ix-b.bad{ background:oklch(62% 0.22 25 / .12); border-color:oklch(62% 0.22 25 / .30); }
+.ix-b.bad b, .ix-b.bad .bl{ color:var(--red); }
+.ix-b.na{ opacity:.5; }
+.ix-b.na b{ color:var(--faint); }
+
 /* ---------- bottoni ---------- */
 .btn{
   display:inline-flex; align-items:center; gap:7px; appearance:none; cursor:pointer;
@@ -271,6 +295,9 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
   .tb-bar{ display:none; }
   .tb-in.sm{ width:60px; }
   .tb-asym{ min-width:70px; font-size:11px; padding:5px 7px; }
+  .ix-row{ flex-wrap:wrap; gap:8px; }
+  .ix-nm{ flex:1 1 100%; }
+  .ix-badges{ justify-content:flex-start; }
 }
 @media (max-width:560px){
   .kpis{ grid-template-columns:1fr; }
@@ -341,6 +368,20 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
           <div class="tb-dir" id="tb-dir"></div>
           <div class="tb-legend" id="tb-legend"></div>
           <div id="tb-list"></div>
+        </div>
+      </section>
+
+      <!-- Indici calcolati dalla batteria test -->
+      <section class="card reveal" id="ix-card" style="--i:3">
+        <div class="card-head">
+          <h2>Indici</h2>
+          <span class="hint">deficit elastico, simmetria degli arti, FMS e Y-balance &#183; calcolati dai test inseriti</span>
+          <span class="spacer"></span>
+          <div class="head-chips" id="ix-chips"></div>
+        </div>
+        <div class="card-body">
+          <div class="tb-legend" id="ix-legend"></div>
+          <div id="ix-list"></div>
         </div>
       </section>
 
@@ -656,6 +697,117 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     };
   }
 
+  // ================= MOTORE INDICI =================
+  // Ogni indice torna { has, val, lev } con lev in ok | warn | bad.
+  // I punteggi FMS bilaterali seguono la regola standard: vale il lato peggiore.
+  const FMS_PAT = [
+    { label:'Deep Squat', keys:['fms_squat'] },
+    { label:'Hurdle',     keys:['fms_hurdle_dx','fms_hurdle_sx'] },
+    { label:'Affondo',    keys:['fms_lunge_dx','fms_lunge_sx'] },
+    { label:'Spalle',     keys:['fms_shoulder_dx','fms_shoulder_sx'] },
+    { label:'ASLR',       keys:['fms_aslr_dx','fms_aslr_sx'] },
+    { label:'Push-up',    keys:['fms_pushup'] },
+    { label:'Rotary',     keys:['fms_rotary_dx','fms_rotary_sx'] }
+  ];
+  const LSI_PAIRS = [
+    { id:'slcmj', label:'SL-CMJ' },
+    { id:'broad', label:'broad jump' },
+    { id:'triple',label:'triplo broad' }
+  ];
+  const YB_DIRS = [
+    { id:'yb_ant', label:'anteriore' },
+    { id:'yb_pm',  label:'postero-mediale' },
+    { id:'yb_pl',  label:'postero-laterale' }
+  ];
+  // soglie: EUR in percentuale, CMJ in cm, LSI in percentuale, FMS in punti, Y-balance in cm
+  const IX = { eurLow:10, eurHigh:20, cmjLow:26, lsiWarn:90, lsiBad:85, fmsRisk:14, ybWarn:4, ybBad:6 };
+
+  function tval(key, name){ return valOf(REG[key]||{}, name); }
+
+  // 1) SJ vs CMJ: quanto rende la componente elastica
+  function idxElastic(name){
+    const sj = tval('sj', name), cmj = tval('cmj', name);
+    if(sj==null || cmj==null || sj<=0) return { has:false };
+    const eur = (cmj - sj) / sj * 100;
+    const lev = eur < IX.eurLow ? 'bad' : (eur > IX.eurHigh ? 'warn' : 'ok');
+    let need = '';
+    if(eur < IX.eurLow && cmj < IX.cmjLow) need = 'forza massima e reattivita';
+    else if(eur < IX.eurLow)               need = 'reattivita e pliometria';
+    else if(cmj < IX.cmjLow)               need = 'forza massima';
+    else if(eur > IX.eurHigh)              need = 'forza massima (SJ basso rispetto al CMJ)';
+    return { has:true, val:eur, lev:lev, sj:sj, cmj:cmj, need:need };
+  }
+
+  // 2) LSI monopodalico: arto debole sul forte, si tiene il peggiore fra i test disponibili
+  function idxLsi(name){
+    let worst = null;
+    LSI_PAIRS.forEach(p=>{
+      const d = tval(p.id+'_dx', name), s = tval(p.id+'_sx', name);
+      if(d==null || s==null) return;
+      const hi = Math.max(d,s), lo = Math.min(d,s);
+      if(hi<=0) return;
+      const lsi = lo/hi*100;
+      if(worst==null || lsi < worst.val) worst = { val:lsi, label:p.label, low:(d<s?'dx':'sx') };
+    });
+    if(!worst) return { has:false };
+    worst.has = true;
+    worst.lev = worst.val < IX.lsiBad ? 'bad' : (worst.val < IX.lsiWarn ? 'warn' : 'ok');
+    return worst;
+  }
+
+  // 3) FMS: totale sul lato peggiore, con red flag su zeri, uno e asimmetrie
+  function idxFms(name){
+    let tot = 0, nPat = 0;
+    const zeros = [], ones = [], asym = [];
+    FMS_PAT.forEach(p=>{
+      const vs = p.keys.map(k=> tval(k,name)).filter(v=> v!=null);
+      if(!vs.length) return;
+      const sc = Math.min.apply(null, vs);
+      nPat++; tot += sc;
+      if(sc===0) zeros.push(p.label);
+      else if(sc===1) ones.push(p.label);
+      if(p.keys.length===2 && vs.length===2 && vs[0]!==vs[1]) asym.push(p.label);
+    });
+    if(!nPat) return { has:false };
+    const complete = nPat===FMS_PAT.length;
+    const lev = (zeros.length || (complete && tot<=IX.fmsRisk)) ? 'bad'
+              : ((ones.length || asym.length) ? 'warn' : 'ok');
+    return { has:true, val:tot, nPat:nPat, complete:complete, lev:lev,
+             zeros:zeros, ones:ones, asym:asym };
+  }
+
+  // 4) Y-balance: differenza massima fra i due arti nelle tre direzioni
+  function idxYb(name){
+    let worst = null, n = 0;
+    YB_DIRS.forEach(p=>{
+      const d = tval(p.id+'_dx', name), s = tval(p.id+'_sx', name);
+      if(d==null || s==null) return;
+      n++;
+      const gap = Math.abs(d-s);
+      if(worst==null || gap > worst.val) worst = { val:gap, label:p.label, low:(d<s?'dx':'sx') };
+    });
+    if(!worst) return { has:false };
+    worst.has = true; worst.n = n;
+    worst.lev = worst.val >= IX.ybBad ? 'bad' : (worst.val >= IX.ybWarn ? 'warn' : 'ok');
+    return worst;
+  }
+
+  // sintesi: cosa mettere in programma per questa atleta
+  function idxPrio(e, l, f, y){
+    const out = [];
+    if(f.has && f.zeros.length) out.push('dolore o schema assente: '+f.zeros.join(', '));
+    if(e.has && e.need) out.push(e.need);
+    if(l.has && l.lev!=='ok') out.push('forza monopodalica '+l.low+' ('+l.label+')');
+    if(y.has && y.lev!=='ok') out.push('stabilita '+y.low+' ('+y.label+')');
+    if(f.has && !f.zeros.length && (f.ones.length || f.asym.length)){
+      const w = f.ones.length ? f.ones : f.asym;
+      out.push('mobilita e controllo: '+w.slice(0,2).join(', '));
+    }
+    if(f.has && f.complete && f.val<=IX.fmsRisk) out.push('FMS sotto la soglia di rischio');
+    if(!out.length) out.push('quadro equilibrato, mantenimento');
+    return out.slice(0,3);
+  }
+
   // ================= RENDER =================
   function seasonName(){ return window.stagioneLabel ? window.stagioneLabel() : 'Stagione 2025/26'; }
   function refreshSubtitle(){
@@ -671,6 +823,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   buildCats();
   buildTabs();
   renderBattery();
+  renderIndici();
 
   document.addEventListener('fio:stagione', function(){
     REG = loadReg();
@@ -679,6 +832,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     buildCats();
     buildTabs();
     renderBattery();
+    renderIndici();
   });
 
   document.getElementById('tb-reset').addEventListener('click', ()=>{
@@ -687,9 +841,67 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!ks.length){ toast('Nessun dato da svuotare'); return; }
     ks.forEach(k=> { delete REG[k]; });
     saveReg();
-    renderBattery(); renderKpis(); buildCats();
+    renderBattery(); renderKpis(); buildCats(); renderIndici();
     toast('Test svuotato');
   });
+
+  function ixBadge(lev, label, val, title){
+    return '<span class="ix-b '+lev+'" title="'+esc(title||'')+'">'+
+      '<span class="bl">'+esc(label)+'</span><b>'+val+'</b></span>';
+  }
+  function renderIndici(){
+    const list  = document.getElementById('ix-list');
+    const chips = document.getElementById('ix-chips');
+    document.getElementById('ix-legend').innerHTML =
+      '<span><i class="ok"></i>nessun segnale</span>'+
+      '<span><i class="warn"></i>da monitorare</span>'+
+      '<span><i class="bad"></i>priorita di lavoro</span>';
+
+    const rows = roster.map(name=>{
+      const e = idxElastic(name), l = idxLsi(name), f = idxFms(name), y = idxYb(name);
+      const all = [e,l,f,y].filter(x=> x.has);
+      return { name:name, e:e, l:l, f:f, y:y, n:all.length,
+               bad: all.filter(x=> x.lev==='bad').length,
+               warn:all.filter(x=> x.lev==='warn').length,
+               prio: idxPrio(e,l,f,y) };
+    }).filter(r=> r.n>0);
+
+    chips.innerHTML =
+      '<div class="mchip em"><span class="ml">Con indici</span><b>'+rows.length+'</b><span class="ml">/'+roster.length+'</span></div>'+
+      '<div class="mchip"><span class="ml">Priorita</span><b>'+rows.filter(r=> r.bad>0).length+'</b><span class="ml">atlete</span></div>'+
+      '<div class="mchip vi"><span class="ml">Da monitorare</span><b>'+rows.filter(r=> r.bad===0 && r.warn>0).length+'</b><span class="ml">atlete</span></div>';
+
+    if(!rows.length){
+      list.innerHTML = '<div class="lb-empty">Compila la batteria test per vedere gli indici: SJ e CMJ per il deficit elastico, '+
+        'i test monopodalici per il LSI, FMS e Y-balance per i semafori.</div>';
+      return;
+    }
+
+    rows.sort((a,b)=> (b.bad-a.bad) || (b.warn-a.warn) || (b.n-a.n) || a.name.localeCompare(b.name,'it'));
+
+    list.innerHTML = rows.map(r=>{
+      const cls = r.bad ? ' alert' : (r.warn ? ' watch' : '');
+      const bs = [
+        r.e.has ? ixBadge(r.e.lev, 'Elastico', NF1.format(r.e.val)+'%',
+                    'SJ '+NF1.format(r.e.sj)+' cm, CMJ '+NF1.format(r.e.cmj)+' cm')
+                : ixBadge('na', 'Elastico', '-', 'servono Squat Jump e CMJ'),
+        r.l.has ? ixBadge(r.l.lev, 'LSI', NF.format(Math.round(r.l.val))+'%',
+                    'peggiore: '+r.l.label+', lato debole '+r.l.low)
+                : ixBadge('na', 'LSI', '-', 'servono i test monopodalici dx e sx'),
+        r.f.has ? ixBadge(r.f.lev, 'FMS', NF.format(r.f.val)+'/'+(r.f.nPat*3),
+                    r.f.complete ? '7 schemi su 7' : (r.f.nPat+' schemi su 7'))
+                : ixBadge('na', 'FMS', '-', 'nessuno schema FMS compilato'),
+        r.y.has ? ixBadge(r.y.lev, 'Y-bal', NF1.format(r.y.val)+' cm',
+                    'differenza massima: '+r.y.label+', lato corto '+r.y.low)
+                : ixBadge('na', 'Y-bal', '-', 'servono le tre direzioni dx e sx')
+      ].join('');
+      return '<div class="ix-row'+cls+'">'+
+        '<div class="ix-nm"><div class="ix-name">'+esc(r.name)+'</div>'+
+          '<div class="ix-prio">'+r.prio.map(esc).join(' &#183; ')+'</div></div>'+
+        '<div class="ix-badges">'+bs+'</div>'+
+      '</div>';
+    }).join('');
+  }
 
   function renderKpis(){
     const kp = [
@@ -811,7 +1023,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     if(REG[testKey] && !Object.keys(REG[testKey]).length) delete REG[testKey];
     saveReg();
-    renderBattery(); renderKpis(); buildCats();
+    renderBattery(); renderKpis(); buildCats(); renderIndici();
   }
   function inputHtml(def, name, val, cls){
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
