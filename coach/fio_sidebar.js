@@ -122,7 +122,78 @@ window.stagioneLabel = function(v) {
   return v === '26-27' ? 'Stagione 2026/27' : 'Stagione 2025/26';
 };
 
+// ---------------------------------------------------------------------------
+// Dati per stagione.
+// La 26/27 parte da zero: si azzerano tutti i dati di stagione (GPS, partite,
+// calendario, esercitazioni, forza). Si conserva soltanto il modello
+// prestativo, cioe' la media delle partite della stagione precedente.
+// Questa funzione viene eseguita prima degli script di pagina, quindi ogni
+// pagina legge automaticamente i dati giusti senza modifiche locali.
+// ---------------------------------------------------------------------------
+window.FIO_CLEAN_SEASON = false;
+window.applyStagioneData = function() {
+  var st = window.getStagione();
+  window.FIO_CLEAN_SEASON = (st === '26-27');
+  if (!window.FIO_CLEAN_SEASON || window.FIO_SEASON_APPLIED === st) return;
+  window.FIO_SEASON_APPLIED = st;
+  var id = '2026-27';
+
+  var S = window.SNAP;
+  if (S) {
+    S.stagione = id;
+    S.generato = '';
+    S.model_from = '2025-26';           // provenienza del modello prestativo
+    if (S.team) { S.team.months = []; S.team.matches = []; }
+    if (S.players) {
+      Object.keys(S.players).forEach(function(n) {
+        if (S.players[n]) S.players[n].months = [];
+      });
+    }
+    // S.model NON si tocca: e' il modello prestativo di riferimento.
+  }
+
+  var C = window.CAL;
+  if (C) {
+    C.stagione = id; C.generato = '';
+    C.days = []; C.fixtures = [];
+    C.n_sedute = 0; C.n_partite_giocate = 0; C.n_fixtures = 0;
+    C.range = { min: '2026-07-27', max: '2027-05-31' };
+  }
+
+  var E = window.ESERC;
+  if (E) {
+    E.stagione = id; E.generato = '';
+    E.sessions = []; E.n_sessions = 0; E.n_drills = 0;
+  }
+
+  var F = window.FORZA;
+  if (F) {
+    F.stagione = id; F.generato = '';
+    F.entries = []; F.n_entries = 0; F.n_sessions = 0;
+    // F.patterns e F.roster restano: sono libreria, non dati di stagione.
+  }
+};
+
+// Avviso in cima alla pagina quando la stagione e' ancora vuota.
+window.paintSeasonBanner = function() {
+  var host = document.querySelector('.wrap');
+  var old  = document.getElementById('fio-season-banner');
+  if (old) old.parentNode.removeChild(old);
+  if (!host || !window.FIO_CLEAN_SEASON) return;
+  var b = document.createElement('div');
+  b.id = 'fio-season-banner';
+  b.className = 'fio-season-banner';
+  b.innerHTML =
+    '<span class="fsb-tag">26/27</span>' +
+    '<span class="fsb-txt"><b>Stagione nuova, archivio vuoto.</b> ' +
+    'Carico, sedute, calendario ed esercitazioni si popolano man mano che inserisci gli allenamenti. ' +
+    'Resta attivo il modello prestativo, cioe\' la media partite della 25/26.</span>';
+  host.insertBefore(b, host.firstChild);
+};
+
 window.initSidebarToggle = function() {
+  window.applyStagioneData();
+  window.paintSeasonBanner();
   const ham = document.getElementById('sb-ham-btn');
   const ov  = document.getElementById('sb-mob-ov');
   const sb  = document.getElementById('sb-sidebar');
@@ -151,9 +222,12 @@ window.initSidebarToggle = function() {
     const closeMenu = () => { menu.hidden = true;  trg.setAttribute('aria-expanded', 'false'); };
     trg.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden ? openMenu() : closeMenu(); });
     opts.forEach(o => o.addEventListener('click', () => {
+      if (o.dataset.season === window.getStagione()) { closeMenu(); return; }
       window.setStagione(o.dataset.season);
       paint();
       closeMenu();
+      // ricarico la pagina: i dati di stagione vanno riletti da zero
+      setTimeout(function() { location.reload(); }, 120);
     }));
     document.addEventListener('click', (e) => {
       if (!menu.hidden && !menu.contains(e.target) && !trg.contains(e.target)) closeMenu();
@@ -243,6 +317,20 @@ window.SIDEBAR_CSS = `
   .fio-season-menu{animation:none;}
   .fio-caret,.fio-season-opt{transition:none;}
 }
+/* Avviso stagione vuota (iniettato in cima a .wrap) */
+.fio-season-banner{
+  display:flex;align-items:flex-start;gap:11px;
+  padding:12px 15px;margin:0 0 20px;border-radius:12px;
+  background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.22);
+}
+.fsb-tag{
+  flex-shrink:0;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;
+  line-height:1;padding:6px 8px 4px;border-radius:7px;
+  color:#C4B5FD;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.26);
+}
+.fsb-txt{font-size:12.5px;line-height:1.55;color:rgba(248,250,255,.56);}
+.fsb-txt b{color:rgba(248,250,255,.86);font-weight:600;}
+@media print{ .fio-season-banner{display:none !important;} }
 .nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
   font-size:9px;font-weight:700;text-transform:uppercase;
