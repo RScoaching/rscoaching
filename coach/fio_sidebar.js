@@ -54,6 +54,10 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6"/><path d="M6 7v10"/><path d="M18 7v10"/><path d="M21 9v6"/><path d="M6 12h12"/></svg></span>
       <span class="nav-lbl-text">Forza</span>
     </a>
+    <a class="nav-item" aria-label="Prevenzione" href="./view.html" data-page="prevenzione">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
+      <span class="nav-lbl-text">Prevenzione</span>
+    </a>
     <a class="nav-item" aria-label="Calendario" href="./calendario.html" data-page="calendario">
       <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M4 10h16"/></svg></span>
       <span class="nav-lbl-text">Calendario</span>
