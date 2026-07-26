@@ -14,12 +14,33 @@ window.SIDEBAR_HTML = `
 <div class="sb-edge" id="sb-edge" aria-hidden="true"><span class="sb-edge-grip"></span></div>
 <div class="sidebar" id="sb-sidebar">
   <div class="sb-top">
-    <div class="fio-brand">
-      <img class="fio-crest" src="./fiorentina.png" alt="Stemma Fiorentina"
-        onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'fio-crest fio-crest-fb',textContent:'ACF'}))">
-      <div class="fio-word">FIORENTINA</div>
+    <button class="fio-season-trigger" id="fio-season-trigger" aria-expanded="false" aria-controls="fio-season-menu" aria-label="Cambia stagione">
+      <div class="fio-brand">
+        <img class="fio-crest" src="./fiorentina.png" alt="Stemma Fiorentina"
+          onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'fio-crest fio-crest-fb',textContent:'ACF'}))">
+        <div class="fio-word">FIORENTINA</div>
+      </div>
+      <svg class="fio-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="logo-sub">Primavera U19 F <span class="ls-dot">&#183;</span> <span id="fio-season-tag">Stagione 2025/26</span></div>
+    <div class="fio-season-menu" id="fio-season-menu" role="menu" hidden>
+      <button class="fio-season-opt" data-season="25-26" role="menuitemradio" aria-checked="true">
+        <span class="fso-body">
+          <span class="fso-name">Stagione 2025/26</span>
+          <span class="fso-note">Archivio completo</span>
+        </span>
+        <span class="fso-meta">Chiusa</span>
+        <svg class="fso-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+      <button class="fio-season-opt" data-season="26-27" role="menuitemradio" aria-checked="false">
+        <span class="fso-body">
+          <span class="fso-name">Stagione 2026/27</span>
+          <span class="fso-note">Si parte lunedi</span>
+        </span>
+        <span class="fso-meta live">Nuova</span>
+        <svg class="fso-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
     </div>
-    <div class="logo-sub">Primavera U19 Femminile</div>
   </div>
   <div class="nav-s">
     <div class="nav-lbl">Giornata</div>
@@ -84,15 +105,63 @@ window.markActiveNav = function(pageId) {
   });
 };
 
+// Stagione attiva (condivisa fra tutte le pagine, persistita solo su questo dispositivo).
+window.FIO_STAGIONI = ['25-26', '26-27'];
+window.getStagione = function() {
+  var s = null;
+  try { s = localStorage.getItem('fio_stagione'); } catch (e) {}
+  return (window.FIO_STAGIONI.indexOf(s) >= 0) ? s : '25-26';
+};
+window.setStagione = function(v) {
+  if (window.FIO_STAGIONI.indexOf(v) < 0) return;
+  try { localStorage.setItem('fio_stagione', v); } catch (e) {}
+  document.dispatchEvent(new CustomEvent('fio:stagione', { detail: { stagione: v } }));
+};
+window.stagioneLabel = function(v) {
+  v = v || window.getStagione();
+  return v === '26-27' ? 'Stagione 2026/27' : 'Stagione 2025/26';
+};
+
 window.initSidebarToggle = function() {
   const ham = document.getElementById('sb-ham-btn');
   const ov  = document.getElementById('sb-mob-ov');
   const sb  = document.getElementById('sb-sidebar');
-  if (!ham || !ov || !sb) return;
-  function openSb()  { sb.classList.add('open'); ov.classList.add('open'); }
-  function closeSb() { sb.classList.remove('open'); ov.classList.remove('open'); }
-  ham.addEventListener('click', openSb);
-  ov.addEventListener('click', closeSb);
+  if (ham && ov && sb) {
+    const openSb  = () => { sb.classList.add('open'); ov.classList.add('open'); };
+    const closeSb = () => { sb.classList.remove('open'); ov.classList.remove('open'); };
+    ham.addEventListener('click', openSb);
+    ov.addEventListener('click', closeSb);
+  }
+  // Selettore stagione
+  const trg  = document.getElementById('fio-season-trigger');
+  const menu = document.getElementById('fio-season-menu');
+  if (trg && menu) {
+    const opts = menu.querySelectorAll('.fio-season-opt');
+    const tag  = document.getElementById('fio-season-tag');
+    const paint = () => {
+      const s = window.getStagione();
+      if (tag) tag.textContent = window.stagioneLabel(s);
+      opts.forEach(o => {
+        const on = o.dataset.season === s;
+        o.classList.toggle('on', on);
+        o.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    };
+    const openMenu  = () => { menu.hidden = false; trg.setAttribute('aria-expanded', 'true'); };
+    const closeMenu = () => { menu.hidden = true;  trg.setAttribute('aria-expanded', 'false'); };
+    trg.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden ? openMenu() : closeMenu(); });
+    opts.forEach(o => o.addEventListener('click', () => {
+      window.setStagione(o.dataset.season);
+      paint();
+      closeMenu();
+    }));
+    document.addEventListener('click', (e) => {
+      if (!menu.hidden && !menu.contains(e.target) && !trg.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) closeMenu(); });
+    document.addEventListener('fio:stagione', paint);
+    paint();
+  }
 };
 
 window.SIDEBAR_CSS = `
@@ -124,8 +193,55 @@ window.SIDEBAR_CSS = `
 .fio-brand.sm .fio-crest{width:26px;height:26px;}
 .fio-brand.sm .fio-word{font-size:17px;letter-spacing:1.2px;}
 .logo-sub{
-  font-size:9px;color:rgba(244,241,236,.34);
-  letter-spacing:1.6px;margin-top:8px;text-transform:uppercase;
+  font-size:9px;color:rgba(244,241,236,.4);
+  letter-spacing:1.4px;margin-top:8px;text-transform:uppercase;
+}
+.logo-sub .ls-dot{color:rgba(255,106,46,.7);margin:0 2px;}
+#fio-season-tag{color:rgba(255,178,122,.85);}
+/* Selettore stagione */
+.fio-season-trigger{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  padding:0;margin:0;border:0;background:none;color:inherit;font:inherit;text-align:left;
+  cursor:pointer;transition:opacity .2s ease;
+}
+.fio-season-trigger:hover{opacity:.9;}
+.fio-caret{width:15px;height:15px;flex-shrink:0;color:rgba(248,250,255,.32);
+  transition:transform .26s cubic-bezier(.4,0,.2,1),color .2s ease;}
+.fio-season-trigger:hover .fio-caret{color:rgba(248,250,255,.6);}
+.fio-season-trigger[aria-expanded="true"] .fio-caret{transform:rotate(180deg);color:#FF6A2E;}
+.fio-season-menu{
+  margin-top:12px;display:flex;flex-direction:column;gap:5px;
+  animation:fio-season-in .26s cubic-bezier(.16,1,.3,1);
+}
+.fio-season-menu[hidden]{display:none;}
+@keyframes fio-season-in{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}
+.fio-season-opt{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:8px 10px;border-radius:9px;cursor:pointer;text-align:left;
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
+  transition:background .18s ease,border-color .18s ease,transform .18s ease;
+}
+.fio-season-opt:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.13);}
+.fio-season-opt:active{transform:scale(.985);}
+.fio-season-opt.on{
+  background:linear-gradient(90deg,rgba(255,106,46,.15),rgba(255,106,46,.04));
+  border-color:rgba(255,106,46,.28);
+}
+.fso-body{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
+.fso-name{font-size:12px;font-weight:600;color:rgba(248,250,255,.68);line-height:1.15;letter-spacing:.2px;}
+.fio-season-opt.on .fso-name{color:#F4F1EC;}
+.fso-note{font-size:9.5px;color:rgba(248,250,255,.32);line-height:1.1;}
+.fio-season-opt.on .fso-note{color:rgba(255,178,122,.7);}
+.fso-meta{font-size:8.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;
+  color:rgba(248,250,255,.34);padding:2px 6px;border-radius:999px;
+  background:rgba(255,255,255,.05);flex-shrink:0;}
+.fso-meta.live{color:#C4B5FD;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.24);}
+.fio-season-opt.on .fso-meta:not(.live){color:#FFB27A;background:rgba(255,106,46,.14);}
+.fso-check{width:15px;height:15px;flex-shrink:0;color:#FF6A2E;opacity:0;transition:opacity .18s ease;}
+.fio-season-opt.on .fso-check{opacity:1;}
+@media(prefers-reduced-motion:reduce){
+  .fio-season-menu{animation:none;}
+  .fio-caret,.fio-season-opt{transition:none;}
 }
 .nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
