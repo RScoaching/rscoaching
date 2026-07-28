@@ -245,6 +245,7 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 .wr-num{ text-align:right; }
 .wr-num b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:24px;
   letter-spacing:.4px; color:var(--ink); line-height:1; }
+.wr-num b i{ font-style:normal; font-size:17px; color:var(--faint); margin-right:1px; }
 .wr-num small{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:700; }
 .wr-num.rpe b{ color:var(--orange2); }
 .wr-sum{
@@ -256,6 +257,9 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 .wr-sum .ws-l{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; }
 .wr-sum .ws-v{ font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:.4px; color:var(--ink); line-height:1; }
 .wr-sum .ws.load .ws-v{ color:var(--orange2); }
+.wr-sum .ws-v.ok{ color:var(--green); }
+.wr-sum .ws-v.up{ color:var(--red); }
+.wr-sum .ws-v.dn{ color:var(--blue); }
 
 .bld-table{ width:100%; border-collapse:separate; border-spacing:0; }
 .bld-table th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
@@ -284,6 +288,9 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 .bld-tot .bt-val{ font-family:'Bebas Neue',sans-serif; font-size:30px; color:var(--ink); letter-spacing:.5px; line-height:1; }
 .bld-tot .bt-val small{ font-family:'Inter',sans-serif; font-size:12px; font-weight:600; color:var(--muted); margin-left:3px; }
 .bld-tot.load .bt-val{ color:var(--orange2); }
+.bld-tot .bt-val.ok{ color:var(--green); }
+.bld-tot .bt-val.up{ color:var(--red); }
+.bld-tot .bt-val.dn{ color:var(--blue); }
 .bld-spacer{ flex:1 1 auto; }
 .bld-hint{ font-size:11.5px; color:var(--faint); }
 
@@ -408,14 +415,20 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
             <div>
               <label class="sr-only" for="wr-in">Appunti della seduta</label>
               <textarea class="wr-in" id="wr-in" spellcheck="false"
-                placeholder="attivazione 10 min tutti&#10;rondos 15x10 5c3 4x1'30&quot; rec 45&quot;&#10;possesso 30x25 6c6+2 3x4'&#10;partita a tema 4x5'&#10;defaticamento 8'"></textarea>
+                placeholder="attivazione 10 min tutte&#10;rondos 15x10 5c3 4x1'30&quot; rec 45&quot;&#10;possesso 30x25 6c6+2 3x4' + 2x3' rec 2'&#10;partita a tema 4x5' + 2x4'&#10;velocita 6x30 m rec 1'&#10;defaticamento 8'"></textarea>
               <p class="wr-help">
                 <b>Una riga per blocco</b>, oppure separa con la virgola. Riconosco il tipo dalla parola
-                (attivazione, rondo, possesso, tattica, partita, forza, velocita, defaticamento, prevenzione)
-                e da li' ricavo l'RPE di partenza.<br>
-                Durata: <code>10 min</code> <code>8'</code> <code>4x1'30"</code> con <code>rec 45"</code>.
-                Campo: <code>30x25</code>. Formato: <code>6c6+2</code>. Serie a ripetizioni: <code>3x8</code>.
-                Forzatura RPE: <code>rpe 8</code>.
+                (attivazione, rondo, possesso, tattica, partita, forza, velocita, resistenza, pliometria,
+                defaticamento, prevenzione, individuale) e da li' ricavo l'RPE di partenza.<br>
+                <b>Serie</b>: <code>4x5'</code>, <code>4 serie da 5'</code>. Spezzate sullo stesso esercizio con
+                il piu': <code>4x5' + 2x4'</code> fa 6 serie, 28 minuti di lavoro.<br>
+                <b>Recupero</b>: <code>rec 45"</code> generale, oppure attaccato alla serie
+                <code>4x5' rec 2' + 2x4' rec 1'</code>. Entra nel conto dei minuti.<br>
+                <b>Campo</b> <code>30x25</code> &#183; <b>formato</b> <code>6c6+2</code> &#183;
+                <b>ripetute</b> <code>6x30 m</code> &#183; <b>serie a ripetizioni</b> <code>3x8 rip</code> &#183;
+                <b>distanza</b> <code>2 km</code> &#183; <b>totale</b> <code>tot 25'</code> &#183;
+                <b>RPE</b> <code>rpe 8</code>.<br>
+                Il segno <code>&#8776;</code> davanti ai minuti vuol dire che la durata non era scritta e l'ho stimata dal tipo di blocco.
               </p>
             </div>
             <div>
@@ -459,6 +472,7 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
           <div class="bld-foot">
             <div class="bld-tot"><span class="bt-lbl">Minuti</span><span class="bt-val" id="bt-min">0<small>min</small></span></div>
             <div class="bld-tot load"><span class="bt-lbl">Indice carico</span><span class="bt-val" id="bt-load">0<small>u.a.</small></span></div>
+            <div class="bld-tot" id="bt-tgt-wrap" hidden><span class="bt-lbl">Vs seduta tipo</span><span class="bt-val" id="bt-tgt">0<small>%</small></span></div>
             <span class="bld-spacer"></span>
             <span class="bld-hint">Carico blocco = minuti &#215; RPE. Salvataggio automatico su questo dispositivo.</span>
           </div>
@@ -543,6 +557,12 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
   // riferimento = mediana dei carichi settimanali con almeno 2 attivita
   const ref = weeks.filter(w=> (w.sessions+w.matches)>=2).map(w=>w.load).sort((a,b)=>a-b);
   const TARGET = ref.length ? (ref.length%2 ? ref[(ref.length-1)/2] : Math.round((ref[ref.length/2-1]+ref[ref.length/2])/2)) : 0;
+
+  // riferimento della singola seduta = mediana dei carichi dei soli allenamenti (partite escluse)
+  const sref = days.filter(d=> !d.is_match && (+d.load||0) > 0).map(d=> +d.load).sort((a,b)=> a-b);
+  const SES_REF = sref.length >= 4
+    ? (sref.length%2 ? sref[(sref.length-1)/2] : Math.round((sref[sref.length/2-1]+sref[sref.length/2])/2))
+    : 0;
 
   // settimana attiva: quella di oggi se presente, altrimenti l'ultima disponibile
   const curKey = dstr(mondayOf(NOW));
@@ -776,23 +796,25 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
   const MD = '·';
 
   // fam: lo = bassa intensita, hi = alta intensita (serve solo al colore del tag)
+  // d:1 = per questo tipo "6x30 m" sono ripetute su distanza, non le dimensioni del campo
   const WR_TYPES = [
     { lab:'Attivazione',   fam:'lo', rpe:3, min:12, k:['attivazion','riscaldam','risveglio','avvio','preatlet','pre atlet','warm up','warmup'] },
     { lab:'Prevenzione',   fam:'lo', rpe:4, min:12, k:['prevenzion','core','stabilit','propriocett','isometri','ischio','caviglia','ginocchio','idp'] },
     { lab:'Mobilita',      fam:'lo', rpe:2, min:10, k:['mobilit','articolar'] },
     { lab:'Defaticamento', fam:'lo', rpe:2, min:10, k:['defaticam','scarico','stretch','allungam','cool down','cooldown','rilassam'] },
-    { lab:'Tecnica',       fam:'md', rpe:5, min:15, k:['tecnic','passagg','conduzion','controllo','cross','tiri','tiro','finalizzaz','dominio'] },
+    { lab:'Tecnica',       fam:'md', rpe:5, min:15, k:['tecnic','passagg','guida palla','conduzion','controllo','cross','traverson','colpi di testa','tiri','tiro','finalizzaz','dominio'] },
     { lab:'Rondo',         fam:'md', rpe:5, min:12, k:['rondo','torello','quadrato'] },
-    { lab:'Possesso',      fam:'md', rpe:6, min:18, k:['possess','mantenim','palla','conservazion'] },
-    { lab:'Transizioni',   fam:'hi', rpe:7, min:15, k:['transizion','ripartenz','contropied'] },
-    { lab:'Tattica',       fam:'md', rpe:6, min:20, k:['tattic','sviluppi','situazion','fase offensiv','fase difensiv','palle inattiv','calci piazzat','pressing','reparto','esercitazione a tema'] },
+    { lab:'Possesso',      fam:'md', rpe:6, min:18, k:['possess','mantenim','conservazion'] },
+    { lab:'Transizioni',   fam:'hi', rpe:7, min:15, k:['transizion','ripartenz','contropied','riaggression'] },
+    { lab:'Tattica',       fam:'md', rpe:6, min:20, k:['tattic','sviluppi','situazion','fase offensiv','fase difensiv','palle inattiv','calci piazzat','pressing','reparto','schemi','uscita palla','costruzion','marcatur','esercitazione a tema'] },
     { lab:'Duelli',        fam:'hi', rpe:7, min:12, k:['duell','1c1','1 contro 1','uno contro uno'] },
     { lab:'Partita a tema',fam:'hi', rpe:7, min:20, k:['partita a tema','partitell','sfida','a tema'] },
     { lab:'Partita',       fam:'hi', rpe:8, min:25, k:['partita','amichevol','allenamento congiunto'] },
-    { lab:'Forza',         fam:'hi', rpe:7, min:25, k:['forza','palestra','sala pesi','pesi','squat','stacco','hip thrust','affond','panca','nordic'] },
-    { lab:'Pliometria',    fam:'hi', rpe:7, min:12, k:['pliometr','balzi','salti','hop','pedana'] },
-    { lab:'Velocita',      fam:'hi', rpe:8, min:15, k:['velocit','sprint','accelerazion','decelerazion','navett','cambi di direzion','agilit','scatti'] },
-    { lab:'Resistenza',    fam:'hi', rpe:8, min:20, k:['resistenz','intermittent','aerobic','gacon','yoyo','ripetut','corsa','endurance'] }
+    { lab:'Forza',         fam:'hi', rpe:7, min:25, k:['forza','palestra','sala pesi','pesi','squat','stacco','hip thrust','affond','panca','nordic','rdl','pressa','step up'] },
+    { lab:'Pliometria',    fam:'hi', rpe:7, min:12, d:1, k:['pliometr','balzi','salti','hop','pedana'] },
+    { lab:'Velocita',      fam:'hi', rpe:8, min:15, d:1, k:['velocit','sprint','accelerazion','decelerazion','navett','shuttle','cambi di direzion','agilit','scatti','lanciat'] },
+    { lab:'Resistenza',    fam:'hi', rpe:8, min:20, d:1, k:['resistenz','intermittent','aerobic','gacon','yoyo','ripetut','fartlek','rsa','corsa','endurance'] },
+    { lab:'Individuale',   fam:'md', rpe:5, min:20, k:['individual','differenziat','reintegr','personalizzat'] }
   ];
   const WR_FALLBACK = { lab:'Blocco', fam:'md', rpe:5, min:15, k:[] };
   const WR_WHO = [
@@ -800,9 +822,15 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     ['non gioca','Chi non gioca'], ['non hanno giocato','Chi non gioca'], ['subentrat','Subentrate'],
     ['rientr','Rientri'], ['infortunat','Infortunate'], ['squadra','Squadra']
   ];
-  const WR_STOP = ['ecc','eccetera','poi','quindi','circa','poi','di','per','con','da','le','la','il','lo','i','gli','a','e','in','su'];
+  const WR_STOP = ['ecc','eccetera','poi','quindi','circa','di','per','con','da','le','la','il','lo','i','gli','a','e','ed','in','su','piu','oltre','fino'];
+  const WR_JUNK = ['m','mt','metri','min','minuti','sec','secondi','rec','recupero','riposo','pausa','serie','blocchi','giri','set','sets','rip','ripetizioni','reps','rep','volte','tot','totale','km','atlete','giocatrici','ragazze','calciatrici'];
   // token temporale: 1'30" | 4' | 45" | 10 min | 30 sec
   const WR_T = '(?:\\d{1,3}\'\\d{1,2}"?|\\d{1,3}"|\\d{1,3}\'|\\d{1,3}\\s*min(?:uti)?\\b|\\d{1,3}\\s*sec(?:ondi)?\\b)';
+  // recupero opzionale agganciato alla serie: "4x5' rec 2'"
+  const WR_REC = '(?:\\s*(?:rec(?:upero)?|riposo|pausa|r)\\s*[:.\\-]?\\s*('+WR_T+'))?';
+  // gruppo di serie a tempo, nelle due scritture: "4x5'" e "4 serie da 5'"
+  const WR_GRP_A = '\\b(\\d{1,2})\\s*(?:x|per|volte)\\s*('+WR_T+')'+WR_REC;
+  const WR_GRP_B = '\\b(\\d{1,2})\\s*(?:serie|blocchi|giri|sets?)\\s*(?:da|di|x)?\\s*('+WR_T+')'+WR_REC;
 
   function wrNorm(s){
     return String(s == null ? '' : s)
@@ -841,13 +869,19 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     });
     return best;
   }
+  // Quello che resta dopo aver tolto numeri e sigle diventa il nome del blocco.
   function wrClean(s){
     let w = String(s||'')
-      .replace(/[,;:.·\/]+/g,' ')
+      .replace(/[,;:.·\/()\[\]"]+/g,' ')
       .replace(/\s+/g,' ')
       .trim()
       .split(' ')
-      .filter(x=> x.length > 0);
+      .filter(function(x){
+        if(!x) return false;
+        if(x === '+' || x === '-' || x === 'x' || x === '&' || x === "'") return false;
+        if(/^\d+$/.test(x)) return false;
+        return WR_JUNK.indexOf(x) < 0;
+      });
     while(w.length && WR_STOP.indexOf(w[w.length-1]) >= 0) w.pop();
     while(w.length && WR_STOP.indexOf(w[0]) >= 0) w.shift();
     const out = w.join(' ');
@@ -858,58 +892,167 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     const raw = String(line||'').trim();
     if(raw.length < 2) return null;
     let s = ' ' + wrNorm(raw) + ' ';
-    let rpe = 0, rec = 0, serie = 0, durSerie = 0, reps = 0, dur = 0, fmt = '', dim = '', who = '';
 
-    s = s.replace(/\brpe\s*[:\-]?\s*(\d{1,2})\b/g, function(m,a){ rpe = Math.min(10, Math.max(1, +a)); return ' '; });
-    s = s.replace(new RegExp('\\b(?:rec(?:upero)?|rip(?:oso)?)\\s*[:\\-]?\\s*('+WR_T+')','g'), function(m,a){ rec = wrTime(a)||0; return ' '; });
-    s = s.replace(new RegExp('\\b(\\d{1,2})\\s*x\\s*('+WR_T+')','g'), function(m,a,b){ serie = +a; durSerie = wrTime(b)||0; return ' '; });
-    s = s.replace(/\b(\d{1,2})\s*(?:c|vs|v|contro)\s*(\d{1,2})(\s*\+\s*\d{1,2})?\b/g, function(m,a,b,c){
-      fmt = a+'c'+b+(c ? c.replace(/\s+/g,'') : ''); return ' ';
+    // il tipo va deciso subito: serve a capire se "6x30 m" sono ripetute o le misure del campo
+    const type = wrTypeOf(raw) || WR_FALLBACK;
+
+    const grp = [];   // catena di serie: {n, t, rec}
+    let rpe = 0, durTot = 0, dur = 0, recG = 0;
+    let repN = 0, repSets = 0, repDist = 0, reps = 0, nAtl = 0;
+    let fmt = '', dim = '', dist = '', who = '';
+
+    // 1. RPE dichiarato: "rpe 8" oppure "@8"
+    s = s.replace(/\brpe\s*[:.\-]?\s*(\d{1,2})\b/g, function(m,a){ rpe = Math.min(10, Math.max(1, +a)); return ' '; });
+    s = s.replace(/(^|\s)@\s*(\d{1,2})(?=\s|$)/g, function(m,a,b){ rpe = Math.min(10, Math.max(1, +b)); return ' '; });
+
+    // 2. durata complessiva gia' fatta dal preparatore: "tot 25'"
+    s = s.replace(new RegExp('\\b(?:tot|totale|in tutto)\\s*[:.\\-]?\\s*('+WR_T+')','g'), function(m,a){
+      durTot = wrTime(a) || durTot; return ' ';
     });
-    s = s.replace(/\b(\d{1,3})\s*x\s*(\d{1,3})\b/g, function(m,a,b){
-      const A = +a, B = +b;
-      if(A >= 8 && B >= 8){ dim = A+'x'+B+' m'; }
-      else { if(!serie) serie = A; reps = B; }
+
+    // 3. quante atlete
+    s = s.replace(/\b(\d{1,2})\s*(?:atlete|giocatrici|ragazze|calciatrici)\b/g, function(m,a){ nAtl = +a; return ' '; });
+
+    // 4. formato di gioco: "6c6+2", "5vs5", "4 contro 4"
+    s = s.replace(/\b(\d{1,2})\s*(?:c|vs|v|contro)\s*(\d{1,2})\s*(\+\s*\d{1,2})?/g, function(m,a,b,c){
+      if(!fmt) fmt = a+'c'+b+(c ? c.replace(/\s+/g,'') : '');
       return ' ';
     });
-    s = s.replace(new RegExp('\\b('+WR_T+')','g'), function(m,a){
+
+    // 5. serie a tempo, anche spezzate sullo stesso esercizio: "4x5' + 2x4' rec 1'"
+    s = s.replace(new RegExp(WR_GRP_B,'g'), function(m,a,b,c){
+      grp.push({ n:Math.max(1,+a), t:wrTime(b)||0, rec:(c ? wrTime(c)||0 : 0) }); return ' ';
+    });
+    s = s.replace(new RegExp(WR_GRP_A,'g'), function(m,a,b,c){
+      grp.push({ n:Math.max(1,+a), t:wrTime(b)||0, rec:(c ? wrTime(c)||0 : 0) }); return ' ';
+    });
+
+    // 6. recupero generale, quello scritto una volta sola per tutto il blocco
+    s = s.replace(new RegExp('\\b(?:rec(?:upero)?|riposo|pausa)\\s*[:.\\-]?\\s*('+WR_T+')','g'), function(m,a){
+      recG = wrTime(a) || recG; return ' ';
+    });
+
+    // 7. serie per ripetizioni dichiarate: "3x8 rip"
+    s = s.replace(/\b(\d{1,2})\s*x\s*(\d{1,3})\s*(?:rip(?:etizioni)?|reps?)\b/g, function(m,a,b){
+      if(!repN){ repN = +a; reps = +b; } return ' ';
+    });
+
+    // 8. ripetute su distanza: "6x30 m", oppure serie per ripetute "3x6x20 m"
+    s = s.replace(/\b(\d{1,2})\s*x\s*(\d{1,2})\s*x\s*(\d{1,3})\s*(?:m|mt|metri)?/g, function(m,a,b,c){
+      if(!repN){ repSets = +a; repN = +a * (+b); repDist = +c; } return ' ';
+    });
+    s = s.replace(/\b(\d{1,2})\s*x\s*(\d{1,3})\s*(?:m|mt|metri)\b/g, function(m,a,b){
+      if(!repN){ repN = +a; repDist = +b; } return ' ';
+    });
+
+    // 9. NxM senza unita': per velocita e resistenza sono ripetute, altrimenti misure del campo
+    s = s.replace(/\b(\d{1,3})\s*x\s*(\d{1,3})\b/g, function(m,a,b){
+      const A = +a, B = +b;
+      if(type.d && A <= 12 && B >= 10 && !repN){ repN = A; repDist = B; }
+      else if(A >= 8 && B >= 8 && !dim){ dim = A+'x'+B+' m'; }
+      else if(!repN){ repN = A; reps = B; }
+      return ' ';
+    });
+
+    // 10. distanza singola: "2 km", "400 m"
+    let distKm = 0;
+    s = s.replace(/\b(\d{1,3}(?:[.,]\d)?)\s*km\b/g, function(m,a){
+      if(!dist){ dist = a.replace(',','.')+' km'; distKm = parseFloat(a.replace(',','.')) || 0; }
+      return ' ';
+    });
+    s = s.replace(/\b(\d{2,4})\s*(?:m|mt|metri)\b/g, function(m,a){
+      if(!dist && !repDist) dist = a+' m'; return ' ';
+    });
+
+    // 11. tempo rimasto isolato = durata del blocco
+    s = s.replace(new RegExp('('+WR_T+')','g'), function(m,a){
       const t = wrTime(a);
       if(t && !dur) dur = t;
       return ' ';
     });
+
+    // 12. a chi era rivolto
     const nrm = wrNorm(raw);
     for(let i=0; i<WR_WHO.length && !who; i++){ if(nrm.indexOf(WR_WHO[i][0]) >= 0) who = WR_WHO[i][1]; }
     const gm = nrm.match(/\bgruppo\s+([a-z0-9]{1,8})\b/);
     if(gm) who = 'Gruppo '+gm[1].toUpperCase();
-    if(who) s = s.replace(/\b(?:tutte|tutti|portieri|titolari|subentrate|rientri|infortunate|squadra|gruppo\s+[a-z0-9]{1,8})\b/g, ' ');
+    if(who) s = s.replace(/\b(?:tutte|tutti|portieri?|titolari|subentrate|rientri|infortunate|squadra|gruppo\s+[a-z0-9]{1,8})\b/g, ' ');
 
-    const type = wrTypeOf(raw) || WR_FALLBACK;
-    let min = 0;
-    if(dur) min = dur;
-    else if(serie && durSerie) min = serie*durSerie + (rec ? rec*Math.max(0, serie-1) : 0);
-    if(!min) min = type.min;
-    min = Math.max(1, Math.round(min));
+    // ---- minuti ----
+    // recupero di riferimento: se il preparatore lo scrive una volta vale per tutte le serie
+    let defRec = recG;
+    if(!defRec){ for(let i=0; i<grp.length && !defRec; i++){ if(grp[i].rec) defRec = grp[i].rec; } }
+    let work = 0, nSer = 0;
+    grp.forEach(function(g){ work += g.n * g.t; nSer += g.n; });
+    let recTot = 0, done = 0;
+    grp.forEach(function(g){
+      const r = g.rec || defRec;
+      done += g.n;
+      recTot += r * (done >= nSer ? Math.max(0, g.n-1) : g.n);
+    });
 
+    let min = 0, est = false;
+    if(durTot) min = durTot;
+    else if(work) min = work + recTot;
+    else if(dur) min = dur;
+    else if(repN && repDist){
+      // sprint: circa 6,5 m/s di corsa e un minuto di recupero ogni 20 metri, al massimo 3'
+      const r = recG || Math.min(3, Math.max(0.5, repDist/20));
+      min = (repN*(repDist/6.5))/60 + r*Math.max(0, repN-1);
+      est = true;
+    }
+    else if(repN && reps){
+      // sala pesi: circa 4 secondi a ripetizione e 2' di recupero fra le serie
+      const r = recG || 2;
+      min = (repN*reps*4)/60 + r*Math.max(0, repN-1);
+      est = true;
+    }
+    else if(distKm){ min = distKm*5.5; est = true; }   // circa 11 km/h
+    else { min = type.min; est = true; }
+    min = Math.max(1, Math.min(240, Math.round(min)));
+
+    // ---- dettaglio ----
     const det = [];
     if(dim) det.push(dim);
     if(fmt) det.push(fmt);
-    if(serie && durSerie) det.push(serie+'x'+wrFmtTime(durSerie));
-    else if(serie && reps) det.push(serie+'x'+reps);
-    if(rec) det.push('rec '+wrFmtTime(rec));
+    if(grp.length){
+      det.push(grp.map(function(g){ return g.n+'x'+wrFmtTime(g.t); }).join(' + '));
+      if(grp.length > 1) det.push(nSer+' serie');
+    }
+    else if(repN && repDist) det.push((repSets ? repSets+'x'+(repN/repSets) : String(repN))+'x'+repDist+' m');
+    else if(repN && reps) det.push(repN+'x'+reps);
+
+    let recLbl = '';
+    if(grp.length){
+      const rs = grp.map(function(g){ return g.rec || defRec; });
+      const same = rs.every(function(v){ return v === rs[0]; });
+      if(same && rs[0]) recLbl = 'rec '+wrFmtTime(rs[0]);
+      else if(rs.some(function(v){ return v; })) recLbl = 'rec '+rs.map(function(v){ return v ? wrFmtTime(v) : '-'; }).join('/');
+    }
+    else if(recG) recLbl = 'rec '+wrFmtTime(recG);
+    if(recLbl) det.push(recLbl);
+    if(dist) det.push(dist);
+    if(nAtl) det.push(nAtl+' atlete');
     if(who) det.push(who);
 
     let name = wrClean(s);
     if(!name) name = type.lab;
-    return { name:name, min:min, rpe:(rpe || type.rpe), note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam };
+    return {
+      name:name, min:min, est:est, rpe:(rpe || type.rpe),
+      note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam
+    };
   }
 
   // Divide gli appunti in blocchi: a capo e punto e virgola dividono sempre,
   // la virgola solo quando dopo comincia un blocco riconoscibile.
+  // Il piu' non divide mai: serve a incatenare le serie dello stesso esercizio.
   function wrSplit(txt){
     const out = [];
     String(txt||'').split(/\r?\n|;|•/).forEach(function(row){
+      const line = String(row).replace(/^\s*(?:[-*>]+|\d{1,2}[.)])\s*/, '').trim();
+      if(!line) return;
       let cur = '';
-      row.split(',').forEach(function(p, i){
+      line.split(',').forEach(function(p, i){
         const t = p.trim();
         if(!t) return;
         if(i === 0 || !wrTypeOf(t)){ cur = cur ? (cur+', '+t) : t; }
@@ -941,23 +1084,32 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
           '<div class="wr-nm">'+esc(b.name)+'</div>'+
           (b.note ? '<div class="wr-det">'+esc(b.note)+'</div>' : '')+
         '</div>'+
-        '<div class="wr-num"><b>'+b.min+'</b><small>min</small></div>'+
+        '<div class="wr-num"><b>'+(b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min+'</b><small>min</small></div>'+
         '<div class="wr-num rpe"><b>'+b.rpe+'</b><small>rpe</small></div>'+
       '</div>';
     }).join('');
     const tm = bl.reduce(function(s,b){ return s+b.min; }, 0);
     const tl = bl.reduce(function(s,b){ return s+b.min*b.rpe; }, 0);
+    let vs = '';
+    if(SES_REF && tl){
+      const d = Math.round((tl-SES_REF)/SES_REF*100);
+      const c = Math.abs(d) <= 12 ? 'ok' : (d > 0 ? 'up' : 'dn');
+      vs = '<span class="ws"><span class="ws-l">Vs seduta tipo</span>'+
+           '<span class="ws-v '+c+'">'+(d>0?'+':'')+d+'%</span></span>';
+    }
     sum.hidden = false;
     sum.innerHTML =
       '<span class="ws"><span class="ws-l">Blocchi</span><span class="ws-v">'+bl.length+'</span></span>'+
       '<span class="ws"><span class="ws-l">Minuti</span><span class="ws-v">'+NF.format(tm)+'</span></span>'+
-      '<span class="ws load"><span class="ws-l">Carico</span><span class="ws-v">'+NF.format(tl)+'</span></span>';
+      '<span class="ws load"><span class="ws-l">Carico</span><span class="ws-v">'+NF.format(tl)+'</span></span>'+
+      vs;
   }
 
-  const WR_EX = "attivazione 10 min tutte\n"+
-                "rondos 15x10 5c3 4x1'30\" rec 45\"\n"+
-                "possesso 30x25 6c6+2 3x4' rec 2'\n"+
-                "partita a tema 4x5'\n"+
+  const WR_EX = "attivazione 12 min tutte\n"+
+                "rondo 15x10 5c3 4x1'30\" rec 45\"\n"+
+                "possesso 30x25 6c6+2 3x4' + 2x3' rec 2'\n"+
+                "partita a tema 4x5' + 2x4' rec 90\"\n"+
+                "velocita 6x30 m rec 1'\n"+
                 "defaticamento 8'";
 
   function buildWriter(){
@@ -1048,6 +1200,15 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
     const load = blocks.reduce((s,b)=> s+(+b.min||0)*(+b.rpe||0), 0);
     document.getElementById('bt-min').innerHTML = NF.format(min)+'<small>min</small>';
     document.getElementById('bt-load').innerHTML = NF.format(load)+'<small>u.a.</small>';
+    const wrap = document.getElementById('bt-tgt-wrap');
+    const el = document.getElementById('bt-tgt');
+    if(!wrap || !el) return;
+    if(!SES_REF || !load){ wrap.hidden = true; return; }
+    const d = Math.round((load-SES_REF)/SES_REF*100);
+    wrap.hidden = false;
+    el.className = 'bt-val ' + (Math.abs(d) <= 12 ? 'ok' : (d > 0 ? 'up' : 'dn'));
+    el.innerHTML = (d>0?'+':'')+d+'<small>%</small>';
+    wrap.title = 'Riferimento: '+NF.format(SES_REF)+' u.a., mediana degli allenamenti in stagione';
   }
 
   buildBuilder();
