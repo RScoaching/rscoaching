@@ -90,6 +90,10 @@ window.SIDEBAR_HTML = `
     </a>
   </div>
   <div class="sb-foot">
+    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati dalla cartella">
+      <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
+      <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
+    </button>
     <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       <span>Cambia area</span>
@@ -191,9 +195,58 @@ window.paintSeasonBanner = function() {
   host.insertBefore(b, host.firstChild);
 };
 
+// ---------------------------------------------------------------------------
+// Aggiornamento dati dall'app.
+// I file dati sono statici e vengono rigenerati in locale dallo script Python
+// quando si scaricano i GPS nella cartella. Il browser pero' li tiene in cache,
+// quindi qui li si rilegge forzando il bypass della cache e poi si ricarica la
+// pagina, cosi' il dato nuovo si vede senza svuotare la cronologia a mano.
+// ---------------------------------------------------------------------------
+window.FIO_DATA_FILES = [
+  'carico_data.js', 'calendario_data.js', 'esercitazioni_data.js', 'forza_data.js'
+];
+window.fioDataStamp = function() {
+  if (window.FIO_CLEAN_SEASON) return 'archivio vuoto';
+  var src = [window.SNAP, window.CAL, window.ESERC, window.FORZA];
+  var s = '';
+  for (var i = 0; i < src.length && !s; i++) {
+    if (src[i] && src[i].generato) s = String(src[i].generato).trim();
+  }
+  return s ? ('agg. ' + s) : 'rileggi dalla cartella';
+};
+window.fioRefreshData = function() {
+  var btn = document.getElementById('fio-sync-btn');
+  var lab = document.getElementById('fio-sync-when');
+  if (!btn || btn.classList.contains('busy')) return;
+  btn.classList.add('busy');
+  btn.disabled = true;
+  if (lab) lab.textContent = 'rilettura in corso';
+  var t = Date.now();
+  var jobs = window.FIO_DATA_FILES.map(function(f) {
+    return fetch('./' + f + '?ts=' + t, { cache: 'reload' });
+  });
+  Promise.all(jobs).then(function() {
+    location.reload();
+  })['catch'](function() {
+    btn.classList.remove('busy');
+    btn.disabled = false;
+    if (lab) lab.textContent = 'rilettura fallita, riprova';
+    setTimeout(function() { if (lab) lab.textContent = window.fioDataStamp(); }, 3200);
+  });
+};
+
 window.initSidebarToggle = function() {
   window.applyStagioneData();
   window.paintSeasonBanner();
+  const sync = document.getElementById('fio-sync-btn');
+  const syncWhen = document.getElementById('fio-sync-when');
+  if (sync) {
+    if (syncWhen) syncWhen.textContent = window.fioDataStamp();
+    sync.addEventListener('click', window.fioRefreshData);
+    document.addEventListener('fio:stagione', function() {
+      if (syncWhen) syncWhen.textContent = window.fioDataStamp();
+    });
+  }
   const ham = document.getElementById('sb-ham-btn');
   const ov  = document.getElementById('sb-mob-ov');
   const sb  = document.getElementById('sb-sidebar');
@@ -375,6 +428,31 @@ window.SIDEBAR_CSS = `
   padding:12px 14px 14px;
   border-top:1px solid rgba(255,255,255,.05);
   flex-shrink:0;display:flex;flex-direction:column;gap:10px;
+}
+.sb-sync{
+  display:flex;align-items:center;gap:9px;width:100%;
+  padding:9px 11px;border-radius:10px;text-align:left;
+  font-family:inherit;cursor:pointer;
+  color:rgba(255,178,122,.86);
+  background:rgba(255,106,46,.09);border:1px solid rgba(255,106,46,.22);
+  transition:color .18s ease,background .18s ease,border-color .18s ease,transform .1s ease;
+}
+.sb-sync:hover{color:#FFD2B4;background:rgba(255,106,46,.15);border-color:rgba(255,106,46,.34);}
+.sb-sync:active{transform:scale(.98);}
+.sb-sync[disabled]{cursor:progress;color:rgba(255,178,122,.55);}
+.sb-sync-ic{width:16px;height:16px;flex-shrink:0;opacity:.9;}
+.sb-sync.busy .sb-sync-ic{animation:fio-spin .9s linear infinite;}
+@keyframes fio-spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce){
+  .sb-sync.busy .sb-sync-ic{animation:none;opacity:.5;}
+  .sb-sync{transition:none;}
+}
+.sb-sync-txt{display:flex;flex-direction:column;gap:1px;min-width:0;}
+.sb-sync-txt b{font-size:12px;font-weight:600;letter-spacing:.01em;}
+.sb-sync-txt em{
+  font-style:normal;font-size:9.5px;letter-spacing:.02em;
+  color:rgba(248,250,255,.34);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .sb-switch{
   display:flex;align-items:center;gap:9px;
