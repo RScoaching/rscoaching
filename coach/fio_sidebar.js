@@ -94,6 +94,13 @@ window.SIDEBAR_HTML = `
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
+    <div class="sb-anom" id="fio-anom" hidden>
+      <button class="sb-anom-hd" id="fio-anom-btn" type="button" aria-expanded="false" aria-controls="fio-anom-list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <span id="fio-anom-lbl">Dati anomali esclusi</span>
+      </button>
+      <div class="sb-anom-list" id="fio-anom-list" hidden></div>
+    </div>
     <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       <span>Cambia area</span>
@@ -124,6 +131,213 @@ window.setStagione = function(v) {
 window.stagioneLabel = function(v) {
   v = v || window.getStagione();
   return v === '26-27' ? 'Stagione 2026/27' : 'Stagione 2025/26';
+};
+
+// ---------------------------------------------------------------------------
+// Controllo di plausibilita' dei dati GPS.
+// Ogni tanto un giubbotto sbaglia una lettura e restituisce un valore
+// impossibile: il 15/11 Fontana risulta a 43,3 km/h, quando in tutta la
+// stagione nessuna supera i 30,6. Un solo dato sballato alza la media della
+// settimana, del mese e della squadra, e resta li' come record personale.
+// Qui i valori fuori scala si tolgono e le righe di totale che li contenevano
+// si rifanno con la stessa formula del file (somma per le metriche cumulate,
+// media per le altre). I file nella cartella non si toccano: la pulizia vive
+// nell'app e resta valida anche dopo aver rigenerato i dati.
+// ---------------------------------------------------------------------------
+window.FIO_LIMITI = {
+  'Minuti': 200,
+  'Dist tot': 20000,
+  'Dist (m/min)': 250,
+  'D>20 W/kg': 8000,
+  '%Dist PM>20W/Kg': 100,
+  'DIST > 23km/h': 2000,
+  'N az. int. /min': 40,
+  'N ACC > 3 m/s^2': 200,
+  'N DEC < -3 m/s^2': 200,
+  'SMax (kmh)': 34,
+  '% Dist Eq': 100,
+  '%Dist Acc>3m/s2': 100,
+  '%DIst Dec <-3 m/s2': 100,
+  'Dist 20-23 Km/h': 3000
+};
+window.FIO_ANOMALIE = [];
+window.fioSanitizeGPS = function() {
+  var S = window.SNAP;
+  if (!S || !S.metrics_full || S.fio_pulito) return window.FIO_ANOMALIE;
+  S.fio_pulito = true;
+
+  var SF = S.sum_flags || [];
+  var MS = S.metrics_short || S.metrics_full;
+  var MOD = S.model || [];
+
+  var lim = [];
+  S.metrics_full.forEach(function(nome, i) {
+    var mx = window.FIO_LIMITI[nome];
+    if (typeof mx === 'number') lim.push({ i: i, max: mx, lab: MS[i] || nome });
+  });
+  if (!lim.length) return window.FIO_ANOMALIE;
+
+  var out = window.FIO_ANOMALIE;
+  var sessSporche = {};    // 'chiaveMese|giorno' -> indici da rifare sulla riga squadra
+  var mesiSporchi = {};    // 'atleta|chiaveMese' -> indici da rifare nei totali
+
+  function segna(mappa, chiave, i) {
+    if (!mappa[chiave]) mappa[chiave] = {};
+    mappa[chiave][i] = true;
+  }
+  function indici(o) {
+    return Object.keys(o || {}).map(function(k) { return +k; });
+  }
+
+  // marchia la riga: serve a rifare solo i totali che contenevano quel valore,
+  // tutto il resto del file resta identico a come lo ha scritto lo script
+  function marca(r, i) {
+    if (!r.fio_out) r.fio_out = {};
+    r.fio_out[i] = true;
+  }
+  function tocca(src, i) {
+    for (var k = 0; k < src.length; k++) { if (src[k].fio_out && src[k].fio_out[i]) return true; }
+    return false;
+  }
+
+  // 1. si tolgono i valori fuori scala dalle righe di seduta e di partita
+  function pulisci(rows, chi, mkey, mese) {
+    (rows || []).forEach(function(r) {
+      if (!r || !r.v || (r.type !== 'day' && r.type !== 'match')) return;
+      lim.forEach(function(L) {
+        var v = r.v[L.i];
+        if (v == null || !(v > L.max)) return;
+        r.v[L.i] = null;
+        marca(r, L.i);
+        out.push({ atleta: chi, mese: mese, giorno: r.label || '', metrica: L.lab, valore: v, limite: L.max });
+        segna(mesiSporchi, chi + '|' + mkey, L.i);
+        segna(sessSporche, mkey + '|' + (r.label || ''), L.i);
+      });
+    });
+  }
+
+  // 2. si rifanno i totali di settimana, di mese e i rapporti sul modello
+  function ricalcola(rows, idx) {
+    if (!idx.length) return;
+    var wkDay = [], wkAll = [], moAll = [], ultimo = {};
+    (rows || []).forEach(function(r) {
+      if (!r || !r.v) return;
+      if (r.type === 'wk_header') { wkDay = []; wkAll = []; return; }
+      if (r.type === 'day') { wkDay.push(r); wkAll.push(r); moAll.push(r); return; }
+      if (r.type === 'match') { wkAll.push(r); moAll.push(r); return; }
+      var src = null;
+      if (r.type === 'tot_train') src = wkDay;
+      else if (r.type === 'tot_week') src = wkAll;
+      else if (r.type === 'tot_month') src = moAll;
+      if (src) {
+        idx.forEach(function(i) {
+          if (!tocca(src, i)) return;
+          var s = 0, n = 0;
+          src.forEach(function(x) { if (x.v[i] != null) { s += x.v[i]; n++; } });
+          r.v[i] = n ? Math.round((SF[i] ? s : s / n) * 10) / 10 : null;
+          marca(r, i);
+        });
+        ultimo[r.type] = r;
+        return;
+      }
+      var base = null;
+      if (r.type === 'valmatch_train') base = ultimo.tot_train;
+      else if (r.type === 'valmatch_week') base = ultimo.tot_week;
+      else if (r.type === 'valmatch_month') base = ultimo.tot_month;
+      if (!base) return;
+      idx.forEach(function(i) {
+        if (!base.fio_out || !base.fio_out[i]) return;
+        var b = base.v[i], m = MOD[i];
+        r.v[i] = (b == null || !m) ? null : Math.round(b / m * 100) / 100;
+      });
+    });
+  }
+
+  // atlete
+  Object.keys(S.players || {}).forEach(function(nome) {
+    (S.players[nome].months || []).forEach(function(m) {
+      pulisci(m.rows, nome, m.key || '', m.title || '');
+    });
+  });
+  // squadra: righe di seduta e archivio partite
+  (S.team && S.team.months || []).forEach(function(m) {
+    pulisci(m.rows, 'Squadra', m.key || '', m.title || '');
+  });
+  (S.team && S.team.matches || []).forEach(function(g) {
+    if (!g || !g.v) return;
+    lim.forEach(function(L) {
+      var v = g.v[L.i];
+      if (v == null || !(v > L.max)) return;
+      g.v[L.i] = null;
+      out.push({ atleta: 'Squadra', mese: '', giorno: g.sigla || g.data || '', metrica: L.lab, valore: v, limite: L.max });
+    });
+  });
+
+  if (!out.length) return out;
+
+  // 3. la riga di squadra e' la media delle atlete di quella seduta:
+  //    se e' saltato un valore va rifatta, anche quando il totale sembrava normale
+  Object.keys(sessSporche).forEach(function(k) {
+    var p = k.split('|'), mkey = p[0], lab = p[1];
+    var tm = (S.team && S.team.months || []).filter(function(m) { return (m.key || '') === mkey; })[0];
+    if (!tm) return;
+    var riga = (tm.rows || []).filter(function(r) {
+      return (r.type === 'day' || r.type === 'match') && (r.label || '') === lab;
+    })[0];
+    if (!riga || !riga.v) return;
+    indici(sessSporche[k]).forEach(function(i) {
+      var s = 0, n = 0;
+      Object.keys(S.players || {}).forEach(function(nome) {
+        var pm = (S.players[nome].months || []).filter(function(m) { return (m.key || '') === mkey; })[0];
+        if (!pm) return;
+        (pm.rows || []).forEach(function(r) {
+          if ((r.type !== 'day' && r.type !== 'match') || (r.label || '') !== lab) return;
+          if (r.v && r.v[i] != null) { s += r.v[i]; n++; }
+        });
+      });
+      riga.v[i] = n ? Math.round(s / n * 10) / 10 : null;
+      marca(riga, i);
+      segna(mesiSporchi, 'Squadra|' + mkey, i);
+    });
+  });
+
+  // 4. totali rifatti solo nei mesi toccati, il resto del file resta com'era
+  Object.keys(mesiSporchi).forEach(function(k) {
+    var p = k.split('|'), chi = p[0], mkey = p[1];
+    var mesi = chi === 'Squadra'
+      ? (S.team && S.team.months || [])
+      : ((S.players && S.players[chi] && S.players[chi].months) || []);
+    var m = mesi.filter(function(x) { return (x.key || '') === mkey; })[0];
+    if (m) ricalcola(m.rows, indici(mesiSporchi[k]));
+  });
+
+  return out;
+};
+window.fioSanitizeGPS();
+
+// Riepilogo dei dati scartati, mostrato sotto il tasto di aggiornamento.
+window.paintAnomalie = function() {
+  var box = document.getElementById('fio-anom');
+  var btn = document.getElementById('fio-anom-btn');
+  var lab = document.getElementById('fio-anom-lbl');
+  var list = document.getElementById('fio-anom-list');
+  if (!box || !btn || !lab || !list) return;
+  var a = window.FIO_ANOMALIE || [];
+  if (!a.length || window.FIO_CLEAN_SEASON) { box.hidden = true; return; }
+  box.hidden = false;
+  lab.textContent = a.length === 1 ? '1 dato anomalo escluso' : (a.length + ' dati anomali esclusi');
+  list.innerHTML = a.map(function(x) {
+    return '<span class="sb-anom-row"><b>' + x.atleta + '</b>' +
+           (x.giorno ? ' ' + x.giorno : '') +
+           '<em>' + x.metrica + ' ' + x.valore + '</em></span>';
+  }).join('');
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  btn.addEventListener('click', function() {
+    var ap = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', ap ? 'false' : 'true');
+    list.hidden = ap;
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -238,6 +452,7 @@ window.fioRefreshData = function() {
 window.initSidebarToggle = function() {
   window.applyStagioneData();
   window.paintSeasonBanner();
+  window.paintAnomalie();
   const sync = document.getElementById('fio-sync-btn');
   const syncWhen = document.getElementById('fio-sync-when');
   if (sync) {
@@ -245,6 +460,7 @@ window.initSidebarToggle = function() {
     sync.addEventListener('click', window.fioRefreshData);
     document.addEventListener('fio:stagione', function() {
       if (syncWhen) syncWhen.textContent = window.fioDataStamp();
+      window.paintAnomalie();
     });
   }
   const ham = document.getElementById('sb-ham-btn');
@@ -454,6 +670,24 @@ window.SIDEBAR_CSS = `
   color:rgba(248,250,255,.34);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+.sb-anom{display:flex;flex-direction:column;gap:6px;}
+.sb-anom-hd{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:7px 10px;border-radius:9px;text-align:left;
+  font-family:inherit;font-size:11px;font-weight:600;letter-spacing:.01em;cursor:pointer;
+  color:rgba(245,196,110,.82);
+  background:rgba(226,164,60,.08);border:1px solid rgba(226,164,60,.2);
+  transition:color .18s ease,background .18s ease,border-color .18s ease;
+}
+.sb-anom-hd:hover{color:#F7D89A;background:rgba(226,164,60,.14);border-color:rgba(226,164,60,.3);}
+.sb-anom-hd svg{width:14px;height:14px;flex-shrink:0;opacity:.9;}
+.sb-anom-list{display:flex;flex-direction:column;gap:5px;padding:2px 2px 2px 10px;}
+.sb-anom-row{
+  display:flex;flex-direction:column;gap:1px;
+  font-size:10px;line-height:1.4;color:rgba(248,250,255,.34);
+}
+.sb-anom-row b{font-size:11px;font-weight:600;color:rgba(248,250,255,.6);}
+.sb-anom-row em{font-style:normal;color:rgba(245,196,110,.6);}
 .sb-switch{
   display:flex;align-items:center;gap:9px;
   padding:9px 11px;border-radius:10px;
