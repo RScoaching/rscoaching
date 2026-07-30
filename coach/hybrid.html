@@ -237,6 +237,29 @@ td.num.cmp.near .pct{ color:var(--green); }
 td.num.cmp.under .pct{ color:oklch(66% 0.13 250); }
 td.num.cmp.na{ color:var(--faint); }
 
+/* ---------- confronto giocatrici ---------- */
+#confronto-view{ position:relative; overflow:hidden; }
+.cf-subctl{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 14px; }
+.cf-rail{ z-index:26; }
+#confronto-view.cf-open-sess #cf-sess-rail{ transform:translateX(0); }
+#confronto-view.cf-open-play #cf-play-rail{ transform:translateX(0); }
+.cf-rail-tools{ display:flex; gap:8px; }
+.cf-mini{ appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:600;
+  color:var(--muted); background:var(--surface3); border:1px solid var(--border2); border-radius:8px;
+  padding:6px 12px; transition:color .15s var(--ease), border-color .15s var(--ease), background .15s var(--ease); }
+.cf-mini:hover{ color:var(--ink); border-color:var(--border3); }
+.cf-mini:active{ transform:scale(.97); }
+.sess-item.cf-opt{ grid-template-columns:19px 1fr auto; }
+.cf-chk{ width:19px; height:19px; border-radius:6px; border:1px solid var(--border3);
+  display:grid; place-items:center; color:transparent; background:var(--surface);
+  transition:background .14s var(--ease), border-color .14s var(--ease); }
+.cf-chk svg{ width:13px; height:13px; }
+.sess-item.cf-opt.is-on .cf-chk{ background:var(--orange); border-color:var(--orange); color:#1a0d05; }
+.sess-item.cf-opt.is-on{ border-color:var(--ember-border); background:var(--ember-bg); }
+table.grid th.cf-n, table.grid td.cf-n{ text-align:center; min-width:52px; }
+table.grid td.cf-n{ color:var(--muted); font-variant-numeric:tabular-nums; }
+table.grid tr.r-day:hover td.cf-n{ color:var(--text); }
+
 /* ---------- partite sort ---------- */
 table.partite thead th.sortable{ cursor:pointer; user-select:none; }
 table.partite thead th.sortable:hover{ color:var(--text); }
@@ -266,7 +289,7 @@ table.partite td.data{ color:var(--muted); }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sb-edge, .sidebar, .controls, .sess-rail, .sess-drawer-backdrop,
-  #btn-rail, .cmp-seg, .toast, .top-right, .foot-note{ display:none !important; }
+  #btn-rail, .cmp-seg, .cf-subctl, #cf-btn-sess, #cf-btn-play, .toast, .top-right, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
@@ -346,6 +369,7 @@ table.partite td.data{ color:var(--muted); }
         <div class="seg" role="tablist" aria-label="Vista">
           <button id="view-sedute" class="on" role="tab" aria-selected="true">Sedute</button>
           <button id="view-partite" role="tab" aria-selected="false">Partite</button>
+          <button id="view-confronto" role="tab" aria-selected="false">Confronto</button>
         </div>
         <span class="grow"></span>
         <span class="cm-lbl">Parametri</span>
@@ -410,6 +434,69 @@ table.partite td.data{ color:var(--muted); }
         </div>
       </section>
 
+      <!-- CONFRONTO GIOCATRICI -->
+      <section class="card reveal" id="confronto-view" style="--i:0; display:none">
+        <div class="card-head">
+          <button class="btn" id="cf-btn-sess" title="Scegli quali sedute o partite includere">
+            <svg class="rail-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            <span id="cf-sess-lbl">Sedute</span>
+          </button>
+          <button class="btn" id="cf-btn-play" title="Scegli quali atlete confrontare">
+            <svg class="rail-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span id="cf-play-lbl">Atlete</span>
+          </button>
+          <h2>Confronto</h2>
+          <span class="hint" id="cf-hint"></span>
+          <span class="spacer"></span>
+          <div class="seg cmp-seg" id="cf-cmp-seg" role="group" aria-label="Modalita lettura confronto">
+            <button class="on" data-cfc="val" type="button" title="Media per seduta di ogni parametro">Media</button>
+            <button data-cfc="tot" type="button" title="Totale accumulato: somma dei parametri cumulativi, media di quelli di intensita">Totale</button>
+            <button data-cfc="team" type="button" title="Quanto ogni atleta dista dalla media squadra sulle stesse sedute">vs Squadra</button>
+            <button data-cfc="model" type="button" title="Quanto ogni atleta dista dal modello AVG partita">vs Modello</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding-top:6px">
+          <div class="sess-stats" id="cf-stats"></div>
+          <div class="cf-subctl">
+            <span class="cm-lbl">Includi</span>
+            <div class="seg cmp-seg" id="cf-scope-seg" role="group" aria-label="Tipo di sedute">
+              <button class="on" data-scope="all" type="button">Tutte</button>
+              <button data-scope="match" type="button">Partite</button>
+              <button data-scope="train" type="button">Allenamenti</button>
+            </div>
+          </div>
+          <div class="sess-main">
+            <div class="cmp-legend" id="cf-legend" hidden></div>
+            <div class="tscroll" id="cf-scroll"></div>
+          </div>
+          <div class="sess-drawer-backdrop" id="cf-backdrop" hidden></div>
+          <aside class="sess-rail cf-rail" id="cf-sess-rail" aria-label="Scelta sedute">
+            <div class="sess-rail-head">
+              <strong>Quali sedute</strong>
+              <button class="rail-x" id="cf-sess-close" type="button" aria-label="Chiudi elenco">&#215;</button>
+            </div>
+            <div class="cf-rail-tools">
+              <button class="cf-mini" id="cf-sess-all" type="button">Tutte</button>
+              <button class="cf-mini" id="cf-sess-none" type="button">Nessuna</button>
+            </div>
+            <input class="sess-search" id="cf-sess-search" type="search" placeholder="Cerca seduta o partita..." autocomplete="off">
+            <div class="sess-rail-list" id="cf-sess-list"></div>
+          </aside>
+          <aside class="sess-rail cf-rail" id="cf-play-rail" aria-label="Scelta atlete">
+            <div class="sess-rail-head">
+              <strong>Quali atlete</strong>
+              <button class="rail-x" id="cf-play-close" type="button" aria-label="Chiudi elenco">&#215;</button>
+            </div>
+            <div class="cf-rail-tools">
+              <button class="cf-mini" id="cf-play-all" type="button">Tutte</button>
+              <button class="cf-mini" id="cf-play-none" type="button">Nessuna</button>
+            </div>
+            <input class="sess-search" id="cf-play-search" type="search" placeholder="Cerca atleta..." autocomplete="off">
+            <div class="sess-rail-list" id="cf-play-list"></div>
+          </aside>
+        </div>
+      </section>
+
     </div>
 
     <p class="foot-note">Le sedute mostrano tutte le atlete piu la media squadra. Le partite sono a livello di squadra: usa i confronti per leggere ogni dato rispetto al modello AVG o al match day.</p>
@@ -454,6 +541,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const state = { view:'sedute', session:null, cmp:'val', mcmp:'val', colMode:'key' };
   const ssort = { col:'name', dir:1 };
   const msort = { col:'data', dir:-1 };
+  const csort = { col:'name', dir:1 };
+  const cfState = { scope:'all', cmp:'val' };
+  let cfSessSel = null;   // Set di "monthKey|label"
+  let cfPlaySel = null;   // Set di nomi atlete
+  const CF_CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
+  const SF = S.sum_flags || [];
 
   // parametri visibili: chiave o tutti
   function VIS(){
@@ -558,12 +651,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     state.view = v;
     const sd = document.getElementById('sedute-view');
     const pt = document.getElementById('partite-view');
+    const cf = document.getElementById('confronto-view');
     if(sd) sd.style.display = (v==='sedute') ? '' : 'none';
     if(pt) pt.style.display = (v==='partite') ? '' : 'none';
-    const bs = document.getElementById('view-sedute');
-    const bp = document.getElementById('view-partite');
-    if(bs){ bs.classList.toggle('on', v==='sedute'); bs.setAttribute('aria-selected', v==='sedute'); }
-    if(bp){ bp.classList.toggle('on', v==='partite'); bp.setAttribute('aria-selected', v==='partite'); }
+    if(cf) cf.style.display = (v==='confronto') ? '' : 'none';
+    [['view-sedute','sedute'],['view-partite','partite'],['view-confronto','confronto']].forEach(function(p){
+      const b = document.getElementById(p[0]);
+      if(b){ b.classList.toggle('on', v===p[1]); b.setAttribute('aria-selected', v===p[1]); }
+    });
+    if(v==='confronto') renderConfronto();
   }
   function openSessionView(monthKey, label){
     state.session = { monthKey, label };
@@ -809,13 +905,157 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }));
   }
 
+  // ---------- confronto giocatrici ----------
+  function playerRow(name, monthKey, label){
+    const p = S.players && S.players[name]; if(!p) return null;
+    const mon = (p.months||[]).find(m=> m.key===monthKey);
+    return findDayRow(mon, label);
+  }
+  function cfAllPlayers(){ return Object.keys(S.players||{}).sort((a,b)=> a.localeCompare(b,'it')); }
+  function cfEligibleSessions(){
+    return allSessions().filter(s=>
+      cfState.scope==='all' ? true : cfState.scope==='match' ? s.type==='match' : s.type==='day');
+  }
+  function cfResetSessSel(){ cfSessSel = new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); }
+  function cfSelectedSessions(){ if(!cfSessSel) cfResetSessSel(); return cfEligibleSessions().filter(s=> cfSessSel.has(s.monthKey+'|'+s.label)); }
+  function cfSelectedPlayers(){ if(!cfPlaySel) cfPlaySel = new Set(cfAllPlayers()); return cfAllPlayers().filter(n=> cfPlaySel.has(n)); }
+  function cfPlayerRows(name, sess){ const out=[]; sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(r) out.push(r); }); return out; }
+  function aggRows(rows, mode){
+    const acc=new Array(M.length).fill(0), cnt=new Array(M.length).fill(0);
+    rows.forEach(row=>{ (row.v||[]).forEach((x,i)=>{ if(x!=null && isFinite(x)){ acc[i]+=x; cnt[i]++; } }); });
+    const v = acc.map((s,i)=>{ if(!cnt[i]) return null; if(mode==='sum' && SF[i]===1) return s; return s/cnt[i]; });
+    return { v, n: rows.length };
+  }
+  function renderCfStats(sess, players){
+    const host=document.getElementById('cf-stats'); if(!host) return;
+    const nMatch=sess.filter(s=> s.type==='match').length, nTrain=sess.filter(s=> s.type==='day').length;
+    const tiles=[
+      {lbl:'Sedute',val:String(sess.length),match:false},
+      {lbl:'Partite',val:String(nMatch),match:nMatch>0},
+      {lbl:'Allenamenti',val:String(nTrain),match:false},
+      {lbl:'Atlete',val:String(players.length),match:false}
+    ];
+    host.innerHTML=tiles.map(t=>'<div class="sess-stat'+(t.match?' match':'')+'"><div class="ss-lbl">'+esc(t.lbl)+'</div><div class="ss-val">'+esc(t.val)+'</div></div>').join('');
+  }
+  function cfSyncButtons(){
+    const es=cfEligibleSessions().length, ss=cfSelectedSessions().length, ap=cfAllPlayers().length, sp=cfSelectedPlayers().length;
+    const sl=document.getElementById('cf-sess-lbl'); if(sl) sl.textContent='Sedute ('+ss+'/'+es+')';
+    const pl=document.getElementById('cf-play-lbl'); if(pl) pl.textContent='Atlete ('+sp+'/'+ap+')';
+    const hint=document.getElementById('cf-hint');
+    if(hint){ const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute'; hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'; }
+  }
+  function renderConfronto(){
+    const host=document.getElementById('cf-scroll'); if(!host) return;
+    const sess=cfSelectedSessions(), players=cfSelectedPlayers(), V=VIS();
+    renderCfStats(sess, players); cfSyncButtons();
+    const lg=document.getElementById('cf-legend');
+    if(!sess.length){ if(lg){lg.hidden=true;lg.innerHTML='';} host.innerHTML=emptyBlock('Nessuna seduta selezionata'); return; }
+    if(!players.length){ if(lg){lg.hidden=true;lg.innerHTML='';} host.innerHTML=emptyBlock('Nessuna atleta selezionata'); return; }
+    const teamRows=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) teamRows.push(r); });
+    const hasModel=!!(S.model && S.model.length);
+    const cmp=cfState.cmp;
+    const eff=(cmp==='team' && !teamRows.length)?'val':(cmp==='model' && !hasModel)?'val':cmp;
+    const aggMode=(eff==='tot')?'sum':'avg';
+    const teamAgg=aggRows(teamRows, aggMode).v;
+    const isCmp=(eff==='team'||eff==='model');
+    const base=eff==='team'?teamAgg:eff==='model'?(S.model||null):null;
+    if(lg){
+      if(!isCmp){ lg.hidden=true; lg.innerHTML=''; }
+      else {
+        const ref=eff==='team'?'media squadra':'modello AVG partita';
+        lg.hidden=false;
+        lg.innerHTML='% rispetto alla <b>'+esc(ref)+'</b>'
+          +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
+          +'<span class="lg"><span class="dot near"></span>95-105%</span>'
+          +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
+      }
+    }
+    const pdata=players.map(name=>{ const a=aggRows(cfPlayerRows(name,sess), aggMode); return { name, role:((S.players[name]&&S.players[name].role)||''), v:a.v, n:a.n }; });
+    pdata.sort((a,b)=>{
+      if(csort.col==='name') return csort.dir*a.name.localeCompare(b.name,'it');
+      if(csort.col==='role') return csort.dir*String(a.role).localeCompare(String(b.role),'it');
+      if(csort.col==='n') return csort.dir*(a.n-b.n);
+      let va=(a.v||[])[csort.col],vb=(b.v||[])[csort.col];
+      va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
+      return csort.dir*(va-vb);
+    });
+    const cell=(v,i)=>{
+      const kc=keyCls(i);
+      if(!isCmp) return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
+      const b=base?base[i]:null;
+      if(v==null||!isFinite(v)||b==null||!isFinite(b)||b===0) return '<td class="num cmp na'+kc+'">-</td>';
+      const r=v/b,pct=Math.round(r*100),cls=r>=1.05?'over':r>=0.95?'near':'under';
+      return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
+    };
+    const arw=k=> csort.col===k?(csort.dir>0?'▲':'▼'):'▴';
+    const ariaSort=k=> csort.col===k?(csort.dir>0?'ascending':'descending'):'none';
+    let h='<table class="grid partite"><thead><tr>';
+    h+='<th class="col-day sortable" data-c="name" aria-sort="'+ariaSort('name')+'">Atleta <span class="arw">'+arw('name')+'</span></th>';
+    h+='<th class="cf-n sortable" data-c="n" aria-sort="'+ariaSort('n')+'" title="Sedute con dati">Sed. <span class="arw">'+arw('n')+'</span></th>';
+    V.forEach(i=>{ const k=keyCls(i); h+='<th class="sortable'+k+'" data-c="'+i+'" aria-sort="'+ariaSort(i)+'" title="'+esc(M[i])+'">'+esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span> <span class="arw">'+arw(i)+'</span></th>'; });
+    h+='</tr></thead><tbody>';
+    const teamLbl=(aggMode==='sum')?'Media squadra (tot.)':'Media squadra';
+    if(teamRows.length){ h+='<tr class="r-teamref"><td class="col-day"><span class="lb">'+esc(teamLbl)+'</span></td><td class="cf-n">'+teamRows.length+'</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(teamAgg[i])+'</td>'); h+='</tr>'; }
+    if(hasModel){ h+='<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='model'?' (rif.)':'')+'</span></td><td class="cf-n">-</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(S.model[i])+'</td>'); h+='</tr>'; }
+    if(!pdata.length){ h+='<tr class="r-day"><td class="col-day" colspan="'+(V.length+2)+'">Nessuna atleta selezionata</td></tr>'; }
+    pdata.forEach(r=>{ h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td><td class="cf-n">'+(r.n||0)+'</td>'; const rv=r.v||[]; V.forEach(i=> h+=cell(rv[i], i)); h+='</tr>'; });
+    h+='</tbody></table>'; host.innerHTML=h;
+    host.querySelectorAll('th.sortable').forEach(th=> th.addEventListener('click', ()=>{
+      const raw=th.getAttribute('data-c');
+      const c=(raw==='name'||raw==='role'||raw==='n')?raw:+raw;
+      if(csort.col===c) csort.dir*=-1; else { csort.col=c; csort.dir=(c==='name'||c==='role')?1:-1; }
+      renderConfronto();
+    }));
+  }
+  function cfRenderSessRail(filter){
+    const host=document.getElementById('cf-sess-list'); if(!host) return;
+    if(!cfSessSel) cfResetSessSel();
+    const q=(filter||'').trim().toLowerCase(); const elig=cfEligibleSessions().slice().reverse();
+    let html='',curMonth='',n=0;
+    elig.forEach(s=>{
+      const hay=(s.label+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
+      if(q && hay.indexOf(q)<0) return;
+      if(s.monthTitle!==curMonth){ curMonth=s.monthTitle; html+='<div class="sess-mgroup">'+esc(curMonth)+'</div>'; }
+      n++; const key=s.monthKey+'|'+s.label,on=cfSessSel.has(key);
+      html+='<button class="sess-item cf-opt'+(s.type==='match'?' is-match':'')+(on?' is-on':'')+'" type="button" data-key="'+esc(key)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(s.label)+'</span><span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span></button>';
+    });
+    if(!n) html='<div class="sess-empty">Nessuna seduta</div>'; host.innerHTML=html;
+    host.querySelectorAll('.cf-opt').forEach(b=> b.addEventListener('click', ()=>{
+      const k=b.getAttribute('data-key'); if(cfSessSel.has(k)) cfSessSel.delete(k); else cfSessSel.add(k);
+      b.classList.toggle('is-on', cfSessSel.has(k)); renderConfronto();
+    }));
+  }
+  function cfRenderPlayRail(filter){
+    const host=document.getElementById('cf-play-list'); if(!host) return;
+    if(!cfPlaySel) cfPlaySel=new Set(cfAllPlayers());
+    const q=(filter||'').trim().toLowerCase(); let html='',n=0;
+    cfAllPlayers().forEach(name=>{
+      const p=S.players[name]||{}; const hay=(name+' '+(p.role||'')).toLowerCase();
+      if(q && hay.indexOf(q)<0) return;
+      n++; const on=cfPlaySel.has(name);
+      html+='<button class="sess-item cf-opt'+(on?' is-on':'')+'" type="button" data-name="'+esc(name)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(name)+'</span><span class="sess-tag">'+esc(p.role||'')+'</span></button>';
+    });
+    if(!n) html='<div class="sess-empty">Nessuna atleta</div>'; host.innerHTML=html;
+    host.querySelectorAll('.cf-opt').forEach(b=> b.addEventListener('click', ()=>{
+      const nm=b.getAttribute('data-name'); if(cfPlaySel.has(nm)) cfPlaySel.delete(nm); else cfPlaySel.add(nm);
+      b.classList.toggle('is-on', cfPlaySel.has(nm)); renderConfronto();
+    }));
+  }
+  function openCfRail(which){
+    const v=document.getElementById('confronto-view'), bd=document.getElementById('cf-backdrop'); if(!v) return;
+    v.classList.remove('cf-open-sess','cf-open-play'); v.classList.add(which==='play'?'cf-open-play':'cf-open-sess');
+    if(bd) bd.hidden=false; const id=which==='play'?'cf-play-search':'cf-sess-search'; const s=document.getElementById(id);
+    if(s) setTimeout(()=>{ try{ s.focus(); s.select(); }catch(e){} }, 60);
+  }
+  function closeCfRails(){ const v=document.getElementById('confronto-view'), bd=document.getElementById('cf-backdrop'); if(v) v.classList.remove('cf-open-sess','cf-open-play'); if(bd) bd.hidden=true; }
+
   // ---------- wirings ----------
   { const b=document.getElementById('view-sedute'); if(b) b.addEventListener('click', ()=> setView('sedute')); }
   { const b=document.getElementById('view-partite'); if(b) b.addEventListener('click', ()=> setView('partite')); }
   { const seg=document.getElementById('colmode-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
       state.colMode = btn.getAttribute('data-cm');
       seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
-      renderSession(); renderMatches();
+      renderSession(); renderMatches(); renderConfronto();
     })); }
   { const seg=document.getElementById('cmp-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
       state.cmp = btn.getAttribute('data-cmp');
@@ -827,11 +1067,39 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
       renderMatches();
     })); }
+  { const b=document.getElementById('view-confronto'); if(b) b.addEventListener('click', ()=> setView('confronto')); }
+  { const seg=document.getElementById('cf-cmp-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+      cfState.cmp = btn.getAttribute('data-cfc');
+      seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+      renderConfronto();
+    })); }
+  { const seg=document.getElementById('cf-scope-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+      cfState.scope = btn.getAttribute('data-scope');
+      seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+      cfResetSessSel(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto();
+    })); }
+  { const b=document.getElementById('cf-btn-sess'); if(b) b.addEventListener('click', ()=>{
+      const v=document.getElementById('confronto-view');
+      if(v && v.classList.contains('cf-open-sess')) closeCfRails(); else openCfRail('sess');
+    }); }
+  { const b=document.getElementById('cf-btn-play'); if(b) b.addEventListener('click', ()=>{
+      const v=document.getElementById('confronto-view');
+      if(v && v.classList.contains('cf-open-play')) closeCfRails(); else openCfRail('play');
+    }); }
+  { const b=document.getElementById('cf-sess-close'); if(b) b.addEventListener('click', closeCfRails); }
+  { const b=document.getElementById('cf-play-close'); if(b) b.addEventListener('click', closeCfRails); }
+  { const bd=document.getElementById('cf-backdrop'); if(bd) bd.addEventListener('click', closeCfRails); }
+  { const i=document.getElementById('cf-sess-search'); if(i) i.addEventListener('input', e=> cfRenderSessRail(e.target.value)); }
+  { const i=document.getElementById('cf-play-search'); if(i) i.addEventListener('input', e=> cfRenderPlayRail(e.target.value)); }
+  { const b=document.getElementById('cf-sess-all'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
+  { const b=document.getElementById('cf-sess-none'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
+  { const b=document.getElementById('cf-play-all'); if(b) b.addEventListener('click', ()=>{ cfPlaySel=new Set(cfAllPlayers()); cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
+  { const b=document.getElementById('cf-play-none'); if(b) b.addEventListener('click', ()=>{ cfPlaySel=new Set(); cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
   { const i=document.getElementById('sess-rail-search'); if(i) i.addEventListener('input', e=>{ renderSessRail(e.target.value); highlightRail(); }); }
   { const b=document.getElementById('btn-rail'); if(b) b.addEventListener('click', toggleRail); }
   { const b=document.getElementById('rail-close'); if(b) b.addEventListener('click', closeRail); }
   { const bd=document.getElementById('sess-backdrop'); if(bd) bd.addEventListener('click', closeRail); }
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeRail(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeRail(); closeCfRails(); } });
   { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{ toast('Preparo la stampa...'); setTimeout(()=> window.print(), 120); }); }
 
   // ---------- init ----------
@@ -845,7 +1113,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderSession();
     highlightRail();
     renderMatches();
-    setView(qv==='partite' ? 'partite' : 'sedute');
+    cfResetSessSel();
+    cfPlaySel = new Set(cfAllPlayers());
+    cfRenderSessRail('');
+    cfRenderPlayRail('');
+    renderConfronto();
+    setView(qv==='partite' ? 'partite' : qv==='confronto' ? 'confronto' : 'sedute');
   })();
 })();
 </script>
