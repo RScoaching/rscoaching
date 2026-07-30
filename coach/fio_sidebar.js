@@ -94,13 +94,6 @@ window.SIDEBAR_HTML = `
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
-    <div class="sb-anom" id="fio-anom" hidden>
-      <button class="sb-anom-hd" id="fio-anom-btn" type="button" aria-expanded="false" aria-controls="fio-anom-list">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <span id="fio-anom-lbl">Dati anomali esclusi</span>
-      </button>
-      <div class="sb-anom-list" id="fio-anom-list" hidden></div>
-    </div>
     <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       <span>Cambia area</span>
@@ -315,31 +308,6 @@ window.fioSanitizeGPS = function() {
 };
 window.fioSanitizeGPS();
 
-// Riepilogo dei dati scartati, mostrato sotto il tasto di aggiornamento.
-window.paintAnomalie = function() {
-  var box = document.getElementById('fio-anom');
-  var btn = document.getElementById('fio-anom-btn');
-  var lab = document.getElementById('fio-anom-lbl');
-  var list = document.getElementById('fio-anom-list');
-  if (!box || !btn || !lab || !list) return;
-  var a = window.FIO_ANOMALIE || [];
-  if (!a.length || window.FIO_CLEAN_SEASON) { box.hidden = true; return; }
-  box.hidden = false;
-  lab.textContent = a.length === 1 ? '1 dato anomalo escluso' : (a.length + ' dati anomali esclusi');
-  list.innerHTML = a.map(function(x) {
-    return '<span class="sb-anom-row"><b>' + x.atleta + '</b>' +
-           (x.giorno ? ' ' + x.giorno : '') +
-           '<em>' + x.metrica + ' ' + x.valore + '</em></span>';
-  }).join('');
-  if (btn.dataset.wired) return;
-  btn.dataset.wired = '1';
-  btn.addEventListener('click', function() {
-    var ap = btn.getAttribute('aria-expanded') === 'true';
-    btn.setAttribute('aria-expanded', ap ? 'false' : 'true');
-    list.hidden = ap;
-  });
-};
-
 // ---------------------------------------------------------------------------
 // Dati per stagione.
 // La 26/27 parte da zero: si azzerano tutti i dati di stagione (GPS, partite,
@@ -452,7 +420,6 @@ window.fioRefreshData = function() {
 window.initSidebarToggle = function() {
   window.applyStagioneData();
   window.paintSeasonBanner();
-  window.paintAnomalie();
   const sync = document.getElementById('fio-sync-btn');
   const syncWhen = document.getElementById('fio-sync-when');
   if (sync) {
@@ -460,7 +427,6 @@ window.initSidebarToggle = function() {
     sync.addEventListener('click', window.fioRefreshData);
     document.addEventListener('fio:stagione', function() {
       if (syncWhen) syncWhen.textContent = window.fioDataStamp();
-      window.paintAnomalie();
     });
   }
   const ham = document.getElementById('sb-ham-btn');
@@ -670,24 +636,6 @@ window.SIDEBAR_CSS = `
   color:rgba(248,250,255,.34);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.sb-anom{display:flex;flex-direction:column;gap:6px;}
-.sb-anom-hd{
-  display:flex;align-items:center;gap:8px;width:100%;
-  padding:7px 10px;border-radius:9px;text-align:left;
-  font-family:inherit;font-size:11px;font-weight:600;letter-spacing:.01em;cursor:pointer;
-  color:rgba(245,196,110,.82);
-  background:rgba(226,164,60,.08);border:1px solid rgba(226,164,60,.2);
-  transition:color .18s ease,background .18s ease,border-color .18s ease;
-}
-.sb-anom-hd:hover{color:#F7D89A;background:rgba(226,164,60,.14);border-color:rgba(226,164,60,.3);}
-.sb-anom-hd svg{width:14px;height:14px;flex-shrink:0;opacity:.9;}
-.sb-anom-list{display:flex;flex-direction:column;gap:5px;padding:2px 2px 2px 10px;}
-.sb-anom-row{
-  display:flex;flex-direction:column;gap:1px;
-  font-size:10px;line-height:1.4;color:rgba(248,250,255,.34);
-}
-.sb-anom-row b{font-size:11px;font-weight:600;color:rgba(248,250,255,.6);}
-.sb-anom-row em{font-style:normal;color:rgba(245,196,110,.6);}
 .sb-switch{
   display:flex;align-items:center;gap:9px;
   padding:9px 11px;border-radius:10px;
