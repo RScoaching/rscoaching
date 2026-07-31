@@ -381,10 +381,14 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 .rosa-sum{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:16px; }
 .rs-chip{ display:inline-flex; align-items:baseline; gap:7px; padding:7px 12px; border-radius:var(--r-sm);
   background:var(--surface2); border:1px solid var(--border); font-size:11.5px; color:var(--muted); }
-.rs-chip b{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:19px; letter-spacing:.4px; color:var(--ink); line-height:1; }
-.rs-chip.ok b{ color:oklch(80% 0.16 152); }
-.rs-chip.part b{ color:var(--orange2); }
-.rs-chip.out b{ color:var(--red); }
+.rs-chip b{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:19px; letter-spacing:.4px;
+  color:var(--c, var(--ink)); line-height:1; }
+/* cinque stati di disponibilita', stessi colori della pagina Atlete */
+.s-disp{ --c:var(--green);       --cbg:oklch(70% 0.18 152 / 0.13); --cbd:oklch(70% 0.18 152 / 0.30); }
+.s-parz{ --c:oklch(80% 0.14 85); --cbg:oklch(78% 0.15 85 / 0.13);  --cbd:oklch(78% 0.15 85 / 0.30); }
+.s-diff{ --c:var(--violet2);     --cbg:var(--violet-bg);           --cbd:var(--violet-border); }
+.s-fis{  --c:var(--orange2);     --cbg:var(--ember-bg);            --cbd:var(--ember-border); }
+.s-ass{  --c:oklch(72% 0.18 25); --cbg:oklch(62% 0.22 25 / 0.13);  --cbd:oklch(62% 0.22 25 / 0.30); }
 .rosa-grp{ margin-bottom:16px; }
 .rosa-grp:last-child{ margin-bottom:0; }
 .rosa-gh{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin-bottom:9px; }
@@ -395,13 +399,11 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
   transition: color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease); }
 .atl:hover{ border-color:var(--border3); color:var(--ink); }
 .atl:active{ transform:scale(.97); }
-.atl .dot{ flex:0 0 8px; width:8px; height:8px; border-radius:50%; background:var(--green); }
+.atl .dot{ flex:0 0 8px; width:8px; height:8px; border-radius:50%; background:var(--c, var(--green)); }
 .atl .rl{ font-size:10.5px; color:var(--faint); }
-.atl.part{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
-.atl.part .dot{ background:var(--orange); }
-.atl.part .rl{ color:oklch(70% 0.10 50); }
-.atl.out{ background:var(--surface); border-color:var(--border); color:var(--faint); text-decoration:line-through; }
-.atl.out .dot{ background:var(--red); }
+.atl.on{ background:var(--cbg); border-color:var(--cbd); color:var(--c); }
+.atl.on .rl{ color:var(--c); opacity:.7; }
+.atl.s-ass{ text-decoration:line-through; }
 .atl.hide{ display:none; }
 .rosa-notes{ margin-top:16px; padding-top:16px; border-top:1px solid var(--border2); }
 .rosa-notes:empty{ display:none; }
@@ -409,9 +411,8 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 .rn-row{ display:flex; align-items:center; gap:10px; padding:5px 0; flex-wrap:wrap; }
 .rn-nm{ flex:0 0 auto; min-width:140px; font-size:13px; color:var(--ink); font-weight:600; }
 .rn-st{ flex:0 0 auto; font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-  border-radius:999px; padding:3px 9px; }
-.rn-st.part{ color:var(--orange2); background:var(--ember-bg); border:1px solid var(--ember-border); }
-.rn-st.out{ color:var(--red); background:oklch(62% 0.22 25 / 0.10); border:1px solid oklch(62% 0.22 25 / 0.28); }
+  border-radius:999px; padding:3px 9px;
+  color:var(--c, var(--muted)); background:var(--cbg, var(--surface2)); border:1px solid var(--cbd, var(--border)); }
 .rn-in{ flex:1 1 200px; min-width:0; font-family:inherit; font-size:13px; color:var(--ink);
   background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r-sm); padding:8px 11px; }
 .rn-in:focus{ outline:none; border-color:var(--orange); background:var(--surface); }
@@ -595,11 +596,11 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
         </div>
       </section>
 
-      <!-- Rosa di oggi: chi c'e', chi lavora a parte, chi e' fuori -->
+      <!-- Rosa di oggi: stati condivisi con la pagina Atlete (rs_fio_avail) -->
       <section class="card reveal" id="rosa-card" style="--i:4">
         <div class="card-head">
           <h2>Rosa di oggi</h2>
-          <span class="hint">tocca un nome per cambiarne lo stato</span>
+          <span class="hint">stato condiviso con la pagina Atlete, tocca un nome per cambiarlo</span>
           <span class="spacer"></span>
           <div class="bld-tools">
             <div class="rosa-find">
@@ -1984,35 +1985,113 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   // ================= ROSA DI OGGI =================
-  // La rosa arriva da window.FORZA.roster (stesso elenco della pagina forza):
-  // 4.8 KB gia' in push list, molto piu' leggero dello snapshot carico.
-  const FZ = (window.FORZA && Array.isArray(window.FORZA.roster)) ? window.FORZA.roster : [];
-  const ROSTER = FZ.map(function(r){
-    const role = (r.role && String(r.role).toLowerCase() !== 'nan') ? String(r.role) : '';
-    return { name:String(r.name||''), role:role, tipo:String(r.tipo||'') };
-  }).filter(function(r){ return r.name; });
+  // Gli stati NON si ricalcolano qui: sono quelli scritti dalla pagina Atlete in
+  // 'rs_fio_avail' (chiave condivisa, cinque stati). Qui restano soltanto le note del
+  // giorno, salvate per data in 'fio_oggi_rosa_<data>'.
+  // L'elenco nomi arriva da window.FORZA.roster (4.8 KB gia' in push list, molto piu'
+  // leggero dello snapshot carico), unito alle atlete aggiunte a mano in Atlete e
+  // meno quelle segnate fuori rosa.
+  const LS_AVAIL  = 'rs_fio_avail';
+  const LS_BIO    = 'rs_fio_bio';
+  const LS_CUSTOM = 'rs_fio_custom';
+  const LS_ROLES  = 'rs_fio_roles';
 
-  const ROSA_GRPS = [{ key:'core', lab:'Gruppo squadra' }, { key:'sporadica', lab:'Aggregate' }];
-  const ROSA_KEY  = 'fio_oggi_rosa_' + TSTR;
-  let ROSA = rosaLoad();
+  const AV_STATES = [
+    { k:'disponibile',   l:'Disponibile',   s:'in gruppo',   cls:'s-disp', ph:'' },
+    { k:'parziale',      l:'Parziale',      s:'parziale',    cls:'s-parz', ph:'quanto puo\' fare oggi' },
+    { k:'differenziato', l:'Differenziato', s:'differenz.',  cls:'s-diff', ph:'lavoro individuale previsto' },
+    { k:'fisico',        l:'Con fisico',    s:'con fisico',  cls:'s-fis',  ph:'programma con il preparatore' },
+    { k:'assente',       l:'Assente',       s:'assenti',     cls:'s-ass',  ph:'motivo e rientro previsto' }
+  ];
 
-  function rosaLoad(){
-    try{ const v = JSON.parse(localStorage.getItem(ROSA_KEY)); if(v && typeof v === 'object' && !Array.isArray(v)) return v; }catch(e){}
-    return {};
+  function lsObj(key){
+    try{ const v = JSON.parse(localStorage.getItem(key) || '{}');
+      return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
+    catch(e){ return {}; }
   }
-  function rosaSave(){ try{ localStorage.setItem(ROSA_KEY, JSON.stringify(ROSA)); }catch(e){} }
-  function rosaSt(name){ const o = ROSA[name]; const s = o && o.st; return (s === 'part' || s === 'out') ? s : 'ok'; }
-  function rosaNote(name){ const o = ROSA[name]; return (o && o.note) ? String(o.note) : ''; }
-  function rosaSet(name, st, note){
-    if(st === 'ok' && !note) delete ROSA[name];
-    else ROSA[name] = { st:st, note:note||'' };
-    rosaSave();
+
+  const FZ     = (window.FORZA && Array.isArray(window.FORZA.roster)) ? window.FORZA.roster : [];
+  const BIO    = lsObj(LS_BIO);
+  const CUSTOM = lsObj(LS_CUSTOM);
+  const ROLES  = lsObj(LS_ROLES);
+  let   AVAIL  = lsObj(LS_AVAIL);
+
+  function availSave(){ try{ localStorage.setItem(LS_AVAIL, JSON.stringify(AVAIL)); }catch(e){} }
+  function isOff(name){ const b = BIO[name]; return !!(b && b.off); }
+
+  const ROSTER = (function(){
+    const seen = {}, list = [];
+    function add(name, role, tipo){
+      name = String(name || '').trim();
+      if(!name || seen[name] || isOff(name)) return;
+      seen[name] = 1;
+      let r = ROLES[name] || role || '';
+      r = String(r); if(r.toLowerCase() === 'nan') r = '';
+      list.push({ name:name, role:r, tipo:String(tipo || '') });
+    }
+    FZ.forEach(function(r){ add(r.name, r.role, r.tipo); });
+    Object.keys(CUSTOM).forEach(function(n){ add(n, CUSTOM[n], 'custom'); });
+    Object.keys(AVAIL).forEach(function(n){ add(n, '', ''); });
+    return list;
+  })();
+
+  const ROSA_GRPS = [
+    { key:'core',      lab:'Gruppo squadra' },
+    { key:'sporadica', lab:'Aggregate' },
+    { key:'custom',    lab:'Aggiunte a mano' }
+  ];
+  const ROSA_KEY = 'fio_oggi_rosa_' + TSTR;
+
+  // note del giorno; migra la vecchia forma {st,note} verso la chiave condivisa
+  let NOTES = (function(){
+    const raw = lsObj(ROSA_KEY), out = {};
+    let mig = false;
+    Object.keys(raw).forEach(function(n){
+      const v = raw[n];
+      if(typeof v === 'string'){ if(v) out[n] = v; return; }
+      if(!v || typeof v !== 'object') return;
+      if(v.note) out[n] = String(v.note);
+      const st = v.st === 'part' ? 'parziale' : (v.st === 'out' ? 'assente' : '');
+      if(st && !AVAIL[n]){ AVAIL[n] = st; mig = true; }
+    });
+    if(mig) availSave();
+    return out;
+  })();
+  function notesSave(){
+    const o = {};
+    Object.keys(NOTES).forEach(function(n){ if(NOTES[n]) o[n] = NOTES[n]; });
+    try{ localStorage.setItem(ROSA_KEY, JSON.stringify(o)); }catch(e){}
   }
-  function rosaLab(st){ return st === 'part' ? 'lavora a parte' : (st === 'out' ? 'non disponibile' : 'disponibile'); }
+
+  function avDef(st){
+    for(let i = 0; i < AV_STATES.length; i++){ if(AV_STATES[i].k === st) return AV_STATES[i]; }
+    return AV_STATES[0];
+  }
+  function avSt(name){
+    const s = AVAIL[name];
+    return AV_STATES.some(function(x){ return x.k === s; }) ? s : 'disponibile';
+  }
+  function avSet(name, st){
+    if(st === 'disponibile') delete AVAIL[name]; else AVAIL[name] = st;
+    availSave();
+  }
+  function avNext(st){
+    let i = 0;
+    AV_STATES.forEach(function(x, j){ if(x.k === st) i = j; });
+    return AV_STATES[(i + 1) % AV_STATES.length].k;
+  }
+  function rosaNote(name){ return NOTES[name] || ''; }
+  function rosaSetNote(name, note){
+    note = String(note || '');
+    if(note) NOTES[name] = note; else delete NOTES[name];
+    notesSave();
+  }
+
   function rosaCount(){
-    let ok = 0, part = 0, out = 0;
-    ROSTER.forEach(function(p){ const s = rosaSt(p.name); if(s === 'part') part++; else if(s === 'out') out++; else ok++; });
-    return { ok:ok, part:part, out:out, tot:ROSTER.length };
+    const c = { tot:ROSTER.length };
+    AV_STATES.forEach(function(s){ c[s.k] = 0; });
+    ROSTER.forEach(function(p){ c[avSt(p.name)]++; });
+    return c;
   }
   function rosaGroups(){
     const done = {}, res = [];
@@ -2031,28 +2110,32 @@ window.FORZA = window.FORZA || { roster:[] };
     if(!el) return;
     if(!ROSTER.length){ el.innerHTML = ''; return; }
     const c = rosaCount();
-    el.innerHTML =
-      '<span class="rs-chip ok"><b>'+c.ok+'</b> in gruppo</span>' +
-      '<span class="rs-chip part"><b>'+c.part+'</b> a parte</span>' +
-      '<span class="rs-chip out"><b>'+c.out+'</b> fuori</span>' +
+    el.innerHTML = AV_STATES.filter(function(s){ return s.k === 'disponibile' || c[s.k]; })
+      .map(function(s){ return '<span class="rs-chip '+s.cls+'"><b>'+c[s.k]+'</b> '+esc(s.s)+'</span>'; }).join('') +
       '<span class="rs-chip"><b>'+c.tot+'</b> in rosa</span>';
+  }
+
+  function atlClass(st){
+    const d = avDef(st);
+    return 'atl ' + d.cls + (st === 'disponibile' ? '' : ' on');
   }
 
   function renderRosa(){
     const host = document.getElementById('rosa-groups');
     if(!host) return;
     if(!ROSTER.length){
-      host.innerHTML = '<div class="rosa-empty">Rosa non disponibile: manca <b>forza_data.js</b>. ' +
-        'Rigenera i dati della sezione forza e l\'elenco compare qui.</div>';
+      host.innerHTML = '<div class="rosa-empty">Rosa non disponibile: manca <b>forza_data.js</b> e ' +
+        'nessuna atleta e\' stata aggiunta dalla pagina Atlete. Rigenera i dati della sezione forza ' +
+        'e l\'elenco compare qui.</div>';
       return;
     }
     host.innerHTML = rosaGroups().map(function(g){
       return '<div class="rosa-grp">' +
         '<div class="rosa-gh">'+esc(g.lab)+' &#183; '+g.list.length+'</div>' +
         '<div class="rosa-list">' + g.list.map(function(p){
-          const st  = rosaSt(p.name);
-          const lbl = rosaLab(st);
-          return '<button type="button" class="atl'+(st === 'ok' ? '' : ' '+st)+'" data-n="'+esc(p.name)+'" ' +
+          const st  = avSt(p.name);
+          const lbl = avDef(st).l.toLowerCase();
+          return '<button type="button" class="'+atlClass(st)+'" data-n="'+esc(p.name)+'" ' +
             'title="'+esc(p.name+' - '+lbl)+'" aria-label="'+esc(p.name+', '+lbl)+'">' +
             '<span class="dot"></span>'+esc(p.name) +
             (p.role ? '<span class="rl">'+esc(p.role)+'</span>' : '') +
@@ -2065,17 +2148,16 @@ window.FORZA = window.FORZA || { roster:[] };
   function rosaNotes(){
     const host = document.getElementById('rosa-notes');
     if(!host) return;
-    const list = ROSTER.filter(function(p){ return rosaSt(p.name) !== 'ok'; });
+    const list = ROSTER.filter(function(p){ return avSt(p.name) !== 'disponibile'; });
     if(!list.length){ host.innerHTML = ''; return; }
-    host.innerHTML = '<div class="rn-hd">Note per chi non e\' in gruppo</div>' +
+    host.innerHTML = '<div class="rn-hd">Note del giorno per chi non e\' in gruppo</div>' +
       list.map(function(p){
-        const st = rosaSt(p.name);
+        const d = avDef(avSt(p.name));
         return '<div class="rn-row">' +
           '<span class="rn-nm">'+esc(p.name)+'</span>' +
-          '<span class="rn-st '+st+'">'+(st === 'part' ? 'a parte' : 'fuori')+'</span>' +
+          '<span class="rn-st '+d.cls+'">'+esc(d.l)+'</span>' +
           '<input class="rn-in" type="text" data-n="'+esc(p.name)+'" value="'+esc(rosaNote(p.name))+'" ' +
-          'placeholder="'+(st === 'part' ? 'lavoro individuale, carico ridotto' : 'motivo e rientro previsto')+'" ' +
-          'aria-label="Nota per '+esc(p.name)+'">' +
+          'placeholder="'+esc(d.ph)+'" aria-label="Nota per '+esc(p.name)+'">' +
           '</div>';
       }).join('');
   }
@@ -2102,13 +2184,13 @@ window.FORZA = window.FORZA || { roster:[] };
       const b = ev.target.closest ? ev.target.closest('.atl') : null;
       if(!b) return;
       const n = b.getAttribute('data-n');
-      const cur = rosaSt(n);
-      const next = cur === 'ok' ? 'part' : (cur === 'part' ? 'out' : 'ok');
-      rosaSet(n, next, rosaNote(n));
-      b.classList.remove('part','out');
-      if(next !== 'ok') b.classList.add(next);
-      b.setAttribute('title', n+' - '+rosaLab(next));
-      b.setAttribute('aria-label', n+', '+rosaLab(next));
+      const next = avNext(avSt(n));
+      const lbl = avDef(next).l.toLowerCase();
+      avSet(n, next);
+      const hid = b.classList.contains('hide');
+      b.className = atlClass(next) + (hid ? ' hide' : '');
+      b.setAttribute('title', n+' - '+lbl);
+      b.setAttribute('aria-label', n+', '+lbl);
       rosaSum(); rosaNotes();
     });
 
@@ -2116,19 +2198,26 @@ window.FORZA = window.FORZA || { roster:[] };
     if(notes) notes.addEventListener('input', function(ev){
       const i = ev.target.closest ? ev.target.closest('.rn-in') : null;
       if(!i) return;
-      const n = i.getAttribute('data-n');
-      rosaSet(n, rosaSt(n), i.value);
+      rosaSetNote(i.getAttribute('data-n'), i.value);
     });
 
     const all = document.getElementById('rosa-all');
     if(all) all.addEventListener('click', function(){
-      ROSA = {}; rosaSave();
+      ROSTER.forEach(function(p){ delete AVAIL[p.name]; });
+      availSave();
       renderRosa(); rosaSum(); rosaNotes();
-      toast('Rosa azzerata: tutte disponibili');
+      toast('Tutte disponibili, anche nella pagina Atlete');
     });
 
     const q = document.getElementById('rosa-q');
     if(q) q.addEventListener('input', rosaFilter);
+
+    // se la pagina Atlete e' aperta in un'altra scheda, qui l'elenco si riallinea da solo
+    window.addEventListener('storage', function(ev){
+      if(ev && ev.key && ev.key !== LS_AVAIL) return;
+      AVAIL = lsObj(LS_AVAIL);
+      renderRosa(); rosaSum(); rosaNotes();
+    });
   }
 
   // ================= SEDUTE SALVATE E SCHEDA STAMPABILE =================
@@ -2140,9 +2229,9 @@ window.FORZA = window.FORZA || { roster:[] };
     const bl = blocks
       .filter(function(b){ return String(b.name||'').trim() || (+b.min||0); })
       .map(function(b){ return { name:String(b.name||''), min:+b.min||0, rpe:+b.rpe||0, note:String(b.note||'') }; });
-    const disp  = ROSTER.filter(function(p){ return rosaSt(p.name) === 'ok'; }).map(function(p){ return p.name; });
-    const fuori = ROSTER.filter(function(p){ return rosaSt(p.name) !== 'ok'; })
-      .map(function(p){ return { name:p.name, st:rosaSt(p.name), note:rosaNote(p.name) }; });
+    const disp  = ROSTER.filter(function(p){ return avSt(p.name) === 'disponibile'; }).map(function(p){ return p.name; });
+    const fuori = ROSTER.filter(function(p){ return avSt(p.name) !== 'disponibile'; })
+      .map(function(p){ return { name:p.name, st:avSt(p.name), note:rosaNote(p.name) }; });
     const min  = bl.reduce(function(s,b){ return s + b.min; }, 0);
     const load = bl.reduce(function(s,b){ return s + b.min*b.rpe; }, 0);
     return {
@@ -2169,20 +2258,23 @@ window.FORZA = window.FORZA || { roster:[] };
         }).join('')
       : '<tr><td class="pp-no" colspan="6">Nessun blocco inserito.</td></tr>';
 
-    const part = (s.rosa||[]).filter(function(p){ return p.st === 'part'; });
-    const out  = (s.rosa||[]).filter(function(p){ return p.st === 'out'; });
+    // le sedute salvate prima dei cinque stati usavano part/out: le rileggo qui
+    function stKey(v){ return v === 'part' ? 'parziale' : (v === 'out' ? 'assente' : String(v||'')); }
     function nomi(list){
       return list.map(function(p){ return esc(p.name) + (p.note ? ' ('+esc(p.note)+')' : ''); }).join(', ');
     }
     const nDisp = (s.disp && s.disp.length) || 0;
     let rosaHtml = '';
     if(s.tot){
+      const righe = AV_STATES.slice(1).map(function(st){
+        const l = (s.rosa||[]).filter(function(p){ return stKey(p.st) === st.k; });
+        return l.length ? '<div class="r"><b>'+esc(st.l)+' ('+l.length+')</b>: '+nomi(l)+'</div>' : '';
+      }).join('');
       rosaHtml =
         '<div class="pp-sec"><div class="t">Rosa del giorno</div></div>' +
         '<div class="pp-rosa">' +
           '<div class="r"><b>In gruppo ('+nDisp+')</b>: '+(nDisp ? esc(s.disp.join(', ')) : 'nessuna')+'</div>' +
-          (part.length ? '<div class="r"><b>A parte ('+part.length+')</b>: '+nomi(part)+'</div>' : '') +
-          (out.length  ? '<div class="r"><b>Fuori ('+out.length+')</b>: '+nomi(out)+'</div>' : '') +
+          righe +
         '</div>';
     }
 
