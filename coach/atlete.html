@@ -881,6 +881,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     ).join('');
   }
 
+  function renderSubtitle(){
+    const el = document.getElementById('subtitle');
+    if(el) el.innerHTML = '<b>Rosa U19W</b> · '+esc(activeRoster().length)+' atlete · Stagione '+esc(S.stagione||'2025-26');
+  }
+
   // ---------- filter pills ----------
   function renderPills(){
     const host = document.getElementById('pills');
@@ -892,6 +897,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     html += pillHTML('__all__', 'Tutte', att.length, false);
     ROLES.forEach(r=>{ if(counts[r]>0) html += pillHTML(r, r, counts[r], false); });
     if(unassignedCount>0) html += pillHTML('__none__', UNASSIGNED, unassignedCount, true);
+    const offCount = PLAYERS.length - att.length;
+    if(offCount>0) html += pillHTML('__off__', 'Fuori rosa', offCount, true);
+    else if(state.filter==='__off__') state.filter = '__all__';
     host.innerHTML = html;
     host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
       state.filter = b.getAttribute('data-f'); syncPills(); renderGrid();
@@ -914,6 +922,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const q = state.q.trim().toLowerCase();
     let list = PLAYERS.filter(pl=>{
       if(q && pl.name.toLowerCase().indexOf(q)<0) return false;
+      const off = isOff(pl.name);
+      if(state.filter==='__off__') return off;
+      if(off) return false;
       if(state.filter==='__all__') return true;
       const r = effRole(pl);
       if(state.filter==='__none__') return !r;
@@ -1307,7 +1318,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       b.off = !b.off;
       saveBio();
       renderSheetBody();
-      renderKPIs(); renderPills(); renderGrid(); renderAvail();
+      renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
       toast(b.off ? pl.name + ' fuori dalla rosa operativa' : pl.name + ' reintegrata');
     });
     const delBtn = document.getElementById('sh-delete-player');
@@ -1318,7 +1329,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       delete avail[pl.name]; saveAvail();
       rebuildPlayers();
       closeSheet();
-      renderKPIs(); renderPills(); renderGrid(); renderAvail();
+      renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
       toast('Atleta eliminata');
     });
   }
@@ -1355,8 +1366,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- export CSV ----------
   function exportCSV(){
+    const att = activeRoster();
     const rows = [['player','role']];
-    PLAYERS.forEach(pl=> rows.push([pl.name, effRole(pl)]));
+    att.forEach(pl=> rows.push([pl.name, effRole(pl)]));
     const csv = rows.map(r=> r.map(csvCell).join(';')).join('\r\n');
     const blob = new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1364,7 +1376,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     a.href = url; a.download = 'rosa_ruoli_'+dateStamp()+'.csv';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=> URL.revokeObjectURL(url), 1500);
-    toast('CSV ruoli esportato ('+PLAYERS.length+' atlete)');
+    toast('CSV ruoli esportato ('+att.length+' atlete)');
   }
   function csvCell(v){
     const s = String(v==null?'':v);
@@ -1380,7 +1392,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const order = ROLES.slice();
     const groups = {}; order.forEach(r=> groups[r]=[]);
     const none = [];
-    PLAYERS.forEach(pl=>{ const r=effRole(pl); if(r && groups[r]) groups[r].push(pl); else none.push(pl); });
+    activeRoster().forEach(pl=>{ const r=effRole(pl); if(r && groups[r]) groups[r].push(pl); else none.push(pl); });
     const byMin = arr=> arr.slice().sort((a,b)=> b.min-a.min || a.name.localeCompare(b.name,'it'));
     order.forEach(r=> groups[r]=byMin(groups[r]));
     return { order, groups, none: byMin(none) };
@@ -1405,10 +1417,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     };
     order.forEach(r=> emit(r, groups[r], false));
     emit(UNASSIGNED, none, true);
-    const assigned = PLAYERS.length - none.length;
+    const tot = activeRoster().length;
+    const assigned = tot - none.length;
     const gen = S.generato ? ('agg. '+esc(S.generato)) : 'anteprima';
     host.innerHTML =
-      '<div class="proster-h">Rosa Fiorentina Primavera U19W &#183; '+PLAYERS.length+' atlete ('+assigned+' assegnate, '+none.length+' da assegnare) &#183; Stagione '+esc(S.stagione||'2025-26')+' &#183; '+gen+'</div>'+
+      '<div class="proster-h">Rosa Fiorentina Primavera U19W &#183; '+tot+' atlete ('+assigned+' assegnate, '+none.length+' da assegnare) &#183; Stagione '+esc(S.stagione||'2025-26')+' &#183; '+gen+'</div>'+
       '<table class="ptbl"><thead><tr><th class="l">Atleta</th><th>Min</th><th>Sedute</th><th>Partite</th><th>Km</th></tr></thead>'+
       '<tbody>'+rows+'</tbody></table>';
   }
@@ -1432,7 +1445,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     };
     order.forEach(r=> emit(r, groups[r], false));
     emit(UNASSIGNED, none, true);
-    const assigned = PLAYERS.length - none.length;
+    const tot = activeRoster().length;
+    const assigned = tot - none.length;
 
     let h = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">'+
       '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
@@ -1447,7 +1461,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '.ttl{font-size:15pt;font-weight:700;color:'+VIO+';border:none;text-align:left}'+
       '.sub{color:'+MUT+';border:none;text-align:left}</style></head><body>';
     h += '<table><tr><td class="ttl" colspan="6">Rosa Fiorentina Primavera U19W</td></tr>'+
-      '<tr><td class="sub" colspan="6">'+PLAYERS.length+' atlete &#183; '+assigned+' assegnate &#183; '+none.length+' da assegnare &#183; Stagione '+esc(S.stagione||'2025-26')+'</td></tr>'+
+      '<tr><td class="sub" colspan="6">'+tot+' atlete &#183; '+assigned+' assegnate &#183; '+none.length+' da assegnare &#183; Stagione '+esc(S.stagione||'2025-26')+'</td></tr>'+
       (S.generato?'<tr><td class="sub" colspan="6">Aggiornato: '+esc(S.generato)+'</td></tr>':'')+
       '</table>';
     h += '<table><tr><th class="lbl">Atleta</th><th class="lbl">Ruolo</th><th>Minuti</th><th>Sedute</th><th>Partite</th><th>Km</th></tr>'+body+'</table>';
@@ -1459,7 +1473,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     a.href = url; a.download = 'rosa_ruoli_'+dateStamp()+'.xls';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=> URL.revokeObjectURL(url), 1500);
-    toast('Excel rosa esportato ('+PLAYERS.length+' atlete)');
+    toast('Excel rosa esportato ('+tot+' atlete)');
   }
 
   // ---------- reset overrides ----------
@@ -1489,7 +1503,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   })();
   document.getElementById('gen-txt').textContent = S.generato ? ('agg. '+S.generato) : 'anteprima';
-  document.getElementById('subtitle').innerHTML = '<b>Rosa U19W</b> · '+esc(PLAYERS.length)+' atlete · Stagione '+esc(S.stagione||'2025-26');
+  renderSubtitle();
 
   // ---------- wiring ----------
   let qTmr=null;
@@ -1685,7 +1699,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rebuildPlayers();
     if(inp) inp.value = '';
     if(addrowEl) addrowEl.hidden = true;
-    renderKPIs(); renderPills(); renderGrid(); renderAvail();
+    renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
     toast('Atleta aggiunta: ' + name);
   });
 
