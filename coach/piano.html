@@ -403,21 +403,45 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 /* ---------- microciclo ---------- */
 .mc-strip{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(84px,1fr); gap:8px;
   overflow-x:auto; padding-bottom:6px; }
-.mc-day{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
-  padding:11px 8px 9px; text-align:center; }
+.mc-day{ display:block; width:100%; appearance:none; cursor:pointer; font-family:inherit;
+  background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
+  padding:11px 8px 9px; text-align:center;
+  transition: border-color .18s var(--ease), background .18s var(--ease), transform .1s var(--ease); }
+.mc-day:hover{ border-color:var(--border3); }
+.mc-day:active{ transform:scale(.97); }
 .mc-day.match{ border-color:var(--violet-border); background:var(--violet-bg); }
 .mc-day.today{ border-color:var(--ember-border); background:var(--ember-bg); }
-.mc-md{ font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px; color:var(--ink); line-height:1; }
+.mc-day.sel{ border-color:var(--orange); }
+.mc-md{ display:block; font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px; color:var(--ink); line-height:1; }
 .mc-day.match .mc-md{ color:var(--violet2); }
 .mc-day.today .mc-md{ color:var(--orange2); }
-.mc-dt{ font-size:10px; color:var(--faint); margin-top:3px; }
+.mc-dt{ display:block; font-size:10px; color:var(--faint); margin-top:3px; }
 .mc-bar{ height:46px; margin:9px 0 6px; display:flex; align-items:flex-end; justify-content:center; }
-.mc-fill{ width:24px; border-radius:4px 4px 0 0; min-height:2px;
+.mc-fill{ display:block; width:24px; border-radius:4px 4px 0 0; min-height:2px;
   background:linear-gradient(180deg, var(--orange), var(--orange2)); }
 .mc-day.match .mc-fill{ background:linear-gradient(180deg, var(--violet), var(--violet2)); }
 .mc-day.zero .mc-fill{ background:var(--surface3); }
-.mc-ld{ font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; line-height:1.2; }
+.mc-ld{ display:block; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; line-height:1.2; }
 .mc-ld small{ font-size:9px; color:var(--faint); display:block; }
+.mc-ovr{ display:block; font-size:9.5px; color:var(--orange2); margin-top:5px; }
+.btn.mc-rst{ min-height:32px; padding:6px 11px; font-size:12px; }
+.mc-ed{ margin-top:15px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r);
+  padding:15px 16px 14px; animation: tgin .3s var(--ease) both; }
+.mc-ed-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; }
+.mc-ed-h .t{ font-size:13.5px; font-weight:700; color:var(--ink); }
+.mc-ed-h .s{ font-size:12px; color:var(--muted); }
+.mc-ed-c{ display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
+.mc-pick{
+  display:inline-flex; align-items:center; appearance:none; cursor:pointer;
+  font-family:inherit; font-size:12px; font-weight:600; color:var(--muted);
+  background:var(--surface); border:1px solid var(--border2); border-radius:999px;
+  padding:6px 12px; min-height:32px;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease);
+}
+.mc-pick:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
+.mc-pick:active{ transform:scale(.97); }
+.mc-pick.on{ color:#1a0d05; background:var(--orange); border-color:transparent; }
+.mc-ed-n{ font-size:11.5px; color:var(--faint); margin-top:12px; max-width:70ch; }
 .mc-note{ margin-top:16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .mc-txt{ margin-top:12px; font-size:12.5px; color:var(--muted); }
 .mc-txt b{ color:var(--text); font-weight:600; }
@@ -602,6 +626,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
+  .tg-dr, .mc-ed{ animation:none; }
   .dist-fill{ transition:none; }
   *{ transition:none !important; }
 }
@@ -714,12 +739,14 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
       <section class="card reveal" id="mc-card" style="--i:4" hidden>
         <div class="card-head">
           <h2>Microciclo</h2>
-          <span class="hint">giorni contati dalla gara, con il carico realmente svolto</span>
+          <span class="hint">giorni contati dalla gara, click su un giorno per correggerlo</span>
           <span class="spacer"></span>
           <span class="mc-legend" id="mc-legend"></span>
+          <button type="button" class="btn mc-rst" id="mc-reset" hidden>ripristina calendario</button>
         </div>
         <div class="card-body">
           <div class="mc-strip" id="mc-strip"></div>
+          <div id="mc-edit"></div>
           <div class="mc-txt" id="mc-txt"></div>
         </div>
       </section>
@@ -1042,17 +1069,54 @@ window.FORZA = window.FORZA || { roster:[] };
   })();
 
   // ================= MICROCICLO MD-x =================
-  // Le gare sono sia quelle gia' giocate (days) sia quelle a calendario (fixtures).
-  const matchSet = {};
-  dates.forEach(function(d){ if(d.is_match) matchSet[d.data] = 1; });
-  fixtures.forEach(function(f){ if(f && f.data) matchSet[f.data] = 1; });
-  const matchDates = Object.keys(matchSet).sort();
+  // Base: le gare gia' giocate (days) piu' quelle a calendario (fixtures).
+  // Sopra la base sta la mano del mister. Le correzioni per data vivono in
+  // 'rs_fio_micro' con lo stesso prefisso condiviso delle altre chiavi di squadra,
+  // cosi' il calendario potra' leggere le stesse correzioni senza duplicarle.
+  // Valori: 'MD' gara aggiunta, 'MD+1'..'MD-1' giorno forzato, '-' giorno fuori ciclo.
+  const LS_MICRO = 'rs_fio_micro';
+  let MC_DAY = {};
+  let MC_SEL = '';
+  function microLoad(){
+    MC_DAY = {};
+    try{
+      const raw = JSON.parse(localStorage.getItem(LS_MICRO) || '{}');
+      if(raw && typeof raw === 'object' && raw.day && typeof raw.day === 'object'){
+        Object.keys(raw.day).forEach(function(k){
+          const v = String(raw.day[k] || '');
+          if(v) MC_DAY[k] = v;
+        });
+      }
+    }catch(e){}
+  }
+  function microSave(){
+    try{ localStorage.setItem(LS_MICRO, JSON.stringify({ day: MC_DAY })); }catch(e){}
+  }
+  microLoad();
+
+  const calMatch = {};
+  dates.forEach(function(d){ if(d.is_match) calMatch[d.data] = 1; });
+  fixtures.forEach(function(f){ if(f && f.data) calMatch[f.data] = 1; });
+
+  let matchSet = {};
+  let matchDates = [];
+  function buildMatches(){
+    matchSet = {};
+    Object.keys(calMatch).forEach(function(ds){
+      if(MC_DAY[ds] && MC_DAY[ds] !== 'MD') return;
+      matchSet[ds] = 1;
+    });
+    Object.keys(MC_DAY).forEach(function(ds){ if(MC_DAY[ds] === 'MD') matchSet[ds] = 1; });
+    matchDates = Object.keys(matchSet).sort();
+  }
+  buildMatches();
 
   // MD = giorno gara, MD+n = giorni dopo l'ultima gara, MD-n = giorni alla prossima.
   // Nei buchi lunghi fra due gare vincono i primi due giorni di recupero, poi si
-  // conta all'indietro dalla gara successiva.
+  // conta all'indietro dalla gara successiva. La correzione a mano vince su tutto.
   function mdOf(ds){
     if(!ds) return '';
+    if(MC_DAY[ds]) return MC_DAY[ds] === '-' ? '' : MC_DAY[ds];
     if(matchSet[ds]) return 'MD';
     if(!matchDates.length) return '';
     let prev = null, next = null;
@@ -1072,19 +1136,23 @@ window.FORZA = window.FORZA || { roster:[] };
   // Profilo appreso dai dati GPS: quanto pesa ogni MD rispetto all'allenamento mediano.
   const trainLoads = dates.filter(function(d){ return !d.is_match && d.load > 0; }).map(function(d){ return d.load; });
   const TRAIN_MED = med(trainLoads);
-  const mdBuckets = {};
-  dates.forEach(function(d){
-    if(d.is_match || !(d.load > 0)) return;
-    const k = mdOf(d.data);
-    if(!k) return;
-    (mdBuckets[k] = mdBuckets[k] || []).push(d.load);
-  });
-  const MD_PROF = {};
-  Object.keys(mdBuckets).forEach(function(k){
-    if(mdBuckets[k].length >= 3 && TRAIN_MED > 0){
-      MD_PROF[k] = Math.max(0.45, Math.min(1.7, med(mdBuckets[k])/TRAIN_MED));
-    }
-  });
+  let MD_PROF = {};
+  function buildProf(){
+    const mdBuckets = {};
+    dates.forEach(function(d){
+      if(d.is_match || !(d.load > 0)) return;
+      const k = mdOf(d.data);
+      if(!k) return;
+      (mdBuckets[k] = mdBuckets[k] || []).push(d.load);
+    });
+    MD_PROF = {};
+    Object.keys(mdBuckets).forEach(function(k){
+      if(mdBuckets[k].length >= 3 && TRAIN_MED > 0){
+        MD_PROF[k] = Math.max(0.45, Math.min(1.7, med(mdBuckets[k])/TRAIN_MED));
+      }
+    });
+  }
+  buildProf();
 
   // Modello di periodizzazione della settimana tipo.
   const MD_PLAN = {
@@ -1114,8 +1182,8 @@ window.FORZA = window.FORZA || { roster:[] };
               ck:['Attivazione breve e reattiva','Palle inattive e situazioni di gara','Nessun lavoro lungo ad alta intensita','Conferma la lista delle convocate'] }
   };
 
-  const TODAY_MD = mdOf(TSTR);
-  const PLAN = MD_PLAN[TODAY_MD] || null;
+  let TODAY_MD = mdOf(TSTR);
+  let PLAN = MD_PLAN[TODAY_MD] || null;
 
   // settimana attiva: quella di oggi se presente, altrimenti l'ultima disponibile
   const curKey = dstr(mondayOf(NOW));
@@ -1123,11 +1191,15 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // ---- stato di oggi ----
   const todayRow = byDate[TSTR] || null;
-  let state; // match | train | rest | off
-  if(!inSeason) state='off';
-  else if(todayRow && todayRow.is_match) state='match';
-  else if(todayRow) state='train';
-  else state='rest';
+  // match | train | rest | off. La gara la decide matchSet, cosi' una correzione a
+  // mano nel microciclo cambia anche lo stato della giornata.
+  function todayState(){
+    if(!inSeason) return 'off';
+    if(matchSet[TSTR]) return 'match';
+    if(todayRow) return 'train';
+    return 'rest';
+  }
+  let state = todayState();
 
   // prossimo impegno (partita)
   const nextFix = fixtures.find(f=> f.data>=TSTR) || null;
@@ -1274,7 +1346,13 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // ---- striscia del microciclo: dalla gara precedente alla successiva ----
   function microRange(){
-    if(!matchDates.length) return null;
+    // Senza gare vicine resta la settimana corrente, cosi' il mister ha comunque
+    // dei giorni su cui mettere la gara a mano.
+    if(!matchDates.length){
+      const s = mondayOf(NOW);
+      const e = new Date(s); e.setDate(e.getDate()+6);
+      return { start:s, end:e };
+    }
     let prev = null, next = null;
     for(let i=0; i<matchDates.length; i++){
       if(matchDates[i] <= TSTR) prev = matchDates[i];
@@ -1311,21 +1389,38 @@ window.FORZA = window.FORZA || { roster:[] };
       cells.push({ ds:ds, d:new Date(d), md:mdOf(ds), load:load, row:row, isMatch:!!matchSet[ds] });
     }
 
-    document.getElementById('mc-strip').innerHTML = cells.map(function(c){
+    const strip = document.getElementById('mc-strip');
+    strip.innerHTML = cells.map(function(c){
       const cls = ['mc-day'];
       if(c.isMatch) cls.push('match');
       if(c.ds === TSTR) cls.push('today');
       if(!c.load) cls.push('zero');
+      if(c.ds === MC_SEL) cls.push('sel');
       const h = maxLoad ? Math.max(2, Math.round(c.load/maxLoad*46)) : 2;
-      const lbl = c.md || itShort(c.d);
+      const lbl = c.md || '·';
       const val = c.load ? NF.format(c.load) : (c.ds > TSTR ? 'da fare' : '-');
-      return '<div class="'+cls.join(' ')+'" title="'+esc(itDate(c.d))+'">'+
-        '<div class="mc-md">'+esc(lbl)+'</div>'+
-        '<div class="mc-dt">'+esc(itShort(c.d))+'</div>'+
-        '<div class="mc-bar"><div class="mc-fill" style="height:'+h+'px"></div></div>'+
-        '<div class="mc-ld">'+esc(val)+(c.load?'<small>u.a.</small>':'')+'</div>'+
-      '</div>';
+      return '<button type="button" class="'+cls.join(' ')+'" data-ds="'+esc(c.ds)+'" '+
+          'title="'+esc(itDate(c.d))+'" aria-expanded="'+(c.ds === MC_SEL ? 'true' : 'false')+'">'+
+        '<span class="mc-md">'+esc(lbl)+'</span>'+
+        '<span class="mc-dt">'+esc(itShort(c.d))+'</span>'+
+        '<span class="mc-bar"><span class="mc-fill" style="height:'+h+'px"></span></span>'+
+        '<span class="mc-ld">'+esc(val)+(c.load?'<small>u.a.</small>':'')+'</span>'+
+        (MC_DAY[c.ds] ? '<span class="mc-ovr">corretto a mano</span>' : '')+
+      '</button>';
     }).join('');
+
+    strip.querySelectorAll('.mc-day').forEach(function(b){
+      b.addEventListener('click', function(){
+        const ds = b.getAttribute('data-ds');
+        MC_SEL = (MC_SEL === ds) ? '' : ds;
+        renderMicro();
+      });
+    });
+
+    const rst = document.getElementById('mc-reset');
+    if(rst) rst.hidden = !Object.keys(MC_DAY).length;
+
+    renderMicroEdit();
 
     const lg = document.getElementById('mc-legend');
     if(lg) lg.textContent = 'carico = ' + (CAL.metric || 'Dist tot') + ' del giorno';
@@ -1337,11 +1432,118 @@ window.FORZA = window.FORZA || { roster:[] };
       if(pr) txt += ' In stagione questo giorno ha pesato circa il <b>'+Math.round(pr*100)+'%</b> di un allenamento tipico.';
     } else if(TODAY_MD){
       txt = 'Oggi e\' <b>'+esc(TODAY_MD)+'</b>, fuori dalla settimana tipo fra due gare.';
+    } else if(MC_DAY[TSTR] === '-'){
+      txt = 'Oggi e\' <b>fuori ciclo</b> per scelta: nessun riferimento MD, i controlli della seduta restano generici.';
     } else {
-      txt = 'Nessuna gara vicina a calendario: la giornata non ha una posizione nel microciclo.';
+      txt = 'Nessuna gara vicina a calendario: la giornata non ha una posizione nel microciclo. '+
+            'Click sul giorno della gara per metterla a mano.';
     }
     document.getElementById('mc-txt').innerHTML = txt;
   }
+
+  // ---- correzione a mano di un giorno ----
+  // Il calendario resta la base: qui si scrive solo la differenza. Ogni scelta rifa'
+  // i conti su stato di oggi, focus, checklist, obiettivi, alert e controlli seduta.
+  const MC_PICKS = [
+    { k:'',     l:'Dal calendario' },
+    { k:'MD',   l:'Gara' },
+    { k:'MD+1', l:'MD+1' },
+    { k:'MD+2', l:'MD+2' },
+    { k:'MD-5', l:'MD-5' },
+    { k:'MD-4', l:'MD-4' },
+    { k:'MD-3', l:'MD-3' },
+    { k:'MD-2', l:'MD-2' },
+    { k:'MD-1', l:'MD-1' },
+    { k:'-',    l:'Fuori ciclo' }
+  ];
+
+  function mcAuto(ds){
+    const keep = MC_DAY[ds];
+    delete MC_DAY[ds];
+    buildMatches();
+    const v = mdOf(ds);
+    if(keep) MC_DAY[ds] = keep;
+    buildMatches();
+    return v;
+  }
+
+  function renderMicroEdit(){
+    const box = document.getElementById('mc-edit');
+    if(!box) return;
+    if(!MC_SEL){ box.innerHTML = ''; return; }
+
+    const d    = parse(MC_SEL);
+    const cur  = MC_DAY[MC_SEL] || '';
+    const auto = mcAuto(MC_SEL);
+    const plan = MD_PLAN[mdOf(MC_SEL)] || null;
+
+    box.innerHTML = '<div class="mc-ed">'+
+      '<div class="mc-ed-h">'+
+        '<span class="t">'+esc(itDate(d))+'</span>'+
+        '<span class="s">'+(plan ? esc(plan.tit.toLowerCase()) : 'nessuna posizione nel microciclo')+'</span>'+
+      '</div>'+
+      '<div class="mc-ed-c">'+
+        MC_PICKS.map(function(p){
+          return '<button type="button" class="mc-pick'+(p.k === cur ? ' on' : '')+'" data-k="'+esc(p.k)+'" '+
+            'aria-pressed="'+(p.k === cur ? 'true' : 'false')+'">'+esc(p.l)+'</button>';
+        }).join('')+
+      '</div>'+
+      '<div class="mc-ed-n">'+
+        (cur
+          ? 'Giorno corretto a mano. Dal calendario sarebbe <b>'+esc(auto || 'fuori ciclo')+'</b>.'
+          : 'Giorno preso dal calendario. Una correzione vale solo su questo dispositivo e non tocca i dati del mister.')+
+      '</div>'+
+    '</div>';
+
+    box.querySelectorAll('.mc-pick').forEach(function(b){
+      b.addEventListener('click', function(){
+        microSet(MC_SEL, b.getAttribute('data-k'));
+      });
+    });
+  }
+
+  function microSet(ds, k){
+    if(!ds) return;
+    if(k) MC_DAY[ds] = k; else delete MC_DAY[ds];
+    microSave();
+    applyMicro();
+    const lbl = (MC_PICKS.find(function(p){ return p.k === k; }) || {}).l || 'dal calendario';
+    toast(itShort(parse(ds))+': '+lbl.toLowerCase());
+  }
+
+  // Rifa' tutto quello che dipende dalla posizione nel microciclo.
+  function applyMicro(){
+    buildMatches();
+    buildProf();
+    TODAY_MD = mdOf(TSTR);
+    PLAN     = MD_PLAN[TODAY_MD] || null;
+    state    = todayState();
+    TG_MDK   = TG_MD[TODAY_MD] ? TODAY_MD : '';
+    TG_COEF  = TG_MDK ? TG_MD[TG_MDK] : TG_GEN;
+    renderKpis();
+    renderFocus();
+    renderChecklist();
+    renderMicro();
+    if(document.getElementById('tg-card')) renderTargets();
+    totals();
+  }
+
+  (function bindMicro(){
+    const rst = document.getElementById('mc-reset');
+    if(rst) rst.addEventListener('click', function(){
+      MC_DAY = {};
+      MC_SEL = '';
+      microSave();
+      applyMicro();
+      toast('Microciclo riportato al calendario');
+    });
+    // stesse correzioni se la pagina e' aperta in un'altra scheda
+    window.addEventListener('storage', function(ev){
+      if(ev && ev.key && ev.key !== LS_MICRO) return;
+      microLoad();
+      applyMicro();
+    });
+  })();
 
   function renderAcwr(){
     const last = ACWR[ACWR.length-1] || null;
@@ -2774,8 +2976,8 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // Il giorno di riferimento: oggi se ha una posizione nel microciclo, altrimenti
   // si usa un allenamento tipo cosi' la card resta utile anche fuori stagione.
-  const TG_MDK  = TG_MD[TODAY_MD] ? TODAY_MD : '';
-  const TG_COEF = TG_MDK ? TG_MD[TG_MDK] : TG_GEN;
+  let TG_MDK  = TG_MD[TODAY_MD] ? TODAY_MD : '';
+  let TG_COEF = TG_MDK ? TG_MD[TG_MDK] : TG_GEN;
 
   const TG_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 
