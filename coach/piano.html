@@ -270,10 +270,28 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-dose i.warn{ color:var(--orange2); }
 .btn.tg-add{ min-height:32px; padding:6px 11px; font-size:12px; }
 .btn.tg-add svg{ width:13px; height:13px; }
+.tg-al{ margin-top:18px; padding-top:16px; border-top:1px solid var(--border2); }
+.tg-al-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; }
+.tg-al-h .t{ font-size:13.5px; font-weight:700; color:var(--ink); }
+.tg-al-h .s{ font-size:12px; color:var(--muted); }
+.tg-al-n{ font-size:12px; color:var(--muted); margin-top:7px; max-width:70ch; }
+.tg-arow{ display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:10px 16px;
+  padding:13px 0; border-bottom:1px solid var(--border); }
+.tg-arow:first-of-type{ margin-top:13px; border-top:1px solid var(--border); }
+.tg-arow .nm{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.tg-arow .de{ font-size:11.5px; color:var(--muted); margin-top:4px; }
+.tg-gap{ text-align:right; }
+.tg-gap b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:27px;
+  letter-spacing:.5px; line-height:1; color:oklch(74% 0.19 25); white-space:nowrap; }
+.tg-gap i{ display:block; font-style:normal; font-size:11px; color:var(--faint); margin-top:5px; white-space:nowrap; }
+.tg-ok{ font-size:11.5px; color:var(--muted); margin-top:13px; }
+.tg-ok b{ color:var(--text); font-weight:600; }
 .tg-foot{ font-size:11px; color:var(--faint); margin-top:12px; }
 @media (max-width: 620px){
   .tg-row{ grid-template-columns:1fr auto; }
   .tg-row .tg-add{ grid-column:2; justify-self:end; }
+  .tg-arow{ grid-template-columns:1fr auto; }
+  .tg-arow .tg-add{ grid-column:2; justify-self:end; }
 }
 
 /* ---------- costruzione seduta ---------- */
@@ -670,6 +688,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           <div class="tg-note" id="tg-note"></div>
           <div class="tg-grid" id="tg-grid"></div>
           <div id="tg-drills"></div>
+          <div id="tg-alert"></div>
           <div class="tg-foot" id="tg-foot"></div>
         </div>
       </section>
@@ -2821,6 +2840,7 @@ window.FORZA = window.FORZA || { roster:[] };
     }).join('');
 
     renderDrills();
+    renderAlert();
 
     document.getElementById('tg-foot').textContent =
       'Riferimento: mediana delle gare oltre 80 minuti, ' + (ref.n||0) + ' prestazioni. '+
@@ -2894,6 +2914,147 @@ window.FORZA = window.FORZA || { roster:[] };
         });
         saveBlocks(); renderBuilder();
         toast(d.n+' aggiunto alla costruzione seduta');
+      });
+    });
+  }
+
+  // ================= CHI RESTA INDIETRO NELLA SETTIMANA =================
+  // Regola: quello che un'atleta produce in una gara intera va rifatto da due a due
+  // volte e mezzo nella settimana di lavoro. Una terzino che in gara corre 200 m sopra
+  // i 23 km/h ne deve fare dai 400 ai 500 fra il giorno dopo la partita e la rifinitura.
+  // Il microciclo pero' e' costruito sul riferimento del ruolo: chi in gara va molto
+  // oltre la mediana del suo ruolo riceve meno di quello che le serve e va integrata.
+  // Mediana per atleta delle gare oltre 80 minuti (metri sopra i 23 km/h) e numero di
+  // gare intere: calcolate una volta sola dallo snapshot GPS, come TG_REF.
+  const TG_ATL = {
+    'Andreoni':      { hi:161, n:14 },
+    'Baccaro':       { hi:63,  n:17 },
+    'Bedini':        { hi:65,  n:12 },
+    'Bellani':       { hi:28,  n:11 },
+    'Benedettini':   { hi:126, n:22 },
+    'Bianchi':       { hi:7,   n:7  },
+    'Boldrini':      { hi:184, n:7  },
+    'De Gregorio':   { hi:95,  n:13 },
+    'El Miroun':     { hi:27,  n:3  },
+    'Fontana':       { hi:85,  n:2  },
+    'Ieva':          { hi:8,   n:5  },
+    'Luciani':       { hi:56,  n:4  },
+    'Magazzini':     { hi:33,  n:1  },
+    'Miraldi':       { hi:14,  n:6  },
+    'Muka':          { hi:54,  n:2  },
+    'Pieri Arianna': { hi:94,  n:17 },
+    'Pieri Viola':   { hi:45,  n:19 },
+    'Sarti':         { hi:142, n:19 },
+    'Tomassoni':     { hi:79,  n:15 }
+  };
+
+  // I giorni che compongono la settimana di lavoro. Sommando i loro pesi si ottiene
+  // quanto il microciclo consegna rispetto a una gara: due volte e mezzo circa.
+  const TG_WK_DAYS = ['MD+1','MD+2','MD-4','MD-3','MD-2','MD-1'];
+  const TG_WK_SUM  = TG_WK_DAYS.reduce(function(s, k){ return s + (TG_MD[k] ? TG_MD[k].hi : 0); }, 0);
+  const TG_WK_LO   = 2.0;
+  const TG_WK_HI   = 2.5;
+
+  // Il mezzo piu' redditizio fra quelli a ripetizione: serve sia a dosare il recupero
+  // sia a fissare la soglia dell'alert. Sotto una ripetizione il buco non e' colmabile
+  // e l'atleta conta come in linea.
+  const TG_WK_DR = (function(){
+    let best = null;
+    (TG_DRILL.hi || []).forEach(function(d){ if(d.per === 'rip' && (!best || d.q > best.q)) best = d; });
+    return best;
+  })();
+  const TG_WK_MIN = TG_WK_DR ? TG_WK_DR.q : 25;
+
+  function tgWeekPlan(role){
+    const ref = TG_REF[role] || TG_REF['Squadra'];
+    return tgRound((+ref.hi || 0) * TG_WK_SUM, 5);
+  }
+
+  function tgLate(){
+    const out = { late:[], ok:[], none:[] };
+    ROSTER.forEach(function(p){
+      if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
+      const a = TG_ATL[p.name];
+      if(!a){ out.none.push(p.name); return; }
+      const role = TG_REF[p.role] ? p.role : 'Squadra';
+      const plan = tgWeekPlan(role);
+      const lo   = tgRound(a.hi * TG_WK_LO, 5);
+      const up   = tgRound(a.hi * TG_WK_HI, 5);
+      const gap  = lo - plan;
+      if(gap >= TG_WK_MIN){
+        out.late.push({ name:p.name, role:role, gara:a.hi, n:a.n, plan:plan, lo:lo, up:up, gap:gap });
+      } else {
+        out.ok.push(p.name);
+      }
+    });
+    out.late.sort(function(x, y){ return y.gap - x.gap; });
+    return out;
+  }
+
+  function tgNames(arr){
+    if(!arr.length) return '';
+    if(arr.length <= 5) return arr.map(esc).join(', ');
+    return arr.slice(0, 5).map(esc).join(', ') + ' e altre ' + (arr.length - 5);
+  }
+
+  function renderAlert(){
+    const box = document.getElementById('tg-alert');
+    if(!box) return;
+    const g = tgLate();
+
+    let html = '<div class="tg-al">'+
+      '<div class="tg-al-h">'+
+        '<span class="t">Chi resta indietro nella settimana</span>'+
+        '<span class="s">metri sopra i 23 km/h</span>'+
+      '</div>'+
+      '<div class="tg-al-n">In settimana ogni atleta deve rifare da due a due volte e mezzo i metri '+
+        'sopra i 23 km/h della sua gara. Il microciclo del ruolo ne consegna sempre gli stessi: '+
+        'chi in gara corre molto piu\' della mediana del suo ruolo resta scoperta e va integrata a parte.</div>';
+
+    if(g.late.length){
+      html += g.late.map(function(r, i){
+        const reps = Math.max(1, Math.ceil(r.gap / TG_WK_MIN));
+        const few  = r.n < 5 ? ' &#183; solo '+r.n+(r.n === 1 ? ' gara intera' : ' gare intere') : '';
+        return '<div class="tg-arow">'+
+          '<div>'+
+            '<div class="nm">'+esc(r.name)+'</div>'+
+            '<div class="de tnum">gara '+NF.format(r.gara)+' m &#183; le servono da '+NF.format(r.lo)+
+              ' a '+NF.format(r.up)+' m &#183; il piano '+esc(r.role.toLowerCase())+' ne da '+
+              NF.format(r.plan)+few+'</div>'+
+          '</div>'+
+          '<div class="tg-gap">'+
+            '<b class="tnum">'+NF.format(r.gap)+' m</b>'+
+            '<i class="tnum">'+(TG_WK_DR ? reps+' x '+(TG_WK_DR.x || 'ripetizione') : 'da integrare')+'</i>'+
+          '</div>'+
+          '<button type="button" class="btn tg-add" data-a="'+i+'">'+TG_PLUS+'aggiungi</button>'+
+        '</div>';
+      }).join('');
+    } else {
+      html += '<div class="tg-ok">Nessuna atleta sotto la richiesta della settimana: '+
+        'il piano del ruolo copre tutte quelle con gare intere registrate.</div>';
+    }
+
+    const coda = [];
+    if(g.ok.length)   coda.push('In linea: <b>'+g.ok.length+'</b> ('+tgNames(g.ok)+').');
+    if(g.none.length) coda.push('Senza gare oltre 80 minuti, non valutabili: <b>'+g.none.length+'</b> ('+tgNames(g.none)+').');
+    if(coda.length) html += '<div class="tg-ok">'+coda.join(' ')+'</div>';
+
+    box.innerHTML = html + '</div>';
+
+    box.querySelectorAll('.tg-add').forEach(function(b){
+      b.addEventListener('click', function(){
+        const r = g.late[+b.getAttribute('data-a')];
+        if(!r || !TG_WK_DR) return;
+        const reps = Math.max(1, Math.ceil(r.gap / TG_WK_MIN));
+        blocks.push({
+          name: TG_WK_DR.n,
+          min:  Math.max(1, Math.ceil(reps * TG_WK_DR.mn)),
+          rpe:  TG_WK_DR.rpe,
+          note: reps+' x '+(TG_WK_DR.x || 'ripetizione')+' '+MD+' individuale '+r.name+' '+MD+
+                ' recupera '+r.gap+' m sopra 23 km/h nella settimana'
+        });
+        saveBlocks(); renderBuilder();
+        toast('Supplemento per '+r.name+' aggiunto alla costruzione seduta');
       });
     });
   }
