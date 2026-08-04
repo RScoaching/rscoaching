@@ -386,6 +386,17 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   color:var(--muted); font-weight:700; margin-bottom:6px; }
 .wb-ta{ resize:vertical; min-height:60px; line-height:1.55; }
 .wb-two{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+/* campo e atlete: da qui escono i metri quadri a testa */
+.wb-cmp{ margin-top:14px; }
+.wb-three{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:2px; }
+.wb-three input{ text-align:center; font-variant-numeric:tabular-nums; }
+.wb-mq{ display:flex; flex-wrap:wrap; align-items:baseline; gap:7px;
+  margin-top:12px; padding-top:11px; border-top:1px solid var(--border); }
+.mq-v{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:23px; letter-spacing:.4px;
+  color:var(--violet2); line-height:1; }
+.mq-l{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:700; }
+.mq-t{ flex:1 1 100%; font-size:11.5px; color:var(--muted); line-height:1.5; }
+.mq-e{ font-size:11.5px; color:var(--faint); line-height:1.55; }
 .wb-acts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
 .wb-prn{ margin-top:14px; }
 .wb-prn .wb-lb.sub{ margin-top:12px; }
@@ -2118,7 +2129,8 @@ window.FORZA = window.FORZA || { roster:[] };
     // i principi escono dalla riga prima di tutto: parole come "pressing" o "finalizzazione"
     // deciderebbero il tipo del blocco al posto dell'esercizio scritto dal preparatore
     const prn = wrPrinRead(src0);
-    const raw = wrPrinCut(src0);
+    const cmp = wrCampoRead(src0);
+    const raw = wrTailCut(src0);
     let s = ' ' + wrNorm(raw) + ' ';
 
     // il tipo va deciso subito: serve a capire se "6x30 m" sono ripetute o le misure del campo
@@ -2128,6 +2140,11 @@ window.FORZA = window.FORZA || { roster:[] };
     let rpe = 0, durTot = 0, dur = 0, recG = 0;
     let repN = 0, repSets = 0, repDist = 0, reps = 0, nAtl = 0;
     let fmt = '', dim = '', dist = '', who = '';
+    // campo e atlete scelti nel pannello: vincono su quello che si legge nella riga,
+    // esattamente come "tot 25'" vince sui minuti dedotti dalle serie
+    let dimW = 0, dimL = 0, fmtN = 0;
+    if(cmp.w > 0 && cmp.l > 0){ dimW = cmp.w; dimL = cmp.l; dim = dimW+'x'+dimL+' m'; }
+    if(cmp.pl > 0) nAtl = cmp.pl;
 
     // 1. RPE dichiarato: "rpe 8" oppure "@8"
     s = s.replace(/\brpe\s*[:.\-]?\s*(\d{1,2})\b/g, function(m,a){ rpe = Math.min(10, Math.max(1, +a)); return ' '; });
@@ -2139,11 +2156,15 @@ window.FORZA = window.FORZA || { roster:[] };
     });
 
     // 3. quante atlete
-    s = s.replace(/\b(\d{1,2})\s*(?:atlete|giocatrici|ragazze|calciatrici)\b/g, function(m,a){ nAtl = +a; return ' '; });
+    s = s.replace(/\b(\d{1,2})\s*(?:atlete|giocatrici|ragazze|calciatrici)\b/g, function(m,a){ if(!nAtl) nAtl = +a; return ' '; });
 
     // 4. formato di gioco: "6c6+2", "5vs5", "4 contro 4"
     s = s.replace(/\b(\d{1,2})\s*(?:c|vs|v|contro)\s*(\d{1,2})\s*(\+\s*\d{1,2})?/g, function(m,a,b,c){
-      if(!fmt) fmt = a+'c'+b+(c ? c.replace(/\s+/g,'') : '');
+      if(!fmt){
+        fmt = a+'c'+b+(c ? c.replace(/\s+/g,'') : '');
+        // "6c6+2" sono 14 in campo: serve a proporre le atlete quando non sono scritte
+        fmtN = (+a) + (+b) + (c ? (+String(c).replace(/[^0-9]/g,'') || 0) : 0);
+      }
       return ' ';
     });
 
@@ -2177,7 +2198,7 @@ window.FORZA = window.FORZA || { roster:[] };
     s = s.replace(/\b(\d{1,3})\s*x\s*(\d{1,3})\b/g, function(m,a,b){
       const A = +a, B = +b;
       if(type.d && A <= 12 && B >= 10 && !repN){ repN = A; repDist = B; }
-      else if(A >= 8 && B >= 8 && !dim){ dim = A+'x'+B+' m'; }
+      else if(A >= 8 && B >= 8){ if(!dim){ dim = A+'x'+B+' m'; dimW = A; dimL = B; } }
       else if(!repN){ repN = A; reps = B; }
       return ' ';
     });
@@ -2261,13 +2282,15 @@ window.FORZA = window.FORZA || { roster:[] };
     if(recLbl) det.push(recLbl);
     if(dist) det.push(dist);
     if(nAtl) det.push(nAtl+' atlete');
+    if(dimW && dimL && nAtl) det.push(NF1.format((dimW*dimL)/nAtl)+' mq a testa');
     if(who) det.push(who);
 
     let name = wrClean(s);
     if(!name) name = type.lab;
     return {
       name:name, min:min, est:est, rpe:(rpe || type.rpe),
-      note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam, prn:prn
+      note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam, prn:prn,
+      w:dimW, l:dimL, pl:(nAtl || fmtN)
     };
   }
 
@@ -2316,18 +2339,48 @@ window.FORZA = window.FORZA || { roster:[] };
   function wrPrinCut(src){
     return String(src||'').replace(/\[\s*princip[^\]]*\]/gi, ' ').replace(/\s+/g,' ').trim();
   }
+  // stessa idea per il campo: "[campo: 30x25 m / 12 atlete]" viaggia in coda alla riga,
+  // cosi' le dimensioni scelte nel pannello non finiscono nel nome del blocco
+  function wrCampoTok(src){
+    const m = String(src||'').match(/\[\s*campo[^\]]*\]/i);
+    return m ? (' '+m[0]) : '';
+  }
+  function wrCampoCut(src){
+    return String(src||'').replace(/\[\s*campo[^\]]*\]/gi, ' ').replace(/\s+/g,' ').trim();
+  }
+  // coda della riga: prima il campo, poi i principi. Il corpo resta come l'ha scritto il preparatore.
+  function wrTailTok(src){ return wrCampoTok(src)+wrPrinTok(src); }
+  function wrTailCut(src){ return wrPrinCut(wrCampoCut(src)); }
+  function wrCampoRead(raw){
+    const out = { w:0, l:0, pl:0 };
+    const m = String(raw||'').match(/\[\s*campo\s*[:.\-]?\s*([^\]]*)\]/i);
+    if(!m) return out;
+    const t = wrNorm(m[1]);
+    const d = t.match(/(\d{1,3})\s*x\s*(\d{1,3})/);
+    if(d){ out.w = Math.min(120, +d[1]); out.l = Math.min(120, +d[2]); }
+    const p = t.match(/(\d{1,3})\s*(?:atlete|giocatrici|giocatori)/);
+    if(p) out.pl = Math.min(30, +p[1]);
+    return out;
+  }
+  function wrSetCampo(src, w, l, pl){
+    const s = wrTailCut(src);
+    const b = [];
+    if(w > 0 && l > 0) b.push(w+'x'+l+' m');
+    if(pl > 0) b.push(pl+' atlete');
+    return s + (b.length ? (' [campo: '+b.join(' / ')+']') : '') + wrPrinTok(src);
+  }
   function wrSetTot(src, min){
-    const s = wrPrinCut(src)
+    const s = wrTailCut(src)
       .replace(new RegExp('\\b(?:tot|totale|in tutto)\\s*[:.\\-]?\\s*'+WR_T,'g'), ' ')
       .replace(/\s+/g,' ').trim();
-    return (min > 0 ? (s+' tot '+min+"'") : s) + wrPrinTok(src);
+    return (min > 0 ? (s+' tot '+min+"'") : s) + wrTailTok(src);
   }
   function wrSetRpe(src, rpe){
-    const s = wrPrinCut(src)
+    const s = wrTailCut(src)
       .replace(/\brpe\s*[:.\-]?\s*\d{1,2}\b/g, ' ')
       .replace(/(^|\s)@\s*\d{1,2}(?=\s|$)/g, ' ')
       .replace(/\s+/g,' ').trim();
-    return (rpe > 0 ? (s+' rpe '+rpe) : s) + wrPrinTok(src);
+    return (rpe > 0 ? (s+' rpe '+rpe) : s) + wrTailTok(src);
   }
   // stesso principio per principi e sotto-principi: stanno in coda alla riga
   // fra parentesi quadre, separati da barra perche' la virgola spezza i blocchi
@@ -2351,7 +2404,7 @@ window.FORZA = window.FORZA || { roster:[] };
     return out;
   }
   function wrSetPrin(src, p, subs){
-    const s = wrPrinCut(src);
+    const s = wrTailCut(src) + wrCampoTok(src);
     if(!p) return s;
     return s+' [principi: '+[p].concat(subs||[]).join(' / ')+']';
   }
@@ -2396,6 +2449,38 @@ window.FORZA = window.FORZA || { roster:[] };
     return h+'</div>';
   }
 
+  // metri quadri a testa: e' il numero che spiega perche' lo stesso esercizio,
+  // a parita' di minuti, un giorno corre e un giorno picchia
+  function wrMq(b){
+    return (b && b.w > 0 && b.l > 0 && b.pl > 0) ? (b.w*b.l)/b.pl : 0;
+  }
+  function wrMqHtml(b){
+    const mq = wrMq(b);
+    if(!mq) return '<span class="mq-e">Metti larghezza, lunghezza e quante atlete: '+
+      'qui esce lo spazio a testa, quello che cambia il carico a parita\' di minuti.</span>';
+    return '<span class="mq-v">'+NF1.format(mq)+'</span>'+
+      '<span class="mq-l">mq per atleta</span>'+
+      '<span class="mq-t">'+NF.format(b.w*b.l)+' mq di campo su '+b.pl+' atlete. '+
+      'Sopra i 100 si corre, sotto i 40 si va di duelli e cambi di direzione.</span>';
+  }
+  function wrCmpHtml(b){
+    return '<div class="wb-cmp">'+
+      '<span class="wb-lb">Campo e atlete</span>'+
+      '<div class="wb-three">'+
+        '<label><span class="wb-lb">Largh. m</span>'+
+          '<input class="bld-in" type="number" min="0" max="120" step="1" '+
+          'value="'+(b.w || '')+'" data-f="cw" placeholder="0"></label>'+
+        '<label><span class="wb-lb">Lungh. m</span>'+
+          '<input class="bld-in" type="number" min="0" max="120" step="1" '+
+          'value="'+(b.l || '')+'" data-f="cl" placeholder="0"></label>'+
+        '<label><span class="wb-lb">Atlete</span>'+
+          '<input class="bld-in" type="number" min="0" max="30" step="1" '+
+          'value="'+(b.pl || '')+'" data-f="cp" placeholder="0"></label>'+
+      '</div>'+
+      '<div class="wb-mq">'+wrMqHtml(b)+'</div>'+
+    '</div>';
+  }
+
   // nella costruzione i principi viaggiano in coda alla nota del blocco
   function wrNote(b){
     const l = prnList(b);
@@ -2421,13 +2506,14 @@ window.FORZA = window.FORZA || { roster:[] };
         '<label><span class="wb-lb">RPE</span>'+
           '<input class="bld-in" type="number" min="0" max="10" step="1" value="'+b.rpe+'" data-f="rpe"></label>'+
       '</div>'+
+      wrCmpHtml(b)+
       prnEdHtml(b)+
       '<div class="wb-acts">'+
         '<button type="button" class="sv-btn" data-act="dup">Duplica</button>'+
         '<button type="button" class="sv-btn del" data-act="del">Elimina</button>'+
       '</div>'+
       '<div class="mc-ed-n">Quello che scrivi qui riscrive la riga negli appunti a sinistra. '+
-        'Minuti, RPE e principi ci aggiungono "tot", "rpe" e "[principi: ...]", '+
+        'Minuti, RPE, campo e principi ci aggiungono "tot", "rpe", "[campo: ...]" e "[principi: ...]", '+
         'il resto della riga resta come l\'hai scritta.</div>'+
     '</div>';
   }
@@ -2516,6 +2602,11 @@ window.FORZA = window.FORZA || { roster:[] };
       if(f !== 'src'){ const el = ed.querySelector('[data-f="src"]'); if(el) el.value = b.src; }
       if(f !== 'min'){ const el = ed.querySelector('[data-f="min"]'); if(el) el.value = b.min; }
       if(f !== 'rpe'){ const el = ed.querySelector('[data-f="rpe"]'); if(el) el.value = b.rpe; }
+      if(f !== 'cw'){ const el = ed.querySelector('[data-f="cw"]'); if(el) el.value = b.w || ''; }
+      if(f !== 'cl'){ const el = ed.querySelector('[data-f="cl"]'); if(el) el.value = b.l || ''; }
+      if(f !== 'cp'){ const el = ed.querySelector('[data-f="cp"]'); if(el) el.value = b.pl || ''; }
+      const mq = ed.querySelector('.wb-mq');
+      if(mq) mq.innerHTML = wrMqHtml(b);
     }
     wrSum(bl);
   }
@@ -2620,6 +2711,16 @@ window.FORZA = window.FORZA || { roster:[] };
       if(f === 'src') list[i] = el.value;
       else if(f === 'min') list[i] = wrSetTot(list[i], Math.max(0, Math.min(240, +el.value||0)));
       else if(f === 'rpe') list[i] = wrSetRpe(list[i], Math.max(0, Math.min(10, +el.value||0)));
+      else if(f === 'cw' || f === 'cl' || f === 'cp'){
+        // gli altri due campi restano quelli gia' letti dalla riga, cosi' non si perdono
+        const b0 = wrParse(list[i]) || { w:0, l:0, pl:0 };
+        let w = b0.w || 0, l = b0.l || 0, pl = b0.pl || 0;
+        const v = Math.max(0, +el.value || 0);
+        if(f === 'cw') w = Math.min(120, v);
+        else if(f === 'cl') l = Math.min(120, v);
+        else pl = Math.min(30, v);
+        list[i] = wrSetCampo(list[i], w, l, pl);
+      }
       wrWrite(list);
       wrSync(i, f);
     });
