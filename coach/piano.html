@@ -349,7 +349,12 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .wr-blk{
   display:grid; grid-template-columns:1fr auto auto; gap:14px; align-items:center;
   padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm);
+  width:100%; appearance:none; cursor:pointer; font-family:inherit; text-align:left; color:inherit;
+  transition: border-color .16s var(--ease), background .16s var(--ease), transform .1s var(--ease);
 }
+.wr-blk:hover{ border-color:var(--border3); background:var(--surface3); }
+.wr-blk:active{ transform:scale(.995); }
+.wr-blk.on{ border-color:var(--orange); background:var(--surface3); }
 .wr-blk .wb-main{ min-width:0; }
 .wr-tag{
   display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
@@ -358,8 +363,9 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 }
 .wr-tag.hi{ color:var(--orange2); background:var(--ember-bg); border-color:var(--ember-border); }
 .wr-tag.lo{ color:oklch(80% 0.16 152); background:oklch(70% 0.18 152 / 0.10); border-color:oklch(70% 0.18 152 / 0.28); }
-.wr-nm{ font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px; color:var(--ink); line-height:1.15; margin-top:5px; }
-.wr-det{ font-size:11.5px; color:var(--muted); margin-top:3px; }
+.wr-nm{ display:block; font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px; color:var(--ink); line-height:1.15; margin-top:5px; }
+.wr-det{ display:block; font-size:11.5px; color:var(--muted); margin-top:3px; }
+.wr-det[hidden]{ display:none; }
 .wr-det i{ font-style:normal; color:var(--faint); margin:0 5px; }
 .wr-num{ text-align:right; }
 .wr-num b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:24px;
@@ -367,6 +373,15 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .wr-num b i{ font-style:normal; font-size:17px; color:var(--faint); margin-right:1px; }
 .wr-num small{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:700; }
 .wr-num.rpe b{ color:var(--orange2); }
+/* editor del singolo blocco, si apre sotto la riga cliccata */
+.wb-ed{ background:var(--surface); border:1px solid var(--border2); border-radius:var(--r-sm);
+  padding:13px 14px 14px; animation: tgin .3s var(--ease) both; }
+.wb-fl{ display:block; margin-top:12px; }
+.wb-lb{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin-bottom:6px; }
+.wb-ta{ resize:vertical; min-height:60px; line-height:1.55; }
+.wb-two{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.wb-acts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
 .wr-sum{
   display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
   margin-top:14px; padding-top:14px; border-top:1px solid var(--border2);
@@ -689,7 +704,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
-  .tg-dr, .mc-ed, .yd-ed, .fx-ed{ animation:none; }
+  .tg-dr, .mc-ed, .yd-ed, .fx-ed, .wb-ed{ animation:none; }
   .dist-fill{ transition:none; }
   *{ transition:none !important; }
 }
@@ -2234,32 +2249,81 @@ window.FORZA = window.FORZA || { roster:[] };
     });
     return out;
   }
+  // ogni blocco si porta dietro la riga da cui nasce: serve per poterla riscrivere dal pannello
   function wrBlocks(){
-    return wrSplit(document.getElementById('wr-in').value).map(wrParse).filter(Boolean);
+    const out = [];
+    wrSplit(document.getElementById('wr-in').value).forEach(function(src){
+      const b = wrParse(src);
+      if(b){ b.src = src; out.push(b); }
+    });
+    return out;
+  }
+  function wrSrcs(){ return wrBlocks().map(function(b){ return b.src; }); }
+
+  function wrWrite(list){
+    const ta = document.getElementById('wr-in');
+    ta.value = list.join('\n');
+    try{ localStorage.setItem(WR_KEY, ta.value); }catch(e){}
   }
 
-  function renderWriter(){
-    const prev = document.getElementById('wr-prev');
-    const sum  = document.getElementById('wr-sum');
-    const bl   = wrBlocks();
-    if(!bl.length){
-      prev.innerHTML = '<div class="wr-empty">Scrivi cosa si e\' fatto e qui compare la seduta impaginata.<br>'+
-                       'Poi con <b>Crea la seduta</b> finisce nella costruzione qui sotto.</div>';
-      sum.hidden = true;
-      return;
-    }
-    prev.innerHTML = bl.map(function(b){
-      const cls = b.fam === 'hi' ? ' hi' : (b.fam === 'lo' ? ' lo' : '');
-      return '<div class="wr-blk">'+
-        '<div class="wb-main">'+
-          '<span class="wr-tag'+cls+'">'+esc(b.tag)+'</span>'+
-          '<div class="wr-nm">'+esc(b.name)+'</div>'+
-          (b.note ? '<div class="wr-det">'+esc(b.note)+'</div>' : '')+
-        '</div>'+
-        '<div class="wr-num"><b>'+(b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min+'</b><small>min</small></div>'+
-        '<div class="wr-num rpe"><b>'+b.rpe+'</b><small>rpe</small></div>'+
-      '</div>';
-    }).join('');
+  // minuti e sforzo si scrivono dentro la riga, cosi' il testo resta l'unica verita'
+  function wrSetTot(src, min){
+    const s = String(src||'')
+      .replace(new RegExp('\\b(?:tot|totale|in tutto)\\s*[:.\\-]?\\s*'+WR_T,'g'), ' ')
+      .replace(/\s+/g,' ').trim();
+    return min > 0 ? (s+' tot '+min+"'") : s;
+  }
+  function wrSetRpe(src, rpe){
+    const s = String(src||'')
+      .replace(/\brpe\s*[:.\-]?\s*\d{1,2}\b/g, ' ')
+      .replace(/(^|\s)@\s*\d{1,2}(?=\s|$)/g, ' ')
+      .replace(/\s+/g,' ').trim();
+    return rpe > 0 ? (s+' rpe '+rpe) : s;
+  }
+
+  let WR_OPEN = -1;
+  let WR_N = 0;
+
+  function wrEdHtml(b, i){
+    return '<div class="wb-ed" data-ed="'+i+'">'+
+      '<div class="mc-ed-h">'+
+        '<span class="t">Blocco '+(i+1)+'</span>'+
+        '<span class="s">'+esc(b.tag)+'</span>'+
+      '</div>'+
+      '<label class="wb-fl"><span class="wb-lb">Come e\' scritto negli appunti</span>'+
+        '<textarea class="bld-in wb-ta" data-f="src" spellcheck="false">'+esc(b.src)+'</textarea></label>'+
+      '<div class="wb-two">'+
+        '<label><span class="wb-lb">Minuti</span>'+
+          '<input class="bld-in" type="number" min="0" max="240" step="1" value="'+b.min+'" data-f="min"></label>'+
+        '<label><span class="wb-lb">RPE</span>'+
+          '<input class="bld-in" type="number" min="0" max="10" step="1" value="'+b.rpe+'" data-f="rpe"></label>'+
+      '</div>'+
+      '<div class="wb-acts">'+
+        '<button type="button" class="sv-btn" data-act="dup">Duplica</button>'+
+        '<button type="button" class="sv-btn del" data-act="del">Elimina</button>'+
+      '</div>'+
+      '<div class="mc-ed-n">Quello che scrivi qui riscrive la riga negli appunti a sinistra. '+
+        'Minuti e RPE ci aggiungono "tot" e "rpe", il resto della riga resta come l\'hai scritta.</div>'+
+    '</div>';
+  }
+
+  function wrRowHtml(b, i){
+    const cls = b.fam === 'hi' ? ' hi' : (b.fam === 'lo' ? ' lo' : '');
+    const on = i === WR_OPEN;
+    return '<button type="button" class="wr-blk'+(on?' on':'')+'" data-i="'+i+'" aria-expanded="'+(on?'true':'false')+'">'+
+      '<span class="wb-main">'+
+        '<span class="wr-tag'+cls+'">'+esc(b.tag)+'</span>'+
+        '<span class="wr-nm">'+esc(b.name)+'</span>'+
+        '<span class="wr-det"'+(b.note?'':' hidden')+'>'+esc(b.note)+'</span>'+
+      '</span>'+
+      '<span class="wr-num"><b>'+(b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min+'</b><small>min</small></span>'+
+      '<span class="wr-num rpe"><b>'+b.rpe+'</b><small>rpe</small></span>'+
+    '</button>'+
+    (on ? wrEdHtml(b, i) : '');
+  }
+
+  function wrSum(bl){
+    const sum = document.getElementById('wr-sum');
     const tm = bl.reduce(function(s,b){ return s+b.min; }, 0);
     const tl = bl.reduce(function(s,b){ return s+b.min*b.rpe; }, 0);
     let vs = '';
@@ -2276,6 +2340,54 @@ window.FORZA = window.FORZA || { roster:[] };
       '<span class="ws"><span class="ws-l">Minuti</span><span class="ws-v">'+NF.format(tm)+'</span></span>'+
       '<span class="ws load"><span class="ws-l">Carico</span><span class="ws-v">'+NF.format(tl)+'</span></span>'+
       vs;
+  }
+
+  function renderWriter(){
+    const prev = document.getElementById('wr-prev');
+    const bl   = wrBlocks();
+    if(!bl.length){
+      WR_OPEN = -1; WR_N = 0;
+      prev.innerHTML = '<div class="wr-empty">Scrivi cosa si e\' fatto e qui compare la seduta impaginata.<br>'+
+                       'Poi con <b>Crea la seduta</b> finisce nella costruzione qui sotto.</div>';
+      document.getElementById('wr-sum').hidden = true;
+      return;
+    }
+    if(WR_OPEN >= bl.length) WR_OPEN = -1;
+    WR_N = bl.length;
+    prev.innerHTML = bl.map(wrRowHtml).join('');
+    wrSum(bl);
+  }
+
+  // aggiorna la riga senza rifare il pannello: chi sta scrivendo non perde il campo
+  function wrSync(i, f){
+    const bl = wrBlocks();
+    if(bl.length !== WR_N){ renderWriter(); return; }
+    const b = bl[i];
+    if(!b){ renderWriter(); return; }
+    const prev = document.getElementById('wr-prev');
+    const row = prev.querySelector('.wr-blk[data-i="'+i+'"]');
+    if(row){
+      const cls = b.fam === 'hi' ? ' hi' : (b.fam === 'lo' ? ' lo' : '');
+      const tag = row.querySelector('.wr-tag');
+      tag.className = 'wr-tag'+cls;
+      tag.textContent = b.tag;
+      row.querySelector('.wr-nm').textContent = b.name;
+      const det = row.querySelector('.wr-det');
+      det.textContent = b.note;
+      det.hidden = !b.note;
+      const nums = row.querySelectorAll('.wr-num b');
+      nums[0].innerHTML = (b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min;
+      nums[1].textContent = b.rpe;
+    }
+    const ed = prev.querySelector('.wb-ed[data-ed="'+i+'"]');
+    if(ed){
+      const h = ed.querySelector('.mc-ed-h .s');
+      if(h) h.textContent = b.tag;
+      if(f !== 'src'){ const el = ed.querySelector('[data-f="src"]'); if(el) el.value = b.src; }
+      if(f !== 'min'){ const el = ed.querySelector('[data-f="min"]'); if(el) el.value = b.min; }
+      if(f !== 'rpe'){ const el = ed.querySelector('[data-f="rpe"]'); if(el) el.value = b.rpe; }
+    }
+    wrSum(bl);
   }
 
   const WR_EX = "attivazione 12 min tutte\n"+
@@ -2300,8 +2412,55 @@ window.FORZA = window.FORZA || { roster:[] };
     document.getElementById('wr-ex').addEventListener('click', function(){
       ta.value = WR_EX;
       try{ localStorage.setItem(WR_KEY, ta.value); }catch(e){}
+      WR_OPEN = -1;
       renderWriter();
       ta.focus();
+    });
+
+    const prev = document.getElementById('wr-prev');
+    prev.addEventListener('click', function(ev){
+      const act = ev.target.closest('[data-act]');
+      if(act){
+        const list = wrSrcs();
+        const i = WR_OPEN;
+        if(i < 0 || i >= list.length) return;
+        if(act.dataset.act === 'dup'){
+          list.splice(i+1, 0, list[i]);
+          wrWrite(list); renderWriter();
+          toast('Blocco duplicato');
+        }else{
+          list.splice(i, 1);
+          WR_OPEN = -1;
+          wrWrite(list); renderWriter();
+          toast('Blocco tolto');
+        }
+        return;
+      }
+      if(ev.target.closest('.wb-ed')) return;
+      const blk = ev.target.closest('.wr-blk');
+      if(!blk) return;
+      const i = +blk.dataset.i;
+      WR_OPEN = (WR_OPEN === i) ? -1 : i;
+      renderWriter();
+      if(WR_OPEN >= 0){
+        const el = prev.querySelector('.wb-ed[data-ed="'+WR_OPEN+'"] [data-f="src"]');
+        if(el) el.focus();
+      }
+    });
+    prev.addEventListener('input', function(ev){
+      const el = ev.target;
+      const f = el.dataset ? el.dataset.f : null;
+      if(!f) return;
+      const ed = el.closest('.wb-ed');
+      if(!ed) return;
+      const i = +ed.dataset.ed;
+      const list = wrSrcs();
+      if(i < 0 || i >= list.length) return;
+      if(f === 'src') list[i] = el.value;
+      else if(f === 'min') list[i] = wrSetTot(list[i], Math.max(0, Math.min(240, +el.value||0)));
+      else if(f === 'rpe') list[i] = wrSetRpe(list[i], Math.max(0, Math.min(10, +el.value||0)));
+      wrWrite(list);
+      wrSync(i, f);
     });
     document.getElementById('wr-apply').addEventListener('click', function(){
       const bl = wrBlocks();
