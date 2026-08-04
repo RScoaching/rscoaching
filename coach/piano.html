@@ -168,6 +168,26 @@ a{ color:inherit; text-decoration:none; }
 .ck-txt{ font-size:13.5px; color:var(--text); transition: color .15s var(--ease); }
 .ck-item.done .ck-txt{ color:var(--faint); text-decoration:line-through; }
 
+/* piano di oggi riscrivibile */
+.fx-plan{ display:block; width:100%; appearance:none; cursor:pointer; font-family:inherit; text-align:left;
+  background:transparent; border:0; padding:0; color:inherit; transition: transform .1s var(--ease); }
+.fx-plan:active{ transform:scale(.995); }
+.fx-top{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.fx-tag{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--orange2);
+  background:var(--ember-bg); border:1px solid var(--ember-border); border-radius:999px; padding:4px 9px; }
+.fx-hint{ margin-left:auto; font-size:11.5px; color:var(--faint); transition: color .16s var(--ease); }
+.fx-plan:hover .fx-hint{ color:var(--orange2); }
+.fx-plan .focus-title, .fx-plan .focus-desc{ display:block; }
+.fx-ed{ margin-top:16px; background:var(--surface); border:1px solid var(--border2); border-radius:var(--r);
+  padding:15px 16px 16px; animation: tgin .3s var(--ease) both; }
+.fx-fl{ display:block; margin-top:14px; }
+.fx-lb{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin-bottom:6px; }
+.fx-ta{ resize:vertical; min-height:66px; line-height:1.55; }
+.fx-row{ display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.fx-none{ font-size:11.5px; color:var(--faint); }
+.fx-acts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
+
 /* ---------- distanza dagli obiettivi ---------- */
 .dist-top{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
 .dist-figure{ font-family:'Bebas Neue',sans-serif; font-size:44px; letter-spacing:.5px; color:var(--ink); line-height:1; }
@@ -676,7 +696,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
-  .tg-dr, .mc-ed, .yd-ed{ animation:none; }
+  .tg-dr, .mc-ed, .yd-ed, .fx-ed{ animation:none; }
   .dist-fill{ transition:none; }
   *{ transition:none !important; }
 }
@@ -1241,8 +1261,55 @@ window.FORZA = window.FORZA || { roster:[] };
               ck:['Attivazione breve e reattiva','Palle inattive e situazioni di gara','Nessun lavoro lungo ad alta intensita','Conferma la lista delle convocate'] }
   };
 
+  // Piano di ripiego quando il calendario non sa dire la posizione nel microciclo.
+  const ST_PLAN = {
+    match:{ tit:'Rifinitura e gestione gara',
+            foc:'Attiva le atlete, cura la parte mentale e conferma le disponibili. La costruzione seduta qui sotto vale come rifinitura.',
+            ck:['Conferma la lista delle disponibili','Attivazione pre gara e mobilita','Idratazione e alimentazione pre partita','Raccogli RPE e sensazioni dopo la gara'] },
+    train:{ tit:'Seduta di squadra',
+            foc:'Imposta i blocchi della seduta odierna e tieni il carico vicino al riferimento della settimana.',
+            ck:['Definisci obiettivo tecnico e tattico','Imposta i blocchi nella costruzione seduta','Controlla il carico rispetto al riferimento','Registra RPE a fine seduta'] },
+    rest:{  tit:'Recupero e prevenzione',
+            foc:'Giornata senza carico a calendario: usala per mobilita, prevenzione e recupero attivo.',
+            ck:['Mobilita e lavoro di prevenzione','Controllo recupero e sonno','Verifica atlete acciaccate','Prepara la prossima seduta'] },
+    off:{   tit:'Programmazione nuova stagione',
+            foc:'La stagione registrata si e conclusa. Usa la costruzione seduta per preparare il lavoro del prossimo ciclo.',
+            ck:['Rivedi i carichi della stagione conclusa','Imposta gli obiettivi del nuovo ciclo','Costruisci le prime sedute di preparazione','Programma i test iniziali'] }
+  };
+
+  // Il piano di oggi arriva dal microciclo, ma il mister lo puo' riscrivere: titolo,
+  // testo e punti della checklist finiscono in fio_oggi_piano sotto la data del giorno,
+  // cosi' la correzione vale solo per quel giorno e non tocca il modello del microciclo.
+  const PLAN_KEY = 'fio_oggi_piano';
+  let PLAN_OV = planLoad();
+  let FX_OPEN = false;
+
+  function planLoad(){
+    try{
+      const o = JSON.parse(localStorage.getItem(PLAN_KEY)||'{}');
+      return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+    }catch(e){ return {}; }
+  }
+
+  function planSave(){
+    const keys = Object.keys(PLAN_OV).sort();
+    while(keys.length > 60) delete PLAN_OV[keys.shift()];
+    try{ localStorage.setItem(PLAN_KEY, JSON.stringify(PLAN_OV)); }catch(e){}
+  }
+
   let TODAY_MD = mdOf(TSTR);
   let PLAN = MD_PLAN[TODAY_MD] || null;
+
+  // Il piano che si vede: base del microciclo (o dello stato del giorno) piu' la
+  // riscrittura a mano, campo per campo.
+  function dayPlan(){
+    const base = (PLAN && state !== 'off') ? PLAN : (ST_PLAN[state] || ST_PLAN.train);
+    const ov = PLAN_OV[TSTR] || null;
+    const tit = (ov && typeof ov.tit === 'string' && ov.tit.trim()) ? ov.tit.trim() : base.tit;
+    const foc = (ov && typeof ov.foc === 'string' && ov.foc.trim()) ? ov.foc.trim() : base.foc;
+    const ck  = (ov && Array.isArray(ov.ck)) ? ov.ck.slice() : base.ck.slice();
+    return { tit:tit, foc:foc, ck:ck, base:base, custom: !!ov };
+  }
 
   // settimana attiva: quella di oggi se presente, altrimenti l'ultima disponibile
   const curKey = dstr(mondayOf(NOW));
@@ -1320,20 +1387,9 @@ window.FORZA = window.FORZA || { roster:[] };
       rest:{cls:'s-rest', txt:'Riposo'},
       off:{cls:'s-off', txt:'Fuori stagione'}
     }[state];
-    let title = {
-      match:'Rifinitura e gestione gara',
-      train:'Seduta di squadra',
-      rest:'Recupero e prevenzione',
-      off:'Programmazione nuova stagione'
-    }[state];
-    let desc = {
-      match:'Attiva le atlete, cura la parte mentale e conferma le disponibili. La costruzione seduta qui sotto vale come rifinitura.',
-      train:'Imposta i blocchi della seduta odierna e tieni il carico vicino al riferimento della settimana.',
-      rest:'Giornata senza carico a calendario: usala per mobilita, prevenzione e recupero attivo.',
-      off:'La stagione registrata si e conclusa. Usa la costruzione seduta per preparare il lavoro del prossimo ciclo.'
-    }[state];
-    // quando il calendario conosce le gare, il focus segue la posizione nel microciclo
-    if(PLAN && state !== 'off'){ title = PLAN.tit; desc = PLAN.foc; }
+    // quando il calendario conosce le gare il focus segue la posizione nel microciclo,
+    // e sopra tutto vale quello che il mister ha riscritto per oggi
+    const dp = dayPlan();
 
     let meta = '';
     if(TODAY_MD){
@@ -1361,27 +1417,155 @@ window.FORZA = window.FORZA || { roster:[] };
     }
 
     document.getElementById('focus-main').innerHTML =
-      '<span class="state-badge '+badge.cls+'"><span class="dot"></span>'+badge.txt+'</span>'+
-      '<div class="focus-title">'+esc(title)+'</div>'+
-      '<div class="focus-desc">'+esc(desc)+'</div>'+
+      '<button type="button" class="fx-plan" data-act="edit" aria-expanded="'+(FX_OPEN?'true':'false')+'">'+
+        '<span class="fx-top">'+
+          '<span class="state-badge '+badge.cls+'"><span class="dot"></span>'+badge.txt+'</span>'+
+          '<span class="fx-tag" id="fx-tag"'+(dp.custom?'':' hidden')+'>riscritto a mano</span>'+
+          '<span class="fx-hint">'+(FX_OPEN?'chiudi':'modifica')+'</span>'+
+        '</span>'+
+        '<span class="focus-title">'+esc(dp.tit)+'</span>'+
+        '<span class="focus-desc">'+esc(dp.foc)+'</span>'+
+      '</button>'+
+      '<div id="fx-edit"></div>'+
       (meta?'<div class="focus-meta">'+meta+'</div>':'')+
       nextStrip;
+    renderFxEdit();
+  }
+
+  // Pannello di riscrittura del piano di oggi. Resta dentro la card del focus cosi'
+  // titolo, testo e punti si correggono dove si leggono.
+  function renderFxEdit(){
+    const host = document.getElementById('fx-edit');
+    if(!host) return;
+    if(!FX_OPEN){ host.innerHTML = ''; return; }
+    const dp = dayPlan();
+    const rows = dp.ck.map(function(t,i){
+      return '<div class="fx-row">'+
+        '<input class="bld-in" type="text" data-f="ck" data-i="'+i+'" value="'+esc(t)+'" placeholder="Punto della checklist">'+
+        '<button type="button" class="sv-btn del" data-act="delck" data-i="'+i+'" title="Togli il punto" aria-label="Togli il punto">'+SVG_TRSH+'</button>'+
+      '</div>';
+    }).join('');
+    host.innerHTML =
+      '<div class="fx-ed">'+
+        '<div class="mc-ed-h">'+
+          '<span class="t">Piano di oggi</span>'+
+          '<span class="s">'+esc(itDate(NOW))+(TODAY_MD?(' &#183; '+esc(TODAY_MD)):'')+'</span>'+
+        '</div>'+
+        '<label class="fx-fl"><span class="fx-lb">Titolo</span>'+
+          '<input class="bld-in" type="text" data-f="tit" value="'+esc(dp.tit)+'" placeholder="Titolo della giornata"></label>'+
+        '<label class="fx-fl"><span class="fx-lb">Cosa conta oggi</span>'+
+          '<textarea class="bld-in fx-ta" data-f="foc" rows="3" placeholder="Cosa conta oggi">'+esc(dp.foc)+'</textarea></label>'+
+        '<div class="fx-fl"><span class="fx-lb">Checklist</span>'+
+          (rows || '<div class="fx-none">Nessun punto. Aggiungine uno qui sotto.</div>')+'</div>'+
+        '<div class="fx-acts">'+
+          '<button type="button" class="sv-btn" data-act="addck">'+SVG_PLS+'Aggiungi punto</button>'+
+          (dp.custom?'<button type="button" class="sv-btn" data-act="fxrst">Ripristina il piano del microciclo</button>':'')+
+        '</div>'+
+        '<div class="mc-ed-n">Vale solo per '+esc(itShort(NOW))+'. Il modello del microciclo resta com\'e\' e torna da solo domani.</div>'+
+      '</div>';
+  }
+
+  // Ogni battuta scrive l'intero piano del giorno e aggiorna quello che si legge
+  // sopra, senza rifare la card: il campo su cui si sta scrivendo resta attivo.
+  function fxCollect(){
+    const host = document.getElementById('fx-edit');
+    if(!host) return;
+    const ti = host.querySelector('[data-f="tit"]');
+    const fo = host.querySelector('[data-f="foc"]');
+    const ck = [];
+    host.querySelectorAll('[data-f="ck"]').forEach(function(el){ ck.push(el.value); });
+    PLAN_OV[TSTR] = { tit:(ti?ti.value:'').trim(), foc:(fo?fo.value:'').trim(), ck:ck };
+    planSave();
+  }
+
+  function fxSync(){
+    const dp = dayPlan();
+    const t = document.querySelector('#focus-main .focus-title');
+    const d = document.querySelector('#focus-main .focus-desc');
+    const g = document.getElementById('fx-tag');
+    if(t) t.textContent = dp.tit;
+    if(d) d.textContent = dp.foc;
+    if(g) g.hidden = !dp.custom;
+  }
+
+  // Togliendo un punto scalano anche le spunte gia' date, altrimenti resterebbero
+  // attaccate alla riga sbagliata.
+  function ckDrop(i){
+    const K = 'fio_oggi_check_'+TSTR;
+    let s = {};
+    try{ s = JSON.parse(localStorage.getItem(K)||'{}')||{}; }catch(e){ s = {}; }
+    const out = {};
+    Object.keys(s).forEach(function(k){
+      const n = +k;
+      if(n < i) out[n] = s[k];
+      else if(n > i) out[n-1] = s[k];
+    });
+    try{ localStorage.setItem(K, JSON.stringify(out)); }catch(e){}
+  }
+
+  function buildFocus(){
+    const main = document.getElementById('focus-main');
+    if(!main) return;
+    main.addEventListener('click', function(ev){
+      const b = ev.target.closest ? ev.target.closest('button') : null;
+      if(!b || !main.contains(b)) return;
+      const act = b.dataset.act;
+      if(act === 'edit'){
+        FX_OPEN = !FX_OPEN;
+        b.setAttribute('aria-expanded', FX_OPEN?'true':'false');
+        const h = b.querySelector('.fx-hint');
+        if(h) h.textContent = FX_OPEN ? 'chiudi' : 'modifica';
+        renderFxEdit();
+        return;
+      }
+      if(act === 'addck'){
+        const dp = dayPlan();
+        const ck = dp.ck.slice(); ck.push('');
+        PLAN_OV[TSTR] = { tit:dp.tit, foc:dp.foc, ck:ck };
+        planSave();
+        renderFxEdit(); fxSync(); renderChecklist();
+        const ins = main.querySelectorAll('[data-f="ck"]');
+        if(ins.length) ins[ins.length-1].focus();
+        return;
+      }
+      if(act === 'delck'){
+        const i = +b.dataset.i;
+        const dp = dayPlan();
+        const ck = dp.ck.slice(); ck.splice(i, 1);
+        PLAN_OV[TSTR] = { tit:dp.tit, foc:dp.foc, ck:ck };
+        planSave(); ckDrop(i);
+        renderFxEdit(); fxSync(); renderChecklist();
+        toast('Punto tolto dalla checklist');
+        return;
+      }
+      if(act === 'fxrst'){
+        delete PLAN_OV[TSTR];
+        planSave();
+        // la lista torna quella del microciclo: le spunte gia' date non valgono piu'
+        try{ localStorage.removeItem('fio_oggi_check_'+TSTR); }catch(e){}
+        renderFocus(); renderChecklist();
+        toast('Piano del giorno ripristinato');
+      }
+    });
+    main.addEventListener('input', function(ev){
+      const el = ev.target;
+      if(!el || !el.dataset || !el.dataset.f) return;
+      fxCollect(); fxSync(); renderChecklist();
+    });
   }
 
   function renderChecklist(){
-    let tasks = {
-      match:['Conferma la lista delle disponibili','Attivazione pre gara e mobilita','Idratazione e alimentazione pre partita','Raccogli RPE e sensazioni dopo la gara'],
-      train:['Definisci obiettivo tecnico e tattico','Imposta i blocchi nella costruzione seduta','Controlla il carico rispetto al riferimento','Registra RPE a fine seduta'],
-      rest:['Mobilita e lavoro di prevenzione','Controllo recupero e sonno','Verifica atlete acciaccate','Prepara la prossima seduta'],
-      off:['Rivedi i carichi della stagione conclusa','Imposta gli obiettivi del nuovo ciclo','Costruisci le prime sedute di preparazione','Programma i test iniziali']
-    }[state];
-    if(PLAN && state !== 'off') tasks = PLAN.ck;
+    const tasks = dayPlan().ck;
 
     const KEY = 'fio_oggi_check_'+TSTR;
     let saved = {};
     try{ saved = JSON.parse(localStorage.getItem(KEY)||'{}')||{}; }catch(e){ saved={}; }
 
     const holder = document.getElementById('checklist');
+    if(!tasks.length){
+      holder.innerHTML = '<div class="fx-none">Nessun punto da spuntare oggi. Aprendo il piano qui sopra puoi aggiungerne.</div>';
+      return;
+    }
     holder.innerHTML = tasks.map((t,i)=>(
       '<div class="ck-item'+(saved[i]?' done':'')+'" data-i="'+i+'" role="checkbox" tabindex="0" aria-checked="'+(saved[i]?'true':'false')+'">'+
         '<span class="ck-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>'+
@@ -3581,6 +3765,7 @@ window.FORZA = window.FORZA || { roster:[] };
 
   buildBuilder();
   buildWriter();
+  buildFocus();
   buildRosa();
   buildSaved();
   buildYd();
