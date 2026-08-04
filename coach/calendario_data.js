@@ -2058,3 +2058,4 @@ window.CAL = {
   }
  ]
 };
+/*S2*/window.CAL_2627={"generato":"2026-08-04T20:03:29","stagione":"2026-27","squadra":"Fiorentina Primavera U19W","metric":"Dist tot","scale":4189,"range":{"min":"2026-07-27","max":"2027-05-31"},"n_sedute":1,"n_partite_giocate":0,"n_fixtures":0,"days":[{"data":"2026-08-04","slot":"AM","kind":"training","is_match":false,"load":4189,"sigla":"","has_ex":true}],"fixtures":[]};
