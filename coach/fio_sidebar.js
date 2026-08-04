@@ -310,46 +310,64 @@ window.fioSanitizeGPS();
 
 // ---------------------------------------------------------------------------
 // Dati per stagione.
-// La 26/27 parte da zero: si azzerano tutti i dati di stagione (GPS, partite,
-// calendario, esercitazioni, forza). Si conserva soltanto il modello
-// prestativo, cioe' la media delle partite della stagione precedente.
+// I file dati contengono due blocchi: la 25/26 in testa e la 26/27 dopo il
+// marcatore, rigenerata dallo script locale che legge la cartella dei GPS.
+// Quando la stagione attiva e' la 26/27 si sostituiscono i dati in memoria con
+// il blocco nuovo; se quel blocco non c'e' ancora, o e' vuoto, si azzera tutto
+// e resta soltanto il modello prestativo, cioe' la media partite della 25/26.
 // Questa funzione viene eseguita prima degli script di pagina, quindi ogni
 // pagina legge automaticamente i dati giusti senza modifiche locali.
 // ---------------------------------------------------------------------------
 window.FIO_CLEAN_SEASON = false;
 window.applyStagioneData = function() {
   var st = window.getStagione();
-  window.FIO_CLEAN_SEASON = (st === '26-27');
-  if (!window.FIO_CLEAN_SEASON || window.FIO_SEASON_APPLIED === st) return;
+  if (st !== '26-27') { window.FIO_CLEAN_SEASON = false; return; }
+  if (window.FIO_SEASON_APPLIED === st) return;
   window.FIO_SEASON_APPLIED = st;
   var id = '2026-27';
 
+  // Copia il blocco nuovo dentro l'oggetto gia' in uso, cosi' i riferimenti
+  // presi dalle pagine restano validi.
+  function overlay(dst, src) {
+    if (!dst || !src) return false;
+    Object.keys(src).forEach(function(k) { dst[k] = src[k]; });
+    return true;
+  }
+
   var S = window.SNAP;
   if (S) {
-    S.stagione = id;
-    S.generato = '';
-    S.model_from = '2025-26';           // provenienza del modello prestativo
-    if (S.team) { S.team.months = []; S.team.matches = []; }
-    if (S.players) {
-      Object.keys(S.players).forEach(function(n) {
-        if (S.players[n]) S.players[n].months = [];
-      });
+    if (!overlay(S, window.SNAP_2627)) {
+      S.generato = '';
+      S.model_from = '2025-26';         // provenienza del modello prestativo
+      if (S.team) { S.team.months = []; S.team.matches = []; }
+      if (S.players) {
+        Object.keys(S.players).forEach(function(n) {
+          if (S.players[n]) S.players[n].months = [];
+        });
+      }
+      // S.model NON si tocca: e' il modello prestativo di riferimento.
     }
-    // S.model NON si tocca: e' il modello prestativo di riferimento.
+    S.stagione = id;
   }
 
   var C = window.CAL;
   if (C) {
-    C.stagione = id; C.generato = '';
-    C.days = []; C.fixtures = [];
-    C.n_sedute = 0; C.n_partite_giocate = 0; C.n_fixtures = 0;
-    C.range = { min: '2026-07-27', max: '2027-05-31' };
+    if (!overlay(C, window.CAL_2627)) {
+      C.generato = '';
+      C.days = []; C.fixtures = [];
+      C.n_sedute = 0; C.n_partite_giocate = 0; C.n_fixtures = 0;
+      C.range = { min: '2026-07-27', max: '2027-05-31' };
+    }
+    C.stagione = id;
   }
 
   var E = window.ESERC;
   if (E) {
-    E.stagione = id; E.generato = '';
-    E.sessions = []; E.n_sessions = 0; E.n_drills = 0;
+    if (!overlay(E, window.ESERC_2627)) {
+      E.generato = '';
+      E.sessions = []; E.n_sessions = 0; E.n_drills = 0;
+    }
+    E.stagione = id;
   }
 
   var F = window.FORZA;
@@ -357,7 +375,48 @@ window.applyStagioneData = function() {
     F.stagione = id; F.generato = '';
     F.entries = []; F.n_entries = 0; F.n_sessions = 0;
     // F.patterns e F.roster restano: sono libreria, non dati di stagione.
+    var T = window.TEST_2627;
+    if (T && T.generato) F.generato = T.generato;
   }
+
+  window.fioSeedTestRegister();
+
+  // L'avviso di archivio vuoto resta solo finche' non arriva il primo dato.
+  // Ogni pagina carica solo i file che le servono, quindi si contano soltanto i
+  // blocchi 26/27 effettivamente presenti.
+  var n = 0;
+  if (window.SNAP_2627 && window.SNAP_2627.team) {
+    n += (window.SNAP_2627.team.months || []).length;
+  }
+  if (window.CAL_2627)   n += (window.CAL_2627.days || []).length;
+  if (window.ESERC_2627) n += (window.ESERC_2627.sessions || []).length;
+  if (window.TEST_2627)  n += (window.TEST_2627.n_valori || 0);
+  window.FIO_CLEAN_SEASON = (n === 0);
+};
+
+// Test presi dal foglio nella cartella della stagione.
+// Il foglio comanda: a ogni Aggiorna i valori che contiene vengono riscritti nel
+// registro e le atlete nuove compaiono. Quello inserito a mano resta per tutte
+// le prove che nel foglio non ci sono. Il registro e' lo stesso usato dalle
+// pagine Test, Atleta e Sintesi, quindi il dato arriva ovunque.
+window.fioSeedTestRegister = function() {
+  var T = window.TEST_2627;
+  if (!T || !T.reg) return;
+  var key = 'fio_test_register_v2_26-27';
+  var reg = {};
+  try {
+    var raw = JSON.parse(localStorage.getItem(key));
+    if (raw && typeof raw === 'object') reg = raw;
+  } catch (e) {}
+  Object.keys(T.reg).forEach(function(k) {
+    var src = T.reg[k] || {};
+    var bag = reg[k] || (reg[k] = {});
+    Object.keys(src).forEach(function(n) {
+      var e = src[n];
+      if (e && e.v !== null && e.v !== undefined) bag[n] = { v: e.v, d: e.d || '' };
+    });
+  });
+  try { localStorage.setItem(key, JSON.stringify(reg)); } catch (e) {}
 };
 
 // Avviso in cima alla pagina quando la stagione e' ancora vuota.
