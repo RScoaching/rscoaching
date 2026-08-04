@@ -367,6 +367,11 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .wr-det{ display:block; font-size:11.5px; color:var(--muted); margin-top:3px; }
 .wr-det[hidden]{ display:none; }
 .wr-det i{ font-style:normal; color:var(--faint); margin:0 5px; }
+.wr-prn{ display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+.wr-prn[hidden]{ display:none; }
+.prn-c{ font-size:10px; font-weight:600; letter-spacing:.02em; line-height:1.3; color:var(--muted);
+  background:var(--surface3); border:1px solid var(--border); border-radius:999px; padding:3px 8px; }
+.prn-c.p{ color:var(--violet2); background:var(--violet-bg); border-color:var(--violet-border); }
 .wr-num{ text-align:right; }
 .wr-num b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:24px;
   letter-spacing:.4px; color:var(--ink); line-height:1; }
@@ -382,6 +387,17 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .wb-ta{ resize:vertical; min-height:60px; line-height:1.55; }
 .wb-two{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
 .wb-acts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
+.wb-prn{ margin-top:14px; }
+.wb-prn .wb-lb.sub{ margin-top:12px; }
+.prn-w{ display:flex; flex-wrap:wrap; gap:6px; }
+.prn-t{
+  appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; line-height:1.3; color:var(--muted);
+  background:var(--surface2); border:1px solid var(--border); border-radius:999px; padding:5px 11px;
+  transition: color .16s var(--ease), background .16s var(--ease), border-color .16s var(--ease);
+}
+.prn-t:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
+.prn-t.on{ color:var(--violet2); background:var(--violet-bg); border-color:var(--violet-border); }
+.prn-t.sub.on{ color:var(--orange2); background:var(--ember-bg); border-color:var(--ember-border); }
 .wr-sum{
   display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
   margin-top:14px; padding-top:14px; border-top:1px solid var(--border2);
@@ -2004,6 +2020,27 @@ window.FORZA = window.FORZA || { roster:[] };
     { lab:'Individuale',   fam:'md', rpe:5, min:20, k:['individual','differenziat','reintegr','personalizzat'] }
   ];
   const WR_FALLBACK = { lab:'Blocco', fam:'md', rpe:5, min:15, k:[] };
+  // Principi e sotto-principi tecnico-tattici: si scelgono dal pannello del blocco
+  // e finiscono in coda alla riga come [principi: <principio> / <sotto> / <sotto>],
+  // cosi' restano dentro gli appunti e non diventano un secondo dato da tenere allineato.
+  const WR_PRIN = [
+    { lab:'Costruzione dal basso', s:['Uscita dal portiere','Ampiezza dei centrali','Sostegno al portatore',
+      'Salto della prima pressione','Terzo uomo','Cambio di gioco'] },
+    { lab:'Sviluppo del gioco', s:['Superiorita sulla corsia','Gioco fra le linee','Ricezione orientata',
+      'Uno due','Sovrapposizione','Ricerca della mezza posizione'] },
+    { lab:'Finalizzazione', s:['Attacco della profondita','Cross dal fondo','Attacco dell area a tre',
+      'Taglio dietro la difesa','Tiro dal limite','Seconda palla'] },
+    { lab:'Pressing', s:['Tempo di aggressione','Uscita sulla ricezione','Copertura ombra',
+      'Orientamento sul lato debole','Linea alta','Riferimenti a uomo'] },
+    { lab:'Difesa posizionale', s:['Compattezza fra i reparti','Scivolamenti','Coperture reciproche',
+      'Difesa dell area','Controllo della profondita','Marcatura preventiva'] },
+    { lab:'Transizione positiva', s:['Ripartenza verticale','Attacco immediato della profondita',
+      'Ampiezza subito','Conservare e riorganizzare'] },
+    { lab:'Transizione negativa', s:['Riaggressione immediata','Ripiegamento e compattezza',
+      'Copertura preventiva','Fallo tattico'] },
+    { lab:'Palle inattive', s:["Calcio d'angolo offensivo",'Punizione laterale','Difesa del corner',
+      'Rimessa lunga','Seconda palla'] }
+  ];
   const WR_WHO = [
     ['tutte','Tutte'], ['tutti','Tutte'], ['portier','Portieri'], ['titolar','Titolari'],
     ['non gioca','Chi non gioca'], ['non hanno giocato','Chi non gioca'], ['subentrat','Subentrate'],
@@ -2076,8 +2113,12 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   function wrParse(line){
-    const raw = String(line||'').trim();
-    if(raw.length < 2) return null;
+    const src0 = String(line||'').trim();
+    if(src0.length < 2) return null;
+    // i principi escono dalla riga prima di tutto: parole come "pressing" o "finalizzazione"
+    // deciderebbero il tipo del blocco al posto dell'esercizio scritto dal preparatore
+    const prn = wrPrinRead(src0);
+    const raw = wrPrinCut(src0);
     let s = ' ' + wrNorm(raw) + ' ';
 
     // il tipo va deciso subito: serve a capire se "6x30 m" sono ripetute o le misure del campo
@@ -2226,7 +2267,7 @@ window.FORZA = window.FORZA || { roster:[] };
     if(!name) name = type.lab;
     return {
       name:name, min:min, est:est, rpe:(rpe || type.rpe),
-      note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam
+      note:det.join(' '+MD+' '), tag:type.lab, fam:type.fam, prn:prn
     };
   }
 
@@ -2266,19 +2307,101 @@ window.FORZA = window.FORZA || { roster:[] };
     try{ localStorage.setItem(WR_KEY, ta.value); }catch(e){}
   }
 
-  // minuti e sforzo si scrivono dentro la riga, cosi' il testo resta l'unica verita'
+  // minuti e sforzo si scrivono dentro la riga, cosi' il testo resta l'unica verita'.
+  // I principi restano sempre in fondo: si tolgono prima e si rimettono dopo.
+  function wrPrinTok(src){
+    const m = String(src||'').match(/\[\s*princip[^\]]*\]/i);
+    return m ? (' '+m[0]) : '';
+  }
+  function wrPrinCut(src){
+    return String(src||'').replace(/\[\s*princip[^\]]*\]/gi, ' ').replace(/\s+/g,' ').trim();
+  }
   function wrSetTot(src, min){
-    const s = String(src||'')
+    const s = wrPrinCut(src)
       .replace(new RegExp('\\b(?:tot|totale|in tutto)\\s*[:.\\-]?\\s*'+WR_T,'g'), ' ')
       .replace(/\s+/g,' ').trim();
-    return min > 0 ? (s+' tot '+min+"'") : s;
+    return (min > 0 ? (s+' tot '+min+"'") : s) + wrPrinTok(src);
   }
   function wrSetRpe(src, rpe){
-    const s = String(src||'')
+    const s = wrPrinCut(src)
       .replace(/\brpe\s*[:.\-]?\s*\d{1,2}\b/g, ' ')
       .replace(/(^|\s)@\s*\d{1,2}(?=\s|$)/g, ' ')
       .replace(/\s+/g,' ').trim();
-    return rpe > 0 ? (s+' rpe '+rpe) : s;
+    return (rpe > 0 ? (s+' rpe '+rpe) : s) + wrPrinTok(src);
+  }
+  // stesso principio per principi e sotto-principi: stanno in coda alla riga
+  // fra parentesi quadre, separati da barra perche' la virgola spezza i blocchi
+  function prnKey(s){
+    let t = String(s||'');
+    try{ t = t.normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'), ''); }catch(e){}
+    return t.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function wrPrinRead(raw){
+    const out = { p:'', s:[] };
+    const m = String(raw||'').match(/\[\s*princip[a-z]*\s*[:.\-]?\s*([^\]]*)\]/i);
+    if(!m) return out;
+    const parts = String(m[1]).split('/').map(function(x){ return x.trim(); })
+      .filter(function(x){ return !!x; });
+    if(!parts.length) return out;
+    const k = prnKey(parts[0]);
+    let lab = parts[0];
+    for(let i=0; i<WR_PRIN.length; i++){ if(prnKey(WR_PRIN[i].lab) === k) lab = WR_PRIN[i].lab; }
+    out.p = lab;
+    out.s = parts.slice(1);
+    return out;
+  }
+  function wrSetPrin(src, p, subs){
+    const s = wrPrinCut(src);
+    if(!p) return s;
+    return s+' [principi: '+[p].concat(subs||[]).join(' / ')+']';
+  }
+  function prnList(b){
+    return (b && b.prn && b.prn.p) ? [b.prn.p].concat(b.prn.s) : [];
+  }
+  function prnInner(b){
+    return prnList(b).map(function(x, j){
+      return '<span class="prn-c'+(j ? '' : ' p')+'">'+esc(x)+'</span>';
+    }).join('');
+  }
+  function prnEdHtml(b){
+    const p = (b.prn && b.prn.p) || '';
+    const sel = b.prn ? b.prn.s : [];
+    let h = '<div class="wb-prn">'+
+      '<span class="wb-lb">Principio di gioco</span>'+
+      '<div class="prn-w">'+
+        WR_PRIN.map(function(g, j){
+          return '<button type="button" class="prn-t'+(g.lab === p ? ' on' : '')+
+            '" data-prin="'+esc(g.lab)+'" data-pi="'+j+'">'+esc(g.lab)+'</button>';
+        }).join('')+
+      '</div>';
+    if(p){
+      let base = [];
+      for(let i=0; i<WR_PRIN.length; i++){ if(WR_PRIN[i].lab === p) base = WR_PRIN[i].s.slice(); }
+      sel.forEach(function(x){
+        const k = prnKey(x);
+        let has = false;
+        base.forEach(function(y){ if(prnKey(y) === k) has = true; });
+        if(!has) base.push(x);
+      });
+      h += '<span class="wb-lb sub">Sotto-principi</span>'+
+        '<div class="prn-w">'+
+          base.map(function(x, j){
+            let on = false;
+            sel.forEach(function(y){ if(prnKey(y) === prnKey(x)) on = true; });
+            return '<button type="button" class="prn-t sub'+(on ? ' on' : '')+
+              '" data-sub="'+esc(x)+'" data-si="'+j+'">'+esc(x)+'</button>';
+          }).join('')+
+        '</div>';
+    }
+    return h+'</div>';
+  }
+
+  // nella costruzione i principi viaggiano in coda alla nota del blocco
+  function wrNote(b){
+    const l = prnList(b);
+    if(!l.length) return b.note;
+    const p = l.join(' '+MD+' ');
+    return b.note ? (b.note+' '+MD+' '+p) : p;
   }
 
   let WR_OPEN = -1;
@@ -2298,12 +2421,14 @@ window.FORZA = window.FORZA || { roster:[] };
         '<label><span class="wb-lb">RPE</span>'+
           '<input class="bld-in" type="number" min="0" max="10" step="1" value="'+b.rpe+'" data-f="rpe"></label>'+
       '</div>'+
+      prnEdHtml(b)+
       '<div class="wb-acts">'+
         '<button type="button" class="sv-btn" data-act="dup">Duplica</button>'+
         '<button type="button" class="sv-btn del" data-act="del">Elimina</button>'+
       '</div>'+
       '<div class="mc-ed-n">Quello che scrivi qui riscrive la riga negli appunti a sinistra. '+
-        'Minuti e RPE ci aggiungono "tot" e "rpe", il resto della riga resta come l\'hai scritta.</div>'+
+        'Minuti, RPE e principi ci aggiungono "tot", "rpe" e "[principi: ...]", '+
+        'il resto della riga resta come l\'hai scritta.</div>'+
     '</div>';
   }
 
@@ -2315,6 +2440,7 @@ window.FORZA = window.FORZA || { roster:[] };
         '<span class="wr-tag'+cls+'">'+esc(b.tag)+'</span>'+
         '<span class="wr-nm">'+esc(b.name)+'</span>'+
         '<span class="wr-det"'+(b.note?'':' hidden')+'>'+esc(b.note)+'</span>'+
+        '<span class="wr-prn"'+(prnList(b).length?'':' hidden')+'>'+prnInner(b)+'</span>'+
       '</span>'+
       '<span class="wr-num"><b>'+(b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min+'</b><small>min</small></span>'+
       '<span class="wr-num rpe"><b>'+b.rpe+'</b><small>rpe</small></span>'+
@@ -2378,11 +2504,15 @@ window.FORZA = window.FORZA || { roster:[] };
       const nums = row.querySelectorAll('.wr-num b');
       nums[0].innerHTML = (b.est ? '<i title="durata stimata">&#8776;</i>' : '')+b.min;
       nums[1].textContent = b.rpe;
+      const pr = row.querySelector('.wr-prn');
+      if(pr){ pr.innerHTML = prnInner(b); pr.hidden = !prnList(b).length; }
     }
     const ed = prev.querySelector('.wb-ed[data-ed="'+i+'"]');
     if(ed){
       const h = ed.querySelector('.mc-ed-h .s');
       if(h) h.textContent = b.tag;
+      const pw = ed.querySelector('.wb-prn');
+      if(pw) pw.outerHTML = prnEdHtml(b);
       if(f !== 'src'){ const el = ed.querySelector('[data-f="src"]'); if(el) el.value = b.src; }
       if(f !== 'min'){ const el = ed.querySelector('[data-f="min"]'); if(el) el.value = b.min; }
       if(f !== 'rpe'){ const el = ed.querySelector('[data-f="rpe"]'); if(el) el.value = b.rpe; }
@@ -2436,6 +2566,37 @@ window.FORZA = window.FORZA || { roster:[] };
         }
         return;
       }
+      const chip = ev.target.closest('[data-prin],[data-sub]');
+      if(chip){
+        const ed = chip.closest('.wb-ed');
+        if(!ed) return;
+        const i = +ed.dataset.ed;
+        const list = wrSrcs();
+        if(i < 0 || i >= list.length) return;
+        const cur = wrPrinRead(list[i]);
+        let p = cur.p, subs = cur.s.slice();
+        if(chip.dataset.prin != null){
+          const lab = chip.dataset.prin;
+          if(p === lab){ p = ''; subs = []; }
+          else { p = lab; subs = []; }
+        }else{
+          const lab = chip.dataset.sub;
+          const k = prnKey(lab);
+          let on = false;
+          subs.forEach(function(x){ if(prnKey(x) === k) on = true; });
+          if(on) subs = subs.filter(function(x){ return prnKey(x) !== k; });
+          else subs.push(lab);
+        }
+        list[i] = wrSetPrin(list[i], p, subs);
+        wrWrite(list);
+        wrSync(i, 'prn');
+        const sel = (chip.dataset.pi != null)
+          ? '.wb-ed[data-ed="'+i+'"] [data-pi="'+chip.dataset.pi+'"]'
+          : '.wb-ed[data-ed="'+i+'"] [data-si="'+chip.dataset.si+'"]';
+        const back = prev.querySelector(sel);
+        if(back) back.focus();
+        return;
+      }
       if(ev.target.closest('.wb-ed')) return;
       const blk = ev.target.closest('.wr-blk');
       if(!blk) return;
@@ -2465,7 +2626,7 @@ window.FORZA = window.FORZA || { roster:[] };
     document.getElementById('wr-apply').addEventListener('click', function(){
       const bl = wrBlocks();
       if(!bl.length){ toast('Scrivi almeno un blocco'); return; }
-      blocks = bl.map(function(b){ return { name:b.name, min:b.min, rpe:b.rpe, note:b.note }; });
+      blocks = bl.map(function(b){ return { name:b.name, min:b.min, rpe:b.rpe, note:wrNote(b) }; });
       saveBlocks(); renderBuilder();
       toast(bl.length+' blocchi nella seduta');
       document.getElementById('bld-card').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -2473,7 +2634,7 @@ window.FORZA = window.FORZA || { roster:[] };
     document.getElementById('wr-add').addEventListener('click', function(){
       const bl = wrBlocks();
       if(!bl.length){ toast('Scrivi almeno un blocco'); return; }
-      bl.forEach(function(b){ blocks.push({ name:b.name, min:b.min, rpe:b.rpe, note:b.note }); });
+      bl.forEach(function(b){ blocks.push({ name:b.name, min:b.min, rpe:b.rpe, note:wrNote(b) }); });
       saveBlocks(); renderBuilder();
       toast(bl.length+' blocchi aggiunti');
       document.getElementById('bld-card').scrollIntoView({ behavior:'smooth', block:'start' });
