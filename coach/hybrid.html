@@ -321,6 +321,16 @@ td.num.cmp.na{ color:var(--faint); }
 /* ---------- confronto giocatrici ---------- */
 #confronto-view{ position:relative; overflow:hidden; }
 .cf-subctl{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 14px; }
+/* periodo: le date scelte a mano restano a fianco del segmento, non aprono pannelli */
+.cf-dates{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.cf-date{ font-family:inherit; font-size:12px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+  padding:6px 9px; color-scheme:dark; font-variant-numeric:tabular-nums;
+  transition:border-color .18s var(--ease); }
+.cf-date:focus{ outline:none; border-color:var(--border3); }
+.cf-date:hover{ border-color:var(--border3); }
+.sess-item .sess-lb .sess-dt{ font-style:normal; font-size:11px; font-weight:600; color:var(--muted);
+  margin-left:6px; font-variant-numeric:tabular-nums; }
 .cf-rail{ z-index:26; }
 #confronto-view.cf-open-sess #cf-sess-rail{ transform:translateX(0); }
 #confronto-view.cf-open-play #cf-play-rail{ transform:translateX(0); }
@@ -641,6 +651,18 @@ table.partite td.sigla.nolink{ color:var(--muted); }
             </div>
             <span class="cm-lbl">Ruolo</span>
             <div class="seg cmp-seg" id="cf-role-seg" role="group" aria-label="Ruolo in campo"></div>
+            <span class="cm-lbl">Periodo</span>
+            <div class="seg cmp-seg" id="cf-per-seg" role="group" aria-label="Periodo">
+              <button class="on" data-per="all" type="button" title="Tutta la stagione">Tutto</button>
+              <button data-per="w4" type="button" title="Le quattro settimane fino all'ultima seduta con dati">4 sett.</button>
+              <button data-per="w8" type="button" title="Le otto settimane fino all'ultima seduta con dati">8 sett.</button>
+              <button data-per="rng" type="button" title="Scegli tu il giorno di inizio e quello di fine">Date</button>
+            </div>
+            <div class="cf-dates" id="cf-dates" hidden>
+              <input class="cf-date" id="cf-from" type="date" aria-label="Dal giorno">
+              <span class="cm-lbl">a</span>
+              <input class="cf-date" id="cf-to" type="date" aria-label="Al giorno">
+            </div>
           </div>
           <div class="sess-main">
             <div class="cf-radar" id="cf-radar" hidden></div>
@@ -719,7 +741,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const ssort = { col:'name', dir:1 };
   const msort = { col:'data', dir:-1 };
   const csort = { col:'name', dir:1 };
-  const cfState = { scope:'all', cmp:'val', role:'' };
+  const cfState = { scope:'all', cmp:'val', role:'', per:'all', from:'', to:'' };
   // colori del radar: una tinta per atleta, nell'ordine in cui compaiono in tabella
   const CF_COLS = ['oklch(72% 0.17 45)','oklch(70% 0.17 285)','oklch(72% 0.16 152)','oklch(72% 0.14 225)'];
   const CF_RADAR_MAX = 4;
@@ -880,6 +902,52 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   let MDMAP = null;
   function mdOf(monthKey,label){ if(!MDMAP) MDMAP=buildMDMap(); return MDMAP[monthKey+'|'+label]||null; }
+  // ---------- la data vera di ogni seduta ----------
+  // Nei fogli la singola seduta non ha una data scritta: ha una sigla ("11PM") e un giorno
+  // della settimana. La data sta nell'intestazione della settimana ("11-17/08"), che dice
+  // il giorno di chiusura. Da quel giorno si torna indietro con il giorno della settimana
+  // e si ottiene la data esatta. Serve per i tagli di periodo, che sono quelli con cui si
+  // preparano i report: le ultime settimane di lavoro, oppure un intervallo scelto a mano.
+  function weekEndDate(monthKey, week){
+    const w = /^(\d{1,2})\s*-\s*(\d{1,2})\/(\d{1,2})$/.exec(String(week||'').trim());
+    const k = /^(\d{4})-(\d{2})$/.exec(String(monthKey||''));
+    if(!w || !k) return null;
+    const dd = +w[2], mm = +w[3];
+    let y = +k[1];
+    if(mm < +k[2]) y += 1;   // la settimana a cavallo di capodanno chiude nell'anno dopo
+    const dt = new Date(y, mm-1, dd);
+    return (dt.getMonth()===mm-1 && dt.getDate()===dd) ? dt : null;
+  }
+  // La chiave tiene dentro anche la settimana: la stessa sigla puo' ripetersi nello stesso
+  // mese in due settimane diverse (il 30PM del 30 settembre e quello del 30 ottobre stanno
+  // tutti e due sotto ottobre) e senza la settimana la seconda copre la data della prima.
+  function tsKey(s){ return s.monthKey+'|'+(s.week||'')+'|'+s.label; }
+  let TSMAP = null;
+  function buildTsMap(){
+    const map = {};
+    allSessions().forEach(s=>{
+      const end = weekEndDate(s.monthKey, s.week);
+      if(!end) return;
+      const wi = WDX[s.wd];
+      const dt = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      if(wi!=null) dt.setDate(dt.getDate() - (6-wi));
+      map[tsKey(s)] = dt.getTime();
+    });
+    return map;
+  }
+  function tsOf(s){
+    if(!TSMAP) TSMAP = buildTsMap();
+    const t = TSMAP[tsKey(s)];
+    return (t==null) ? null : t;
+  }
+  function d2(n){ return String(n).padStart(2,'0'); }
+  function dShort(ts){ if(ts==null) return ''; const d=new Date(ts); return d.getDate()+'/'+d2(d.getMonth()+1); }
+  function dFull(ts){ if(ts==null) return ''; const d=new Date(ts); return d2(d.getDate())+'/'+d2(d.getMonth()+1)+'/'+d.getFullYear(); }
+  function dIso(ts){ if(ts==null) return ''; const d=new Date(ts); return d.getFullYear()+'-'+d2(d.getMonth()+1)+'-'+d2(d.getDate()); }
+  function isoTs(v){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v||'').trim());
+    return m ? new Date(+m[1], +m[2]-1, +m[3]).getTime() : null;
+  }
   function mdLabel(md){ if(md==null) return ''; if(md===0) return 'Partita (MD)'; return 'MD-'+md; }
   function mdAverage(md){
     if(md==null) return null;
@@ -1269,11 +1337,56 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return findDayRow(mon, label);
   }
   function cfAllPlayers(){ return Object.keys(S.players||{}).sort((a,b)=> a.localeCompare(b,'it')); }
-  function cfEligibleSessions(){
+  function cfScopeSessions(){
     return allSessions().filter(s=>
       cfState.scope==='all' ? true : cfState.scope==='match' ? s.type==='match' : s.type==='day');
   }
-  function cfResetSessSel(){ cfSessSel = new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); }
+  // Il periodo e' un filtro sopra la spunta, come il ruolo: restringe quello che si vede e
+  // quello che entra nei conti, ma le sedute spuntate restano spuntate e tornano appena si
+  // riallarga il periodo. Le ultime settimane si contano dall'ultima seduta con dati, non da
+  // oggi: una stagione finita a maggio non deve diventare vuota.
+  const DAY_MS = 86400000;
+  function cfLastTs(){
+    let t = null;
+    cfScopeSessions().forEach(s=>{ const x = tsOf(s); if(x!=null && (t==null || x>t)) t = x; });
+    return t;
+  }
+  function cfSeasonSpan(){
+    let a = null, b = null;
+    allSessions().forEach(s=>{ const x = tsOf(s); if(x==null) return; if(a==null || x<a) a=x; if(b==null || x>b) b=x; });
+    return { a:a, b:b };
+  }
+  function cfWindow(){
+    const p = cfState.per;
+    if(p==='w4' || p==='w8'){
+      const last = cfLastTs();
+      if(last==null) return null;
+      const n = (p==='w4') ? 4 : 8;
+      return { a: last - (n*7-1)*DAY_MS, b: last };
+    }
+    if(p==='rng'){
+      const a = isoTs(cfState.from), b = isoTs(cfState.to);
+      if(a==null && b==null) return null;
+      return { a: (a==null ? -Infinity : a), b: (b==null ? Infinity : b) };
+    }
+    return null;
+  }
+  function cfPerActive(){ return !!cfWindow(); }
+  function cfPerText(){
+    const w = cfWindow();
+    if(!w) return 'tutta la stagione';
+    if(cfState.per==='w4' || cfState.per==='w8')
+      return (cfState.per==='w4'?'ultime 4 settimane':'ultime 8 settimane')+' (dal '+dShort(w.a)+' al '+dShort(w.b)+')';
+    if(w.a===-Infinity) return 'fino al '+dFull(w.b);
+    if(w.b===Infinity) return 'dal '+dFull(w.a);
+    return 'dal '+dFull(w.a)+' al '+dFull(w.b);
+  }
+  function cfEligibleSessions(){
+    const base = cfScopeSessions(), w = cfWindow();
+    if(!w) return base;
+    return base.filter(s=>{ const t = tsOf(s); return t!=null && t>=w.a && t<=w.b; });
+  }
+  function cfResetSessSel(){ cfSessSel = new Set(cfScopeSessions().map(s=> s.monthKey+'|'+s.label)); }
   function cfSelectedSessions(){ if(!cfSessSel) cfResetSessSel(); return cfEligibleSessions().filter(s=> cfSessSel.has(s.monthKey+'|'+s.label)); }
   // Il ruolo e' un filtro sopra la spunta: restringe l'elenco senza cancellare le scelte fatte.
   function cfRoleOk(name){ return !cfState.role || roleOf(name)===cfState.role; }
@@ -1313,12 +1426,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function renderCfStats(sess, players){
     const host=document.getElementById('cf-stats'); if(!host) return;
     const nMatch=sess.filter(s=> s.type==='match').length, nTrain=sess.filter(s=> s.type==='day').length;
+    let da=null, a=null;
+    sess.forEach(s=>{ const t=tsOf(s); if(t==null) return; if(da==null||t<da) da=t; if(a==null||t>a) a=t; });
     const tiles=[
       {lbl:'Sedute',val:String(sess.length),match:false},
       {lbl:'Partite',val:String(nMatch),match:nMatch>0},
       {lbl:'Allenamenti',val:String(nTrain),match:false},
       {lbl:'Atlete',val:String(players.length),match:false}
     ];
+    if(da!=null) tiles.push({ lbl:'Dal - al', val: dShort(da)+' - '+dShort(a), match:false });
     host.innerHTML=tiles.map(t=>'<div class="sess-stat'+(t.match?' match':'')+'"><div class="ss-lbl">'+esc(t.lbl)+'</div><div class="ss-val">'+esc(t.val)+'</div></div>').join('');
   }
   function cfSyncButtons(){
@@ -1328,8 +1444,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const hint=document.getElementById('cf-hint');
     if(hint){
       const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute';
-      hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'+(cfState.role?('  ·  '+cfState.role):'');
+      hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'+(cfState.role?('  ·  '+cfState.role):'')
+        +(cfPerActive()?('  ·  '+cfPerText()):'');
     }
+  }
+  // Il periodo si vede anche in stampa: nel report deve essere scritto di che giorni si parla.
+  function cfRenderPerSeg(){
+    const seg=document.getElementById('cf-per-seg');
+    if(seg) seg.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.getAttribute('data-per')===cfState.per));
+    const box=document.getElementById('cf-dates');
+    if(box) box.hidden = (cfState.per!=='rng');
+    const f=document.getElementById('cf-from'), t=document.getElementById('cf-to');
+    if(f && document.activeElement!==f) f.value=cfState.from;
+    if(t && document.activeElement!==t) t.value=cfState.to;
+    const sp=cfSeasonSpan();
+    [f,t].forEach(i=>{ if(!i) return; if(sp.a!=null) i.min=dIso(sp.a); if(sp.b!=null) i.max=dIso(sp.b); });
   }
   // ---------- radar delle caratteristiche ----------
   // Un raggio per parametro chiave. Il bordo esterno e' il valore piu' alto fra le atlete
@@ -1433,7 +1562,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(rd){ rd.hidden=true; rd.innerHTML=''; }
       host.innerHTML=emptyBlock(msg);
     };
-    if(!sess.length){ vuoto('Nessuna seduta selezionata'); return; }
+    if(!sess.length){ vuoto(cfPerActive() ? ('Nessuna seduta in questo periodo: '+cfPerText()) : 'Nessuna seduta selezionata'); return; }
     if(!players.length){ vuoto(cfState.role ? ('Nessuna atleta selezionata fra i ruoli "'+cfState.role+'"') : 'Nessuna atleta selezionata'); return; }
     const teamRows=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) teamRows.push(r); });
     const hasModel=!!(S.model && S.model.length);
@@ -1498,11 +1627,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const q=(filter||'').trim().toLowerCase(); const elig=cfEligibleSessions().slice().reverse();
     let html='',curMonth='',n=0;
     elig.forEach(s=>{
-      const hay=(s.label+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
+      const dt=dFull(tsOf(s));
+      const hay=(s.label+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+dt+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
       if(q && hay.indexOf(q)<0) return;
       if(s.monthTitle!==curMonth){ curMonth=s.monthTitle; html+='<div class="sess-mgroup">'+esc(curMonth)+'</div>'; }
       n++; const key=s.monthKey+'|'+s.label,on=cfSessSel.has(key);
-      html+='<button class="sess-item cf-opt'+(s.type==='match'?' is-match':'')+(on?' is-on':'')+'" type="button" data-key="'+esc(key)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(s.label)+'</span><span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span></button>';
+      html+='<button class="sess-item cf-opt'+(s.type==='match'?' is-match':'')+(on?' is-on':'')+'" type="button" data-key="'+esc(key)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(s.label)+(dt?'<i class="sess-dt">'+esc(dt)+'</i>':'')+'</span><span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span></button>';
     });
     if(!n) html='<div class="sess-empty">Nessuna seduta</div>'; host.innerHTML=html;
     host.querySelectorAll('.cf-opt').forEach(b=> b.addEventListener('click', ()=>{
@@ -1689,6 +1819,32 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
       cfResetSessSel(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto();
     })); }
+  { const seg=document.getElementById('cf-per-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
+      const p=btn.getAttribute('data-per');
+      cfState.per=p;
+      // La prima volta che si sceglie Date, le due caselle partono dalla stagione intera:
+      // cosi' si sposta un estremo e si vede subito l'effetto, senza tabella vuota.
+      if(p==='rng' && !cfState.from && !cfState.to){
+        const sp=cfSeasonSpan();
+        if(sp.a!=null){ cfState.from=dIso(sp.a); cfState.to=dIso(sp.b); }
+      }
+      cfRenderPerSeg();
+      cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:'');
+      renderConfronto();
+      if(p!=='all' && p!=='rng') toast('Periodo: '+cfPerText());
+    })); }
+  { const wire=(id, key)=>{ const i=document.getElementById(id); if(!i) return;
+      i.addEventListener('change', ()=>{
+        cfState[key]=i.value||'';
+        // se le date finiscono al contrario si raddrizzano da sole, invece di dare zero sedute
+        const a=isoTs(cfState.from), b=isoTs(cfState.to);
+        if(a!=null && b!=null && a>b){ const v=cfState.from; cfState.from=cfState.to; cfState.to=v; }
+        cfRenderPerSeg();
+        cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:'');
+        renderConfronto();
+      });
+    };
+    wire('cf-from','from'); wire('cf-to','to'); }
   { const b=document.getElementById('cf-btn-sess'); if(b) b.addEventListener('click', ()=>{
       const v=document.getElementById('confronto-view');
       if(v && v.classList.contains('cf-open-sess')) closeCfRails(); else openCfRail('sess');
@@ -1702,8 +1858,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const bd=document.getElementById('cf-backdrop'); if(bd) bd.addEventListener('click', closeCfRails); }
   { const i=document.getElementById('cf-sess-search'); if(i) i.addEventListener('input', e=> cfRenderSessRail(e.target.value)); }
   { const i=document.getElementById('cf-play-search'); if(i) i.addEventListener('input', e=> cfRenderPlayRail(e.target.value)); }
-  { const b=document.getElementById('cf-sess-all'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
-  { const b=document.getElementById('cf-sess-none'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
+  // Come per le atlete, Tutte e Nessuna toccano solo le sedute che il periodo lascia vedere.
+  { const b=document.getElementById('cf-sess-all'); if(b) b.addEventListener('click', ()=>{
+      if(!cfSessSel) cfSessSel=new Set(); cfEligibleSessions().forEach(s=> cfSessSel.add(s.monthKey+'|'+s.label));
+      cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
+  { const b=document.getElementById('cf-sess-none'); if(b) b.addEventListener('click', ()=>{
+      if(!cfSessSel) cfSessSel=new Set(); cfEligibleSessions().forEach(s=> cfSessSel.delete(s.monthKey+'|'+s.label));
+      cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
   // Tutte e Nessuna lavorano su quello che si vede: con un ruolo attivo toccano solo quel ruolo.
   { const b=document.getElementById('cf-play-all'); if(b) b.addEventListener('click', ()=>{
       if(!cfPlaySel) cfPlaySel=new Set(); cfRolePlayers().forEach(n=> cfPlaySel.add(n));
@@ -1770,6 +1931,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     cfResetSessSel();
     cfPlaySel = new Set(cfAllPlayers());
     cfRenderRoleSeg();
+    cfRenderPerSeg();
     cfRenderSessRail('');
     cfRenderPlayRail('');
     renderConfronto();
