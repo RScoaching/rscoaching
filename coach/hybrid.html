@@ -268,6 +268,22 @@ table.partite thead th[aria-sort="ascending"] .arw,
 table.partite thead th[aria-sort="descending"] .arw{ opacity:1; color:var(--orange2); }
 table.partite td.sigla{ font-weight:600; color:var(--text); }
 table.partite td.data{ color:var(--muted); }
+/* La riga della partita porta alla seduta corrispondente: la sigla e' un pulsante vero
+   (raggiungibile da tastiera) e tutta la riga risponde al tocco. */
+table.partite tr.r-day.openable{ cursor:pointer; }
+table.partite tr.r-day.openable:hover td.sigla{ background:var(--ember-bg); }
+table.partite td.sigla.nolink{ color:var(--muted); }
+.mopen{
+  display:inline-flex; align-items:center; gap:6px; appearance:none; border:0; background:transparent;
+  cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--text);
+  padding:0; border-radius:6px;
+  transition: color .16s var(--ease);
+}
+.mopen svg{ width:12px; height:12px; color:var(--faint);
+  transition: color .16s var(--ease), transform .16s var(--ease); }
+.mopen:hover{ color:var(--orange2); }
+.mopen:hover svg{ color:var(--orange2); transform:translateX(2px); }
+.mopen:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
 
 .empty{ padding:44px 20px; text-align:center; color:var(--muted); }
 .empty svg{ width:30px; height:30px; color:var(--faint); margin-bottom:8px; }
@@ -322,6 +338,8 @@ table.partite td.data{ color:var(--muted); }
   table.partite td.sigla{ color:#14110f !important; }
   table.partite td.data{ color:#5a524c !important; }
   table.partite thead th .arw{ display:none !important; }
+  .mopen{ color:#14110f !important; }
+  .mopen svg{ display:none !important; }
   .reveal{ opacity:1 !important; transform:none !important; animation:none !important; }
 }
 
@@ -421,7 +439,7 @@ table.partite td.data{ color:var(--muted); }
       <section class="card reveal" id="partite-view" style="--i:0; display:none">
         <div class="card-head">
           <h2>Partite</h2>
-          <span class="hint">tutte le gare della squadra, ordinabili per ogni parametro</span>
+          <span class="hint">tutte le gare della squadra: tocca la sigla per aprire la seduta con i valori di ogni atleta</span>
           <span class="spacer"></span>
           <div class="seg cmp-seg" id="mcmp-seg" role="group" aria-label="Modalita confronto partite">
             <button class="on" data-mcmp="val" type="button" title="Mostra i valori assoluti">Valori</button>
@@ -499,7 +517,7 @@ table.partite td.data{ color:var(--muted); }
 
     </div>
 
-    <p class="foot-note">Le sedute mostrano tutte le atlete piu la media squadra. Le partite sono a livello di squadra: usa i confronti per leggere ogni dato rispetto al modello AVG o al match day.</p>
+    <p class="foot-note">Le sedute mostrano tutte le atlete piu la media squadra. Le partite sono a livello di squadra: usa i confronti per leggere ogni dato rispetto al modello AVG o al match day. Dalla tabella delle partite, un tocco sulla sigla apre la seduta di quella gara con i valori di ogni atleta.</p>
 
   </main>
 </div>
@@ -546,6 +564,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   let cfSessSel = null;   // Set di "monthKey|label"
   let cfPlaySel = null;   // Set di nomi atlete
   const CF_CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
+  const ARROW_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   const SF = S.sum_flags || [];
 
   // parametri visibili: chiave o tutti
@@ -763,7 +782,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const cls = r>=1.05 ? 'over' : r>=0.95 ? 'near' : 'under';
       return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
     };
-    const arw = k=> ssort.col===k ? (ssort.dir>0?'▲':'▼') : '▴';
+    const arw = k=> ssort.col===k ? (ssort.dir>0?'&#9650;':'&#9660;') : '&#9652;';
     const ariaSort = k=> ssort.col===k ? (ssort.dir>0?'ascending':'descending') : 'none';
     let h = '<table class="grid"><thead><tr>';
     h += '<th class="col-day sortable" data-c="name" aria-sort="'+ariaSort('name')+'">Atleta <span class="arw">'+arw('name')+'</span></th>';
@@ -838,6 +857,46 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec((d||'').trim());
     if(!m) return 0; let y=+m[3]; if(y<100) y+=2000; return new Date(y, +m[2]-1, +m[1]).getTime();
   }
+  function monthKeyOf(d){
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec((d||'').trim());
+    if(!m) return '';
+    let y = +m[3]; if(y<100) y += 2000;
+    return y + '-' + String(+m[2]).padStart(2,'0');
+  }
+  function monthIdx(k){ const p = /^(\d{4})-(\d{2})$/.exec(k||''); return p ? (+p[1])*12 + (+p[2]) : null; }
+  // Trova la seduta che corrisponde a una partita della tabella.
+  // Il foglio del mister archivia la settimana di gara nel mese in cui la settimana inizia,
+  // percio' una partita dei primi di novembre puo' stare nel foglio di ottobre. In piu' una
+  // stessa sigla torna all'andata e al ritorno: fra le sedute con quella sigla si prende
+  // quella col mese piu' vicino alla data della gara.
+  function matchSession(sigla, data){
+    const cand = allSessions().filter(s=> s.type==='match' && s.label===sigla);
+    if(!cand.length) return null;
+    if(cand.length===1) return cand[0];
+    const t = monthIdx(monthKeyOf(data));
+    if(t==null) return cand[0];
+    let best = cand[0], bd = Infinity;
+    cand.forEach(s=>{
+      const i = monthIdx(s.monthKey);
+      const d = (i==null) ? Infinity : Math.abs(i - t);
+      if(d < bd){ bd = d; best = s; }
+    });
+    return best;
+  }
+  // Passa dalla tabella partite alla vista seduta, con i valori di tutte le atlete di quella gara.
+  function openMatchSession(monthKey, label){
+    const n = sessionAthletes(monthKey, label).length;
+    openSessionView(monthKey, label);
+    const card = document.getElementById('sedute-view');
+    if(card){
+      // sopra i 900 pixel l'intestazione resta agganciata e coprirebbe il titolo della scheda
+      const tb = document.querySelector('.topbar');
+      const off = (tb && getComputedStyle(tb).position === 'sticky') ? tb.offsetHeight + 12 : 64;
+      const y = card.getBoundingClientRect().top + window.scrollY - off;
+      window.scrollTo({ top: Math.max(0, y), behavior: REDUCE ? 'auto' : 'smooth' });
+    }
+    toast(n ? ('Partita ' + label + ': ' + n + ' atlete') : ('Partita ' + label + ': nessun dato per atleta'));
+  }
   function renderMatches(){
     const host = document.getElementById('matches-scroll'); if(!host) return;
     const list = (S.team && S.team.matches) || [];
@@ -874,7 +933,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const cls = r>=1.05 ? 'over' : r>=0.95 ? 'near' : 'under';
       return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
     };
-    const arw = k=> msort.col===k ? (msort.dir>0?'▲':'▼') : '▴';
+    const arw = k=> msort.col===k ? (msort.dir>0?'&#9650;':'&#9660;') : '&#9652;';
     const ariaSort = k=> msort.col===k ? (msort.dir>0?'ascending':'descending') : 'none';
     let h = '<table class="grid partite"><thead><tr>';
     h += '<th class="col-day sortable" data-c="sigla" aria-sort="'+ariaSort('sigla')+'">Sigla <span class="arw">'+arw('sigla')+'</span></th>';
@@ -891,7 +950,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     rows.forEach(r=>{
       const rv = r.v||[];
-      h += '<tr class="r-day"><td class="col-day sigla">'+esc(r.sigla)+'</td><td class="data">'+esc(r.data||'')+'</td>';
+      const link = matchSession(r.sigla, r.data);
+      const sig = link
+        ? '<button class="mopen" type="button" title="Apri la seduta di questa partita con i valori di tutte le atlete">'+esc(r.sigla)+ARROW_ICO+'</button>'
+        : esc(r.sigla);
+      h += '<tr class="r-day'+(link?' openable':'')+'"'
+         + (link ? ' data-mk="'+esc(link.monthKey)+'" data-l="'+esc(link.label)+'"' : '')
+         + '><td class="col-day sigla'+(link?'':' nolink')+'">'+sig+'</td><td class="data">'+esc(r.data||'')+'</td>';
       V.forEach(i=> h += mcell(rv[i], i));
       h += '</tr>';
     });
@@ -902,6 +967,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const c = (raw==='sigla'||raw==='data') ? raw : +raw;
       if(msort.col===c) msort.dir*=-1; else { msort.col=c; msort.dir = (c==='sigla'?1:-1); }
       renderMatches();
+    }));
+    // il clic sul pulsante della sigla risale fino alla riga, percio' basta un ascoltatore per riga
+    host.querySelectorAll('tr.r-day.openable').forEach(tr=> tr.addEventListener('click', ()=>{
+      openMatchSession(tr.getAttribute('data-mk'), tr.getAttribute('data-l'));
     }));
   }
 
@@ -987,7 +1056,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const r=v/b,pct=Math.round(r*100),cls=r>=1.05?'over':r>=0.95?'near':'under';
       return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
     };
-    const arw=k=> csort.col===k?(csort.dir>0?'▲':'▼'):'▴';
+    const arw=k=> csort.col===k?(csort.dir>0?'&#9650;':'&#9660;'):'&#9652;';
     const ariaSort=k=> csort.col===k?(csort.dir>0?'ascending':'descending'):'none';
     let h='<table class="grid partite"><thead><tr>';
     h+='<th class="col-day sortable" data-c="name" aria-sort="'+ariaSort('name')+'">Atleta <span class="arw">'+arw('name')+'</span></th>';
