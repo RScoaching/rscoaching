@@ -121,6 +121,32 @@ a{ color:inherit; text-decoration:none; }
 .btn svg{ width:15px; height:15px; }
 .btn:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
 .btn:active{ transform:scale(.97); }
+.btn.is-open{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
+
+/* ---------- scelta dei parametri chiave ----------
+   I parametri chiave sono la lente con cui si legge tutta la pagina: le colonne
+   della modalita' Chiave, quelle accese in modalita' Tutti e i raggi del radar
+   nel Confronto. Prima li decideva il foglio, adesso li sceglie chi guarda e la
+   scelta resta salvata sul dispositivo. */
+.keypick{ border:1px solid var(--border2); border-radius:var(--r); background:var(--surface2);
+  padding:14px 16px; margin:-8px 0 20px; }
+.kp-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px; }
+.kp-head strong{ font-size:12.5px; letter-spacing:.3px; color:var(--ink); }
+.kp-sub{ font-size:11.5px; color:var(--muted); }
+.kp-head .spacer{ flex:1 1 auto; }
+.kp-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(184px, 1fr)); gap:8px; }
+.kp-opt{ display:grid; grid-template-columns:19px 1fr; align-items:center; gap:9px; width:100%;
+  appearance:none; cursor:pointer; text-align:left; font-family:inherit;
+  background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:8px 10px;
+  transition: background .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease); }
+.kp-opt:hover{ border-color:var(--border3); background:var(--surface3); }
+.kp-opt:active{ transform:scale(.99); }
+.kp-opt.is-on{ border-color:var(--ember-border); background:var(--ember-bg); }
+.kp-opt.is-on .cf-chk{ background:var(--orange); border-color:var(--orange); color:#1a0d05; }
+.kp-nm{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.kp-full{ display:block; font-size:10.5px; font-weight:600; color:var(--muted); }
+.kp-opt.in-radar .kp-nm::after{ content:' \2022'; color:var(--orange2); }
+.kp-note{ font-size:11.5px; color:var(--muted); margin:11px 0 0; }
 
 /* ---------- cards ---------- */
 .card{
@@ -345,7 +371,7 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   @page{ margin:13mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
-  .sb-mob-bar, .sb-mob-overlay, .sb-edge, .sidebar, .controls, .sess-rail, .sess-drawer-backdrop,
+  .sb-mob-bar, .sb-mob-overlay, .sb-edge, .sidebar, .controls, .keypick, .sess-rail, .sess-drawer-backdrop,
   #btn-rail, .cmp-seg, .cf-subctl, #cf-btn-sess, #cf-btn-play, .toast, .top-right, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
@@ -449,10 +475,29 @@ table.partite td.sigla.nolink{ color:var(--muted); }
           <button class="on" data-cm="key" type="button" title="Mostra solo i parametri chiave">Chiave</button>
           <button data-cm="all" type="button" title="Mostra tutti i parametri">Tutti</button>
         </div>
+        <button class="btn" id="btn-keypick" type="button" aria-expanded="false" aria-controls="keypick"
+          title="Scegli quali parametri sono quelli chiave in tutta la pagina">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>
+          <span id="kp-btn-lbl">Scegli</span>
+        </button>
         <button class="btn" id="btn-print" title="Stampa o salva in PDF la vista corrente">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
         </button>
+      </div>
+
+      <!-- scelta parametri chiave: vale per tutte e tre le viste -->
+      <div class="keypick" id="keypick" hidden>
+        <div class="kp-head">
+          <strong>Quali sono i parametri chiave</strong>
+          <span class="kp-sub">valgono per Sedute, Partite e Confronto</span>
+          <span class="spacer"></span>
+          <button class="cf-mini" id="kp-reset" type="button" title="Torna ai parametri chiave indicati nei fogli">Predefiniti</button>
+          <button class="cf-mini" id="kp-all" type="button" title="Segna tutti i parametri come chiave">Tutti</button>
+          <button class="cf-mini" id="kp-close" type="button">Chiudi</button>
+        </div>
+        <div class="kp-list" id="kp-list"></div>
+        <p class="kp-note" id="kp-note"></p>
       </div>
 
       <!-- SEDUTE -->
@@ -610,7 +655,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const M = S.metrics_full || [];
   const SHORT = S.metrics_short || M;
   const UNIT = S.metrics_unit || M.map(()=> '');
-  const KEY = new Set(S.key_idx || []);
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const state = { view:'sedute', session:null, cmp:'val', mcmp:'val', colMode:'key' };
@@ -627,13 +671,41 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const ARROW_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   const SF = S.sum_flags || [];
 
-  // parametri visibili: chiave o tutti
-  function VIS(){
-    if(state.colMode==='all') return M.map((_,i)=> i);
+  // ---------- parametri chiave scelti da chi guarda ----------
+  // I parametri chiave del foglio restano il punto di partenza, ma da qui in poi
+  // sono modificabili: la scelta vale per Sedute, Partite, Confronto e radar, e
+  // resta salvata sul dispositivo. Un solo elenco, nessuna impostazione per vista.
+  const KP_STORE = 'rs_param_chiave_v1';
+  const KP_RADAR = 6;   // quanti raggi al massimo puo' avere il radar del confronto
+  function allIdx(){ return M.map((_,i)=> i); }
+  function keyDefault(){
     const k = (S.key_idx||[]).filter(i=> Number.isInteger(i) && i>=0 && i<M.length);
-    return k.length ? k : M.map((_,i)=> i);
+    return k.length ? k.slice() : allIdx();
   }
-  function keyCls(i){ return (state.colMode==='all' && KEY.has(i)) ? ' key' : ''; }
+  function keyLoad(){
+    try{
+      const raw = window.localStorage.getItem(KP_STORE);
+      if(!raw) return keyDefault();
+      const a = JSON.parse(raw);
+      if(!Array.isArray(a)) return keyDefault();
+      const ok = a.filter(i=> Number.isInteger(i) && i>=0 && i<M.length);
+      return ok.length ? ok : keyDefault();
+    }catch(e){ return keyDefault(); }
+  }
+  let keySel = new Set(keyLoad());
+  function keySave(){
+    try{ window.localStorage.setItem(KP_STORE, JSON.stringify(keyList())); }catch(e){}
+  }
+  // sempre in ordine di tabella, cosi' le colonne non ballano da una scelta all'altra
+  function keyList(){ const k = allIdx().filter(i=> keySel.has(i)); return k.length ? k : keyDefault(); }
+  function keyIsDefault(){
+    const a = keyList(), b = keyDefault().slice().sort((x,y)=> x-y);
+    return a.length===b.length && a.every((v,i)=> v===b[i]);
+  }
+
+  // parametri visibili: chiave o tutti
+  function VIS(){ return state.colMode==='all' ? allIdx() : keyList(); }
+  function keyCls(i){ return (state.colMode==='all' && keySel.has(i)) ? ' key' : ''; }
 
   // helpers
   function fmt(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
@@ -1155,11 +1227,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // scelte e la media squadra, cosi' si legge subito chi corre di piu', chi va sopra i 23
   // km/h e chi accelera. Fino a quattro atlete: oltre, le tracce si sovrappongono e non
   // si capisce piu' niente, percio' resta solo la tabella.
-  function cfRadarAxes(){
-    const k=(S.key_idx||[]).filter(i=> Number.isInteger(i) && i>=0 && i<M.length);
-    const src = k.length>=3 ? k : M.map((_,i)=> i);
-    return src.slice(0,6);
-  }
+  function cfRadarAxes(){ return keyList().slice(0, KP_RADAR); }
   function cfPoly(vals, R, cx, cy){
     const n=vals.length;
     return vals.map((f,i)=>{
@@ -1170,8 +1238,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function renderCfRadar(pdata, teamAgg, hasTeam){
     const host=document.getElementById('cf-radar'); if(!host) return;
     const ax=cfRadarAxes();
-    if(ax.length<3 || !pdata.length){ host.hidden=true; host.innerHTML=''; return; }
+    if(!pdata.length){ host.hidden=true; host.innerHTML=''; return; }
     host.hidden=false;
+    if(ax.length<3){
+      // con due soli raggi non si disegna una forma: meglio dirlo che mostrare una riga storta
+      host.classList.add('solo-nota');
+      host.innerHTML='<p class="cfr-note">Il radar ha bisogno di almeno tre parametri chiave (adesso sono '
+        +ax.length+'): aggiungine dal pulsante Scegli in alto.</p>';
+      return;
+    }
     if(pdata.length>CF_RADAR_MAX){
       // con troppe tracce il radar diventa illeggibile: resta solo la riga che spiega come averlo
       host.classList.add('solo-nota');
@@ -1350,6 +1425,60 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function closeCfRails(){ const v=document.getElementById('confronto-view'), bd=document.getElementById('cf-backdrop'); if(v) v.classList.remove('cf-open-sess','cf-open-play'); if(bd) bd.hidden=true; }
 
+  // ---------- pannello dei parametri chiave ----------
+  // Una sola lista per tutta la pagina: si spunta qui e cambiano insieme le colonne
+  // di Sedute, quelle di Partite, quelle del Confronto e i raggi del radar.
+  function kpApply(){
+    keySave();
+    renderKeyPick();
+    renderSession(); renderMatches(); renderConfronto();
+  }
+  function renderKeyPick(){
+    const k = keyList(), n = k.length;
+    const lbl = document.getElementById('kp-btn-lbl');
+    if(lbl) lbl.textContent = 'Scegli ('+n+')';
+    const host = document.getElementById('kp-list');
+    if(host){
+      const inRadar = new Set(k.slice(0, KP_RADAR));
+      let h = '';
+      M.forEach((full,i)=>{
+        const on = keySel.has(i);
+        const u = UNIT[i] ? (' ('+UNIT[i]+')') : '';
+        h += '<button class="kp-opt'+(on?' is-on':'')+(inRadar.has(i)?' in-radar':'')+'" type="button"'
+          +' data-i="'+i+'" aria-pressed="'+(on?'true':'false')+'" title="'+esc(full+u)+'">'
+          +'<span class="cf-chk">'+CF_CHK+'</span>'
+          +'<span><span class="kp-nm">'+esc(SHORT[i]||full)+'</span>'
+          +'<span class="kp-full">'+esc(full)+'</span></span></button>';
+      });
+      host.innerHTML = h;
+      host.querySelectorAll('.kp-opt').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.getAttribute('data-i'));
+        if(keySel.has(i)){
+          // togliere l'ultimo lascerebbe la pagina senza colonne: meglio dirlo e non fare niente
+          if(keySel.size<=1){ toast('Serve almeno un parametro chiave'); return; }
+          keySel.delete(i);
+        } else keySel.add(i);
+        kpApply();
+      }));
+    }
+    const note = document.getElementById('kp-note');
+    if(note){
+      const radar = n>=3
+        ? ('Nel radar del Confronto entrano i primi '+Math.min(n, KP_RADAR)+', segnati col punto: '
+           +k.slice(0, KP_RADAR).map(i=> SHORT[i]||M[i]).join(', ')+'.')
+        : 'Il radar del Confronto ha bisogno di almeno tre parametri.';
+      note.textContent = n+(n===1?' parametro chiave su ':' parametri chiave su ')+M.length+'. '+radar
+        + (keyIsDefault() ? '' : ' Scelta salvata su questo dispositivo.');
+    }
+  }
+  function toggleKeyPick(force){
+    const p = document.getElementById('keypick'), b = document.getElementById('btn-keypick');
+    if(!p) return;
+    const open = (force===undefined) ? p.hidden : !!force;
+    p.hidden = !open;
+    if(b){ b.setAttribute('aria-expanded', open?'true':'false'); b.classList.toggle('is-open', open); }
+  }
+
   // ---------- wirings ----------
   { const b=document.getElementById('view-sedute'); if(b) b.addEventListener('click', ()=> setView('sedute')); }
   { const b=document.getElementById('view-partite'); if(b) b.addEventListener('click', ()=> setView('partite')); }
@@ -1405,7 +1534,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const b=document.getElementById('btn-rail'); if(b) b.addEventListener('click', toggleRail); }
   { const b=document.getElementById('rail-close'); if(b) b.addEventListener('click', closeRail); }
   { const bd=document.getElementById('sess-backdrop'); if(bd) bd.addEventListener('click', closeRail); }
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeRail(); closeCfRails(); } });
+  { const b=document.getElementById('btn-keypick'); if(b) b.addEventListener('click', ()=> toggleKeyPick()); }
+  { const b=document.getElementById('kp-close'); if(b) b.addEventListener('click', ()=> toggleKeyPick(false)); }
+  { const b=document.getElementById('kp-all'); if(b) b.addEventListener('click', ()=>{
+      keySel = new Set(allIdx()); kpApply(); toast('Tutti i parametri sono chiave'); }); }
+  { const b=document.getElementById('kp-reset'); if(b) b.addEventListener('click', ()=>{
+      keySel = new Set(keyDefault());
+      try{ window.localStorage.removeItem(KP_STORE); }catch(e){}
+      renderKeyPick(); renderSession(); renderMatches(); renderConfronto();
+      toast('Parametri chiave: torno a quelli dei fogli'); }); }
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeRail(); closeCfRails(); toggleKeyPick(false); } });
   { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{ toast('Preparo la stampa...'); setTimeout(()=> window.print(), 120); }); }
 
   // ---------- init ----------
@@ -1415,6 +1553,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const all = allSessions();
     if(qm && ql){ state.session = { monthKey:qm, label:ql }; }
     else if(all.length){ const s = all[all.length-1]; state.session = { monthKey:s.monthKey, label:s.label }; }
+    renderKeyPick();
     renderSessRail('');
     renderSession();
     highlightRail();
