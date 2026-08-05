@@ -126,6 +126,48 @@ window.stagioneLabel = function(v) {
   return v === '26-27' ? 'Stagione 2026/27' : 'Stagione 2025/26';
 };
 
+// Chiave di memoria separata per stagione.
+// Quello che si scrive a mano (ruoli, disponibilita', atlete aggiunte, note
+// personali) non deve passare da un anno all'altro: chi era indisponibile a
+// marzo non lo e' anche a settembre. La 25/26 tiene la chiave vecchia, cosi'
+// il lavoro gia' fatto resta dov'e'; le stagioni nuove hanno la loro.
+window.fioKey = function(base, st) {
+  st = st || window.getStagione();
+  return st === '25-26' ? base : base + '_' + st;
+};
+
+// Rosa della stagione attiva, in forma [{name, role}].
+// Sulla 26/27 comanda il blocco rigenerato dai file della cartella: se
+// un'atleta quest'anno non c'e', qui non compare, e le pagine che partono da
+// questa lista non la mostrano piu'. Sulla 25/26 resta la rosa storica.
+window.fioRoster = function() {
+  var out = [], seen = {};
+  function add(n, r, t) {
+    n = String(n == null ? '' : n).trim();
+    if (!n || seen[n]) return;
+    r = String(r == null ? '' : r).trim();
+    if (r.toLowerCase() === 'nan') r = '';
+    seen[n] = 1;
+    out.push({ name: n, role: r, tipo: String(t == null ? '' : t) });
+  }
+  if (window.getStagione() === '26-27') {
+    var R = window.ROSTER_2627;
+    if (R && R.players) R.players.forEach(function(p) { add(p.name, p.role, p.tipo); });
+    return out;
+  }
+  var F = window.FORZA;
+  if (F && F.roster) F.roster.forEach(function(p) { add(p.name, p.role, p.tipo); });
+  var S = window.SNAP;
+  if (S && S.players) Object.keys(S.players).forEach(function(n) {
+    add(n, (S.players[n] || {}).role, '');
+  });
+  // Il planner del calendario porta con se' la rosa 25-26 in forma breve {n,r}:
+  // serve li' dove non vengono caricati ne' i dati forza ne' quelli di carico.
+  var L = window.RS_ROSTER;
+  if (Array.isArray(L)) L.forEach(function(p) { add(p.n, p.r, ''); });
+  return out;
+};
+
 // ---------------------------------------------------------------------------
 // Controllo di plausibilita' dei dati GPS.
 // Ogni tanto un giubbotto sbaglia una lettura e restituisce un valore
