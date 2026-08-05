@@ -559,6 +559,9 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .cols-foot #model-done{ flex:1 1 100%; justify-content:center; }
 }
 
+/* ---------- blocchi di stampa (creati al volo, invisibili a schermo) ---------- */
+.print-split{ display:none; }
+
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
   @page{ margin:13mm; }
@@ -586,6 +589,15 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .kpi .k-val{ color:#14110f !important; }
   .kpi .k-val small{ color:#5a524c !important; }
   .tscroll{ overflow:visible !important; }
+  /* quando i parametri sono tanti la griglia viene ricostruita in blocchi che stanno nel foglio */
+  .print-hidden{ display:none !important; }
+  .print-split{ display:block !important; }
+  .print-blk{ break-inside:avoid; page-break-inside:avoid; margin:0 0 14px; }
+  .print-blk:last-child{ margin-bottom:0; }
+  .print-blk-lbl{ font-size:10px; color:#5a524c !important; margin:0 0 5px; letter-spacing:.01em; }
+  .print-split table.grid{ width:100% !important; table-layout:auto; }
+  #grid-card{ break-inside:auto !important; }
+  table.grid thead{ display:table-header-group; }
   table.grid{ font-size:10px !important; }
   table.grid th, table.grid td{ border-bottom:1px solid #ddd !important; }
   table.grid thead th{ background:#f0f0f0 !important; color:#14110f !important; }
@@ -682,7 +694,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4 16.5z"/><path d="M13.5 6.5l4 4"/></svg>
           Modello <span class="cols-count" id="model-count"></span>
         </button>
-        <button class="btn" id="btn-print" title="Stampa o salva in PDF la vista corrente">
+        <button class="btn" id="btn-print" title="Stampa o salva in PDF: se i parametri sono tanti la griglia viene divisa in piu' blocchi che stanno nel foglio">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
         </button>
@@ -1877,6 +1889,81 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> { location.href='hybrid.html?m='+encodeURIComponent(mk)+'&l='+encodeURIComponent(b.getAttribute('data-l')); }));
   }
 
+  // ---------- stampa: griglia divisa in blocchi che stanno nel foglio ----------
+  // Con tutti i parametri accesi la tabella e' troppo larga per un A4 e il PDF esce tagliato.
+  // Prima di stampare ricostruiamo la stessa tabella in piu' blocchi, ognuno con la colonna
+  // del giorno piu' un gruppo di parametri. A schermo non cambia niente.
+  const PRINT_MAX_COL = 6;
+  function printChunks(n){
+    const out = [];
+    if(n<=0) return out;
+    const nb = Math.ceil(n / PRINT_MAX_COL);
+    const per = Math.ceil(n / nb);
+    for(let a=0; a<n; a+=per) out.push([a, Math.min(n, a+per)]);
+    return out;
+  }
+  function splitTableForPrint(tb, lead, nMet, chunks){
+    const wrap = document.createElement('div');
+    wrap.className = 'print-split';
+    chunks.forEach(ch=>{
+      const a = ch[0], b = ch[1];
+      const blk = document.createElement('div');
+      blk.className = 'print-blk';
+      const lbl = document.createElement('div');
+      lbl.className = 'print-blk-lbl';
+      lbl.textContent = 'Parametri ' + (a+1) + '-' + b + ' di ' + nMet;
+      blk.appendChild(lbl);
+      const cl = tb.cloneNode(true);
+      cl.querySelectorAll('tr').forEach(tr=>{
+        const cells = tr.children;
+        if(cells.length === lead + nMet){
+          for(let i=cells.length-1; i>=lead; i--){
+            const j = i - lead;
+            if(j<a || j>=b) cells[i].remove();
+          }
+        } else {
+          for(let i=0;i<cells.length;i++){
+            const cs = +(cells[i].getAttribute('colspan') || 1);
+            if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a)));
+          }
+        }
+      });
+      // nel foglio stampato i bottoni non servono: restano solo le etichette
+      cl.querySelectorAll('button.lb-open').forEach(btn=>{
+        const sp = document.createElement('span');
+        sp.className = 'lb';
+        sp.textContent = btn.textContent;
+        btn.parentNode.replaceChild(sp, btn);
+      });
+      blk.appendChild(cl);
+      wrap.appendChild(blk);
+    });
+    return wrap;
+  }
+  function clearPrintSheets(){
+    document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
+  }
+  function buildPrintSheets(){
+    clearPrintSheets();
+    const nMet = VIS().length;
+    if(nMet <= PRINT_MAX_COL) return;
+    const chunks = printChunks(nMet);
+    if(chunks.length < 2) return;
+    document.querySelectorAll('.tscroll').forEach(host=>{
+      if(host.offsetWidth===0 && host.offsetHeight===0) return; // vista non visibile: niente da stampare
+      const tb = host.querySelector('table');
+      if(!tb) return;
+      const hr = tb.querySelector('tr');
+      if(!hr) return;
+      const lead = hr.children.length - nMet;
+      if(lead < 1) return;
+      host.classList.add('print-hidden');
+      const wrap = splitTableForPrint(tb, lead, nMet, chunks);
+      host.parentNode.insertBefore(wrap, host.nextSibling);
+    });
+  }
+
   // ---------- partite ----------
   const msort = { col:'data', dir:-1 }; // 'sigla' | 'data' | metric index; default data desc
   function parseData(d){ // dd/mm/yyyy -> ts
@@ -2321,7 +2408,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('seg-player').addEventListener('click', ()=> setLevel('player'));
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
-  document.getElementById('btn-print').addEventListener('click', ()=> window.print());
+  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintSheets(); window.print(); });
+  window.addEventListener('beforeprint', buildPrintSheets);
+  window.addEventListener('afterprint', clearPrintSheets);
   document.getElementById('player-select').addEventListener('change', e=>{
     state.player = e.target.value; state.monthKey=null; updateRole();
     document.getElementById('subtitle').innerHTML = '<b>'+esc(state.player)+'</b> · Fiorentina Primavera U19W';
