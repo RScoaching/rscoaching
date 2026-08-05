@@ -168,6 +168,31 @@ window.fioRoster = function() {
   return out;
 };
 
+// Rosa dell'anno prima, in forma [{name, role}].
+// Serve solo sulla stagione nuova: sono le atlete che c'erano e che quest'anno
+// non hanno ancora un dato, tipo chi rientra piu' tardi o chi si e' allenata
+// senza GPS. Vengono riproposte in Atlete per rimetterle in rosa con un click,
+// invece di dover riscrivere il nome a mano.
+window.fioRosterPrev = function() {
+  var out = [], seen = {};
+  function add(n, r) {
+    n = String(n == null ? '' : n).trim();
+    if (!n || seen[n]) return;
+    r = String(r == null ? '' : r).trim();
+    if (r.toLowerCase() === 'nan') r = '';
+    seen[n] = 1;
+    out.push({ name: n, role: r });
+  }
+  if (window.getStagione() !== '26-27') return out;
+  var P = window.FIO_PREV_PLAYERS;
+  if (Array.isArray(P)) P.forEach(function(p) { add(p.name, p.role); });
+  var F = window.FORZA;
+  if (F && F.roster) F.roster.forEach(function(p) { add(p.name, p.role); });
+  var L = window.RS_ROSTER;
+  if (Array.isArray(L)) L.forEach(function(p) { add(p.n, p.r); });
+  return out.sort(function(a, b) { return a.name.localeCompare(b.name, 'it'); });
+};
+
 // ---------------------------------------------------------------------------
 // Controllo di plausibilita' dei dati GPS.
 // Ogni tanto un giubbotto sbaglia una lettura e restituisce un valore
@@ -374,6 +399,17 @@ window.applyStagioneData = function() {
     if (!dst || !src) return false;
     Object.keys(src).forEach(function(k) { dst[k] = src[k]; });
     return true;
+  }
+
+  // Fotografia della rosa vecchia PRIMA di sovrascrivere i dati: serve per
+  // riproporre in Atlete le atlete dell'anno scorso che quest'anno non si sono
+  // ancora allenate. Senza questa copia sparirebbero e non ci sarebbe modo di
+  // rimetterle dentro se non riscrivendo il nome a mano.
+  window.FIO_PREV_PLAYERS = [];
+  if (window.SNAP && window.SNAP.players) {
+    Object.keys(window.SNAP.players).forEach(function(n) {
+      window.FIO_PREV_PLAYERS.push({ name: n, role: (window.SNAP.players[n] || {}).role || '' });
+    });
   }
 
   var S = window.SNAP;
