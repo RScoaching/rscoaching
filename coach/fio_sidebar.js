@@ -90,7 +90,7 @@ window.SIDEBAR_HTML = `
     </a>
   </div>
   <div class="sb-foot">
-    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati pubblicati" title="Rilegge i file dati pubblicati e ricarica la pagina se c&#39;e&#39; qualcosa di nuovo. I dati nascono dai file della cartella della stagione: sul Mac li rigenera e li pubblica Aggiorna.">
+    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati pubblicati" title="Rilegge i file dati pubblicati e ricarica la pagina se c&#39;e&#39; qualcosa di nuovo. Qui sotto c&#39;e&#39; la data del dato online: se non e&#39; di oggi, i file della cartella della stagione non sono ancora stati rigenerati sul Mac. Per farlo da soli: aggiorna.command sorveglia, che pubblica appena aggiungi un file.">
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
@@ -533,14 +533,60 @@ window.FIO_DATA_FILES = [
   { f: 'esercitazioni_data.js', v: 'ESERC_2627' },
   { f: 'forza_data.js',         v: 'TEST_2627' }
 ];
-window.fioDataStamp = function() {
-  if (window.FIO_CLEAN_SEASON) return 'archivio vuoto';
+// Da "05/08/2026 14:13" a "oggi 14:13", "ieri 09:20", "3 giorni fa". Sotto il
+// pulsante c'e' poco spazio e la data per esteso non dice niente a colpo
+// d'occhio: quello che serve sapere e' se il dato online e' di oggi.
+window.fioAgeTxt = function(s) {
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2}))?/.exec(String(s || '').trim());
+  if (!m) return String(s || '');
+  var ora = m[4] ? (('0' + m[4]).slice(-2) + ':' + m[5]) : '';
+  var gg = window.fioAgeDays(s);
+  if (gg <= 0) return ora ? ('oggi ' + ora) : 'oggi';
+  if (gg === 1) return ora ? ('ieri ' + ora) : 'ieri';
+  if (gg < 8) return gg + ' giorni fa';
+  return m[1] + '/' + m[2];
+};
+window.fioAgeDays = function(s) {
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || '').trim());
+  if (!m) return 0;
+  var g = new Date(+m[3], +m[2] - 1, +m[1]);
+  if (isNaN(g.getTime())) return 0;
+  var o = new Date();
+  o.setHours(0, 0, 0, 0);
+  return Math.round((o.getTime() - g.getTime()) / 86400000);
+};
+
+// Timbro del dato caricato: testo breve per la riga sotto il pulsante, data per
+// esteso per il suggerimento, eta' in giorni per capire se e' rimasto indietro.
+window.fioStampInfo = function() {
+  if (window.FIO_CLEAN_SEASON) return { raw: '', txt: 'archivio vuoto', gg: 0 };
   var src = [window.SNAP, window.CAL, window.ESERC, window.FORZA];
   var s = '';
   for (var i = 0; i < src.length && !s; i++) {
     if (src[i] && src[i].generato) s = String(src[i].generato).trim();
   }
-  return s ? ('agg. ' + s) : 'nessun dato letto';
+  if (!s) return { raw: '', txt: 'nessun dato letto', gg: 0 };
+  return { raw: s, txt: 'agg. ' + window.fioAgeTxt(s), gg: window.fioAgeDays(s) };
+};
+window.fioDataStamp = function() {
+  return window.fioStampInfo().txt;
+};
+
+// Scrive lo stato del dato sotto il pulsante. Se non e' di oggi la riga si
+// accende: il tasto ha fatto il suo lavoro, e' la pubblicazione sul Mac che
+// manca.
+window.fioPaintStamp = function() {
+  var btn = document.getElementById('fio-sync-btn');
+  var lab = document.getElementById('fio-sync-when');
+  var inf = window.fioStampInfo();
+  if (lab) {
+    lab.textContent = inf.txt;
+    lab.title = inf.raw ? ('Dati generati il ' + inf.raw) : '';
+  }
+  if (btn) {
+    if (inf.gg >= 1) btn.classList.add('vecchio');
+    else btn.classList.remove('vecchio');
+  }
 };
 
 // Timbro di generazione del blocco di stagione dentro il testo del file appena
@@ -605,7 +651,7 @@ window.fioRefreshData = function() {
     btn.classList.remove('busy');
     btn.disabled = false;
     if (lab) lab.textContent = msg;
-    setTimeout(function() { if (lab) lab.textContent = window.fioDataStamp(); }, 4200);
+    setTimeout(window.fioPaintStamp, 4200);
   };
   window.fioProbeData().then(function(p) {
     if (!p.attesi) { fine('nessun dato in questa pagina'); return; }
@@ -642,13 +688,10 @@ window.initSidebarToggle = function() {
   window.applyStagioneData();
   window.paintSeasonBanner();
   const sync = document.getElementById('fio-sync-btn');
-  const syncWhen = document.getElementById('fio-sync-when');
   if (sync) {
-    if (syncWhen) syncWhen.textContent = window.fioDataStamp();
+    window.fioPaintStamp();
     sync.addEventListener('click', window.fioRefreshData);
-    document.addEventListener('fio:stagione', function() {
-      if (syncWhen) syncWhen.textContent = window.fioDataStamp();
-    });
+    document.addEventListener('fio:stagione', window.fioPaintStamp);
     window.fioAutoCheck();
   }
   const ham = document.getElementById('sb-ham-btn');
@@ -858,6 +901,10 @@ window.SIDEBAR_CSS = `
   color:rgba(248,250,255,.34);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+/* Se il dato pubblicato non e' di oggi la riga sotto il pulsante si accende:
+   vuol dire che sul Mac manca il passaggio di rigenerazione, non che il tasto
+   non funziona. */
+.sb-sync.vecchio .sb-sync-txt em{color:rgba(255,178,122,.72);}
 .sb-switch{
   display:flex;align-items:center;gap:9px;
   padding:9px 11px;border-radius:10px;
