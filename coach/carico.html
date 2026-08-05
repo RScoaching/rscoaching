@@ -203,6 +203,24 @@ input.dpick:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; 
 .chart-wrap::-webkit-scrollbar{ height:6px; }
 .chart-wrap::-webkit-scrollbar-thumb{ background:var(--border3); border-radius:3px; }
 svg.chart{ display:block; }
+/* ---------- parametri chiave: un grafico piccolo per metrica ---------- */
+.mgrid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(226px, 1fr)); gap:12px; }
+.mcell{
+  appearance:none; font-family:inherit; text-align:left; cursor:pointer; display:block; width:100%;
+  background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
+  padding:12px 13px 10px;
+  transition: border-color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease);
+}
+.mcell:hover{ border-color:var(--border3); background:var(--surface3); }
+.mcell:active{ transform:scale(.99); }
+.mcell.on{ border-color:var(--ember-border); background:var(--ember-bg); }
+.mcell:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.mc-name{ font-size:11.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--muted); }
+.mcell.on .mc-name{ color:var(--orange2); }
+.mc-val{ font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:4px; }
+.mc-val small{ font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
+.mc-sub{ font-size:11.5px; color:var(--faint); margin-top:1px; }
+.mc-spark{ display:block; width:100%; height:42px; margin-top:9px; }
 svg.chart .bar{ transform-box:fill-box; transform-origin:center bottom; transition: opacity .15s var(--ease), filter .15s var(--ease); cursor:pointer; }
 svg.chart .bar:hover, svg.chart .bar.hot{ opacity:1 !important; filter:brightness(1.12); }
 svg.chart text{ font-family:'Inter',sans-serif; }
@@ -655,8 +673,19 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
         <div class="chart-wrap" id="chart-wrap"></div>
       </section>
 
+      <!-- un grafico per ogni parametro chiave -->
+      <section class="card reveal" id="mini-card" style="--i:2">
+        <div class="card-head">
+          <h2>Parametri chiave</h2>
+          <span class="hint" id="mini-hint"></span>
+        </div>
+        <div class="card-body" style="padding-top:8px">
+          <div class="mgrid" id="mini-grid"></div>
+        </div>
+      </section>
+
       <!-- analisi carico (ACWR / preparatore) -->
-      <section class="card reveal" id="acwr-card" style="--i:2">
+      <section class="card reveal" id="acwr-card" style="--i:3">
         <div class="card-head">
           <h2>Analisi carico</h2>
           <span class="hint">rapporto acuto:cronico (ACWR), settimana per settimana e microciclo tipo</span>
@@ -702,7 +731,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
       </section>
 
       <!-- uguale identico grid -->
-      <section class="card reveal" id="grid-card" style="--i:3">
+      <section class="card reveal" id="grid-card" style="--i:4">
         <div class="card-head">
           <h2 id="grid-title">Monitoraggio</h2>
           <span class="hint" id="grid-hint">griglia mensile · giorno per giorno</span>
@@ -782,6 +811,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const UNIT = S.metrics_unit || M.map(()=> '');
   const KEY = new Set(S.key_idx || []);
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- un canale in piu': tutta la distanza sopra i 20 km/h ----------
+  // Il file dati tiene separate "20-23 km/h" e "oltre 23 km/h", ma il mister ragiona
+  // anche sul totale sopra i 20: si calcola qui sommando le due colonne, cosi' nessun
+  // file dati va toccato e nella griglia sinottica le colonne restano quelle vere.
+  function metFind(pats){
+    for(let i=0;i<M.length;i++){ const n=(M[i]||'').toLowerCase(); if(pats.some(p=> n.indexOf(p)>=0)) return i; }
+    return -1;
+  }
+  const I2023 = metFind(['20-23']), I23 = metFind(['> 23','>23']);
+  const IOVER20 = (I2023>=0 && I23>=0) ? M.length : -1;
+  const NMET = M.length + (IOVER20>=0 ? 1 : 0);
+  function metName(i){ return i===IOVER20 ? 'Distanza sopra 20 km/h' : (M[i]||''); }
+  function metShort(i){ return i===IOVER20 ? '>20 km/h' : (SHORT[i]||M[i]||''); }
+  function metUnit(i){ return i===IOVER20 ? (UNIT[I23]||'m') : (UNIT[i]||''); }
+  function metSum(i){ return i===IOVER20 ? true : ((S.sum_flags||[])[i]===1); }
+  function vAt(r, i){
+    if(!r || !r.v) return null;
+    if(i!==IOVER20){ const v = r.v[i]; return (v==null || !isFinite(v)) ? null : v; }
+    const a = r.v[I2023], b = r.v[I23];
+    const oka = (a!=null && isFinite(a)), okb = (b!=null && isFinite(b));
+    if(!oka && !okb) return null;
+    return (oka?a:0) + (okb?b:0);
+  }
 
   // ---------- state ----------
   const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartFrom:null, chartTo:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1), acwrIdx:1 };
@@ -875,9 +928,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- chart metric dropdown ----------
   (function(){
     const sel = document.getElementById('chart-metric');
-    sel.innerHTML = M.map((m,i)=> '<option value="'+i+'"'+(i===state.chartIdx?' selected':'')+'>'+esc(m)+'</option>').join('');
+    let opts = '';
+    for(let i=0;i<NMET;i++) opts += '<option value="'+i+'"'+(i===state.chartIdx?' selected':'')+'>'+esc(metName(i))+'</option>';
+    sel.innerHTML = opts;
     sel.addEventListener('change', ()=>{ state.chartIdx = +sel.value; renderChart(); });
   })();
+  function syncMetricSelect(){
+    const sel = document.getElementById('chart-metric');
+    if(sel) sel.value = String(state.chartIdx);
+  }
 
   // ---------- metrica analisi carico (solo metriche sommabili) ----------
   let SUMIDX = M.map((_,i)=> i).filter(i=> (S.sum_flags||[])[i]===1);
@@ -990,9 +1049,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Somma o media secondo il file dati: quello che nella griglia e' sommabile si somma,
   // il resto (m/min, percentuali, velocita' massima) va a media semplice, come i TOT del foglio.
   function aggVal(rows, idx){
-    const sum = (S.sum_flags||[])[idx]===1;
+    const sum = metSum(idx);
     let acc = 0, n = 0;
-    rows.forEach(r=>{ const v = r && r.v ? r.v[idx] : null; if(v==null || !isFinite(v)) return; acc += v; n++; });
+    rows.forEach(r=>{ const v = vAt(r, idx); if(v==null) return; acc += v; n++; });
     if(!n) return null;
     return sum ? acc : acc/n;
   }
@@ -1073,21 +1132,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media stagione</span>';
     }
   }
-  function buildPoints(){
-    const idx = state.chartIdx, scope = state.chartScope, pts = [];
+  function buildPoints(idxArg){
+    const idx = (idxArg==null ? state.chartIdx : idxArg), scope = state.chartScope, pts = [];
     if(scope==='season'){
       currentMonths().forEach(m=>{
         let wk = '';
         (m.rows||[]).forEach(r=>{
           if(r.type==='wk_header') wk = r.label;
-          else if(r.type==='tot_week') pts.push({ value:r.v[idx], group:monthCode(m.title), barLabel:null, kind:'week', ttTitle:m.title, ttSub:wk, md:null });
+          else if(r.type==='tot_week') pts.push({ value:vAt(r,idx), group:monthCode(m.title), barLabel:null, kind:'week', ttTitle:m.title, ttSub:wk, md:null });
         });
       });
     } else if(scope==='month'){
       const mon = activeMonth(); if(!mon) return pts;
       weekBlocks(mon).forEach(b=>{
         if(!b.rows.length && !b.tot) return;
-        const v = b.tot ? b.tot.v[idx] : b.rows.reduce((a,r)=> a + ((r.v&&r.v[idx]!=null)? r.v[idx]:0), 0);
+        const v = b.tot ? vAt(b.tot, idx) : b.rows.reduce((a,r)=> a + (vAt(r,idx)||0), 0);
         pts.push({ value:v, group:null, barLabel:(b.week||'sett.'), kind:'week', ttTitle:mon.title, ttSub:(b.week||'settimana'), md:null });
       });
     } else if(scope==='last4' || scope==='range'){
@@ -1115,7 +1174,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const info = mdOf(x.mon.key, x.row.label);
           const md = x.kind==='match' ? 0 : (info ? info.md : null);
           pts.push({
-            value:(x.row.v ? x.row.v[idx] : null), group:null, barLabel: shortD(x.d), kind:x.kind,
+            value: vAt(x.row, idx), group:null, barLabel: shortD(x.d), kind:x.kind,
             ttTitle: (x.row.wd ? x.row.wd+' ' : '') + shortD(x.d) + ' · ' + x.row.label,
             ttSub: (mdLabel(md) || (x.kind==='match' ? 'partita' : 'allenamento')), md:md
           });
@@ -1130,7 +1189,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const info = mdOf(mon.key, r.label);
         const md = r.type==='match' ? 0 : (info ? info.md : null);
         pts.push({
-          value:(r.v?r.v[idx]:null), group:null, barLabel:(r.wd||r.label),
+          value: vAt(r, idx), group:null, barLabel:(r.wd||r.label),
           kind:(r.type==='match'?'match':'train'),
           ttTitle:(r.label+(r.wd?(' · '+r.wd):'')),
           ttSub:(mdLabel(md)||(r.type==='match'?'partita':'allenamento')), md:md
@@ -1145,8 +1204,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     syncWeekSelect();
     syncRangeField();
     setChartChrome(scope);
+    renderMini();
     const pts = buildPoints();
-    const idx = state.chartIdx, unit = UNIT[idx]||'';
+    const idx = state.chartIdx, unit = metUnit(idx);
     if(!pts.length){
       const msg = scope==='micro' ? 'Nessuna seduta in questa settimana'
                 : (scope==='range' ? 'Nessuna seduta nel periodo scelto' : 'Nessun dato disponibile');
@@ -1221,7 +1281,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const svg =
       '<svg class="chart" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" '+
-      'aria-label="'+esc(M[idx]||'')+' - '+pts.length+' voci">'+
+      'aria-label="'+esc(metName(idx))+' - '+pts.length+' voci">'+
       '<defs>'+
       '<linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(74% 0.15 50)"/><stop offset="1" stop-color="oklch(64% 0.19 40)"/></linearGradient>'+
       '<linearGradient id="barMatch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(68% 0.18 285)"/><stop offset="1" stop-color="oklch(58% 0.22 280)"/></linearGradient>'+
@@ -1246,6 +1306,70 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         tip.innerHTML = '<div class="tt-m">'+esc(p.ttTitle||'')+'</div><div class="tt-w">'+esc(p.ttSub||'')+'</div>'+
           '<div class="tt-v tnum">'+fmt(p.value)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>';
         tip.style.left = ev.clientX+'px'; tip.style.top = ev.clientY+'px'; tip.classList.add('show');
+      });
+    });
+  }
+  // ---------- parametri chiave: un grafico piccolo per ognuno ----------
+  // Il menu a tendina resta per chi cerca una colonna precisa, ma i parametri che
+  // il mister guarda sempre stanno tutti sotto gli occhi, ciascuno col suo istogramma
+  // sullo stesso periodo del grafico grande. Un tocco e quel parametro va nel grande.
+  const MINI_IDX = (function(){
+    const out = [], add = i => { if(i!=null && i>=0 && i<NMET && out.indexOf(i)<0) out.push(i); };
+    add(metFind(['dist tot','distanza tot']));
+    add(IOVER20);
+    add(I23);
+    add(I2023);
+    add(metFind(['n acc','acc > 3','acc>3']));
+    add(metFind(['n dec','dec < -3','dec<-3']));
+    add(metFind(['m/min']));
+    add(metFind(['smax','vel max','vmax']));
+    (S.key_idx||[]).forEach(add);
+    return out.slice(0,8);
+  })();
+  function miniSpark(pts){
+    const n = pts.length, H = 41;
+    if(!n) return '<svg class="mc-spark" viewBox="0 0 100 '+H+'" preserveAspectRatio="none" aria-hidden="true"></svg>';
+    const vals = pts.map(p=> (p.value==null || !isFinite(p.value)) ? 0 : p.value);
+    const mx = Math.max(1, ...vals), W = n*10, gap = 2.4;
+    let g = '';
+    for(let i=0;i<n;i++){
+      const h = Math.max(1, (H-3) * vals[i]/mx), x = i*10 + gap/2, y = H - h;
+      const col = (pts[i].kind==='match') ? 'var(--violet2)' : 'var(--orange)';
+      const op = (pts[i].value==null) ? 0.2 : 0.85;
+      g += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(10-gap).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1" fill="'+col+'" opacity="'+op+'"/>';
+    }
+    g += '<line x1="0" y1="'+(H-0.5)+'" x2="'+W+'" y2="'+(H-0.5)+'" stroke="var(--border2)" stroke-width="1"/>';
+    return '<svg class="mc-spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+g+'</svg>';
+  }
+  function miniCell(i){
+    const pts = buildPoints(i);
+    const nz = pts.filter(p=> p.value!=null && isFinite(p.value)).map(p=> p.value);
+    const sum = metSum(i);
+    const tot = nz.reduce((a,b)=> a+b, 0);
+    const agg = nz.length ? (sum ? tot : tot/nz.length) : null;
+    const on = (i===state.chartIdx), u = metUnit(i);
+    return '<button type="button" class="mcell'+(on?' on':'')+'" data-idx="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+
+      '<div class="mc-name">'+esc(metShort(i))+'</div>'+
+      '<div class="mc-val tnum">'+ (agg==null ? '-' : fmtLoad(agg)) + (u ? '<small>'+esc(u)+'</small>' : '') +'</div>'+
+      '<div class="mc-sub">'+ (sum ? 'totale del periodo' : 'media del periodo') +'</div>'+
+      miniSpark(pts)+
+      '</button>';
+  }
+  function renderMini(){
+    const grid = document.getElementById('mini-grid');
+    if(!grid) return;
+    const hint = document.getElementById('mini-hint');
+    if(hint) hint.textContent = 'stesso periodo del grafico sopra, tocca un parametro per aprirlo grande';
+    let html = '';
+    MINI_IDX.forEach(i=>{ html += miniCell(i); });
+    grid.innerHTML = html || emptyBlock('Nessun parametro disponibile');
+    grid.querySelectorAll('.mcell').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        state.chartIdx = +b.getAttribute('data-idx');
+        syncMetricSelect();
+        renderChart();
+        const card = document.getElementById('chart-card');
+        if(card) card.scrollIntoView({ behavior: REDUCE?'auto':'smooth', block:'start' });
       });
     });
   }
