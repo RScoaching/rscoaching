@@ -178,43 +178,19 @@ tr.r-teamref td.num{ color:var(--ink); }
 /* ---------- leggibilita' della griglia seduta ---------- */
 /* Trenta atlete per quindici colonne di numeri che si somigliano tutti: senza appigli
    l'occhio si perde. Le cifre vanno incolonnate, una riga su due e' leggermente piu'
-   chiara per non saltare di atleta, la colonna sotto il mouse resta segnata ai lati e
-   dentro ogni cella una barra dice subito chi ha fatto di piu' in quel parametro. */
+   chiara per non saltare di atleta e la colonna sotto il mouse resta segnata. Niente
+   riempimenti dentro le celle: sporcano la lettura dei numeri. */
 table.grid td.num, table.grid td.cmp{ font-variant-numeric:tabular-nums; }
 table.grid tr.r-alt td{ background:oklch(13.5% 0.014 38); }
 table.grid tr.r-alt td.key{ background:oklch(16.5% 0.018 38); }
 /* l'evidenziazione della riga sotto il mouse viene dopo la zebratura: deve vincere sempre */
 table.grid tr.r-day:hover td{ background:var(--surface2); }
 table.grid tr.r-day:hover td.key{ background:oklch(19% 0.018 38); }
-/* la colonna sotto il puntatore si schiarisce: la barra dentro la cella e' semitrasparente
-   e resta leggibile sopra la tinta. Le righe di riferimento (squadra, modello) restano
-   com'erano, il loro colore dice gia' che cosa sono. */
+/* la colonna sotto il puntatore si schiarisce insieme alla sua intestazione. Le righe di
+   riferimento (squadra, modello) restano com'erano, il loro colore dice gia' che cosa sono. */
 table.grid tr.r-day td.col-hot{ background:oklch(17.5% 0.020 38); }
 table.grid tr.r-day td.col-hot.key{ background:oklch(20% 0.022 38); }
 table.grid thead th.col-hot{ color:var(--ink); background:var(--surface3); }
-
-/* barra proporzionale al massimo della colonna fra le atlete presenti,
-   con la tacca verde della media atlete: sopra la tacca si e' sopra la media */
-table.grid td.num.bar{ position:relative; z-index:0; }
-table.grid td.num.bar::before{
-  content:''; position:absolute; z-index:0; left:0; top:4px; bottom:4px; width:var(--p, 0%);
-  background:oklch(68% 0.19 42 / 0.15); border-radius:0 3px 3px 0;
-}
-table.grid td.num.bar::after{
-  content:''; position:absolute; z-index:1; left:var(--a, 0%); top:3px; bottom:3px; width:1px;
-  background:oklch(70% 0.18 152 / 0.60);
-}
-table.grid td.num.bar.noavg::after{ display:none; }
-table.grid td.num.bar .v{ position:relative; z-index:2; }
-table.grid td.num.bar.key::before{ background:oklch(68% 0.19 42 / 0.22); }
-.cmp-legend .barsample{
-  display:inline-block; width:26px; height:9px; border-radius:0 2px 2px 0; vertical-align:-1px;
-  background:oklch(68% 0.19 42 / 0.30); margin-right:5px;
-}
-.cmp-legend .avgsample{
-  display:inline-block; width:2px; height:11px; vertical-align:-2px;
-  background:var(--green); margin-right:5px;
-}
 
 /* ---------- rail sedute ---------- */
 .sess-search{ display:block; width:100%; box-sizing:border-box; font-family:inherit; font-size:13px;
@@ -376,7 +352,6 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
   table.grid tr.r-alt td{ background:#f7f7f7 !important; }
   table.grid tr.r-alt td.key{ background:#f6efe8 !important; }
-  table.grid td.num.bar::before, table.grid td.num.bar::after{ display:none !important; }
   table.grid tr.r-day td.col-hot{ background:#fff !important; }
   table.grid tr.r-alt td.col-hot{ background:#f7f7f7 !important; }
   table.grid tr.r-day td.col-hot.key{ background:#faf1ea !important; }
@@ -803,11 +778,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const lg = document.getElementById('cmp-legend');
     if(lg){
       if(eff==='val'){
-        // in modalita' valori la legenda spiega la barra dentro la cella, non le percentuali
-        lg.hidden = false;
-        lg.innerHTML = 'Valori della seduta'
-          + '<span class="lg"><span class="barsample"></span>quanto rispetto alla piu&#39; alta della colonna</span>'
-          + '<span class="lg"><span class="avgsample"></span>media delle atlete presenti</span>';
+        // in modalita' valori non c'e' niente da spiegare: i numeri parlano da soli
+        lg.hidden = true;
       }
       else {
         const ref = eff==='match' ? 'partita modello' : ('media '+mdLabel(md)+' di stagione');
@@ -826,28 +798,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
       return ssort.dir*(va-vb);
     });
-    // Massimo e media di ogni colonna calcolati solo sulle atlete presenti: sono loro il metro
-    // di paragone della seduta. La riga squadra e il modello restano fuori dal conto perche'
-    // nelle partite il dato squadra e' quello di tutta la gara, non una media.
-    const colStats = {};
-    V.forEach(i=>{
-      let mx = 0, sum = 0, n = 0;
-      rows.forEach(r=>{
-        const v = (r.v||[])[i];
-        if(v!=null && isFinite(v) && v>0){ if(v>mx) mx = v; sum += v; n++; }
-      });
-      colStats[i] = { max: mx, avg: n ? sum/n : null };
-    });
-    const pctOf = (v, mx)=> Math.round(Math.max(0, Math.min(100, v/mx*100))*10)/10;
-    const cell = (v, i, cmp, st)=>{
+    const cell = (v, i, cmp)=>{
       const kc = keyCls(i);
       if(cmp!=='match' && cmp!=='md'){
-        if(st && st.max>0 && v!=null && isFinite(v) && v>0){
-          const p = pctOf(v, st.max);
-          const a = (st.avg!=null && st.avg>0) ? pctOf(st.avg, st.max) : null;
-          return '<td class="num tnum bar'+(a==null?' noavg':'')+kc+'" style="--p:'+p+'%;--a:'+(a==null?0:a)+'%">'
-               + '<span class="v">'+fmt(v)+'</span></td>';
-        }
         return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
       }
       const b = base ? base[i] : null;
@@ -889,7 +842,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rows.forEach((r, ri)=>{
       h += '<tr class="r-day'+(ri%2?' r-alt':'')+'"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       const rv = r.v||[];
-      V.forEach(i=> h += cell(rv[i], i, eff, colStats[i]));
+      V.forEach(i=> h += cell(rv[i], i, eff));
       h += '</tr>';
     });
     h += '</tbody></table>';
