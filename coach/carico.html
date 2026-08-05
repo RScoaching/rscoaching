@@ -531,13 +531,41 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .cols-foot #cols-done{ flex:1 1 100%; justify-content:center; }
 }
 
+/* ---------- modello partita modificabile ---------- */
+.mod-list{ border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+.mod-row{ display:flex; align-items:center; gap:11px; padding:9px 11px; background:var(--surface);
+  border-bottom:1px solid var(--border); transition: background .14s var(--ease); }
+.mod-row:last-child{ border-bottom:0; }
+.mod-row.edited{ background:var(--ember-bg); }
+.mod-name{ flex:1 1 auto; min-width:0; font-size:13px; color:var(--text); line-height:1.35; }
+.mod-name small{ display:block; font-size:11px; color:var(--faint); margin-top:1px; font-variant-numeric:tabular-nums; }
+.mod-row.edited .mod-name{ color:var(--ink); }
+.mod-inp{ flex:0 0 auto; width:106px; font-family:inherit; font-size:13px; text-align:right; color:var(--ink);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px; padding:8px 10px; min-height:38px;
+  font-variant-numeric:tabular-nums; }
+.mod-inp::placeholder{ color:var(--faint); }
+.mod-inp:focus{ outline:2px solid var(--orange); outline-offset:1px; }
+.mod-undo{ appearance:none; cursor:pointer; border:1px solid var(--border2); background:transparent; color:var(--faint);
+  width:34px; height:34px; border-radius:9px; display:grid; place-items:center; flex:0 0 auto;
+  transition: color .14s var(--ease), border-color .14s var(--ease), background .14s var(--ease); }
+.mod-undo:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface2); }
+.mod-undo:active{ transform:scale(.96); }
+.mod-undo[disabled]{ opacity:.28; cursor:default; }
+.mod-undo svg{ width:16px; height:16px; }
+.mod-state{ flex:1 1 auto; min-width:180px; font-size:12px; color:var(--muted); line-height:1.4; }
+@media (max-width: 560px){
+  .mod-inp{ width:88px; }
+  .mod-state{ flex:1 1 100%; }
+  .cols-foot #model-done{ flex:1 1 100%; justify-content:center; }
+}
+
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
   @page{ margin:13mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, #chart-card, .chart-tooltip, .toast,
-  #cols-dialog, .top-right, .foot-note{ display:none !important; }
+  #cols-dialog, #model-dialog, .top-right, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
@@ -649,6 +677,10 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
         <button class="btn" id="btn-cols" title="Scegli, ordina e salva i parametri (sinottiche)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
           Parametri <span class="cols-count" id="cols-count"></span>
+        </button>
+        <button class="btn" id="btn-model" title="Correggi a mano i valori di riferimento del modello partita">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4 16.5z"/><path d="M13.5 6.5l4 4"/></svg>
+          Modello <span class="cols-count" id="model-count"></span>
         </button>
         <button class="btn" id="btn-print" title="Stampa o salva in PDF la vista corrente">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
@@ -813,6 +845,26 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   </div>
 </dialog>
 
+<!-- modello partita: valori di riferimento correggibili a mano -->
+<dialog id="model-dialog" class="cols-dialog" aria-label="Modello partita">
+  <div class="cols-panel">
+    <div class="cols-head">
+      <h2>Modello partita</h2>
+      <span class="hint">Sono i valori con cui la seduta viene confrontata quando scegli "rispetto al match". Nascono in automatico dalle partite; qui li puoi correggere a mano. Lascia il campo vuoto per tornare al valore automatico. Le correzioni restano su questo dispositivo, valgono solo per la stagione <b id="model-season"></b> e non toccano i file dei dati.</span>
+    </div>
+    <div class="cols-scroll">
+      <div class="col-tools">
+        <button class="mini" id="model-reset" type="button">Ripristina tutti i valori automatici</button>
+      </div>
+      <div class="mod-list" id="model-list"></div>
+    </div>
+    <div class="cols-foot">
+      <span class="mod-state" id="model-state"></span>
+      <button class="btn primary" id="model-done" type="button">Fatto</button>
+    </div>
+  </div>
+</dialog>
+
 <!-- snapshot dati calcolati (window.SNAP) -->
 <script src="./carico_data.js"></script>
 <script>
@@ -868,6 +920,40 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const oka = (a!=null && isFinite(a)), okb = (b!=null && isFinite(b));
     if(!oka && !okb) return null;
     return (oka?a:0) + (okb?b:0);
+  }
+
+  // ---------- modello partita: automatico ma correggibile ----------
+  // I valori di riferimento nascono dalle partite gia' giocate (S.model), pero' il mister
+  // deve poterli aggiustare: le correzioni stanno nel browser, separate per stagione,
+  // e non riscrivono mai il file dei dati.
+  const MODEL_KEY = 'rs_fio_carico_model_' + (S.stagione || 'na');
+  let modelOv = {};
+  (function loadModelOv(){
+    try{
+      const raw = JSON.parse(localStorage.getItem(MODEL_KEY) || 'null');
+      if(raw && typeof raw==='object'){
+        Object.keys(raw).forEach(k=>{
+          const i = +k, v = +raw[k];
+          if(Number.isInteger(i) && i>=0 && i<M.length && isFinite(v)) modelOv[i] = v;
+        });
+      }
+    }catch(e){}
+  })();
+  function saveModelOv(){ try{ localStorage.setItem(MODEL_KEY, JSON.stringify(modelOv)); }catch(e){} }
+  function modelAuto(){ return Array.isArray(S.model) ? S.model : []; }
+  function modelEditN(){ return Object.keys(modelOv).length; }
+  function modelTag(){ return modelEditN() ? ' (corretto a mano)' : ''; }
+  function MODEL(){
+    const auto = modelAuto();
+    if(!auto.length && !modelEditN()) return null;
+    const out = [];
+    for(let i=0;i<M.length;i++){
+      const ov = modelOv[i];
+      if(ov!=null && isFinite(ov)){ out[i] = ov; continue; }
+      const a = auto[i];
+      out[i] = (a==null || !isFinite(a)) ? null : a;
+    }
+    return out.length ? out : null;
   }
 
   // ---------- state ----------
@@ -1764,9 +1850,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const ncol = V.length + 1;
     let body = '<tbody>';
     // modello AVG partita in testa (riferimento sempre visibile)
-    if(S.model && S.model.length){
-      body += '<tr class="r-model"><td class="col-day"><span class="wd">rif.</span><span class="lb">Modello AVG partita</span></td>';
-      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(S.model[i])+'</td>');
+    const MOD = MODEL();
+    if(MOD){
+      body += '<tr class="r-model"><td class="col-day"><span class="wd">rif.</span><span class="lb">Modello AVG partita'+esc(modelTag())+'</span></td>';
+      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
       body += '</tr>';
     }
     (mon.rows||[]).forEach(r=>{
@@ -1821,9 +1908,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     h += '</tr></thead><tbody>';
     // model row pinned on top
-    if(S.model && S.model.length){
-      h += '<tr class="r-model"><td class="col-day"><span class="lb">AVG partita</span></td><td class="data">modello</td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(S.model[i])+'</td>');
+    const MOD = MODEL();
+    if(MOD){
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">AVG partita</span></td><td class="data">'+(modelEditN()?'modello corretto':'modello')+'</td>';
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
       h += '</tr>';
     }
     rows.forEach(r=>{
@@ -1957,9 +2045,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const info = mdOf(monthKey, label);
     const md = info ? info.md : null;
     const mdAvg = (mode==='md') ? mdAverage(md) : null;
-    const base = mode==='match' ? (S.model||null) : mode==='md' ? mdAvg : null;
+    const MOD = MODEL();
+    const base = mode==='match' ? MOD : mode==='md' ? mdAvg : null;
     // se il confronto scelto non e applicabile, ripiega sui valori
-    const eff = (mode==='match' && !(S.model&&S.model.length)) ? 'val'
+    const eff = (mode==='match' && !MOD) ? 'val'
               : (mode==='md' && !(mdAvg && md!=null)) ? 'val' : mode;
     document.getElementById('session-title').textContent = (isMatch?'Partita ':'Seduta ')+label;
     const badge = (md!=null) ? '  ·  '+mdLabel(md)+(info&&info.matchLabel&&md!==0?(' ('+info.matchLabel+')'):'') : '';
@@ -2014,9 +2103,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h += '<tr class="r-model"><td class="col-day"><span class="lb">Media '+esc(mdLabel(md))+' (rif.)</span></td>';
       V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(mdAvg[i])+'</td>');
       h += '</tr>';
-    } else if(S.model && S.model.length){
-      h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='match'?' (rif.)':'')+'</span></td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(S.model[i])+'</td>');
+    } else if(MOD){
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='match'?' (rif.)':'')+esc(modelTag())+'</span></td>';
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
       h += '</tr>';
     }
     if(!rows.length){
@@ -2126,7 +2215,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rows.push(['Giorno', ...V.map(i=> M[i])]);
     rows.push(['', ...V.map(i=> UNIT[i]||'')]);
     // riferimenti
-    if(S.model && S.model.length) rows.push(['Modello AVG partita', ...V.map(i=> rawIt(S.model[i]))]);
+    const MOD = MODEL();
+    if(MOD) rows.push(['Modello AVG partita'+modelTag(), ...V.map(i=> rawIt(MOD[i]))]);
     // righe del mese
     (mon && mon.rows || []).forEach(r=>{
       if(r.type==='wk_header'){ rows.push([r.label]); return; }
@@ -2181,8 +2271,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     h += '<table><tr><th class="lbl">Giorno</th>';
     V.forEach(i=>{ h += '<th>'+esc(SHORT[i]||M[i])+(UNIT[i]?'<br><span class="u">'+esc(UNIT[i])+'</span>':'')+'</th>'; });
     h += '</tr>';
-    if(S.model && S.model.length){
-      h += '<tr class="mod"><td class="lbl">Modello AVG partita</td>'+ V.map(i=>'<td'+(KEY.has(i)?' class="key"':'')+'>'+xlsNum(S.model[i])+'</td>').join('') +'</tr>';
+    const MOD = MODEL();
+    if(MOD){
+      h += '<tr class="mod"><td class="lbl">Modello AVG partita'+esc(modelTag())+'</td>'+ V.map(i=>'<td'+(KEY.has(i)?' class="key"':'')+'>'+xlsNum(MOD[i])+'</td>').join('') +'</tr>';
     }
     (mon && mon.rows || []).forEach(r=>{
       if(r.type==='wk_header'){ h += '<tr class="week"><td class="lbl" colspan="'+ncol+'">'+esc(r.label)+'</td></tr>'; return; }
@@ -2368,10 +2459,112 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     dlg.addEventListener('cancel', e=>{ e.preventDefault(); closeColDialog(); });
   }
 
+  // ---------- editor del modello partita ----------
+  const UNDO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h11a5 5 0 0 1 0 10h-5"/><path d="M3 9l4.5-4.5M3 9l4.5 4.5"/></svg>';
+  function parseModelNum(t){
+    const s = String(t==null?'':t).trim().replace(/\s/g,'').replace(',', '.');
+    if(!s) return null;
+    const v = Number(s);
+    return isFinite(v) ? v : null;
+  }
+  function updateModelCount(){
+    const el = document.getElementById('model-count'); if(!el) return;
+    const n = modelEditN();
+    el.textContent = n ? String(n) : '';
+    el.style.display = n ? '' : 'none';
+  }
+  function renderModelPanel(){
+    const host = document.getElementById('model-list'); if(!host) return;
+    const seas = document.getElementById('model-season'); if(seas) seas.textContent = S.stagione || '';
+    const auto = modelAuto();
+    let h = '';
+    for(let i=0;i<M.length;i++){
+      const ov = modelOv[i], on = (ov!=null && isFinite(ov));
+      const a = auto[i], hasA = (a!=null && isFinite(a));
+      const u = UNIT[i] ? ' '+UNIT[i] : '';
+      const nm = M[i] || '';
+      h += '<div class="mod-row'+(on?' edited':'')+'">'+
+        '<span class="mod-name">'+esc(nm)+
+          '<small>'+(hasA ? 'automatico '+esc(NF.format(a))+esc(u) : 'nessun valore automatico')+'</small></span>'+
+        '<input class="mod-inp" type="text" inputmode="decimal" data-mi="'+i+'"'+
+          ' value="'+(on ? esc(NF.format(ov)) : '')+'"'+
+          ' placeholder="'+(hasA ? esc(NF.format(a)) : '-')+'"'+
+          ' aria-label="Valore di riferimento per '+esc(nm)+'">'+
+        '<button class="mod-undo" type="button" data-mu="'+i+'"'+(on?'':' disabled')+
+          ' title="Torna al valore automatico" aria-label="Torna al valore automatico di '+esc(nm)+'">'+UNDO_SVG+'</button>'+
+        '</div>';
+    }
+    host.innerHTML = h || emptyBlock('Nessun parametro disponibile');
+    const st = document.getElementById('model-state');
+    if(st){
+      const n = modelEditN();
+      st.textContent = n===0 ? 'Tutti i valori sono quelli automatici'
+        : n===1 ? '1 valore corretto a mano'
+        : n+' valori corretti a mano';
+    }
+    updateModelCount();
+  }
+  function refreshModelViews(){
+    renderGrid();
+    renderMatches();
+    if(state.session) renderSession();
+  }
+  function commitModelInput(inp){
+    const i = +inp.getAttribute('data-mi');
+    if(!Number.isInteger(i) || i<0 || i>=M.length) return;
+    const v = parseModelNum(inp.value);
+    const auto = modelAuto()[i];
+    if(v==null || (auto!=null && isFinite(auto) && v===auto)) delete modelOv[i];
+    else modelOv[i] = v;
+    saveModelOv(); renderModelPanel(); refreshModelViews();
+  }
+  function openModelDialog(){
+    renderModelPanel();
+    const d = document.getElementById('model-dialog'); if(!d) return;
+    if(typeof d.showModal==='function'){ if(!d.open) d.showModal(); } else d.setAttribute('open','');
+  }
+  function closeModelDialog(){
+    const d = document.getElementById('model-dialog'); if(!d) return;
+    if(typeof d.close==='function' && d.open) d.close(); else d.removeAttribute('open');
+  }
+  function initModelDialog(){
+    const dlg = document.getElementById('model-dialog'), list = document.getElementById('model-list');
+    if(!dlg || !list) return;
+    list.addEventListener('change', e=>{
+      const inp = e.target.closest && e.target.closest('.mod-inp'); if(!inp) return;
+      commitModelInput(inp);
+    });
+    list.addEventListener('keydown', e=>{
+      if(e.key!=='Enter') return;
+      const inp = e.target.closest && e.target.closest('.mod-inp'); if(!inp) return;
+      e.preventDefault(); commitModelInput(inp);
+    });
+    list.addEventListener('click', e=>{
+      const b = e.target.closest && e.target.closest('.mod-undo'); if(!b) return;
+      const i = +b.getAttribute('data-mu');
+      if(modelOv[i]==null) return;
+      delete modelOv[i];
+      saveModelOv(); renderModelPanel(); refreshModelViews();
+      toast('Valore automatico ripristinato');
+    });
+    const rst = document.getElementById('model-reset');
+    if(rst) rst.addEventListener('click', ()=>{
+      if(!modelEditN()){ toast('Non ci sono valori corretti a mano'); return; }
+      modelOv = {};
+      saveModelOv(); renderModelPanel(); refreshModelViews();
+      toast('Modello riportato ai valori automatici');
+    });
+    const done = document.getElementById('model-done');
+    if(done) done.addEventListener('click', closeModelDialog);
+    dlg.addEventListener('click', e=>{ if(e.target===dlg) closeModelDialog(); });
+    dlg.addEventListener('cancel', e=>{ e.preventDefault(); closeModelDialog(); });
+  }
+
   // ---------- init (con deep-link ?atleta=NOME) ----------
   (function init(){
     const bc = document.getElementById('btn-cols'); if(bc) bc.addEventListener('click', openColDialog);
-    initColDialog(); updateColsCount();
+    const bm = document.getElementById('btn-model'); if(bm) bm.addEventListener('click', openModelDialog);
+    initColDialog(); initModelDialog(); updateColsCount(); updateModelCount();
     try{
       const q = new URLSearchParams(location.search).get('atleta');
       if(q && S.players && S.players[q]){
