@@ -1742,14 +1742,19 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const PL_PEOPLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20v-1.6a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.4V20"/><circle cx="10" cy="7.2" r="3.1"/><path d="M21 20v-1.6a3.6 3.6 0 0 0-2.7-3.5"/><path d="M15.5 4.3a3.1 3.1 0 0 1 0 6"/></svg>';
 
   // ---- roster giocatrici (per filtri e assegnazioni) ----
-  const RS_ROLES_KEY = 'rs_fio_roles';
+  // Ruoli riscritti a mano: chiave separata per stagione, come in Atlete.
+  const RS_ROLES_KEY = (window.fioKey || function(b){ return b; })('rs_fio_roles');
   const PL_ROLE_ORDER = ['Portiere','Difensore centrale','Terzino','Play','Mezzala','Esterno','Punta','Da assegnare'];
   function rosterOverrides(){
     try{ const o = JSON.parse(localStorage.getItem(RS_ROLES_KEY)||'{}'); return (o && typeof o==='object') ? o : {}; }
     catch(e){ return {}; }
   }
   function rosterList(){
-    const src = Array.isArray(window.RS_ROSTER) ? window.RS_ROSTER : [];
+    // La rosa arriva da fioRoster(): sulla 26/27 sono le atlete rigenerate dai file
+    // della cartella, sulla 25/26 resta l'elenco storico qui sopra.
+    const src = (typeof window.fioRoster === 'function')
+      ? window.fioRoster().map(function(p){ return { n:p.name, r:p.role }; })
+      : (Array.isArray(window.RS_ROSTER) ? window.RS_ROSTER : []);
     const ov = rosterOverrides();
     return src.map(function(p){
       let r = String(p.r||'').trim();
