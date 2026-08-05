@@ -153,6 +153,28 @@ select.picker:hover{ border-color:var(--border3); }
 .mpill:active{ transform:scale(.96); }
 .mpill.on{ background:var(--violet-bg); color:var(--violet2); border-color:var(--violet-border); }
 
+/* ---------- indice delle sezioni ---------- */
+/* La pagina e' lunga: l'indice resta agganciato sotto l'intestazione, dice cosa c'e'
+   piu' sotto e accende la voce del blocco che si sta guardando. */
+.secnav{
+  position:sticky; top:var(--nav-top, 74px); z-index:calc(var(--z-nav) - 1);
+  display:flex; gap:6px; overflow-x:auto; scrollbar-width:none;
+  padding:8px 2px; margin:0 -2px 20px;
+  background:oklch(8.5% 0.014 38 / 0.92); backdrop-filter:saturate(160%) blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.secnav::-webkit-scrollbar{ display:none; }
+.snav{
+  flex:0 0 auto; appearance:none; border:1px solid transparent; background:transparent;
+  color:var(--muted); cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  letter-spacing:.02em; padding:7px 13px; border-radius:8px; white-space:nowrap;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease);
+}
+.snav:hover{ color:var(--text); background:var(--surface2); }
+.snav:active{ transform:scale(.97); }
+.snav.on{ background:var(--ember-bg); color:var(--orange2); border-color:var(--ember-border); }
+.snav:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+
 /* ---------- KPI strip ---------- */
 .kpis{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:24px; }
 .kpi{
@@ -573,7 +595,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   @page{ margin:13mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
-  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, #chart-card, .chart-tooltip, .toast,
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, #chart-card, .chart-tooltip, .toast,
   #cols-dialog, #model-dialog, .top-right, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
@@ -717,6 +739,15 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
       <!-- month pills -->
       <div class="months" id="months" role="tablist" aria-label="Mese"></div>
 
+      <!-- indice: cosa c'e' nella pagina e dove si e' arrivati -->
+      <nav class="secnav" id="secnav" aria-label="Sezioni della pagina">
+        <button class="snav on" type="button" data-sec="kpis" aria-current="true" title="Minuti, distanza, sedute e partite del mese">Riepilogo del mese</button>
+        <button class="snav" type="button" data-sec="chart-card" title="Il grafico grande, un parametro per volta sul periodo scelto">Andamento</button>
+        <button class="snav" type="button" data-sec="mini-card" title="Otto parametri sotto gli occhi, ognuno col suo istogramma">Parametri chiave</button>
+        <button class="snav" type="button" data-sec="acwr-card" title="Quanto e' salito il carico rispetto alle ultime quattro settimane">Rischio carico</button>
+        <button class="snav" type="button" data-sec="grid-card" title="La griglia del mese, giorno per giorno">Griglia del mese</button>
+      </nav>
+
       <!-- KPIs -->
       <div class="kpis reveal" id="kpis" style="--i:0"></div>
 
@@ -767,7 +798,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
       <section class="card reveal" id="acwr-card" style="--i:3">
         <div class="card-head">
           <h2>Analisi carico</h2>
-          <span class="hint">rapporto acuto:cronico (ACWR), settimana per settimana e microciclo tipo</span>
+          <span class="hint">quanto e' salito il carico rispetto alla media delle ultime quattro settimane: sotto 0,8 si e' scarichi, sopra 1,5 il rischio cresce</span>
           <span class="spacer"></span>
           <div class="chart-tools">
             <div class="field">
@@ -1591,8 +1622,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         state.chartIdx = +b.getAttribute('data-idx');
         syncMetricSelect();
         renderChart();
-        const card = document.getElementById('chart-card');
-        if(card) card.scrollIntoView({ behavior: REDUCE?'auto':'smooth', block:'start' });
+        scrollToCard(document.getElementById('chart-card'));
       });
     });
   }
@@ -2529,6 +2559,75 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const t = e.target;
     if(!(t && t.closest && t.closest('#chart-wrap'))) chartHide();
   }, true);
+
+  // ---------- indice delle sezioni ----------
+  // La pagina e' fatta di cinque blocchi uno sotto l'altro e per arrivare in fondo
+  // servono parecchi giri di rotella. L'indice resta agganciato sotto l'intestazione,
+  // porta al blocco con un tocco e mentre si scorre accende la voce di dove si e'.
+  const SECN = ['kpis','chart-card','mini-card','acwr-card','grid-card'];
+  function navTop(){
+    const tb = document.querySelector('.topbar');
+    // sopra i 900 pixel l'intestazione resta agganciata, sotto no e al suo posto
+    // c'e' la barra fissa del telefono iniettata dalla sidebar (52 pixel)
+    if(tb && getComputedStyle(tb).position === 'sticky') return tb.offsetHeight;
+    return 52;
+  }
+  function syncNavTop(){ document.documentElement.style.setProperty('--nav-top', navTop()+'px'); }
+  function setSecActive(id){
+    document.querySelectorAll('#secnav .snav').forEach(b=>{
+      const on = b.getAttribute('data-sec') === id;
+      b.classList.toggle('on', on);
+      if(on) b.setAttribute('aria-current','true'); else b.removeAttribute('aria-current');
+    });
+  }
+  function secOffset(nav){ return navTop() + (nav ? nav.offsetHeight : 0) + 14; }
+  // porta un blocco in cima allo schermo senza che intestazione e indice ne coprano il titolo
+  function scrollToCard(el){
+    if(!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY - secOffset(document.getElementById('secnav'));
+    window.scrollTo({ top: Math.max(0, y), behavior: REDUCE ? 'auto' : 'smooth' });
+  }
+  function currentSection(nav){
+    const line = secOffset(nav) + 12;
+    let best = SECN[0];
+    SECN.forEach(id=>{
+      const el = document.getElementById(id);
+      if(el && el.getBoundingClientRect().top <= line) best = id;
+    });
+    // in fondo alla pagina l'ultimo blocco puo' non arrivare mai alla linea: lo accendiamo lo stesso
+    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 6) best = SECN[SECN.length-1];
+    return best;
+  }
+  { const nav = document.getElementById('secnav');
+    if(nav){
+      nav.addEventListener('click', e=>{
+        const b = e.target.closest ? e.target.closest('.snav') : null;
+        if(!b) return;
+        const id = b.getAttribute('data-sec');
+        const el = document.getElementById(id);
+        if(!el) return;
+        scrollToCard(el);
+        setSecActive(id);
+      });
+      let raf = 0, last = '';
+      const tick = ()=>{
+        raf = 0;
+        const id = currentSection(nav);
+        if(id === last) return;
+        last = id; setSecActive(id);
+        // se le voci non ci stanno tutte in larghezza, quella accesa va portata in vista
+        const on = nav.querySelector('.snav.on');
+        if(on){
+          const l = on.offsetLeft, r = l + on.offsetWidth;
+          if(l < nav.scrollLeft) nav.scrollLeft = Math.max(0, l - 8);
+          else if(r > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = r - nav.clientWidth + 8;
+        }
+      };
+      const queue = ()=>{ if(!raf) raf = requestAnimationFrame(tick); };
+      window.addEventListener('scroll', queue, { passive:true });
+      window.addEventListener('resize', ()=>{ syncNavTop(); queue(); });
+      syncNavTop(); tick();
+    } }
 
   // ---------- resize (re-render chart width) ----------
   let rz; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(()=>{ renderChart(); renderAnalytics(); }, 160); });
