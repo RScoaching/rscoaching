@@ -196,7 +196,8 @@ input.dpick:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; 
 .legend span{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
 .lg-bar{ width:13px; height:13px; border-radius:3px; background:linear-gradient(180deg, var(--orange), var(--orange2)); }
 .lg-match{ width:13px; height:13px; border-radius:3px; background:linear-gradient(180deg, var(--violet), var(--violet2)); }
-.lg-line{ width:16px; height:0; border-top:2px dashed var(--violet2); }
+.lg-line{ width:16px; height:0; border-top:2px dashed oklch(66% 0.012 38); }
+.lg-line-mod{ width:16px; height:0; border-top:2px dotted var(--violet2); }
 .seg.chart-scope{ padding:2px; }
 .seg.chart-scope button{ font-size:12px; padding:6px 11px; }
 .chart-wrap{ overflow-x:auto; padding:2px 6px 6px; scrollbar-width:thin; }
@@ -221,8 +222,13 @@ svg.chart{ display:block; }
 .mc-val small{ font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
 .mc-sub{ font-size:11.5px; color:var(--faint); margin-top:1px; }
 .mc-spark{ display:block; width:100%; height:42px; margin-top:9px; }
-svg.chart .bar{ transform-box:fill-box; transform-origin:center bottom; transition: opacity .15s var(--ease), filter .15s var(--ease); cursor:pointer; }
-svg.chart .bar:hover, svg.chart .bar.hot{ opacity:1 !important; filter:brightness(1.12); }
+svg.chart .bar{ transform-box:fill-box; transform-origin:center bottom; pointer-events:none;
+  transition: opacity .15s var(--ease), filter .15s var(--ease); }
+svg.chart .bar.hot{ opacity:1 !important; filter:brightness(1.14); }
+/* aree di tocco larghe quanto la colonna: il grafico si legge anche col dito */
+svg.chart .hitz{ cursor:pointer; }
+svg.chart .ch-band{ transition: opacity .13s var(--ease); }
+svg.chart .vlab{ pointer-events:none; }
 svg.chart text{ font-family:'Inter',sans-serif; }
 .chart-tooltip{
   position:fixed; z-index:var(--z-tooltip); pointer-events:none; opacity:0;
@@ -1244,10 +1250,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const hint = document.getElementById('chart-hint');
     const leg = document.getElementById('chart-legend');
     const mon = activeMonth();
+    // la voce del modello compare solo dove ha senso, cioe' quando le colonne sono singole sedute
+    const modLeg = (chartIsDaily() && modelAt(state.chartIdx)!=null)
+      ? '<span><span class="lg-line-mod"></span>modello partita</span>' : '';
     if(scope==='micro'){
       if(t) t.textContent = 'Microciclo';
       if(hint) hint.textContent = (state.chartWeek? (state.chartWeek+' · ') : '') + (mon?mon.title:'') + ' · giorno per giorno';
-      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media microciclo</span>';
+      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media microciclo</span>'+modLeg;
     } else if(scope==='month'){
       if(t) t.textContent = 'Carico settimanale';
       if(hint) hint.textContent = (mon?mon.title:'') + ' · totali per settimana';
@@ -1260,7 +1269,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(hint) hint.textContent = per + (win ? (win.byWeek ? ' · totali per settimana' : ' · giorno per giorno') : '');
       if(leg){
         leg.innerHTML = (win && !win.byWeek)
-          ? '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media periodo</span>'
+          ? '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media periodo</span>'+modLeg
           : '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media periodo</span>';
       }
     } else {
@@ -1335,6 +1344,32 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     return pts;
   }
+  // valore di riferimento del modello per una metrica, derivato "sopra 20 km/h" compreso
+  function modelAt(i){
+    const MOD = MODEL();
+    if(!MOD) return null;
+    if(i===IOVER20){
+      if(I2023<0 || I23<0) return null;
+      const a = MOD[I2023], b = MOD[I23];
+      if(a==null || b==null || !isFinite(a) || !isFinite(b)) return null;
+      return a + b;
+    }
+    const v = MOD[i];
+    return (v==null || !isFinite(v)) ? null : v;
+  }
+  // vero quando ogni colonna e' una singola seduta: solo li' il confronto col match ha senso
+  function chartIsDaily(){
+    const s = state.chartScope;
+    if(s==='micro') return true;
+    if(s==='last4' || s==='range'){
+      const days = dayRows();
+      if(!days.length) return false;
+      const win = chartWindow(days);
+      return !!(win && !win.byWeek);
+    }
+    return false;
+  }
+  let chartHide = null; // chiusura del tooltip del grafico corrente
   function renderChart(){
     const wrap = document.getElementById('chart-wrap');
     const scope = state.chartScope;
@@ -1344,6 +1379,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderMini();
     const pts = buildPoints();
     const idx = state.chartIdx, unit = metUnit(idx);
+    chartHide = null;
     if(!pts.length){
       const msg = scope==='micro' ? 'Nessuna seduta in questa settimana'
                 : (scope==='range' ? 'Nessuna seduta nel periodo scelto' : 'Nessun dato disponibile');
@@ -1351,7 +1387,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
 
     const grouped = (scope==='season');
-    const H = 260, padL = 52, padR = 14, padT = 14, padB = grouped?42:52;
+    const daily = chartIsDaily();
+    const modV = daily ? modelAt(idx) : null;
+    const H = 282, padL = 56, padR = 16, padT = 32, padB = grouped?42:52;
     const slot = grouped?26:34, gapMonth = 10;
     // posizioni x (gap solo tra mesi in vista stagione)
     let x = padL, xs = [], prev = null;
@@ -1363,15 +1401,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const stretch = pts.length>1 ? extra/pts.length : 0;
     const barW = Math.min(48, slot - 8 + Math.min(stretch, 12));
     xs = xs.map((xx,i)=> xx + stretch*i);
+    const zoneW = Math.max(barW + 8, slot + stretch);
 
     const vals = pts.map(p=> (p.value==null?0:p.value));
-    const nz = pts.filter(p=> p.value!=null).map(p=> p.value);
-    const maxV = Math.max(1, ...vals);
+    const nz = pts.filter(p=> p.value!=null && isFinite(p.value)).map(p=> p.value);
+    const maxV = Math.max(1, ...vals, (modV!=null ? modV : 0));
     const nice = niceMax(maxV);
     const mean = nz.length ? nz.reduce((a,b)=>a+b,0)/nz.length : 0;
     const yOf = v => padT + (H-padT-padB) * (1 - v/nice);
 
     let g = '';
+    // che cosa si sta guardando, scritto sul grafico e non solo nel menu
+    g += '<text x="'+padL+'" y="14" font-size="10.5" font-weight="600" fill="var(--muted)">'+
+      esc(metName(idx))+(unit?' <tspan fill="var(--faint)">('+esc(unit)+')</tspan>':'')+'</text>';
     // gridlines + y ticks
     const TICKS = 4;
     for(let t=0;t<=TICKS;t++){
@@ -1379,6 +1421,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(24% 0.016 38 / 0.7)" stroke-width="1"/>';
       g += '<text x="'+(padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+ (nice>=1000? NF0.format(Math.round(val)) : NF.format(val)) +'</text>';
     }
+    // banda che si accende sotto la colonna scelta
+    g += '<rect class="ch-band" id="ch-band" x="0" y="'+padT+'" width="0" height="'+(H-padB-padT).toFixed(1)+
+      '" rx="6" fill="oklch(100% 0 0 / 0.05)" opacity="0" pointer-events="none"></rect>';
     if(grouped){
       // etichette mese (centrate sotto ogni gruppo) + separatori
       const groups = {};
@@ -1409,12 +1454,34 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(d) g += '<path class="bar" data-i="'+i+'" d="'+d+'" fill="'+fill+'" opacity="'+op+'"></path>';
       else  g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+(H-padB-1).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="1" fill="'+fill+'" opacity="'+op+'"></rect>';
     });
-    // media
+    // il numero sopra la colonna: si legge senza passarci sopra, quindi anche da telefono
+    const labs = pts.map(p=> (p.value==null || !isFinite(p.value)) ? '' : fmtLoad(p.value));
+    let maxLab = 0; labs.forEach(s=>{ if(s.length>maxLab) maxLab = s.length; });
+    if(maxLab && barW >= maxLab*5.6 + 5){
+      pts.forEach((p,i)=>{
+        if(!labs[i]) return;
+        const y = yOf(Math.min(p.value, nice)), cx = xs[i] + barW/2;
+        const inside = (y - padT) < 13;
+        g += '<text class="vlab" x="'+cx.toFixed(1)+'" y="'+(inside ? y+13 : y-6).toFixed(1)+
+          '" text-anchor="middle" font-size="10" font-weight="700" fill="'+(inside?'oklch(16% 0.02 38)':'var(--ink)')+'">'+esc(labs[i])+'</text>';
+      });
+    }
+    // riferimenti: media del periodo a sinistra, modello partita a destra
     if(isFinite(mean) && mean>0){
       const y = yOf(Math.min(mean, nice));
-      g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--violet2)" stroke-width="1.6" stroke-dasharray="5 4"/>';
-      g += '<text x="'+(W-padR)+'" y="'+(y-6).toFixed(1)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--violet2)">media '+fmt(round1(mean))+'</text>';
+      g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(66% 0.012 38)" stroke-width="1.4" stroke-dasharray="5 4"/>';
+      g += '<text x="'+(padL+5)+'" y="'+(y-6).toFixed(1)+'" font-size="10" font-weight="600" fill="oklch(74% 0.012 38)">media '+esc(fmtLoad(mean))+'</text>';
     }
+    if(modV!=null && modV>0){
+      const y = yOf(Math.min(modV, nice));
+      g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--violet2)" stroke-width="1.8" stroke-dasharray="2 4" stroke-linecap="round"/>';
+      g += '<text x="'+(W-padR)+'" y="'+(y-6).toFixed(1)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--violet2)">modello partita '+esc(fmtLoad(modV))+'</text>';
+    }
+    // aree di tocco larghe quanto lo slot, sopra a tutto: il dito non deve centrare la colonna
+    pts.forEach((p,i)=>{
+      g += '<rect class="hitz" data-i="'+i+'" x="'+(xs[i]+barW/2-zoneW/2).toFixed(1)+'" y="'+padT+
+        '" width="'+zoneW.toFixed(1)+'" height="'+(H-padB-padT).toFixed(1)+'" fill="transparent"></rect>';
+    });
 
     const svg =
       '<svg class="chart" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" '+
@@ -1433,18 +1500,37 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         requestAnimationFrame(()=> requestAnimationFrame(()=>{ b.style.transform='scaleY(1)'; }));
       });
     }
-    // tooltip
+    // tooltip: stessa cosa col mouse e col dito
     const tip = document.getElementById('tooltip');
-    wrap.querySelectorAll('.bar').forEach(b=>{
-      b.addEventListener('mouseenter', ()=> b.classList.add('hot'));
-      b.addEventListener('mouseleave', ()=>{ b.classList.remove('hot'); tip.classList.remove('show'); });
-      b.addEventListener('mousemove', ev=>{
-        const p = pts[+b.getAttribute('data-i')];
-        tip.innerHTML = '<div class="tt-m">'+esc(p.ttTitle||'')+'</div><div class="tt-w">'+esc(p.ttSub||'')+'</div>'+
-          '<div class="tt-v tnum">'+fmt(p.value)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>';
-        tip.style.left = ev.clientX+'px'; tip.style.top = ev.clientY+'px'; tip.classList.add('show');
-      });
+    const band = wrap.querySelector('#ch-band');
+    function showAt(i, cx, cy){
+      const p = pts[i]; if(!p) return;
+      wrap.querySelectorAll('.bar').forEach(b=> b.classList.toggle('hot', +b.getAttribute('data-i')===i));
+      if(band){
+        band.setAttribute('x', (xs[i]+barW/2-zoneW/2).toFixed(1));
+        band.setAttribute('width', zoneW.toFixed(1));
+        band.setAttribute('opacity','1');
+      }
+      let extra = '';
+      if(modV!=null && modV>0 && p.value!=null && isFinite(p.value))
+        extra = '<div class="tt-x"><span>rispetto al match</span><b>'+Math.round(p.value/modV*100)+'%</b></div>';
+      tip.innerHTML = '<div class="tt-m">'+esc(p.ttTitle||'')+'</div><div class="tt-w">'+esc(p.ttSub||'')+'</div>'+
+        '<div class="tt-v tnum">'+fmt(p.value)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>'+extra;
+      tip.style.left = cx+'px'; tip.style.top = cy+'px'; tip.classList.add('show');
+    }
+    function hideTip(){
+      wrap.querySelectorAll('.bar.hot').forEach(b=> b.classList.remove('hot'));
+      if(band) band.setAttribute('opacity','0');
+      tip.classList.remove('show');
+    }
+    wrap.querySelectorAll('.hitz').forEach(z=>{
+      const i = +z.getAttribute('data-i');
+      const go = ev => showAt(i, ev.clientX, ev.clientY);
+      z.addEventListener('pointerenter', go);
+      z.addEventListener('pointermove', go);
+      z.addEventListener('pointerdown', go);
     });
+    chartHide = hideTip;
   }
   // ---------- parametri chiave: un grafico piccolo per ognuno ----------
   // Il menu a tendina resta per chi cerca una colonna precisa, ma i parametri che
@@ -2429,6 +2515,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     })); }
   { const i=document.getElementById('sess-search'); if(i) i.addEventListener('input', e=> renderSessList(e.target.value)); }
   { const d=document.getElementById('sess-dialog'); if(d){ d.addEventListener('click', e=>{ if(e.target===d) closeSessDialog(); }); d.addEventListener('cancel', e=>{ e.preventDefault(); closeSessDialog(); }); } }
+
+  // ---------- tooltip del grafico: chiusura ----------
+  // Il contenuto di #chart-wrap viene rigenerato a ogni render, percio' questi ascoltatori
+  // stanno qui una volta sola e chiamano la chiusura del grafico corrente.
+  { const w = document.getElementById('chart-wrap');
+    if(w){
+      w.addEventListener('pointerleave', ()=>{ if(chartHide) chartHide(); });
+      w.addEventListener('scroll', ()=>{ if(chartHide) chartHide(); });
+    } }
+  document.addEventListener('pointerdown', e=>{
+    if(!chartHide) return;
+    const t = e.target;
+    if(!(t && t.closest && t.closest('#chart-wrap'))) chartHide();
+  }, true);
 
   // ---------- resize (re-render chart width) ----------
   let rz; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(()=>{ renderChart(); renderAnalytics(); }, 160); });
