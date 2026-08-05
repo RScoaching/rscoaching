@@ -180,7 +180,18 @@ select.picker:hover{ border-color:var(--border3); }
 .card-body{ padding:14px 20px 20px; }
 
 /* ---------- chart ---------- */
-.chart-tools{ display:flex; align-items:center; gap:10px; }
+.chart-tools{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+/* periodo scelto a mano: due date e il tasto per tornare alle ultime quattro settimane */
+.range-field{ display:inline-flex; align-items:center; gap:7px; }
+.range-sep{ font-size:12px; color:var(--faint); }
+input.dpick{
+  appearance:none; font-family:inherit; font-size:13px; font-weight:500; color:var(--text);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:9px;
+  padding:9px 12px; min-height:40px; color-scheme:dark; cursor:pointer;
+}
+input.dpick:hover{ border-color:var(--border3); }
+input.dpick:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.range-reset{ min-height:40px; }
 .legend{ display:flex; align-items:center; gap:16px; padding:2px 20px 10px; flex-wrap:wrap; }
 .legend span{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
 .lg-bar{ width:13px; height:13px; border-radius:3px; background:linear-gradient(180deg, var(--orange), var(--orange2)); }
@@ -622,10 +633,18 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
             <div class="seg chart-scope" id="chart-scope" role="group" aria-label="Ambito grafico">
               <button class="on" data-scope="micro" type="button" title="Microciclo: giorno per giorno di una settimana">Microciclo</button>
               <button data-scope="month" type="button" title="Totali per settimana del mese selezionato">Mese</button>
+              <button data-scope="last4" type="button" title="Le ultime quattro settimane con dati, totali per settimana">4 settimane</button>
               <button data-scope="season" type="button" title="Totali per settimana di tutta la stagione">Stagione</button>
+              <button data-scope="range" type="button" title="Periodo scelto a mano, da una data all'altra">Periodo</button>
             </div>
             <div class="field" id="chart-week-field" style="display:none">
               <select class="picker" id="chart-week" aria-label="Settimana del microciclo"></select>
+            </div>
+            <div class="range-field" id="chart-range-field" style="display:none">
+              <input class="dpick" id="chart-from" type="date" aria-label="Data di inizio del periodo">
+              <span class="range-sep">a</span>
+              <input class="dpick" id="chart-to" type="date" aria-label="Data di fine del periodo">
+              <button class="mini range-reset" id="chart-range-reset" type="button" title="Torna alle ultime quattro settimane">Ripristina</button>
             </div>
             <div class="field">
               <select class="picker" id="chart-metric" aria-label="Metrica del grafico"></select>
@@ -765,7 +784,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- state ----------
-  const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1), acwrIdx:1 };
+  const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartFrom:null, chartTo:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1), acwrIdx:1 };
   const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
 
   // ---------- parametri visibili + ordine (sinottiche) ----------
@@ -880,6 +899,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }));
     const wsel = document.getElementById('chart-week');
     if(wsel) wsel.addEventListener('change', ()=>{ state.chartWeek = wsel.value; renderChart(); });
+    const a = document.getElementById('chart-from'), b = document.getElementById('chart-to');
+    if(a) a.addEventListener('change', ()=>{ state.chartFrom = a.value; renderChart(); });
+    if(b) b.addEventListener('change', ()=>{ state.chartTo = b.value; renderChart(); });
+    const rst = document.getElementById('chart-range-reset');
+    if(rst) rst.addEventListener('click', ()=>{ state.chartFrom = null; state.chartTo = null; renderChart(); });
   })();
 
   // ---------- month pills ----------
@@ -894,7 +918,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.querySelectorAll('.mpill').forEach(b=> b.addEventListener('click', ()=>{
       state.monthKey = b.getAttribute('data-k'); state.chartWeek = null;
       renderMonths(); renderKPIs(); renderGrid();
-      if(state.chartScope!=='season') renderChart();
+      if(state.chartScope==='micro' || state.chartScope==='month') renderChart();
       const on = host.querySelector('.mpill.on'); if(on) on.scrollIntoView({block:'nearest', inline:'center', behavior: REDUCE?'auto':'smooth'});
     }));
   }
@@ -938,6 +962,75 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const mon = activeMonth(); if(!mon) return [];
     return weekBlocks(mon).filter(b=> b.rows.length);
   }
+
+  // ---------- giorni con data vera (servono a "4 settimane" e "Periodo") ----------
+  // La griglia scrive il giorno come "13AM" o "13PM": il numero e' il giorno del mese
+  // e il mese arriva dalla chiave ("2025-08"), quindi la data si ricostruisce senza
+  // aggiungere niente ai file dati.
+  function dpad(n){ return (n<10?'0':'')+n; }
+  function isoOf(d){ return d.getFullYear()+'-'+dpad(d.getMonth()+1)+'-'+dpad(d.getDate()); }
+  function fromIso(s){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+  function shortD(d){ return dpad(d.getDate())+'/'+dpad(d.getMonth()+1); }
+  function mondayOf(d){ const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; }
+  function dayRows(){
+    const out = [];
+    currentMonths().forEach(mon=>{
+      const y = +String(mon.key||'').slice(0,4), mo = +String(mon.key||'').slice(5,7);
+      if(!y || !mo) return;
+      (mon.rows||[]).forEach(r=>{
+        if(r.type!=='day' && r.type!=='match') return;
+        const dm = /^(\d{1,2})/.exec(r.label||''); if(!dm) return;
+        const d = new Date(y, mo-1, +dm[1]); d.setHours(0,0,0,0);
+        out.push({ d:d, row:r, mon:mon, kind:(r.type==='match'?'match':'train') });
+      });
+    });
+    out.sort((a,b)=> a.d - b.d);
+    return out;
+  }
+  // Somma o media secondo il file dati: quello che nella griglia e' sommabile si somma,
+  // il resto (m/min, percentuali, velocita' massima) va a media semplice, come i TOT del foglio.
+  function aggVal(rows, idx){
+    const sum = (S.sum_flags||[])[idx]===1;
+    let acc = 0, n = 0;
+    rows.forEach(r=>{ const v = r && r.v ? r.v[idx] : null; if(v==null || !isFinite(v)) return; acc += v; n++; });
+    if(!n) return null;
+    return sum ? acc : acc/n;
+  }
+  function chartWindow(days){
+    const last = days[days.length-1].d, first = days[0].d;
+    if(state.chartScope==='last4'){
+      const mon0 = mondayOf(last), from = new Date(mon0); from.setDate(from.getDate()-21);
+      const to = new Date(mon0); to.setDate(to.getDate()+6);
+      return { from:from, to:to, byWeek:true };
+    }
+    let f = fromIso(state.chartFrom), t = fromIso(state.chartTo);
+    if(!f || !t){
+      t = new Date(last); f = new Date(last); f.setDate(f.getDate()-27);
+      if(f < first) f = new Date(first);
+    }
+    if(f > t){ const s = f; f = t; t = s; }
+    // le date restano dentro la stagione che si sta guardando: cambiando atleta
+    // il periodo si adatta invece di svuotare il grafico
+    if(f < first) f = new Date(first);
+    if(t > last) t = new Date(last);
+    if(f > t) f = new Date(t);
+    const span = Math.round((t - f)/86400000) + 1;
+    return { from:f, to:t, byWeek: span > 31 };
+  }
+  function syncRangeField(){
+    const field = document.getElementById('chart-range-field');
+    if(!field) return;
+    if(state.chartScope!=='range'){ field.style.display='none'; return; }
+    field.style.display = '';
+    const days = dayRows();
+    const a = document.getElementById('chart-from'), b = document.getElementById('chart-to');
+    if(!a || !b || !days.length) return;
+    const win = chartWindow(days);
+    state.chartFrom = isoOf(win.from); state.chartTo = isoOf(win.to);
+    a.min = b.min = isoOf(days[0].d);
+    a.max = b.max = isoOf(days[days.length-1].d);
+    a.value = state.chartFrom; b.value = state.chartTo;
+  }
   function syncWeekSelect(){
     const field = document.getElementById('chart-week-field');
     const sel = document.getElementById('chart-week');
@@ -963,6 +1056,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(t) t.textContent = 'Carico settimanale';
       if(hint) hint.textContent = (mon?mon.title:'') + ' · totali per settimana';
       if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media mese</span>';
+    } else if(scope==='last4' || scope==='range'){
+      const days = dayRows();
+      const win = days.length ? chartWindow(days) : null;
+      const per = win ? (shortD(win.from) + ' - ' + shortD(win.to)) : '';
+      if(t) t.textContent = (scope==='last4') ? 'Ultime 4 settimane' : 'Periodo scelto';
+      if(hint) hint.textContent = per + (win ? (win.byWeek ? ' · totali per settimana' : ' · giorno per giorno') : '');
+      if(leg){
+        leg.innerHTML = (win && !win.byWeek)
+          ? '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media periodo</span>'
+          : '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media periodo</span>';
+      }
     } else {
       if(t) t.textContent = 'Andamento stagione';
       if(hint) hint.textContent = 'totali per settimana · intera stagione';
@@ -986,6 +1090,37 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const v = b.tot ? b.tot.v[idx] : b.rows.reduce((a,r)=> a + ((r.v&&r.v[idx]!=null)? r.v[idx]:0), 0);
         pts.push({ value:v, group:null, barLabel:(b.week||'sett.'), kind:'week', ttTitle:mon.title, ttSub:(b.week||'settimana'), md:null });
       });
+    } else if(scope==='last4' || scope==='range'){
+      const days = dayRows(); if(!days.length) return pts;
+      const win = chartWindow(days);
+      const inWin = days.filter(x=> x.d>=win.from && x.d<=win.to);
+      if(!inWin.length) return pts;
+      if(win.byWeek){
+        const keys = [], buckets = {};
+        inWin.forEach(x=>{
+          const k = isoOf(mondayOf(x.d));
+          if(!buckets[k]){ buckets[k] = []; keys.push(k); }
+          buckets[k].push(x);
+        });
+        keys.sort().forEach(k=>{
+          const arr = buckets[k], mon0 = fromIso(k), end = new Date(mon0); end.setDate(end.getDate()+6);
+          pts.push({
+            value: aggVal(arr.map(x=> x.row), idx), group:null, barLabel: shortD(mon0), kind:'week',
+            ttTitle: shortD(mon0)+' - '+shortD(end),
+            ttSub: arr.length + (arr.length===1 ? ' seduta' : ' sedute'), md:null
+          });
+        });
+      } else {
+        inWin.forEach(x=>{
+          const info = mdOf(x.mon.key, x.row.label);
+          const md = x.kind==='match' ? 0 : (info ? info.md : null);
+          pts.push({
+            value:(x.row.v ? x.row.v[idx] : null), group:null, barLabel: shortD(x.d), kind:x.kind,
+            ttTitle: (x.row.wd ? x.row.wd+' ' : '') + shortD(x.d) + ' · ' + x.row.label,
+            ttSub: (mdLabel(md) || (x.kind==='match' ? 'partita' : 'allenamento')), md:md
+          });
+        });
+      }
     } else { // micro
       const mon = activeMonth(); if(!mon) return pts;
       const wks = microWeeks();
@@ -1008,10 +1143,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const wrap = document.getElementById('chart-wrap');
     const scope = state.chartScope;
     syncWeekSelect();
+    syncRangeField();
     setChartChrome(scope);
     const pts = buildPoints();
     const idx = state.chartIdx, unit = UNIT[idx]||'';
-    if(!pts.length){ wrap.innerHTML = emptyBlock(scope==='micro'?'Nessuna seduta in questa settimana':'Nessun dato disponibile'); return; }
+    if(!pts.length){
+      const msg = scope==='micro' ? 'Nessuna seduta in questa settimana'
+                : (scope==='range' ? 'Nessuna seduta nel periodo scelto' : 'Nessun dato disponibile');
+      wrap.innerHTML = emptyBlock(msg); return;
+    }
 
     const grouped = (scope==='season');
     const H = 260, padL = 52, padR = 14, padT = 14, padB = grouped?42:52;
