@@ -296,6 +296,24 @@ select.picker:hover{ border-color:var(--border3); }
 .addrow input:focus, .addrow select:focus{ border-color:var(--violet-border); }
 .addrow .fld > span{ font-size:11.5px; font-weight:600; color:var(--muted); display:block; margin-bottom:6px; }
 
+/* riconferma atlete dell'anno prima (solo stagione nuova) */
+.recon{ grid-column:1 / -1; border-top:1px solid var(--border); padding-top:12px; margin-top:2px; }
+.recon[hidden]{ display:none; }
+.recon > p{ font-size:11.5px; color:var(--muted); margin:0 0 9px; max-width:74ch; }
+.recon-list{ display:flex; flex-wrap:wrap; gap:7px; }
+.recon-btn{
+  appearance:none; font-family:inherit; cursor:pointer;
+  font-size:11.5px; font-weight:650; line-height:1;
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 11px; border-radius:999px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--text);
+  transition:border-color .18s var(--ease), color .18s var(--ease), transform .1s var(--ease);
+}
+.recon-btn:hover{ color:var(--ink); border-color:var(--border3); }
+.recon-btn:active{ transform:scale(.96); }
+.recon-btn svg{ width:12px; height:12px; flex:none; opacity:.62; }
+.recon-btn .rl{ font-weight:500; color:var(--faint); }
+
 /* ---------- scheda atleta (pannello laterale) ---------- */
 .sheet-ov{
   position:fixed; inset:0; z-index:var(--z-sheet); background:oklch(6% 0.012 38 / 0.62);
@@ -597,6 +615,10 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
         <div class="fld"><span>Ruolo</span><select id="add-role"><option value="">Da assegnare</option></select></div>
         <button class="btn primary" id="add-confirm">Aggiungi</button>
         <button class="btn ghost" id="add-cancel">Annulla</button>
+        <div class="recon" id="recon" hidden>
+          <p id="recon-note"></p>
+          <div class="recon-list" id="recon-list"></div>
+        </div>
       </div>
 
       <!-- disponibilita' -->
@@ -812,7 +834,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { k:'disponibile',   l:'Disponibile',    cls:'s-disp' },
     { k:'parziale',      l:'Parziale',       cls:'s-parz' },
     { k:'differenziato', l:'Differenziato',  cls:'s-diff' },
-    { k:'fisico',        l:'Con fisico',      cls:'s-fis'  },
+    // la chiave resta 'fisico' per non perdere quello che e' gia' salvato
+    { k:'fisico',        l:'Fisioterapista', cls:'s-fis'  },
     { k:'assente',       l:'Assente',        cls:'s-ass'  }
   ];
 
@@ -1333,6 +1356,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       rebuildPlayers();
       closeSheet();
       renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
+      renderRecon();
       toast('Atleta eliminata');
     });
   }
@@ -1703,11 +1727,61 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(inp) inp.value = '';
     if(addrowEl) addrowEl.hidden = true;
     renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
+    renderRecon();
     toast('Atleta aggiunta: ' + name);
   });
 
+  // ---------- riconferma atlete dell'anno prima ----------
+  // Sulla stagione nuova la rosa arriva dai file: chi non si e' ancora allenata
+  // non compare, e sono spesso atlete che ci sono comunque (rientri, chi lavora
+  // senza GPS). Qui si rimettono in rosa con un click e con il ruolo dell'anno
+  // scorso gia' dentro, senza doverle riscrivere una per una. Rientrano come
+  // atlete aggiunte a mano, quindi si tolgono dalla loro scheda come le altre.
+  const PLUS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+  const reconEl = document.getElementById('recon');
+  const reconListEl = document.getElementById('recon-list');
+  const reconNoteEl = document.getElementById('recon-note');
+
+  function reconPool(){
+    if(typeof window.fioRosterPrev !== 'function') return [];
+    const inRosa = {};
+    PLAYERS.forEach(p=>{ inRosa[p.name] = 1; });
+    return window.fioRosterPrev().filter(p=> !inRosa[p.name]);
+  }
+
+  function renderRecon(){
+    if(!reconEl || !reconListEl) return;
+    const pool = reconPool();
+    if(!pool.length){ reconEl.hidden = true; reconListEl.innerHTML = ''; return; }
+    reconEl.hidden = false;
+    if(reconNoteEl){
+      reconNoteEl.textContent = 'Dalla stagione scorsa, non ancora in rosa quest\'anno: '
+        + pool.length + (pool.length===1 ? ' atleta.' : ' atlete.')
+        + ' Un click la rimette dentro con il suo ruolo.';
+    }
+    reconListEl.innerHTML = pool.map(p=>
+      '<button type="button" class="recon-btn" data-recon="'+esc(p.name)+'" data-role="'+esc(p.role)+'">'
+      + PLUS_SVG + esc(p.name)
+      + (p.role ? ' <span class="rl">'+esc(p.role)+'</span>' : '')
+      + '</button>'
+    ).join('');
+  }
+
+  if(reconListEl) reconListEl.addEventListener('click', ev=>{
+    const b = ev.target.closest('[data-recon]');
+    if(!b) return;
+    const name = b.getAttribute('data-recon') || '';
+    if(!name || PLAYERS.find(p=> p.name===name)) return;
+    customPlayers[name] = normRole(b.getAttribute('data-role') || '');
+    saveCustom();
+    rebuildPlayers();
+    renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
+    renderRecon();
+    toast('Riconfermata: ' + name);
+  });
+
   renderKPIs(); renderPills(); renderGrid(); updateResetBtn(); buildPrintRoster();
-  renderAvail(); initAvailToggle();
+  renderAvail(); initAvailToggle(); renderRecon();
 })();
 </script>
 </body>
