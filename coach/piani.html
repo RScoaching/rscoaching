@@ -172,6 +172,46 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
   color:var(--yellow); background:oklch(80% 0.15 75 / .12); border:1px solid oklch(80% 0.15 75 / .28);
   border-radius:999px; padding:2px 8px; white-space:nowrap; }
 .lb-sess{ font-size:11px; color:var(--faint); }
+/* la lista si apre a dieci, il resto sta dietro un tasto per non allungare la pagina */
+.lb-more{
+  appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); background:var(--surface2); border:1px solid var(--border2);
+  border-radius:var(--r-sm); padding:10px 14px; margin-top:8px; width:100%;
+  transition: color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease), transform .1s var(--ease);
+}
+.lb-more:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
+.lb-more:active{ transform:scale(.99); }
+
+/* ---------- record: il migliore per ogni metrica ---------- */
+.rc-group{ margin-bottom:20px; }
+.rc-group:last-child{ margin-bottom:0; }
+.rc-gt{
+  margin:0 0 9px; font-size:11px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted);
+}
+.rc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }
+.rc-tile{
+  display:block; min-width:0; text-decoration:none;
+  background:var(--surface2); border:1px solid var(--border2);
+  border-radius:var(--r); padding:13px 14px;
+}
+.rc-tile.gps{ background:var(--ember-bg); border-color:var(--ember-border); }
+.rc-lab{ font-size:11.5px; font-weight:600; color:var(--muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rc-val{ font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:.5px;
+  color:var(--ink); line-height:1.05; margin-top:5px; }
+.rc-val small{ font-family:'Inter',sans-serif; font-size:12px; font-weight:600;
+  color:var(--muted); letter-spacing:0; margin-left:4px; }
+.rc-tile.gps .rc-val{ color:var(--orange2); }
+.rc-who{ font-size:13.5px; font-weight:650; color:var(--text); margin-top:6px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition: color .16s var(--ease); }
+.rc-meta{ font-size:11px; color:var(--faint); margin-top:2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+a.rc-tile{ transition: border-color .16s var(--ease); }
+a.rc-tile:hover{ border-color:var(--border3); }
+a.rc-tile:hover .rc-who{ color:var(--orange2); }
+.rc-empty{ text-align:center; padding:26px; color:var(--faint); font-size:13px; line-height:1.55; }
 
 /* ---------- batteria test ---------- */
 .test-cats{ display:inline-flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; padding:4px;
@@ -328,6 +368,9 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
   .wrap{ padding:20px 16px 0; }
   .topbar{ padding:14px 16px; }
   .lb-role{ display:none; }
+  .rc-grid{ grid-template-columns:repeat(2, 1fr); gap:8px; }
+  .rc-tile{ padding:11px 12px; }
+  .rc-val{ font-size:26px; }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
@@ -361,8 +404,21 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
       <!-- KPI strip -->
       <div class="kpis reveal" id="kpis" style="--i:0"></div>
 
+      <!-- Record: il migliore per ogni metrica, GPS e batteria test -->
+      <section class="card reveal" id="rec-card" style="--i:1">
+        <div class="card-head">
+          <h2>Record</h2>
+          <span class="hint">il migliore per ogni metrica in questa stagione</span>
+          <span class="spacer"></span>
+          <div class="head-chips" id="rec-chips"></div>
+        </div>
+        <div class="card-body">
+          <div id="rec-list"></div>
+        </div>
+      </section>
+
       <!-- Velocita massima (GPS reali) -->
-      <section class="card reveal" id="gps-card" style="--i:1">
+      <section class="card reveal" id="gps-card" style="--i:2">
         <div class="card-head">
           <h2>Velocita massima</h2>
           <span class="hint">migliore SMax registrata in stagione, atleta per atleta</span>
@@ -375,7 +431,7 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
       </section>
 
       <!-- Batteria test sul campo (localStorage) -->
-      <section class="card reveal" id="tb-card" style="--i:2">
+      <section class="card reveal" id="tb-card" style="--i:3">
         <div class="card-head">
           <h2>Batteria test</h2>
           <span class="hint">salti, FMS e prove sul campo &#183; salvati per stagione su questo dispositivo</span>
@@ -401,7 +457,7 @@ a.lb-row:hover .lb-go{ opacity:1; transform:none; color:var(--orange2); }
       </section>
 
       <!-- Indici calcolati dalla batteria test -->
-      <section class="card reveal" id="ix-card" style="--i:3">
+      <section class="card reveal" id="ix-card" style="--i:4">
         <div class="card-head">
           <h2>Indici</h2>
           <span class="hint">deficit elastico, simmetria degli arti, FMS e Y-balance &#183; calcolati dai test inseriti</span>
@@ -690,6 +746,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   let curView = (viewsIn(curCat)[0] || VIEWS[0]).id;
   let REG = loadReg();
 
+  // la classifica velocita parte dalle prime dieci, le altre si aprono col tasto
+  const GPS_LIM = 10;
+  let gpsAll = false;
+
   function seasonId(){ return (window.getStagione ? window.getStagione() : '25-26'); }
   function regKey(){ return 'fio_test_register_v2_' + seasonId(); }
   function loadReg(){
@@ -903,6 +963,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('gen-txt').textContent = SNAP.generato ? ('dati '+SNAP.generato) : 'dati non disponibili';
 
   renderKpis();
+  renderRecords();
   renderGps();
   buildCats();
   buildTabs();
@@ -913,6 +974,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     REG = loadReg();
     refreshSubtitle();
     renderKpis();
+    renderRecords();
     buildCats();
     buildTabs();
     renderBattery();
@@ -926,7 +988,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!ks.length){ toast('Nessun dato da svuotare'); return; }
     ks.forEach(k=> { delete REG[k]; });
     saveReg();
-    renderBattery(); renderKpis(); buildCats(); renderIndici();
+    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
     toast('Test svuotato');
   });
 
@@ -953,7 +1015,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
     saveReg();
-    renderBattery(); renderKpis(); buildCats(); renderIndici();
+    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
     toast(n + ' valori importati' + (skip ? ', ' + skip + ' fuori rosa' : ''));
   }
   function renderSeedBar(){
@@ -1074,6 +1136,129 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     )).join('');
   }
 
+  // ================= RECORD =================
+  // Una casella per metrica con il valore migliore della stagione e chi lo ha fatto.
+  // I test bilaterali stanno in una casella sola con il lato indicato: il record e' il
+  // valore piu' alto fra i due arti, non ha senso spezzarlo in due.
+  // L FMS non si spacchetta per schema: un 3 su Deep Squat lo prendono in dieci,
+  // quello che conta e' il totale.
+  function recNum(v, unit){ return (unit==='pt' ? NF : NF1).format(v); }
+  function recTile(cls, lab, val, unit, who, metaHtml, href){
+    const inner =
+      '<div class="rc-lab">'+esc(lab)+'</div>'+
+      '<div class="rc-val">'+val+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>'+
+      '<div class="rc-who">'+esc(who)+'</div>'+
+      '<div class="rc-meta">'+(metaHtml||'')+'</div>';
+    return href
+      ? '<a class="rc-tile'+cls+'" href="'+esc(href)+'" title="Apri la seduta del record">'+inner+'</a>'
+      : '<div class="rc-tile'+cls+'">'+inner+'</div>';
+  }
+  function atlText(n){ return n+(n===1?' atleta':' atlete'); }
+  function recMeta(parts){ return parts.filter(Boolean).join(' &#183; '); }
+
+  // migliore assoluto fra arto destro e sinistro
+  function pairBest(v){
+    const all = [];
+    const names = {};
+    [['dx', v.dx.key], ['sx', v.sx.key]].forEach(p=>{
+      entriesFor(p[1]).forEach(e=>{
+        if(e.v==null) return;
+        all.push({ side:p[0], name:e.name, v:e.v, d:e.d });
+        names[e.name] = 1;
+      });
+    });
+    if(!all.length) return null;
+    let b = all[0];
+    all.forEach(x=>{ if(v.dir==='high' ? x.v>b.v : x.v<b.v) b = x; });
+    b.n = Object.keys(names).length;
+    return b;
+  }
+  // FMS: confronto solo fra chi ha lo stesso numero di schemi compilati
+  function fmsBest(){
+    const has = [];
+    roster.forEach(n=>{ const f = idxFms(n); if(f.has) has.push({ name:n, f:f }); });
+    if(!has.length) return null;
+    const maxPat = has.reduce((m,x)=> Math.max(m, x.f.nPat), 0);
+    const pool = has.filter(x=> x.f.nPat===maxPat);
+    let b = pool[0];
+    pool.forEach(x=>{ if(x.f.val > b.f.val) b = x; });
+    b.nAtl = has.length;
+    return b;
+  }
+
+  function renderRecords(){
+    const list  = document.getElementById('rec-list');
+    const chips = document.getElementById('rec-chips');
+    const groups = [];
+
+    // 1) GPS reali dal monitoraggio del carico
+    const gt = [];
+    if(monitored.length){
+      const nMon = atlText(monitored.length);
+      const tNint = topBy('nint'), tMmin = topBy('mmin');
+      if(topSmax && topSmax.smax>0){
+        gt.push(recTile(' gps', 'Velocita massima', NF1.format(topSmax.smax), 'km/h', topSmax.name,
+          recMeta([esc(sessLabel(topSmax)), nMon]), sessHref(topSmax)));
+      }
+      if(topHs && topHs.hs>0){
+        gt.push(recTile(' gps', 'Distanza oltre 23 km/h', NF.format(topHs.hs), 'm', topHs.name,
+          recMeta(['in una seduta', nMon]), ''));
+      }
+      if(tNint && tNint.nint>0){
+        gt.push(recTile(' gps', 'Azioni intense al minuto', NF1.format(tNint.nint), 'n/min', tNint.name,
+          recMeta(['in una seduta', nMon]), ''));
+      }
+      if(tMmin && tMmin.mmin>0){
+        gt.push(recTile(' gps', 'Metri al minuto', NF.format(tMmin.mmin), 'm/min', tMmin.name,
+          recMeta(['in una seduta', nMon]), ''));
+      }
+    }
+    if(gt.length) groups.push({ t:'GPS', h:gt });
+
+    // 2) batteria test, categoria per categoria
+    CATS.forEach(c=>{
+      const tiles = [];
+      if(c.key==='fms'){
+        const b = fmsBest();
+        if(b){
+          tiles.push(recTile('', 'FMS totale', NF.format(b.f.val), '/'+(b.f.nPat*3), b.name,
+            recMeta([(b.f.complete ? '7 schemi su 7' : b.f.nPat+' schemi su 7'), atlText(b.nAtl)]), ''));
+        }
+      } else {
+        viewsIn(c.key).forEach(v=>{
+          if(v.kind==='pair'){
+            const b = pairBest(v);
+            if(!b) return;
+            tiles.push(recTile('', v.label, recNum(b.v, v.unit), v.unit, b.name,
+              recMeta(['lato '+b.side, esc(b.d||''), atlText(b.n)]), ''));
+          } else {
+            const st = statsFor(v.def.key, v.def);
+            if(!st.n) return;
+            const e = (REG[v.def.key]||{})[st.bestName];
+            tiles.push(recTile('', v.label, recNum(st.best, v.unit), v.unit, st.bestName,
+              recMeta([esc((e&&e.d)||''), atlText(st.n)]), ''));
+          }
+        });
+      }
+      if(tiles.length) groups.push({ t:c.label, h:tiles });
+    });
+
+    const nRec = groups.reduce((a,g)=> a + g.h.length, 0);
+    chips.innerHTML = nRec
+      ? '<div class="mchip em"><span class="ml">Metriche</span><b>'+nRec+'</b></div>'
+      : '';
+
+    if(!groups.length){
+      list.innerHTML = '<div class="rc-empty">Ancora nessun record: servono i dati GPS del monitoraggio '+
+        'oppure qualche valore nella batteria test qui sotto.</div>';
+      return;
+    }
+    list.innerHTML = groups.map(g=>(
+      '<div class="rc-group"><p class="rc-gt">'+esc(g.t)+'</p>'+
+        '<div class="rc-grid">'+g.h.join('')+'</div></div>'
+    )).join('');
+  }
+
   function renderGps(){
     const chips = document.getElementById('gps-chips');
     chips.innerHTML =
@@ -1089,7 +1274,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     // la scala delle barre usa il migliore valore plausibile, per non appiattire il grafico
     const max = (topSmax && topSmax.smax) ? topSmax.smax : (ranked[0].smax || 1);
-    holder.innerHTML = ranked.map((p,i)=>{
+    const shown = gpsAll ? ranked : ranked.slice(0, GPS_LIM);
+    const rest  = ranked.length - GPS_LIM;
+    holder.innerHTML = shown.map((p,i)=>{
       const rk = i+1;
       const cls = (rk<=3 ? (' top'+rk) : '') + (p.susp ? ' susp' : '');
       const fillCls = p.susp ? ' gr' : (rk===1?'':(rk<=3?' vi':''));
@@ -1108,7 +1295,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="lb-val'+(rk>1&&rk<=3?' vi':'')+'">'+NF1.format(p.smax)+'<small>km/h</small></div>'+
         '<svg class="lb-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'+
         (href? '</a>' : '</div>');
-    }).join('');
+    }).join('') + (rest>0
+      ? '<button class="lb-more" id="gps-more" type="button" aria-expanded="'+(gpsAll?'true':'false')+'">'+
+          (gpsAll ? 'Mostra solo le prime '+GPS_LIM : 'Mostra le altre '+rest+(rest===1?' atleta':' atlete'))+
+        '</button>'
+      : '');
+    const more = document.getElementById('gps-more');
+    if(more) more.addEventListener('click', ()=>{ gpsAll = !gpsAll; renderGps(); });
     requestAnimationFrame(()=>{
       holder.querySelectorAll('.lb-fill').forEach(el=>{ el.style.width = el.dataset.w+'%'; });
     });
@@ -1172,7 +1365,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     if(REG[testKey] && !Object.keys(REG[testKey]).length) delete REG[testKey];
     saveReg();
-    renderBattery(); renderKpis(); buildCats(); renderIndici();
+    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
   }
   function inputHtml(def, name, val, cls){
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
