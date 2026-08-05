@@ -90,7 +90,7 @@ window.SIDEBAR_HTML = `
     </a>
   </div>
   <div class="sb-foot">
-    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati dalla cartella">
+    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati pubblicati" title="Rilegge i file dati pubblicati e ricarica la pagina se c&#39;e&#39; qualcosa di nuovo. I dati nascono dai file della cartella della stagione: sul Mac li rigenera e li pubblica Aggiorna.">
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
@@ -516,13 +516,22 @@ window.paintSeasonBanner = function() {
 
 // ---------------------------------------------------------------------------
 // Aggiornamento dati dall'app.
-// I file dati sono statici e vengono rigenerati in locale dallo script Python
-// quando si scaricano i GPS nella cartella. Il browser pero' li tiene in cache,
-// quindi qui li si rilegge forzando il bypass della cache e poi si ricarica la
-// pagina, cosi' il dato nuovo si vede senza svuotare la cronologia a mano.
+// I file dati sono statici: li rigenera lo script locale leggendo la cartella
+// della stagione e li mette online la pubblicazione. Il problema era il modo in
+// cui il pulsante li rileggeva: chiedeva 'carico_data.js?ts=1234', cioe' un
+// indirizzo diverso da quello che la pagina carica davvero, percio' la copia in
+// cache restava quella vecchia e dopo il ricaricamento ricompariva lo stesso
+// dato di prima. Adesso il giro e' in tre passi: si legge il file online
+// saltando ogni cache, si confronta il timbro di generazione con quello gia' in
+// memoria e, solo se e' cambiato, si riscarica proprio l'indirizzo usato dalla
+// pagina prima di ricaricare. Cosi' il dato nuovo entra davvero, e quando non
+// c'e' niente di nuovo lo si dice invece di ricaricare a vuoto.
 // ---------------------------------------------------------------------------
 window.FIO_DATA_FILES = [
-  'carico_data.js', 'calendario_data.js', 'esercitazioni_data.js', 'forza_data.js'
+  { f: 'carico_data.js',        v: 'SNAP_2627' },
+  { f: 'calendario_data.js',    v: 'CAL_2627' },
+  { f: 'esercitazioni_data.js', v: 'ESERC_2627' },
+  { f: 'forza_data.js',         v: 'TEST_2627' }
 ];
 window.fioDataStamp = function() {
   if (window.FIO_CLEAN_SEASON) return 'archivio vuoto';
@@ -531,8 +540,60 @@ window.fioDataStamp = function() {
   for (var i = 0; i < src.length && !s; i++) {
     if (src[i] && src[i].generato) s = String(src[i].generato).trim();
   }
-  return s ? ('agg. ' + s) : 'rileggi dalla cartella';
+  return s ? ('agg. ' + s) : 'nessun dato letto';
 };
+
+// Timbro di generazione del blocco di stagione dentro il testo del file appena
+// scaricato. Si guarda solo il pezzo che riguarda quella variabile, cosi' non si
+// prende per sbaglio il timbro del blocco che viene dopo.
+window.fioStampIn = function(txt, v) {
+  var i = txt.indexOf('window.' + v + '=');
+  if (i < 0) return null;
+  var j = txt.indexOf(';window.', i);
+  var seg = txt.slice(i, j < 0 ? txt.length : j);
+  var m = /"generato":"([^"]*)"/.exec(seg);
+  return m ? m[1] : '';
+};
+
+// Legge i file dati online senza passare dalla cache e dice quali sono cambiati
+// rispetto a quelli caricati adesso. Ogni pagina carica solo i file che le
+// servono, quindi si controllano soltanto quelli presenti in memoria.
+window.fioProbeData = function() {
+  if (location.protocol === 'file:') return Promise.reject(new Error('file'));
+  var t = Date.now();
+  var attesi = 0;
+  var jobs = window.FIO_DATA_FILES.map(function(d) {
+    if (!window[d.v]) return Promise.resolve(null);
+    attesi++;
+    return fetch('./' + d.f + '?ts=' + t, { cache: 'no-store' })
+      .then(function(r) { return r.ok ? r.text() : ''; })
+      .then(function(txt) {
+        if (!txt) return null;
+        var s = window.fioStampIn(txt, d.v);
+        if (s === null) return null;
+        return { file: d.f, stamp: s, old: String((window[d.v] || {}).generato || '') };
+      })['catch'](function() { return null; });
+  });
+  return Promise.all(jobs).then(function(res) {
+    var out = { attesi: attesi, letti: 0, cambiati: [], sign: '', stamp: '' };
+    res.forEach(function(r) {
+      if (!r) return;
+      out.letti++;
+      out.sign += r.file + '=' + r.stamp + ';';
+      if (!out.stamp && r.stamp) out.stamp = r.stamp;
+      if (r.stamp !== r.old) out.cambiati.push(r.file);
+    });
+    return out;
+  });
+};
+
+// Riscarica i file all'indirizzo esatto che la pagina usa negli script, cosi' la
+// copia vecchia in cache viene sostituita, e solo dopo ricarica la pagina.
+window.fioApplyRefresh = function(files) {
+  var jobs = files.map(function(f) { return fetch('./' + f, { cache: 'reload' }); });
+  return Promise.all(jobs).then(function() { location.reload(); });
+};
+
 window.fioRefreshData = function() {
   var btn = document.getElementById('fio-sync-btn');
   var lab = document.getElementById('fio-sync-when');
@@ -540,18 +601,41 @@ window.fioRefreshData = function() {
   btn.classList.add('busy');
   btn.disabled = true;
   if (lab) lab.textContent = 'rilettura in corso';
-  var t = Date.now();
-  var jobs = window.FIO_DATA_FILES.map(function(f) {
-    return fetch('./' + f + '?ts=' + t, { cache: 'reload' });
-  });
-  Promise.all(jobs).then(function() {
-    location.reload();
-  })['catch'](function() {
+  var fine = function(msg) {
     btn.classList.remove('busy');
     btn.disabled = false;
-    if (lab) lab.textContent = 'rilettura fallita, riprova';
-    setTimeout(function() { if (lab) lab.textContent = window.fioDataStamp(); }, 3200);
+    if (lab) lab.textContent = msg;
+    setTimeout(function() { if (lab) lab.textContent = window.fioDataStamp(); }, 4200);
+  };
+  window.fioProbeData().then(function(p) {
+    if (!p.attesi) { fine('nessun dato in questa pagina'); return; }
+    if (!p.letti) { fine('rilettura fallita, riprova'); return; }
+    if (!p.cambiati.length) { fine('gia\' aggiornato'); return; }
+    try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
+    return window.fioApplyRefresh(p.cambiati);
+  })['catch'](function(e) {
+    fine(e && e.message === 'file' ? 'apri il sito online' : 'rilettura fallita, riprova');
   });
+};
+
+// Controllo automatico all'apertura della pagina: se online c'e' un dato piu'
+// nuovo di quello caricato, la pagina si aggiorna da sola. Si tiene memoria del
+// tentativo cosi' il ricaricamento avviene una volta sola: se il dato risulta
+// ancora vecchio vuol dire che il browser sta tenendo la copia sua e lo si dice,
+// invece di ricaricare all'infinito.
+window.fioAutoCheck = function() {
+  var lab = document.getElementById('fio-sync-when');
+  window.fioProbeData().then(function(p) {
+    if (!p.cambiati.length) return;
+    var tried = '';
+    try { tried = sessionStorage.getItem('fio_sync_try') || ''; } catch (e) {}
+    if (tried === p.sign) {
+      if (lab) lab.textContent = 'dato nuovo, ricarica';
+      return;
+    }
+    try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
+    window.fioApplyRefresh(p.cambiati);
+  })['catch'](function() {});
 };
 
 window.initSidebarToggle = function() {
@@ -565,6 +649,7 @@ window.initSidebarToggle = function() {
     document.addEventListener('fio:stagione', function() {
       if (syncWhen) syncWhen.textContent = window.fioDataStamp();
     });
+    window.fioAutoCheck();
   }
   const ham = document.getElementById('sb-ham-btn');
   const ov  = document.getElementById('sb-mob-ov');
