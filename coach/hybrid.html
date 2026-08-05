@@ -275,6 +275,32 @@ table.grid th.cf-n, table.grid td.cf-n{ text-align:center; min-width:52px; }
 table.grid td.cf-n{ color:var(--muted); font-variant-numeric:tabular-nums; }
 table.grid tr.r-day:hover td.cf-n{ color:var(--text); }
 
+/* ---------- radar del confronto ----------
+   Con poche atlete selezionate il radar dice a colpo d'occhio chi va piu' forte e dove:
+   ogni raggio e' un parametro chiave e il bordo esterno e' il valore migliore fra le
+   atlete scelte. La media squadra entra come traccia tratteggiata, per riferimento. */
+.cf-radar{ border:1px solid var(--border2); border-radius:var(--r); background:var(--surface2);
+  padding:14px 16px 12px; margin:2px 2px 14px; }
+.cfr-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.cfr-head strong{ font-size:12.5px; letter-spacing:.3px; color:var(--ink); }
+.cfr-head span{ font-size:11.5px; color:var(--muted); }
+.cfr-body{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.cfr-svg{ width:min(100%, 372px); height:auto; flex:0 0 auto; }
+.cfr-grid{ fill:none; stroke:var(--border2); stroke-width:1; }
+.cfr-spoke{ stroke:var(--border2); stroke-width:1; }
+.cfr-ax{ font-size:10px; fill:var(--muted); }
+.cfr-team{ fill:none; stroke:var(--faint); stroke-width:1.4; stroke-dasharray:4 3; }
+.cfr-area{ stroke-width:2; stroke-linejoin:round; }
+.cfr-side{ flex:1 1 220px; min-width:200px; display:flex; flex-direction:column; gap:9px; }
+.cfr-who{ display:flex; align-items:flex-start; gap:9px; font-size:12px; }
+.cfr-sw{ width:11px; height:11px; border-radius:3px; margin-top:4px; flex:0 0 auto; }
+.cfr-nm{ color:var(--ink); font-weight:600; }
+.cfr-best{ display:block; color:var(--muted); font-size:11.5px; }
+.cfr-note{ font-size:11.5px; color:var(--muted); margin:0; }
+/* con troppe atlete il radar non si disegna: resta solo la riga di istruzioni,
+   che non deve avere il peso visivo di una scheda */
+.cf-radar.solo-nota{ border:0; background:none; padding:0 2px; margin:0 2px 10px; }
+
 /* ---------- partite sort ---------- */
 table.partite thead th.sortable{ cursor:pointer; user-select:none; }
 table.partite thead th.sortable:hover{ color:var(--text); }
@@ -360,6 +386,12 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   table.partite td.sigla{ color:#14110f !important; }
   table.partite td.data{ color:#5a524c !important; }
   table.partite thead th .arw{ display:none !important; }
+  .cf-radar{ background:#fff !important; border:1px solid #ccc !important; break-inside:avoid; }
+  .cfr-head strong, .cfr-nm{ color:#14110f !important; }
+  .cfr-head span, .cfr-best, .cfr-note{ color:#5a524c !important; }
+  .cfr-grid, .cfr-spoke{ stroke:#ccc !important; }
+  .cfr-ax{ fill:#5a524c !important; }
+  .cfr-team{ stroke:#8a8a8a !important; }
   .mopen{ color:#14110f !important; }
   .mopen svg{ display:none !important; }
   .reveal{ opacity:1 !important; transform:none !important; animation:none !important; }
@@ -504,8 +536,11 @@ table.partite td.sigla.nolink{ color:var(--muted); }
               <button data-scope="match" type="button">Partite</button>
               <button data-scope="train" type="button">Allenamenti</button>
             </div>
+            <span class="cm-lbl">Ruolo</span>
+            <div class="seg cmp-seg" id="cf-role-seg" role="group" aria-label="Ruolo in campo"></div>
           </div>
           <div class="sess-main">
+            <div class="cf-radar" id="cf-radar" hidden></div>
             <div class="cmp-legend" id="cf-legend" hidden></div>
             <div class="tscroll" id="cf-scroll"></div>
           </div>
@@ -582,7 +617,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const ssort = { col:'name', dir:1 };
   const msort = { col:'data', dir:-1 };
   const csort = { col:'name', dir:1 };
-  const cfState = { scope:'all', cmp:'val' };
+  const cfState = { scope:'all', cmp:'val', role:'' };
+  // colori del radar: una tinta per atleta, nell'ordine in cui compaiono in tabella
+  const CF_COLS = ['oklch(72% 0.17 45)','oklch(70% 0.17 285)','oklch(72% 0.16 152)','oklch(72% 0.14 225)'];
+  const CF_RADAR_MAX = 4;
   let cfSessSel = null;   // Set di "monthKey|label"
   let cfPlaySel = null;   // Set di nomi atlete
   const CF_CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
@@ -676,13 +714,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return acc.map((s,i)=> cnt[i]? s/cnt[i] : null);
   }
+  // Il ruolo arriva dai fogli del mister: quando la casella e' vuota il foglio scrive "nan",
+  // che non e' un ruolo e non va mostrato. Qui si normalizza una volta sola.
+  function roleOf(name){
+    const p = S.players && S.players[name];
+    const r = String((p && p.role) || '').trim();
+    if(!r || r.toLowerCase()==='nan' || r==='-') return '';
+    return r;
+  }
   function sessionAthletes(monthKey, label){
     const out = [];
     Object.keys(S.players||{}).forEach(name=>{
       const p = S.players[name];
       const mon = (p.months||[]).find(m=> m.key===monthKey);
       const row = findDayRow(mon, label);
-      if(row) out.push({ name, role:(p.role||''), v:row.v||[] });
+      if(row) out.push({ name, role:roleOf(name), v:row.v||[] });
     });
     return out;
   }
@@ -1048,7 +1094,34 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function cfResetSessSel(){ cfSessSel = new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); }
   function cfSelectedSessions(){ if(!cfSessSel) cfResetSessSel(); return cfEligibleSessions().filter(s=> cfSessSel.has(s.monthKey+'|'+s.label)); }
-  function cfSelectedPlayers(){ if(!cfPlaySel) cfPlaySel = new Set(cfAllPlayers()); return cfAllPlayers().filter(n=> cfPlaySel.has(n)); }
+  // Il ruolo e' un filtro sopra la spunta: restringe l'elenco senza cancellare le scelte fatte.
+  function cfRoleOk(name){ return !cfState.role || roleOf(name)===cfState.role; }
+  function cfRolePlayers(){ return cfAllPlayers().filter(cfRoleOk); }
+  function cfSelectedPlayers(){ if(!cfPlaySel) cfPlaySel = new Set(cfAllPlayers()); return cfRolePlayers().filter(n=> cfPlaySel.has(n)); }
+  function cfRoleList(){
+    const c = {};
+    cfAllPlayers().forEach(n=>{ const r=roleOf(n); if(r) c[r]=(c[r]||0)+1; });
+    return Object.keys(c).sort((a,b)=> a.localeCompare(b,'it')).map(r=> ({ role:r, n:c[r] }));
+  }
+  function cfRenderRoleSeg(){
+    const host=document.getElementById('cf-role-seg'); if(!host) return;
+    const list=cfRoleList();
+    if(!list.length){ host.hidden=true; host.innerHTML=''; return; }
+    host.hidden=false;
+    let h='<button type="button" data-role="" class="'+(cfState.role?'':'on')+'">Tutti</button>';
+    list.forEach(r=>{
+      h+='<button type="button" data-role="'+esc(r.role)+'" class="'+(cfState.role===r.role?'on':'')+'"'
+        +' title="'+esc(r.role)+': '+r.n+(r.n===1?' atleta':' atlete')+'">'+esc(r.role)+'</button>';
+    });
+    host.innerHTML=h;
+    host.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+      cfState.role = b.getAttribute('data-role') || '';
+      cfRenderRoleSeg();
+      const s=document.getElementById('cf-play-search');
+      cfRenderPlayRail(s?s.value:'');
+      renderConfronto();
+    }));
+  }
   function cfPlayerRows(name, sess){ const out=[]; sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(r) out.push(r); }); return out; }
   function aggRows(rows, mode){
     const acc=new Array(M.length).fill(0), cnt=new Array(M.length).fill(0);
@@ -1068,19 +1141,116 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.innerHTML=tiles.map(t=>'<div class="sess-stat'+(t.match?' match':'')+'"><div class="ss-lbl">'+esc(t.lbl)+'</div><div class="ss-val">'+esc(t.val)+'</div></div>').join('');
   }
   function cfSyncButtons(){
-    const es=cfEligibleSessions().length, ss=cfSelectedSessions().length, ap=cfAllPlayers().length, sp=cfSelectedPlayers().length;
+    const es=cfEligibleSessions().length, ss=cfSelectedSessions().length, ap=cfRolePlayers().length, sp=cfSelectedPlayers().length;
     const sl=document.getElementById('cf-sess-lbl'); if(sl) sl.textContent='Sedute ('+ss+'/'+es+')';
     const pl=document.getElementById('cf-play-lbl'); if(pl) pl.textContent='Atlete ('+sp+'/'+ap+')';
     const hint=document.getElementById('cf-hint');
-    if(hint){ const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute'; hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'; }
+    if(hint){
+      const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute';
+      hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'+(cfState.role?('  ·  '+cfState.role):'');
+    }
+  }
+  // ---------- radar delle caratteristiche ----------
+  // Un raggio per parametro chiave. Il bordo esterno e' il valore piu' alto fra le atlete
+  // scelte e la media squadra, cosi' si legge subito chi corre di piu', chi va sopra i 23
+  // km/h e chi accelera. Fino a quattro atlete: oltre, le tracce si sovrappongono e non
+  // si capisce piu' niente, percio' resta solo la tabella.
+  function cfRadarAxes(){
+    const k=(S.key_idx||[]).filter(i=> Number.isInteger(i) && i>=0 && i<M.length);
+    const src = k.length>=3 ? k : M.map((_,i)=> i);
+    return src.slice(0,6);
+  }
+  function cfPoly(vals, R, cx, cy){
+    const n=vals.length;
+    return vals.map((f,i)=>{
+      const a=-Math.PI/2 + i*2*Math.PI/n, r=R*Math.max(0, Math.min(1, f||0));
+      return (cx+r*Math.cos(a)).toFixed(1)+','+(cy+r*Math.sin(a)).toFixed(1);
+    }).join(' ');
+  }
+  function renderCfRadar(pdata, teamAgg, hasTeam){
+    const host=document.getElementById('cf-radar'); if(!host) return;
+    const ax=cfRadarAxes();
+    if(ax.length<3 || !pdata.length){ host.hidden=true; host.innerHTML=''; return; }
+    host.hidden=false;
+    if(pdata.length>CF_RADAR_MAX){
+      // con troppe tracce il radar diventa illeggibile: resta solo la riga che spiega come averlo
+      host.classList.add('solo-nota');
+      host.innerHTML='<p class="cfr-note">Radar delle caratteristiche: scegli da 1 a '+CF_RADAR_MAX
+        +' atlete (adesso sono '+pdata.length+') dal pulsante Atlete oppure filtra per ruolo.</p>';
+      return;
+    }
+    host.classList.remove('solo-nota');
+    const who=pdata.slice(0, CF_RADAR_MAX);
+    const maxs=ax.map(i=>{
+      let m=0;
+      who.forEach(p=>{ const v=(p.v||[])[i]; if(v!=null && isFinite(v) && v>m) m=v; });
+      if(hasTeam){ const t=teamAgg?teamAgg[i]:null; if(t!=null && isFinite(t) && t>m) m=t; }
+      return m;
+    });
+    const frac=(v,j)=> (v==null || !isFinite(v) || !maxs[j]) ? 0 : v/maxs[j];
+    const cx=186, cy=150, R=104;
+    let svg='<svg class="cfr-svg" viewBox="0 0 372 300" role="img" aria-label="Radar dei parametri chiave delle atlete selezionate">';
+    [0.25,0.5,0.75,1].forEach(f=>{
+      svg+='<polygon class="cfr-grid" points="'+cfPoly(ax.map(()=> f), R, cx, cy)+'"/>';
+    });
+    ax.forEach((mi,j)=>{
+      const a=-Math.PI/2 + j*2*Math.PI/ax.length;
+      const x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
+      svg+='<line class="cfr-spoke" x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'"/>';
+      const lx=cx+(R+18)*Math.cos(a), ly=cy+(R+18)*Math.sin(a);
+      const an=Math.abs(Math.cos(a))<0.2 ? 'middle' : (Math.cos(a)>0 ? 'start' : 'end');
+      svg+='<text class="cfr-ax" x="'+lx.toFixed(1)+'" y="'+(ly+3.5).toFixed(1)+'" text-anchor="'+an+'">'
+        +esc(SHORT[mi]||M[mi])+'</text>';
+    });
+    if(hasTeam && teamAgg){
+      svg+='<polygon class="cfr-team" points="'+cfPoly(ax.map((mi,j)=> frac(teamAgg[mi], j)), R, cx, cy)+'"/>';
+    }
+    who.forEach((p,pi)=>{
+      const col=CF_COLS[pi%CF_COLS.length];
+      const pts=cfPoly(ax.map((mi,j)=> frac((p.v||[])[mi], j)), R, cx, cy);
+      svg+='<polygon class="cfr-area" points="'+pts+'" style="fill:'+col+';fill-opacity:.16;stroke:'+col+'"/>';
+      pts.split(' ').forEach(pt=>{
+        const c=pt.split(',');
+        svg+='<circle class="cfr-dot" cx="'+c[0]+'" cy="'+c[1]+'" r="2.8" style="fill:'+col+'"/>';
+      });
+    });
+    svg+='</svg>';
+    // per ogni atleta i parametri in cui e' la migliore del gruppo: e' la frase che il mister
+    // vuole leggere ("questa va piu' forte sopra i 23, quest'altra accelera di piu'")
+    const best=who.map(()=> []);
+    ax.forEach(mi=>{
+      let top=-1, idx=-1;
+      who.forEach((p,pi)=>{ const v=(p.v||[])[mi]; if(v!=null && isFinite(v) && v>top){ top=v; idx=pi; } });
+      if(idx>=0 && top>0) best[idx].push(SHORT[mi]||M[mi]);
+    });
+    let side='<div class="cfr-side">';
+    who.forEach((p,pi)=>{
+      const col=CF_COLS[pi%CF_COLS.length];
+      const b=best[pi].length ? ('meglio in: '+best[pi].join(', ')) : 'nessun parametro in testa';
+      side+='<div class="cfr-who"><span class="cfr-sw" style="background:'+col+'"></span><span>'
+        +'<span class="cfr-nm">'+esc(p.name)+'</span>'+(p.role?' <span class="cfr-best">'+esc(p.role)+'</span>':'')
+        +'<span class="cfr-best">'+esc(b)+'</span></span></div>';
+    });
+    if(hasTeam) side+='<div class="cfr-who"><span class="cfr-sw" style="background:var(--faint)"></span><span>'
+      +'<span class="cfr-nm">Media squadra</span><span class="cfr-best">traccia tratteggiata</span></span></div>';
+    side+='</div>';
+    host.innerHTML='<div class="cfr-head"><strong>Profilo a confronto</strong>'
+      +'<span>parametri chiave, il bordo esterno e\' il valore migliore fra chi e\' selezionato</span></div>'
+      +'<div class="cfr-body">'+svg+side+'</div>';
   }
   function renderConfronto(){
     const host=document.getElementById('cf-scroll'); if(!host) return;
     const sess=cfSelectedSessions(), players=cfSelectedPlayers(), V=VIS();
     renderCfStats(sess, players); cfSyncButtons();
     const lg=document.getElementById('cf-legend');
-    if(!sess.length){ if(lg){lg.hidden=true;lg.innerHTML='';} host.innerHTML=emptyBlock('Nessuna seduta selezionata'); return; }
-    if(!players.length){ if(lg){lg.hidden=true;lg.innerHTML='';} host.innerHTML=emptyBlock('Nessuna atleta selezionata'); return; }
+    const rd=document.getElementById('cf-radar');
+    const vuoto=(msg)=>{
+      if(lg){ lg.hidden=true; lg.innerHTML=''; }
+      if(rd){ rd.hidden=true; rd.innerHTML=''; }
+      host.innerHTML=emptyBlock(msg);
+    };
+    if(!sess.length){ vuoto('Nessuna seduta selezionata'); return; }
+    if(!players.length){ vuoto(cfState.role ? ('Nessuna atleta selezionata fra i ruoli "'+cfState.role+'"') : 'Nessuna atleta selezionata'); return; }
     const teamRows=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) teamRows.push(r); });
     const hasModel=!!(S.model && S.model.length);
     const cmp=cfState.cmp;
@@ -1100,7 +1270,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
       }
     }
-    const pdata=players.map(name=>{ const a=aggRows(cfPlayerRows(name,sess), aggMode); return { name, role:((S.players[name]&&S.players[name].role)||''), v:a.v, n:a.n }; });
+    const pdata=players.map(name=>{ const a=aggRows(cfPlayerRows(name,sess), aggMode); return { name, role:roleOf(name), v:a.v, n:a.n }; });
     pdata.sort((a,b)=>{
       if(csort.col==='name') return csort.dir*a.name.localeCompare(b.name,'it');
       if(csort.col==='role') return csort.dir*String(a.role).localeCompare(String(b.role),'it');
@@ -1109,6 +1279,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
       return csort.dir*(va-vb);
     });
+    renderCfRadar(pdata, teamAgg, teamRows.length>0);
     const cell=(v,i)=>{
       const kc=keyCls(i);
       if(!isCmp) return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
@@ -1159,13 +1330,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const host=document.getElementById('cf-play-list'); if(!host) return;
     if(!cfPlaySel) cfPlaySel=new Set(cfAllPlayers());
     const q=(filter||'').trim().toLowerCase(); let html='',n=0;
-    cfAllPlayers().forEach(name=>{
-      const p=S.players[name]||{}; const hay=(name+' '+(p.role||'')).toLowerCase();
+    cfRolePlayers().forEach(name=>{
+      const r=roleOf(name); const hay=(name+' '+r).toLowerCase();
       if(q && hay.indexOf(q)<0) return;
       n++; const on=cfPlaySel.has(name);
-      html+='<button class="sess-item cf-opt'+(on?' is-on':'')+'" type="button" data-name="'+esc(name)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(name)+'</span><span class="sess-tag">'+esc(p.role||'')+'</span></button>';
+      html+='<button class="sess-item cf-opt'+(on?' is-on':'')+'" type="button" data-name="'+esc(name)+'"><span class="cf-chk">'+CF_CHK+'</span><span class="sess-lb">'+esc(name)+'</span><span class="sess-tag">'+esc(r)+'</span></button>';
     });
-    if(!n) html='<div class="sess-empty">Nessuna atleta</div>'; host.innerHTML=html;
+    if(!n) html='<div class="sess-empty">'+(cfState.role?'Nessuna atleta con questo ruolo':'Nessuna atleta')+'</div>'; host.innerHTML=html;
     host.querySelectorAll('.cf-opt').forEach(b=> b.addEventListener('click', ()=>{
       const nm=b.getAttribute('data-name'); if(cfPlaySel.has(nm)) cfPlaySel.delete(nm); else cfPlaySel.add(nm);
       b.classList.toggle('is-on', cfPlaySel.has(nm)); renderConfronto();
@@ -1223,8 +1394,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const i=document.getElementById('cf-play-search'); if(i) i.addEventListener('input', e=> cfRenderPlayRail(e.target.value)); }
   { const b=document.getElementById('cf-sess-all'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(cfEligibleSessions().map(s=> s.monthKey+'|'+s.label)); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
   { const b=document.getElementById('cf-sess-none'); if(b) b.addEventListener('click', ()=>{ cfSessSel=new Set(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto(); }); }
-  { const b=document.getElementById('cf-play-all'); if(b) b.addEventListener('click', ()=>{ cfPlaySel=new Set(cfAllPlayers()); cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
-  { const b=document.getElementById('cf-play-none'); if(b) b.addEventListener('click', ()=>{ cfPlaySel=new Set(); cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
+  // Tutte e Nessuna lavorano su quello che si vede: con un ruolo attivo toccano solo quel ruolo.
+  { const b=document.getElementById('cf-play-all'); if(b) b.addEventListener('click', ()=>{
+      if(!cfPlaySel) cfPlaySel=new Set(); cfRolePlayers().forEach(n=> cfPlaySel.add(n));
+      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
+  { const b=document.getElementById('cf-play-none'); if(b) b.addEventListener('click', ()=>{
+      if(!cfPlaySel) cfPlaySel=new Set(); cfRolePlayers().forEach(n=> cfPlaySel.delete(n));
+      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
   { const i=document.getElementById('sess-rail-search'); if(i) i.addEventListener('input', e=>{ renderSessRail(e.target.value); highlightRail(); }); }
   { const b=document.getElementById('btn-rail'); if(b) b.addEventListener('click', toggleRail); }
   { const b=document.getElementById('rail-close'); if(b) b.addEventListener('click', closeRail); }
@@ -1245,6 +1421,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderMatches();
     cfResetSessSel();
     cfPlaySel = new Set(cfAllPlayers());
+    cfRenderRoleSeg();
     cfRenderSessRail('');
     cfRenderPlayRail('');
     renderConfronto();
