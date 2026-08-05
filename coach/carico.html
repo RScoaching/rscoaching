@@ -262,6 +262,35 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .at-val.up{ color:var(--orange2); }
 .at-val.dn{ color:oklch(74% 0.12 230); }
 .at-sub{ font-size:11px; color:var(--faint); margin-top:4px; }
+/* ---------- ACWR parametro per parametro ---------- */
+.agrid-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:2px 0 9px; }
+.agrid-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:18px; letter-spacing:.4px; color:var(--ink); }
+.agrid-head span{ font-size:11.5px; color:var(--faint); }
+.agrid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(212px, 1fr)); gap:12px; margin-bottom:18px; }
+.acell{
+  appearance:none; font-family:inherit; text-align:left; cursor:pointer; display:block; width:100%;
+  background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:11px 13px 9px;
+  transition: border-color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease);
+}
+.acell:hover{ border-color:var(--border3); }
+.acell:active{ transform:scale(.99); }
+.acell:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.acell.z-ok{ background:oklch(70% 0.18 152 / 0.08); border-color:oklch(70% 0.18 152 / 0.26); }
+.acell.z-low{ background:oklch(72% 0.13 230 / 0.08); border-color:oklch(72% 0.13 230 / 0.26); }
+.acell.z-warn{ background:oklch(80% 0.15 75 / 0.10); border-color:oklch(80% 0.15 75 / 0.28); }
+.acell.z-high{ background:oklch(64% 0.22 25 / 0.09); border-color:oklch(64% 0.22 25 / 0.28); }
+.acell.on{ border-width:2px; padding:10px 12px 8px; }
+.ac-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.ac-name{ font-size:11.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--muted); }
+.ac-pill{ font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 6px; border-radius:999px; white-space:nowrap; }
+.ac-pill.z-ok{ background:oklch(70% 0.18 152 / 0.20); color:oklch(80% 0.15 152); }
+.ac-pill.z-low{ background:oklch(72% 0.13 230 / 0.20); color:oklch(82% 0.11 230); }
+.ac-pill.z-warn{ background:oklch(80% 0.15 75 / 0.22); color:oklch(86% 0.13 75); }
+.ac-pill.z-high{ background:oklch(64% 0.22 25 / 0.22); color:oklch(78% 0.17 25); }
+.ac-pill.z-none{ background:var(--surface3); color:var(--faint); }
+.ac-val{ font-family:'Bebas Neue',sans-serif; font-size:29px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:3px; }
+.ac-sub{ font-size:11px; color:var(--faint); margin-top:1px; }
+.ac-spark{ display:block; width:100%; height:38px; margin-top:8px; }
 .acwr-charts{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 .acwr-block{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px 8px; }
 .acwr-block.full{ grid-column:1 / -1; }
@@ -698,6 +727,11 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
         </div>
         <div class="card-body" style="padding-top:6px">
           <div class="acwr-stats" id="acwr-stats"></div>
+          <div class="agrid-head">
+            <h3>ACWR per parametro</h3>
+            <span id="acwr-grid-hint"></span>
+          </div>
+          <div class="agrid" id="acwr-grid"></div>
           <div class="acwr-charts">
             <div class="acwr-block full">
               <div class="acwr-blk-head"><h3>Rapporto acuto:cronico</h3><span>zona ottimale 0,8-1,3 &#183; rischio sopra 1,5</span></div>
@@ -939,14 +973,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   // ---------- metrica analisi carico (solo metriche sommabili) ----------
-  let SUMIDX = M.map((_,i)=> i).filter(i=> (S.sum_flags||[])[i]===1);
+  let SUMIDX = [];
+  for(let i=0;i<NMET;i++) if(metSum(i)) SUMIDX.push(i);
   if(!SUMIDX.length) SUMIDX = M.map((_,i)=> i);
   if(SUMIDX.indexOf(state.acwrIdx)<0) state.acwrIdx = (SUMIDX.indexOf(1)>=0 ? 1 : SUMIDX[0]);
   (function(){
     const sel = document.getElementById('acwr-metric'); if(!sel) return;
-    sel.innerHTML = SUMIDX.map(i=> '<option value="'+i+'"'+(i===state.acwrIdx?' selected':'')+'>'+esc(M[i])+'</option>').join('');
+    sel.innerHTML = SUMIDX.map(i=> '<option value="'+i+'"'+(i===state.acwrIdx?' selected':'')+'>'+esc(metName(i))+'</option>').join('');
     sel.addEventListener('change', ()=>{ state.acwrIdx = +sel.value; renderAnalytics(); });
   })();
+  function syncAcwrSelect(){
+    const sel = document.getElementById('acwr-metric');
+    if(sel) sel.value = String(state.acwrIdx);
+  }
 
   // ---------- chart scope (microciclo / mese / stagione) + settimana ----------
   (function(){
@@ -1459,8 +1498,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       (m.rows||[]).forEach(r=>{
         if(r.type==='wk_header'){ flush(); cur={ week:r.label, tot:null, sum:0, has:false }; return; }
         if(!cur) cur={ week:'', tot:null, sum:0, has:false };
-        if(r.type==='tot_week'){ if(r.v && r.v[idx]!=null){ cur.tot=r.v[idx]; cur.has=true; } }
-        else if(r.type==='day' || r.type==='match'){ if(r.v && r.v[idx]!=null){ cur.sum+=r.v[idx]; cur.has=true; } }
+        if(r.type==='tot_week'){ const v=vAt(r,idx); if(v!=null){ cur.tot=v; cur.has=true; } }
+        else if(r.type==='day' || r.type==='match'){ const v=vAt(r,idx); if(v!=null){ cur.sum+=v; cur.has=true; } }
       });
       flush();
     });
@@ -1482,9 +1521,61 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(r<=1.5) return { key:'warn', label:'Carico alto', color:'oklch(80% 0.15 75)' };
     return { key:'high', label:'Rischio', color:'oklch(64% 0.22 25)' };
   }
+  // ---------- ACWR parametro per parametro ----------
+  // Il menu a tendina dava un solo rapporto alla volta: se i minuti erano in zona
+  // ma la distanza sopra i 20 stava a 1,6, quel numero restava nascosto finche' non
+  // si apriva il menu. Qui il rapporto viene calcolato su tutte le metriche sommabili
+  // e mostrato insieme, ognuna col colore della sua zona e la scia delle settimane.
+  function acwrSpark(acwr){
+    const list = acwr.filter(x=> x.ratio!=null).slice(-14);
+    const n = list.length, H = 38;
+    if(!n) return '<svg class="ac-spark" viewBox="0 0 100 '+H+'" preserveAspectRatio="none" aria-hidden="true"></svg>';
+    let mx = 1.6; list.forEach(x=>{ if(x.ratio>mx) mx = x.ratio; });
+    const W = n*10, gap = 2.4;
+    const yOf = r => (H-2) * (1 - Math.min(r,mx)/mx) + 1;
+    const yTop = yOf(1.3), yBot = yOf(0.8);
+    let g = '<rect x="0" y="'+yTop.toFixed(1)+'" width="'+W+'" height="'+(yBot-yTop).toFixed(1)+'" fill="oklch(70% 0.18 152 / 0.16)"/>';
+    for(let i=0;i<n;i++){
+      const y = yOf(list[i].ratio), h = Math.max(1, (H-1) - y);
+      g += '<rect x="'+(i*10+gap/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(10-gap).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1" fill="'+acwrZone(list[i].ratio).color+'" opacity="0.9"/>';
+    }
+    g += '<line x1="0" y1="'+(H-0.5)+'" x2="'+W+'" y2="'+(H-0.5)+'" stroke="var(--border2)" stroke-width="1"/>';
+    return '<svg class="ac-spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+g+'</svg>';
+  }
+  function acwrCell(i){
+    const weeks = seasonWeeks(i);
+    const acwr = computeACWR(weeks);
+    let li = -1;
+    for(let k=acwr.length-1;k>=0;k--){ if(acwr[k].full && acwr[k].ratio!=null){ li=k; break; } }
+    if(li<0) for(let k=acwr.length-1;k>=0;k--){ if(acwr[k].ratio!=null){ li=k; break; } }
+    const a = (li>=0) ? acwr[li] : null;
+    const z = acwrZone(a ? a.ratio : null);
+    const on = (i===state.acwrIdx), u = metUnit(i);
+    return '<button type="button" class="acell z-'+z.key+(on?' on':'')+'" data-idx="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+
+      '<div class="ac-top"><span class="ac-name">'+esc(metShort(i))+'</span><span class="ac-pill z-'+z.key+'">'+esc(z.label)+'</span></div>'+
+      '<div class="ac-val tnum">'+ (a && a.ratio!=null ? NF.format(round2(a.ratio)) : '-') +'</div>'+
+      '<div class="ac-sub">'+ (a ? ('acuto '+fmtLoad(a.acute)+(u?' '+esc(u):'')+' su cronico '+fmtLoad(a.chronic)) : 'settimane insufficienti') +'</div>'+
+      acwrSpark(acwr)+
+      '</button>';
+  }
+  function renderAcwrGrid(){
+    const host = document.getElementById('acwr-grid'); if(!host) return;
+    const hint = document.getElementById('acwr-grid-hint');
+    if(hint) hint.textContent = 'ultima settimana su media 4 settimane, tocca per portare il parametro nei grafici sotto';
+    let html = '';
+    SUMIDX.forEach(i=>{ html += acwrCell(i); });
+    host.innerHTML = html || emptyBlock('Nessun parametro sommabile disponibile');
+    host.querySelectorAll('.acell').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        state.acwrIdx = +b.getAttribute('data-idx');
+        syncAcwrSelect();
+        renderAnalytics();
+      });
+    });
+  }
   function renderAcwrStats(weeks, acwr, idx){
     const host = document.getElementById('acwr-stats'); if(!host) return;
-    const unit = UNIT[idx]||'';
+    const unit = metUnit(idx);
     if(!weeks.length){ host.innerHTML=''; return; }
     let li = acwr.length-1; // ultima settimana con rapporto
     for(let i=acwr.length-1;i>=0;i--){ if(acwr[i].full && acwr[i].ratio!=null){ li=i; break; } }
@@ -1562,7 +1653,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const wrap = document.getElementById('acwr-chart2'); if(!wrap) return;
     if(weeks.length<2){ wrap.innerHTML = emptyBlock('Dati insufficienti'); return; }
     const geo = anLayout(weeks.length, wrap, { H:230, padB:34, slotMin:22 });
-    const W = geo.W, unit = UNIT[idx]||'';
+    const W = geo.W, unit = metUnit(idx);
     const maxV = Math.max(1, ...acwr.map(x=> x.acute||0), ...acwr.map(x=> x.chronic||0));
     const nice = niceMax(maxV);
     const yOf = v => geo.padT + geo.plotH*(1 - Math.min(v,nice)/nice);
@@ -1602,9 +1693,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function renderMdShape(idx){
     const wrap = document.getElementById('acwr-chart3'); if(!wrap) return;
-    const unit = UNIT[idx]||'';
+    const unit = metUnit(idx);
     const order = [5,4,3,2,1,0];
-    const rows = order.map(md=>{ const av=mdAverage(md); return { md:md, v:(av && av[idx]!=null)? av[idx]:null }; }).filter(r=> r.v!=null);
+    const rows = order.map(md=>{ const av=mdAverage(md); return { md:md, v:(av ? vAt({ v:av }, idx) : null) }; }).filter(r=> r.v!=null);
     if(!rows.length){ wrap.innerHTML = emptyBlock('Nessun microciclo tipo disponibile'); return; }
     const geo = anLayout(rows.length, wrap, { H:230, padB:42, slotMin:44, padL:42, padR:16 });
     const W = geo.W;
@@ -1645,6 +1736,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const weeks = seasonWeeks(idx);
     const acwr = computeACWR(weeks);
     renderAcwrStats(weeks, acwr, idx);
+    renderAcwrGrid();
     renderAcwrRatio(weeks, acwr, idx);
     renderAcwrLoad(weeks, acwr, idx);
     renderMdShape(idx);
