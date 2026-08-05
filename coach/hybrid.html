@@ -317,6 +317,10 @@ td.num.cmp.over .pct{ color:var(--orange2); }
 td.num.cmp.near .pct{ color:var(--green); }
 td.num.cmp.under .pct{ color:oklch(66% 0.13 250); }
 td.num.cmp.na{ color:var(--faint); }
+/* riga scarto: compare solo quando le atlete a confronto sono esattamente due */
+tr.r-diff td, tr.r-diff td.col-day{ background:oklch(28% 0.03 250); }
+tr.r-diff td.col-day .lb{ color:oklch(78% 0.10 250); }
+tr.r-diff td.col-day .role-inline{ color:var(--muted); }
 
 /* ---------- confronto giocatrici ---------- */
 #confronto-view{ position:relative; overflow:hidden; }
@@ -452,6 +456,21 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   tr.r-model td.col-day .lb{ color:#5b3f8a !important; }
   tr.r-teamref td, tr.r-teamref td.col-day{ background:#eaf4ea !important; }
   tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
+  tr.r-diff td, tr.r-diff td.col-day{ background:#eaf0f8 !important; }
+  tr.r-diff td.col-day .lb{ color:#2f4f7b !important; }
+  /* su piu' pagine l'intestazione si ripete e nessuna atleta resta tagliata a meta' */
+  table.grid thead{ display:table-header-group; }
+  table.grid tr{ break-inside:avoid; }
+  td.num.cmp .pct{ color:#14110f !important; }
+  td.num.cmp.over .pct{ color:#b8531f !important; }
+  td.num.cmp.near .pct{ color:#2f6b34 !important; }
+  td.num.cmp.under .pct{ color:#2f4f7b !important; }
+  td.num.cmp .raw{ color:#5a524c !important; }
+  .cmp-legend{ color:#5a524c !important; }
+  .cmp-legend b{ color:#14110f !important; }
+  .cmp-legend .dot.over{ background:#b8531f !important; }
+  .cmp-legend .dot.near{ background:#2f6b34 !important; }
+  .cmp-legend .dot.under{ background:#2f4f7b !important; }
   table.grid tr.r-alt td{ background:#f7f7f7 !important; }
   table.grid tr.r-alt td.key{ background:#f6efe8 !important; }
   table.grid tr.r-day td.col-hot{ background:#fff !important; }
@@ -638,12 +657,13 @@ table.partite td.sigla.nolink{ color:var(--muted); }
             <button data-cfc="tot" type="button" title="Totale accumulato: somma dei parametri cumulativi, media di quelli di intensita">Totale</button>
             <button data-cfc="team" type="button" title="Quanto ogni atleta dista dalla media squadra sulle stesse sedute">vs Squadra</button>
             <button data-cfc="model" type="button" title="Quanto ogni atleta dista dal modello AVG partita">vs Modello</button>
+            <button data-cfc="tvm" type="button" title="Quanto rende in partita ogni atleta rispetto a quanto lavora in allenamento">Part. vs All.</button>
           </div>
         </div>
         <div class="card-body" style="padding-top:6px">
           <div class="sess-stats" id="cf-stats"></div>
           <div class="cf-subctl">
-            <span class="cm-lbl">Includi</span>
+            <span class="cm-lbl" id="cf-scope-lbl">Includi</span>
             <div class="seg cmp-seg" id="cf-scope-seg" role="group" aria-label="Tipo di sedute">
               <button class="on" data-scope="all" type="button">Tutte</button>
               <button data-scope="match" type="button">Partite</button>
@@ -1417,6 +1437,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }));
   }
   function cfPlayerRows(name, sess){ const out=[]; sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(r) out.push(r); }); return out; }
+  // Le stesse sedute divise in due mucchi: da una parte le partite, dall'altra gli allenamenti.
+  function cfSplitPlayerRows(name, sess){
+    const m=[], d=[];
+    sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(!r) return; (s.type==='match'?m:d).push(r); });
+    return { m, d };
+  }
+  function cfSplitTeamRows(sess){
+    const m=[], d=[];
+    sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(!r) return; (s.type==='match'?m:d).push(r); });
+    return { m, d };
+  }
+  // Rapporto partita su allenamento, parametro per parametro. Torna null dove uno dei due
+  // manca: meglio un trattino che una percentuale inventata.
+  function cfRatio(va, vb){
+    return (va||[]).map((x,i)=>{
+      const y=(vb||[])[i];
+      if(x==null || !isFinite(x) || y==null || !isFinite(y) || y===0) return null;
+      return x/y;
+    });
+  }
+  function cfPctCell(r, sotto, kc){
+    if(r==null || !isFinite(r)) return '<td class="num cmp na'+kc+'">-</td>';
+    const pct=Math.round(r*100), cls=r>=1.05?'over':r>=0.95?'near':'under';
+    return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+sotto+'</span></td>';
+  }
   function aggRows(rows, mode){
     const acc=new Array(M.length).fill(0), cnt=new Array(M.length).fill(0);
     rows.forEach(row=>{ (row.v||[]).forEach((x,i)=>{ if(x!=null && isFinite(x)){ acc[i]+=x; cnt[i]++; } }); });
@@ -1437,16 +1482,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(da!=null) tiles.push({ lbl:'Dal - al', val: dShort(da)+' - '+dShort(a), match:false });
     host.innerHTML=tiles.map(t=>'<div class="sess-stat'+(t.match?' match':'')+'"><div class="ss-lbl">'+esc(t.lbl)+'</div><div class="ss-val">'+esc(t.val)+'</div></div>').join('');
   }
-  function cfSyncButtons(){
+  // In stampa il segmento della modalita' sparisce, percio' il nome della lettura deve stare
+  // qui dentro: chi apre il PDF deve capire senza chiedere se sta guardando medie, totali,
+  // scarti dalla squadra o il peso della partita.
+  function cfModeText(m){
+    return m==='tot' ? 'totale accumulato'
+      : m==='team' ? '% sulla media squadra'
+      : m==='model' ? '% sul modello AVG partita'
+      : m==='tvm' ? 'partita contro allenamento'
+      : 'media per seduta';
+  }
+  function cfSyncButtons(eff){
     const es=cfEligibleSessions().length, ss=cfSelectedSessions().length, ap=cfRolePlayers().length, sp=cfSelectedPlayers().length;
     const sl=document.getElementById('cf-sess-lbl'); if(sl) sl.textContent='Sedute ('+ss+'/'+es+')';
     const pl=document.getElementById('cf-play-lbl'); if(pl) pl.textContent='Atlete ('+sp+'/'+ap+')';
     const hint=document.getElementById('cf-hint');
     if(hint){
       const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute';
-      hint.textContent=t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'+(cfState.role?('  ·  '+cfState.role):'')
+      hint.textContent=cfModeText(eff||cfState.cmp)+'  ·  '+t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'
+        +(cfState.role?('  ·  '+cfState.role):'')
         +(cfPerActive()?('  ·  '+cfPerText()):'');
     }
+  }
+  // Partita contro allenamento vuole tutte e due le cose dentro la selezione: finche' la
+  // lettura e' quella, il filtro Includi non ha senso e sparisce invece di restare li' a
+  // svuotare la tabella.
+  function cfSyncCmpUi(){
+    const tvm=(cfState.cmp==='tvm');
+    const seg=document.getElementById('cf-scope-seg'); if(seg) seg.hidden=tvm;
+    const lbl=document.getElementById('cf-scope-lbl'); if(lbl) lbl.hidden=tvm;
   }
   // Il periodo si vede anche in stampa: nel report deve essere scritto di che giorni si parla.
   function cfRenderPerSeg(){
@@ -1473,7 +1537,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return (cx+r*Math.cos(a)).toFixed(1)+','+(cy+r*Math.sin(a)).toFixed(1);
     }).join(' ');
   }
-  function renderCfRadar(pdata, teamAgg, hasTeam){
+  function renderCfRadar(pdata, teamAgg, hasTeam, nota){
     const host=document.getElementById('cf-radar'); if(!host) return;
     const ax=cfRadarAxes();
     if(!pdata.length){ host.hidden=true; host.innerHTML=''; return; }
@@ -1548,7 +1612,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       +'<span class="cfr-nm">Media squadra</span><span class="cfr-best">traccia tratteggiata</span></span></div>';
     side+='</div>';
     host.innerHTML='<div class="cfr-head"><strong>Profilo a confronto</strong>'
-      +'<span>parametri chiave, il bordo esterno e\' il valore migliore fra chi e\' selezionato</span></div>'
+      +'<span>'+esc(nota || 'parametri chiave, il bordo esterno e\' il valore migliore fra chi e\' selezionato')+'</span></div>'
       +'<div class="cfr-body">'+svg+side+'</div>';
   }
   function renderConfronto(){
@@ -1566,33 +1630,71 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!players.length){ vuoto(cfState.role ? ('Nessuna atleta selezionata fra i ruoli "'+cfState.role+'"') : 'Nessuna atleta selezionata'); return; }
     const teamRows=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) teamRows.push(r); });
     const hasModel=!!(S.model && S.model.length);
+    const nMatch=sess.filter(s=> s.type==='match').length, nTrain=sess.filter(s=> s.type==='day').length;
+    const canTvm=(nMatch>0 && nTrain>0);
     const cmp=cfState.cmp;
-    const eff=(cmp==='team' && !teamRows.length)?'val':(cmp==='model' && !hasModel)?'val':cmp;
+    const eff=(cmp==='team' && !teamRows.length)?'val'
+      :(cmp==='model' && !hasModel)?'val'
+      :(cmp==='tvm' && !canTvm)?'val':cmp;
+    const isTvm=(eff==='tvm');
     const aggMode=(eff==='tot')?'sum':'avg';
     const teamAgg=aggRows(teamRows, aggMode).v;
     const isCmp=(eff==='team'||eff==='model');
     const base=eff==='team'?teamAgg:eff==='model'?(S.model||null):null;
+    cfSyncButtons(eff);
+    const tSplit=isTvm?cfSplitTeamRows(sess):null;
+    const teamM=tSplit?aggRows(tSplit.m,'avg').v:null;
+    const teamD=tSplit?aggRows(tSplit.d,'avg').v:null;
+    const pdata=players.map(name=>{
+      if(isTvm){
+        const sp=cfSplitPlayerRows(name, sess);
+        const am=aggRows(sp.m,'avg'), ad=aggRows(sp.d,'avg');
+        return { name, role:roleOf(name), v:am.v, v2:ad.v, vr:cfRatio(am.v, ad.v), n:sp.m.length+sp.d.length, nm:sp.m.length, nd:sp.d.length };
+      }
+      const a=aggRows(cfPlayerRows(name,sess), aggMode);
+      return { name, role:roleOf(name), v:a.v, n:a.n };
+    });
+    pdata.sort((a,b)=>{
+      if(csort.col==='name') return csort.dir*a.name.localeCompare(b.name,'it');
+      if(csort.col==='role') return csort.dir*String(a.role).localeCompare(String(b.role),'it');
+      if(csort.col==='n') return csort.dir*(a.n-b.n);
+      // in "partita contro allenamento" la colonna si ordina per rapporto, non per valore
+      let va=((isTvm?a.vr:a.v)||[])[csort.col], vb=((isTvm?b.vr:b.v)||[])[csort.col];
+      va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
+      return csort.dir*(va-vb);
+    });
+    // La riga dello scarto esce solo con due atlete e solo dove i numeri sono assoluti:
+    // sopra le percentuali il rapporto fra due percentuali non direbbe niente di utile.
+    const duello=(!isCmp && !isTvm && pdata.length===2) ? { a:pdata[0], b:pdata[1] } : null;
     if(lg){
-      if(!isCmp){ lg.hidden=true; lg.innerHTML=''; }
-      else {
+      if(cmp==='tvm' && !canTvm){
+        lg.hidden=false;
+        lg.innerHTML='Partita contro allenamento ha bisogno di tutte e due le cose fra le sedute scelte: '
+          +'adesso ci sono <b>'+nMatch+'</b> partite e <b>'+nTrain+'</b> allenamenti. Resta la media per seduta.';
+      } else if(isTvm){
+        lg.hidden=false;
+        lg.innerHTML='% della <b>partita</b> sull\'<b>allenamento</b>, media per seduta; sotto i due valori'
+          +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
+          +'<span class="lg"><span class="dot near"></span>95-105%</span>'
+          +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
+      } else if(isCmp){
         const ref=eff==='team'?'media squadra':'modello AVG partita';
         lg.hidden=false;
         lg.innerHTML='% rispetto alla <b>'+esc(ref)+'</b>'
           +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
           +'<span class="lg"><span class="dot near"></span>95-105%</span>'
           +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
-      }
+      } else if(duello){
+        lg.hidden=false;
+        lg.innerHTML='Riga <b>Scarto</b>: quanto fa <b>'+esc(duello.a.name)+'</b> rispetto a <b>'+esc(duello.b.name)
+          +'</b>, sopra in percentuale e sotto in differenza'
+          +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
+          +'<span class="lg"><span class="dot near"></span>95-105%</span>'
+          +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
+      } else { lg.hidden=true; lg.innerHTML=''; }
     }
-    const pdata=players.map(name=>{ const a=aggRows(cfPlayerRows(name,sess), aggMode); return { name, role:roleOf(name), v:a.v, n:a.n }; });
-    pdata.sort((a,b)=>{
-      if(csort.col==='name') return csort.dir*a.name.localeCompare(b.name,'it');
-      if(csort.col==='role') return csort.dir*String(a.role).localeCompare(String(b.role),'it');
-      if(csort.col==='n') return csort.dir*(a.n-b.n);
-      let va=(a.v||[])[csort.col],vb=(b.v||[])[csort.col];
-      va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
-      return csort.dir*(va-vb);
-    });
-    renderCfRadar(pdata, teamAgg, teamRows.length>0);
+    renderCfRadar(pdata, teamAgg, !isTvm && teamRows.length>0,
+      isTvm ? 'parametri chiave, qui il profilo disegnato e\' quello delle partite' : '');
     const cell=(v,i)=>{
       const kc=keyCls(i);
       if(!isCmp) return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
@@ -1605,14 +1707,44 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const ariaSort=k=> csort.col===k?(csort.dir>0?'ascending':'descending'):'none';
     let h='<table class="grid partite"><thead><tr>';
     h+='<th class="col-day sortable" data-c="name" aria-sort="'+ariaSort('name')+'">Atleta <span class="arw">'+arw('name')+'</span></th>';
-    h+='<th class="cf-n sortable" data-c="n" aria-sort="'+ariaSort('n')+'" title="Sedute con dati">Sed. <span class="arw">'+arw('n')+'</span></th>';
+    h+='<th class="cf-n sortable" data-c="n" aria-sort="'+ariaSort('n')+'" title="'
+      +(isTvm?'Partite e allenamenti con dati':'Sedute con dati')+'">'+(isTvm?'P/A':'Sed.')
+      +' <span class="arw">'+arw('n')+'</span></th>';
     V.forEach(i=>{ const k=keyCls(i); h+='<th class="sortable'+k+'" data-c="'+i+'" aria-sort="'+ariaSort(i)+'" title="'+esc(M[i])+'">'+esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span> <span class="arw">'+arw(i)+'</span></th>'; });
     h+='</tr></thead><tbody>';
-    const teamLbl=(aggMode==='sum')?'Media squadra (tot.)':'Media squadra';
-    if(teamRows.length){ h+='<tr class="r-teamref"><td class="col-day"><span class="lb">'+esc(teamLbl)+'</span></td><td class="cf-n">'+teamRows.length+'</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(teamAgg[i])+'</td>'); h+='</tr>'; }
-    if(hasModel){ h+='<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='model'?' (rif.)':'')+'</span></td><td class="cf-n">-</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(S.model[i])+'</td>'); h+='</tr>'; }
+    if(isTvm){
+      // il riferimento di squadra segue la stessa lettura: partita contro allenamento
+      const tr=cfRatio(teamM, teamD);
+      if(tSplit.m.length && tSplit.d.length){
+        h+='<tr class="r-teamref"><td class="col-day"><span class="lb">Media squadra</span></td><td class="cf-n">'
+          +tSplit.m.length+'/'+tSplit.d.length+'</td>';
+        V.forEach(i=> h+=cfPctCell(tr[i], fmt(teamM[i])+' / '+fmt(teamD[i]), keyCls(i)));
+        h+='</tr>';
+      }
+    } else {
+      const teamLbl=(aggMode==='sum')?'Media squadra (tot.)':'Media squadra';
+      if(teamRows.length){ h+='<tr class="r-teamref"><td class="col-day"><span class="lb">'+esc(teamLbl)+'</span></td><td class="cf-n">'+teamRows.length+'</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(teamAgg[i])+'</td>'); h+='</tr>'; }
+      if(hasModel){ h+='<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='model'?' (rif.)':'')+'</span></td><td class="cf-n">-</td>'; V.forEach(i=> h+='<td class="num tnum'+keyCls(i)+'">'+fmt(S.model[i])+'</td>'); h+='</tr>'; }
+    }
     if(!pdata.length){ h+='<tr class="r-day"><td class="col-day" colspan="'+(V.length+2)+'">Nessuna atleta selezionata</td></tr>'; }
-    pdata.forEach(r=>{ h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td><td class="cf-n">'+(r.n||0)+'</td>'; const rv=r.v||[]; V.forEach(i=> h+=cell(rv[i], i)); h+='</tr>'; });
+    pdata.forEach(r=>{
+      h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'
+        +(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
+      h+='<td class="cf-n">'+(isTvm?(r.nm+'/'+r.nd):(r.n||0))+'</td>';
+      if(isTvm){ const vm=r.v||[], vd=r.v2||[], vr=r.vr||[]; V.forEach(i=> h+=cfPctCell(vr[i], fmt(vm[i])+' / '+fmt(vd[i]), keyCls(i))); }
+      else { const rv=r.v||[]; V.forEach(i=> h+=cell(rv[i], i)); }
+      h+='</tr>';
+    });
+    if(duello){
+      const A=duello.a.v||[], B=duello.b.v||[], rr=cfRatio(A, B);
+      h+='<tr class="r-diff"><td class="col-day"><span class="lb">Scarto</span>'
+        +'<span class="role-inline">'+esc(duello.a.name)+' su '+esc(duello.b.name)+'</span></td><td class="cf-n">-</td>';
+      V.forEach(i=>{
+        const d=(A[i]!=null && isFinite(A[i]) && B[i]!=null && isFinite(B[i])) ? (A[i]-B[i]) : null;
+        h+=cfPctCell(rr[i], (d==null?'-':((d>0?'+':'')+fmt(d))), keyCls(i));
+      });
+      h+='</tr>';
+    }
     h+='</tbody></table>'; host.innerHTML=h;
     host.querySelectorAll('th.sortable').forEach(th=> th.addEventListener('click', ()=>{
       const raw=th.getAttribute('data-c');
@@ -1812,6 +1944,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const seg=document.getElementById('cf-cmp-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
       cfState.cmp = btn.getAttribute('data-cfc');
       seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+      // per confrontare partita e allenamento servono tutte e due: se il filtro Includi ne
+      // teneva fuori una meta', torna da solo su Tutte invece di dare una tabella di trattini
+      if(cfState.cmp==='tvm' && cfState.scope!=='all'){
+        cfState.scope='all';
+        const sc=document.getElementById('cf-scope-seg');
+        if(sc) sc.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x.getAttribute('data-scope')==='all'));
+        cfResetSessSel();
+        cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:'');
+      }
+      cfSyncCmpUi();
       renderConfronto();
     })); }
   { const seg=document.getElementById('cf-scope-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
@@ -1932,6 +2074,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     cfPlaySel = new Set(cfAllPlayers());
     cfRenderRoleSeg();
     cfRenderPerSeg();
+    cfSyncCmpUi();
     cfRenderSessRail('');
     cfRenderPlayRail('');
     renderConfronto();
