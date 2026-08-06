@@ -213,6 +213,20 @@ a.rc-tile:hover{ border-color:var(--border3); }
 a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .rc-empty{ text-align:center; padding:26px; color:var(--faint); font-size:13px; line-height:1.55; }
 
+/* ---------- sessione: quale rilevazione si sta guardando ---------- */
+.sess-bar{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.sess-lab{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); margin-right:2px; }
+.sess-btn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); background:var(--surface2); border:1px solid var(--border2);
+  border-radius:999px; padding:7px 13px;
+  transition: color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
+.sess-btn:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
+.sess-btn.active{ color:var(--ink); background:var(--ember-bg); border-color:var(--ember-border); }
+.sess-btn .sn{ margin-left:6px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.sess-btn.active .sn{ color:var(--orange2); }
+.sess-note{ flex-basis:100%; font-size:12px; color:var(--faint); line-height:1.5; margin:0; }
+
 /* ---------- batteria test ---------- */
 .test-cats{ display:inline-flex; gap:4px; flex-wrap:wrap; margin-bottom:14px; padding:4px;
   background:var(--surface2); border:1px solid var(--border2); border-radius:12px; max-width:100%; }
@@ -447,6 +461,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
         </div>
         <div class="card-body">
           <div class="seed-bar" id="seed-bar" hidden></div>
+          <div class="sess-bar" id="sess-bar"></div>
           <div class="test-cats" id="test-cats"></div>
           <div class="test-tabs" id="test-tabs"></div>
           <div class="tb-strip" id="tb-strip"></div>
@@ -744,6 +759,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   let curCat  = CATS[0].key;
   let curView = (viewsIn(curCat)[0] || VIEWS[0]).id;
+  // sessione scelta: stringa vuota vuol dire tutte, altrimenti la data della rilevazione
+  let curSess = '';
   let REG = loadReg();
 
   // la classifica velocita parte dalle prime dieci, le altre si aprono col tasto
@@ -754,21 +771,78 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function regKey(){ return 'fio_test_register_v2_' + seasonId(); }
   function loadReg(){
     const key = regKey();
-    try{ const v=JSON.parse(localStorage.getItem(key)); if(v&&typeof v==='object') return v; }catch(e){}
+    try{ const v=JSON.parse(localStorage.getItem(key)); if(v&&typeof v==='object') return withHist(v); }catch(e){}
     // migrazione una tantum dai vecchi dati nella stagione 25-26
     if(seasonId()==='25-26'){
-      try{ const old=JSON.parse(localStorage.getItem('fio_test_register_v1')); if(old&&typeof old==='object') return old; }catch(e){}
+      try{ const old=JSON.parse(localStorage.getItem('fio_test_register_v1')); if(old&&typeof old==='object') return withHist(old); }catch(e){}
     }
     return {};
   }
   function saveReg(){ try{ localStorage.setItem(regKey(), JSON.stringify(REG)); }catch(e){} }
 
+  // ---- storico per sessione ----
+  // Ogni casella del registro tiene tutte le rilevazioni fatte su quel test, non solo
+  // l' ultima: { v, d, h:[{v,d}, ...] } con h in ordine cronologico e v/d copia
+  // dell' ultima misura, cosi' tutto quello che leggeva solo v/d continua a funzionare.
+  // Il registro vecchio aveva una misura sola: al caricamento diventa uno storico da uno.
+  function withHist(reg){
+    Object.keys(reg).forEach(k=>{
+      const bag = reg[k];
+      if(!bag || typeof bag!=='object') return;
+      Object.keys(bag).forEach(n=>{
+        const e = bag[n];
+        if(!e || typeof e!=='object') { delete bag[n]; return; }
+        if(!Array.isArray(e.h) || !e.h.length) e.h = [{ v:e.v, d:e.d||'' }];
+        sealEntry(e);
+        if(!e.h.length) delete bag[n];
+      });
+    });
+    return reg;
+  }
+  // la stagione parte a luglio: i mesi da luglio a dicembre vengono prima di quelli dopo
+  function dOrd(d){
+    const m = String(d||'').trim().match(/^(\d{1,2})\s+([a-z]{3})/i);
+    if(!m) return 0;
+    const mi = MO.indexOf(m[2].toLowerCase());
+    if(mi < 0) return 0;
+    return (mi>=6 ? mi : mi+12) * 100 + (+m[1]||0);
+  }
+  // riordina lo storico, butta le misure vuote e riallinea v/d all' ultima
+  function sealEntry(e){
+    e.h = (e.h||[]).filter(x=> x && x.v!=null && x.v!=='' && !isNaN(+x.v))
+                   .map(x=> ({ v:+x.v, d:x.d||'' }));
+    e.h.sort((a,b)=> dOrd(a.d) - dOrd(b.d));
+    const last = e.h[e.h.length-1];
+    if(last){ e.v = last.v; e.d = last.d; } else { e.v = null; e.d = ''; }
+    return e;
+  }
+  // la misura da usare: quella della sessione scelta, oppure l' ultima se sono tutte
+  function pick(e){
+    if(!e) return null;
+    if(!curSess){ return (e.v!=null && e.v!=='' && !isNaN(+e.v)) ? { v:+e.v, d:e.d||'' } : null; }
+    const h = e.h || [];
+    for(let i=h.length-1; i>=0; i--){ if(h[i].d === curSess) return { v:+h[i].v, d:h[i].d }; }
+    return null;
+  }
+  // elenco delle sessioni presenti nel registro, in ordine cronologico
+  function sessList(){
+    const m = {};
+    Object.keys(REG).forEach(k=>{
+      const bag = REG[k]||{};
+      roster.forEach(n=>{
+        const e = bag[n];
+        if(!e) return;
+        (e.h||[]).forEach(x=>{ if(x.d){ m[x.d] = (m[x.d]||0) + 1; } });
+      });
+    });
+    return Object.keys(m).map(d=> ({ d:d, n:m[d] })).sort((a,b)=> dOrd(a.d) - dOrd(b.d));
+  }
+
   function entriesFor(testKey){
     const bag = REG[testKey]||{};
     return roster.map(name=>{
-      const e = bag[name];
-      const v = e && e.v!=null && e.v!=='' ? +e.v : null;
-      return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', v:(v!=null && !isNaN(v))?v:null, d:e?e.d:'' };
+      const p = pick(bag[name]);
+      return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', v:p?p.v:null, d:p?p.d:'' };
     });
   }
   function statsFor(testKey, def){
@@ -784,7 +858,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function registeredCount(){
     let c=0;
-    TESTS.forEach(t=>{ const bag=REG[t.key]||{}; roster.forEach(n=>{ if(bag[n] && bag[n].v!=null && bag[n].v!=='') c++; }); });
+    TESTS.forEach(t=>{ const bag=REG[t.key]||{}; roster.forEach(n=>{ if(pick(bag[n])) c++; }); });
     return c;
   }
   function fmtTest(v, unit){
@@ -795,10 +869,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---- test bilaterali: righe dx/sx con calcolo dell asimmetria ----
   function valOf(bag, name){
-    const e = bag[name];
-    if(!e || e.v==null || e.v==='') return null;
-    const n = +e.v;
-    return isNaN(n) ? null : n;
+    const p = pick(bag[name]);
+    return p ? p.v : null;
+  }
+  function dateOf(bag, name){
+    const p = pick(bag[name]);
+    return p ? p.d : '';
   }
   function pairRows(v){
     const bd = REG[v.dx.key]||{}, bs = REG[v.sx.key]||{};
@@ -815,7 +891,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', d:d, s:s,
                gap:gap, pct:pct, amt:amt, lev:lev, low:low,
-               dd:(bd[name]?bd[name].d:''), ds:(bs[name]?bs[name].d:'') };
+               dd:dateOf(bd, name), ds:dateOf(bs, name) };
     });
   }
   function asymText(v, r){
@@ -965,6 +1041,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   renderKpis();
   renderRecords();
   renderGps();
+  renderSessBar();
   buildCats();
   buildTabs();
   renderBattery();
@@ -972,9 +1049,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   document.addEventListener('fio:stagione', function(){
     REG = loadReg();
+    curSess = '';
     refreshSubtitle();
     renderKpis();
     renderRecords();
+    renderSessBar();
     buildCats();
     buildTabs();
     renderBattery();
@@ -982,14 +1061,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderSeedBar();
   });
 
+  // svuota il test aperto: con una sessione scelta tocca solo quella rilevazione
   document.getElementById('tb-reset').addEventListener('click', ()=>{
     const v = viewById(curView);
     const ks = keysOf(v).filter(k=> REG[k] && Object.keys(REG[k]).length);
-    if(!ks.length){ toast('Nessun dato da svuotare'); return; }
-    ks.forEach(k=> { delete REG[k]; });
+    let n = 0;
+    ks.forEach(k=>{
+      if(!curSess){ n += Object.keys(REG[k]).length; delete REG[k]; return; }
+      Object.keys(REG[k]).forEach(name=>{
+        if(pick(REG[k][name])){ putMeasure(k, name, null, curSess); n++; }
+      });
+    });
+    if(!n){ toast('Nessun dato da svuotare'); return; }
     saveReg();
-    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
-    toast('Test svuotato');
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
+    toast(curSess ? ('Svuotato il test del '+curSess) : 'Test svuotato');
   });
 
   /* ---------- import storico test ---------- */
@@ -1008,14 +1094,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         for(let i=0; i<arr.length; i+=2){
           const name = SEED_ATL[arr[i]];
           if(!PLAYERS[name]){ skip++; continue; }
-          if(!REG[k]) REG[k] = {};
-          REG[k][name] = { v:arr[i+1], d:s.d };
+          putMeasure(k, name, arr[i+1], s.d);
           n++;
         }
       });
     });
     saveReg();
-    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
     toast(n + ' valori importati' + (skip ? ', ' + skip + ' fuori rosa' : ''));
   }
   function renderSeedBar(){
@@ -1027,7 +1112,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return;
     }
     btn.hidden = false;
-    let h = '<p class="seed-note">Rilevazioni gia' + "'" + ' fatte sul campo nella stagione 25-26. L' + "'" + 'import sovrascrive i valori esistenti degli stessi test; con "Tutte" vince sempre la misura piu' + "'" + ' recente.</p>';
+    let h = '<p class="seed-note">Rilevazioni gia' + "'" + ' fatte sul campo nella stagione 25-26. Ogni import entra nello storico con la sua data, non cancella le altre sessioni: nella lettura "Tutte" comanda la misura piu' + "'" + ' recente, e col tasto della sessione si guarda una rilevazione alla volta.</p>';
     SEED.forEach(s=>{
       h += '<button class="seed-it" type="button" data-seed="'+esc(s.id)+'">'+
              '<b>'+esc(s.label)+'</b>'+
@@ -1192,8 +1277,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const groups = [];
 
     // 1) GPS reali dal monitoraggio del carico
+    // con una rilevazione scelta restano fuori: il GPS viene dalle sedute, non dai test
     const gt = [];
-    if(monitored.length){
+    if(!curSess && monitored.length){
       const nMon = atlText(monitored.length);
       const tNint = topBy('nint'), tMmin = topBy('mmin');
       if(topSmax && topSmax.smax>0){
@@ -1234,9 +1320,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           } else {
             const st = statsFor(v.def.key, v.def);
             if(!st.n) return;
-            const e = (REG[v.def.key]||{})[st.bestName];
             tiles.push(recTile('', v.label, recNum(st.best, v.unit), v.unit, st.bestName,
-              recMeta([esc((e&&e.d)||''), atlText(st.n)]), ''));
+              recMeta([esc(dateOf(REG[v.def.key]||{}, st.bestName)), atlText(st.n)]), ''));
           }
         });
       }
@@ -1244,13 +1329,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
 
     const nRec = groups.reduce((a,g)=> a + g.h.length, 0);
-    chips.innerHTML = nRec
-      ? '<div class="mchip em"><span class="ml">Metriche</span><b>'+nRec+'</b></div>'
-      : '';
+    chips.innerHTML = (nRec ? '<div class="mchip em"><span class="ml">Metriche</span><b>'+nRec+'</b></div>' : '')+
+      (curSess ? '<div class="mchip"><span class="ml">Rilevazione</span><b>'+esc(curSess)+'</b></div>' : '');
 
     if(!groups.length){
-      list.innerHTML = '<div class="rc-empty">Ancora nessun record: servono i dati GPS del monitoraggio '+
-        'oppure qualche valore nella batteria test qui sotto.</div>';
+      list.innerHTML = curSess
+        ? '<div class="rc-empty">Nessun valore registrato il '+esc(curSess)+'. Scegli un' + "'" +
+          'altra rilevazione oppure torna su Tutte.</div>'
+        : '<div class="rc-empty">Ancora nessun record: servono i dati GPS del monitoraggio '+
+          'oppure qualche valore nella batteria test qui sotto.</div>';
       return;
     }
     list.innerHTML = groups.map(g=>(
@@ -1307,12 +1394,44 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
 
+  // barra della sessione: si vede solo quando ci sono almeno due rilevazioni diverse
+  function renderSessBar(){
+    const bar = document.getElementById('sess-bar');
+    const ss = sessList();
+    if(ss.length < 2){
+      if(curSess) curSess = '';
+      bar.innerHTML = ''; bar.hidden = true; return;
+    }
+    bar.hidden = false;
+    if(curSess && !ss.some(s=> s.d===curSess)) curSess = '';
+    const tot = ss.reduce((a,s)=> a+s.n, 0);
+    let h = '<span class="sess-lab">Rilevazione</span>'+
+      '<button class="sess-btn'+(curSess?'':' active')+'" type="button" data-s="">Tutte'+
+        '<span class="sn">'+tot+'</span></button>';
+    ss.forEach(s=>{
+      h += '<button class="sess-btn'+(curSess===s.d?' active':'')+'" type="button" data-s="'+esc(s.d)+'">'+
+             esc(s.d)+'<span class="sn">'+s.n+'</span></button>';
+    });
+    h += '<p class="sess-note">'+(curSess
+      ? 'Batteria, indici e record leggono solo la rilevazione del '+esc(curSess)+'. Scrivendo un valore si corregge quella misura, invece di aggiungerne una di oggi.'
+      : 'Di ogni atleta vale la misura registrata per ultima. Scegli una data per vedere quella rilevazione da sola.')+'</p>';
+    bar.innerHTML = h;
+    bar.querySelectorAll('.sess-btn').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const d = b.getAttribute('data-s') || '';
+        if(d === curSess) return;
+        curSess = d;
+        renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
+      });
+    });
+  }
+
   function catCounts(){
     const m = {};
     CATS.forEach(c=> m[c.key] = 0);
     TESTS.forEach(t=>{
       const bag = REG[t.key]||{};
-      roster.forEach(n=>{ if(bag[n] && bag[n].v!=null && bag[n].v!=='' && m[t.cat]!=null) m[t.cat]++; });
+      roster.forEach(n=>{ if(pick(bag[n]) && m[t.cat]!=null) m[t.cat]++; });
     });
     return m;
   }
@@ -1350,22 +1469,33 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
 
-  // scrive un valore nel registro e ridisegna
-  function writeVal(testKey, def, name, raw){
+  // mette una misura nello storico di una casella, su una data precisa
+  function putMeasure(testKey, name, num, when){
     if(!REG[testKey]) REG[testKey] = {};
+    const bag = REG[testKey];
+    const e = bag[name] || (bag[name] = { v:null, d:'', h:[] });
+    if(!Array.isArray(e.h)) e.h = (e.v!=null && e.v!=='') ? [{ v:e.v, d:e.d||'' }] : [];
+    const i = e.h.findIndex(x=> x.d === when);
+    if(num==null){ if(i>=0) e.h.splice(i,1); }
+    else if(i>=0) e.h[i].v = num;
+    else e.h.push({ v:num, d:when });
+    sealEntry(e);
+    if(!e.h.length) delete bag[name];
+    if(!Object.keys(bag).length) delete REG[testKey];
+  }
+  // scrive un valore nel registro e ridisegna
+  // con una sessione scelta si corregge quella rilevazione li', altrimenti si scrive oggi
+  function writeVal(testKey, def, name, raw){
+    const when = curSess || todayShort();
     const s = String(raw==null?'':raw).trim();
-    if(s===''){ delete REG[testKey][name]; }
-    else {
-      let num = +s;
-      if(isNaN(num)){ delete REG[testKey][name]; }
-      else {
-        if(def && def.fms) num = Math.max(0, Math.min(3, Math.round(num)));
-        REG[testKey][name] = { v:num, d:todayShort() };
-      }
+    let num = null;
+    if(s!==''){
+      const x = +s;
+      if(!isNaN(x)) num = (def && def.fms) ? Math.max(0, Math.min(3, Math.round(x))) : x;
     }
-    if(REG[testKey] && !Object.keys(REG[testKey]).length) delete REG[testKey];
+    putMeasure(testKey, name, num, when);
     saveReg();
-    renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici();
   }
   function inputHtml(def, name, val, cls){
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
