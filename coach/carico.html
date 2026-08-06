@@ -1198,26 +1198,80 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- giorni con data vera (servono a "4 settimane" e "Periodo") ----------
   // La griglia scrive il giorno come "13AM" o "13PM": il numero e' il giorno del mese
-  // e il mese arriva dalla chiave ("2025-08"), quindi la data si ricostruisce senza
-  // aggiungere niente ai file dati.
+  // e lo slot dice se e' la seduta del mattino o quella del pomeriggio. La data pero'
+  // non si puo' ricavare dalla sola chiave del mese: le settimane a cavallo stanno nel
+  // blocco del mese seguente e le partite hanno la sigla al posto del giorno.
   function dpad(n){ return (n<10?'0':'')+n; }
   function isoOf(d){ return d.getFullYear()+'-'+dpad(d.getMonth()+1)+'-'+dpad(d.getDate()); }
   function fromIso(s){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||'')); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
   function shortD(d){ return dpad(d.getDate())+'/'+dpad(d.getMonth()+1); }
   function mondayOf(d){ const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; }
+  const WDI = { 'Lun':0,'Mar':1,'Mer':2,'Gio':3,'Ven':4,'Sab':5,'Dom':6 };
+  // Il lunedi' di apertura si legge dall'intestazione della settimana ("25-31/08",
+  // "29-5/10"): il mese di chiusura e' scritto, quello di apertura si ricava quando il
+  // giorno iniziale e' piu' alto di quello finale.
+  function weekStart(week, monthKey){
+    const m = /^(\d{1,2})\s*-\s*(\d{1,2})\/(\d{1,2})$/.exec(String(week||'').trim());
+    if(!m) return null;
+    const y0 = +String(monthKey||'').slice(0,4), m0 = +String(monthKey||'').slice(5,7);
+    if(!y0 || !m0) return null;
+    const d1 = +m[1], d2 = +m[2];
+    let em = +m[3], ey = y0;
+    const gap = em - m0;
+    if(gap < -6) ey = y0 + 1;
+    else if(gap > 6) ey = y0 - 1;
+    let sm = em, sy = ey;
+    if(d1 > d2){ sm = em - 1; if(sm < 1){ sm = 12; sy = ey - 1; } }
+    const d = new Date(sy, sm-1, d1); d.setHours(0,0,0,0);
+    return (d.getMonth() === sm-1 && d.getDate() === d1) ? d : null;
+  }
+  // slot della seduta: nelle doppie giornate c'e' una riga AM e una PM
+  function slotOf(label){ const m = /(AM|PM)\s*$/i.exec(String(label||'').trim()); return m ? m[1].toUpperCase() : ''; }
+  function slotOrd(s){ return s==='AM' ? 0 : (s==='PM' ? 2 : 1); }
+  // data vera della riga: col numero del giorno si cerca dentro i sette giorni della
+  // settimana, senza numero decide il giorno gia' scritto nel foglio
+  function rowDate(row, week, monthKey){
+    const mon0 = weekStart(week, monthKey);
+    const dm = /^(\d{1,2})/.exec(String(row && row.label || ''));
+    if(mon0){
+      if(dm){
+        const n = +dm[1];
+        for(let i=0;i<7;i++){
+          const d = new Date(mon0); d.setDate(d.getDate()+i);
+          if(d.getDate() === n) return d;
+        }
+      }
+      const w = WDI[row && row.wd];
+      if(w != null){ const d = new Date(mon0); d.setDate(d.getDate()+w); return d; }
+    }
+    if(!dm) return null;
+    const y = +String(monthKey||'').slice(0,4), mo = +String(monthKey||'').slice(5,7);
+    if(!y || !mo) return null;
+    const d = new Date(y, mo-1, +dm[1]); d.setHours(0,0,0,0);
+    return (d.getMonth() === mo-1) ? d : null;
+  }
+  // etichetta da mostrare: dove il foglio ha scritto solo "AM" ci mettiamo davanti il giorno
+  function dayLabel(row, d){
+    const raw = String(row && row.label || '');
+    if(/^\d/.test(raw) || !d) return raw;
+    const s = slotOf(raw);
+    return s ? (d.getDate()+s) : raw;
+  }
   function dayRows(){
     const out = [];
     currentMonths().forEach(mon=>{
-      const y = +String(mon.key||'').slice(0,4), mo = +String(mon.key||'').slice(5,7);
-      if(!y || !mo) return;
+      let wk = '';
       (mon.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ wk = r.label||''; return; }
         if(r.type!=='day' && r.type!=='match') return;
-        const dm = /^(\d{1,2})/.exec(r.label||''); if(!dm) return;
-        const d = new Date(y, mo-1, +dm[1]); d.setHours(0,0,0,0);
-        out.push({ d:d, row:r, mon:mon, kind:(r.type==='match'?'match':'train') });
+        const d = rowDate(r, wk, mon.key);
+        if(!d) return;
+        out.push({ d:d, row:r, mon:mon, week:wk, slot:slotOf(r.label),
+                   kind:(r.type==='match'?'match':'train') });
       });
     });
-    out.sort((a,b)=> a.d - b.d);
+    // stesso giorno: prima il mattino, poi il pomeriggio
+    out.sort((a,b)=> (a.d - b.d) || (slotOrd(a.slot) - slotOrd(b.slot)));
     return out;
   }
   // Somma o media secondo il file dati: quello che nella griglia e' sommabile si somma,
@@ -1352,7 +1406,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const md = x.kind==='match' ? 0 : (info ? info.md : null);
           pts.push({
             value: vAt(x.row, idx), group:null, barLabel: shortD(x.d), kind:x.kind,
-            ttTitle: (x.row.wd ? x.row.wd+' ' : '') + shortD(x.d) + ' · ' + x.row.label,
+            ttTitle: (x.row.wd ? x.row.wd+' ' : '') + shortD(x.d) + ' · ' + dayLabel(x.row, x.d),
             ttSub: (mdLabel(md) || (x.kind==='match' ? 'partita' : 'allenamento')), md:md
           });
         });
@@ -1365,10 +1419,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       blk.rows.forEach(r=>{
         const info = mdOf(mon.key, r.label);
         const md = r.type==='match' ? 0 : (info ? info.md : null);
+        const lb = dayLabel(r, rowDate(r, blk.week, mon.key));
         pts.push({
-          value: vAt(r, idx), group:null, barLabel:(r.wd||r.label),
+          value: vAt(r, idx), group:null, barLabel:(r.wd||lb),
           kind:(r.type==='match'?'match':'train'),
-          ttTitle:(r.label+(r.wd?(' · '+r.wd):'')),
+          ttTitle:(lb+(r.wd?(' · '+r.wd):'')),
           ttSub:(mdLabel(md)||(r.type==='match'?'partita':'allenamento')), md:md
         });
       });
@@ -1984,15 +2039,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
       body += '</tr>';
     }
+    let wkNow = '';
     (mon.rows||[]).forEach(r=>{
       if(r.type==='wk_header'){
+        wkNow = r.label||'';
         body += '<tr class="wkband"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+'</td></tr>';
         return;
       }
       const cls = ROWCLS[r.type] || 'r-day';
       const clickable = (r.type==='day' || r.type==='match');
+      // il testo mostra sempre il giorno, il data-l resta l'etichetta originale del foglio
+      const txt = clickable ? dayLabel(r, rowDate(r, wkNow, mon.key)) : r.label;
       const lb = clickable
-        ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(r.label)+'</button>'
+        ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(txt)+'</button>'
         : '<span class="lb">'+esc(r.label)+'</span>';
       body += '<tr class="'+cls+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
@@ -2143,7 +2202,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       (mon.rows||[]).forEach(r=>{
         if(r.type==='wk_header'){ wk = r.label; return; }
         if(r.type==='day' || r.type==='match')
-          out.push({ monthKey:mon.key, monthTitle:mon.title, label:r.label, wd:r.wd||'', type:r.type, week:wk });
+          out.push({ monthKey:mon.key, monthTitle:mon.title, label:r.label,
+                     show:dayLabel(r, rowDate(r, wk, mon.key)),
+                     wd:r.wd||'', type:r.type, week:wk });
       });
     });
     return out;
@@ -2253,7 +2314,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // se il confronto scelto non e applicabile, ripiega sui valori
     const eff = (mode==='match' && !MOD) ? 'val'
               : (mode==='md' && !(mdAvg && md!=null)) ? 'val' : mode;
-    document.getElementById('session-title').textContent = (isMatch?'Partita ':'Seduta ')+label;
+    document.getElementById('session-title').textContent = (isMatch?'Partita ':'Seduta ')+((sess&&sess.show)||label);
     const badge = (md!=null) ? '  ·  '+mdLabel(md)+(info&&info.matchLabel&&md!==0?(' ('+info.matchLabel+')'):'') : '';
     document.getElementById('session-hint').textContent =
       (mon?mon.title:'') + (sess&&sess.week?('  ·  '+sess.week):'') + (wd?('  ·  '+wd):'') + '  ·  ' + ath.length + ' atlete' + badge;
@@ -2335,14 +2396,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const all = allSessions().reverse();
     let html='', curMonth='', n=0;
     all.forEach(s=>{
-      const hay = (s.label+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
+      const hay = (s.label+' '+(s.show||'')+' '+s.wd+' '+s.monthTitle+' '+s.week+' '+(s.type==='match'?'partita':'allenamento')).toLowerCase();
       if(q && hay.indexOf(q)<0) return;
       if(s.monthTitle!==curMonth){ curMonth=s.monthTitle; html += '<div class="sess-mgroup">'+esc(curMonth)+'</div>'; }
       n++;
       const act = (activeKey && (s.monthKey+'|'+s.label)===activeKey) ? ' is-active' : '';
       html += '<button class="sess-item'+(s.type==='match'?' is-match':'')+act+'" type="button" data-k="'+esc(s.monthKey)+'" data-l="'+esc(s.label)+'">'+
         '<span class="sess-wd">'+esc(s.wd||'-')+'</span>'+
-        '<span class="sess-lb">'+esc(s.label)+'</span>'+
+        '<span class="sess-lb">'+esc(s.show||s.label)+'</span>'+
         '<span class="sess-tag">'+(s.type==='match'?'Partita':'Allenamento')+'</span>'+
         '<span class="sess-wk">'+esc(s.week||'')+'</span></button>';
     });
@@ -2421,9 +2482,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const MOD = MODEL();
     if(MOD) rows.push(['Modello AVG partita'+modelTag(), ...V.map(i=> rawIt(MOD[i]))]);
     // righe del mese
+    let wkCsv = '';
     (mon && mon.rows || []).forEach(r=>{
-      if(r.type==='wk_header'){ rows.push([r.label]); return; }
-      const label = (r.wd ? r.wd+' ' : '') + (r.label||'');
+      if(r.type==='wk_header'){ wkCsv = r.label||''; rows.push([r.label]); return; }
+      const isSess = (r.type==='day' || r.type==='match');
+      const label = (r.wd ? r.wd+' ' : '') + (isSess ? dayLabel(r, rowDate(r, wkCsv, mon.key)) : (r.label||''));
       const rv = r.v||[];
       rows.push([label, ...V.map(i=> rawIt(rv[i]))]);
     });
@@ -2478,10 +2541,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(MOD){
       h += '<tr class="mod"><td class="lbl">Modello AVG partita'+esc(modelTag())+'</td>'+ V.map(i=>'<td'+(KEY.has(i)?' class="key"':'')+'>'+xlsNum(MOD[i])+'</td>').join('') +'</tr>';
     }
+    let wkXls = '';
     (mon && mon.rows || []).forEach(r=>{
-      if(r.type==='wk_header'){ h += '<tr class="week"><td class="lbl" colspan="'+ncol+'">'+esc(r.label)+'</td></tr>'; return; }
+      if(r.type==='wk_header'){ wkXls = r.label||''; h += '<tr class="week"><td class="lbl" colspan="'+ncol+'">'+esc(r.label)+'</td></tr>'; return; }
       const rc = r.type==='match'?'match' : r.type==='tot_month'?'month' : (r.type==='tot_week'||r.type==='tot_train')?'week':'';
-      const label = (r.wd?r.wd+' ':'')+(r.label||'');
+      const isSess = (r.type==='day' || r.type==='match');
+      const label = (r.wd?r.wd+' ':'')+(isSess ? dayLabel(r, rowDate(r, wkXls, mon.key)) : (r.label||''));
       const rv = r.v||[];
       h += '<tr'+(rc?' class="'+rc+'"':'')+'><td class="lbl">'+esc(label)+'</td>'+
         V.map(i=>'<td'+(KEY.has(i)?' class="key"':'')+'>'+xlsNum(rv[i])+'</td>').join('') +'</tr>';
