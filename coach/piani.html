@@ -359,6 +359,29 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .tr-d.down{ color:var(--red);    background:oklch(62% 0.22 25  / .12); border-color:oklch(62% 0.22 25  / .30); }
 .tr-d.flat{ color:var(--muted); }
 
+/* ---------- calcolatore del lavoro intermittente ---------- */
+.im-note{ font-size:12px; color:var(--faint); line-height:1.5; margin:2px 0 14px; }
+.im-note b{ color:var(--text); font-weight:650; }
+.im-row{ display:flex; align-items:center; gap:13px; padding:9px 12px; border-radius:var(--r-sm);
+  border-top:1px solid var(--border); }
+.im-row:first-of-type{ border-top:0; }
+.im-nm{ flex:0 0 190px; min-width:0; }
+.im-name{ font-size:14px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.im-sub{ font-size:11px; color:var(--muted); margin-top:2px; }
+.im-base{ flex:0 0 auto; min-width:88px; text-align:center; font-size:12.5px; font-weight:700;
+  padding:5px 10px; border-radius:999px; background:var(--ember-bg); border:1px solid var(--ember-border);
+  color:var(--orange2); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.im-base.vift{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
+.im-cells{ flex:1 1 auto; display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+.im-c{ min-width:84px; text-align:right; padding:5px 10px; border-radius:var(--r-sm);
+  background:var(--surface2); border:1px solid var(--border2); }
+.im-c.key{ background:var(--ember-bg); border-color:var(--ember-border); }
+.im-c .pk{ display:block; font-size:10px; color:var(--faint); white-space:nowrap; }
+.im-c .pm{ display:block; font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px;
+  color:var(--ink); line-height:1.1; font-variant-numeric:tabular-nums; }
+.im-c.key .pm{ color:var(--orange2); }
+.im-c .pn{ display:block; font-size:10px; color:var(--faint); white-space:nowrap; min-height:12px; }
+
 /* ---------- bottoni ---------- */
 .btn{
   display:inline-flex; align-items:center; gap:7px; appearance:none; cursor:pointer;
@@ -421,6 +444,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   .ix-nm{ flex:1 1 100%; }
   .ix-badges{ justify-content:flex-start; }
   .tr-nm{ flex:0 0 150px; }
+  .im-nm{ flex:0 0 150px; }
 }
 @media (max-width:560px){
   .kpis{ grid-template-columns:1fr; }
@@ -434,6 +458,9 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   .tr-nm{ flex:1 1 100%; }
   .tr-cells{ justify-content:flex-start; }
   .tr-row{ flex-wrap:wrap; }
+  .im-nm{ flex:1 1 100%; }
+  .im-cells{ justify-content:flex-start; }
+  .im-row{ flex-wrap:wrap; }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
@@ -557,6 +584,23 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
         <div class="card-body">
           <div class="tb-legend" id="ix-legend"></div>
           <div id="ix-list"></div>
+        </div>
+      </section>
+
+      <!-- Lavoro intermittente calcolato dalla velocita aerobica massima -->
+      <section class="card reveal" id="im-card" style="--i:6">
+        <div class="card-head">
+          <h2>Intermittente</h2>
+          <span class="hint">metri e navette di ogni atleta, calcolati dalla sua velocita aerobica massima</span>
+          <span class="spacer"></span>
+          <div class="head-chips" id="im-chips"></div>
+        </div>
+        <div class="card-body">
+          <div class="sess-bar" id="im-src"></div>
+          <div class="sess-bar" id="im-pro"></div>
+          <div class="sess-bar" id="im-nav"></div>
+          <p class="im-note" id="im-note"></p>
+          <div id="im-list"></div>
         </div>
       </section>
 
@@ -733,6 +777,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'yb_pl_dx',  cat:'yb', label:'Y-bal postero-laterale dx', short:'PL dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'dx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto destro' },
     { key:'yb_pl_sx',  cat:'yb', label:'Y-bal postero-laterale sx', short:'PL sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'sx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto sinistro' },
     // test da campo (km/h)
+    { key:'leger',   cat:'campo', label:'Beep test Leger', short:'Beep', unit:'liv',  dir:'high', step:'0.5', ph:'es. 9.5',  note:'navetta 20 m, ultimo livello completato: la VAM e 8 + mezzo km/h per livello' },
     { key:'gacon',   cat:'campo', label:'Gacon 45-15', short:'Gacon', unit:'km/h', dir:'high', step:'0.5', ph:'es. 15.5', note:'test intermittente, velocita aerobica massima' },
     { key:'ift3015', cat:'campo', label:'30-15 IFT',   short:'30-15', unit:'km/h', dir:'high', step:'0.5', ph:'es. 18.5', note:'velocita finale intermittente (VIFT)' }
   ];
@@ -838,6 +883,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   let curSess = '';
   // atleta aperta nella scheda Andamento
   let curAtl  = '';
+
+  // ---- lavoro intermittente: da dove arriva la velocita e come e' fatta la serie ----
+  // Il Gacon e il beep test danno la VAM, il 30-15 da' la VIFT che e' gia' piu' alta:
+  // la percentuale e' sempre riferita al valore scritto nella riga dell atleta.
+  const IM_SRC = [
+    { id:'auto',    label:'Automatica' },
+    { id:'gacon',   label:'Gacon 45-15' },
+    { id:'leger',   label:'Beep test' },
+    { id:'ift3015', label:'30-15 IFT' }
+  ];
+  const IM_PRO = [
+    { id:'15-15', w:15, r:15 },
+    { id:'20-20', w:20, r:20 },
+    { id:'30-30', w:30, r:30 },
+    { id:'10-20', w:10, r:20 }
+  ];
+  const IM_NAV = [
+    { id:10, label:'Navetta 10 m' },
+    { id:20, label:'Navetta 20 m' },
+    { id:0,  label:'Corsa lineare' }
+  ];
+  const IM_PCT = [90, 95, 100, 105, 110];
+  let imSrc = 'auto';
+  let imPro = '20-20';
+  let imNav = 10;
   let REG = loadReg();
 
   // la classifica velocita parte dalle prime dieci, le altre si aprono col tasto
@@ -940,7 +1010,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function fmtTest(v, unit){
     if(v==null) return '-';
-    const s = unit==='cm'||unit==='m' ? NF.format(v) : NF2.format(v);
+    const s = (unit==='cm'||unit==='m') ? NF.format(v) : (unit==='liv' ? NF1.format(v) : NF2.format(v));
     return s+' '+unit;
   }
 
@@ -1124,6 +1194,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   renderBattery();
   renderIndici();
   renderTrend();
+  renderIntermittente();
 
   document.addEventListener('fio:stagione', function(){
     REG = loadReg();
@@ -1138,6 +1209,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderBattery();
     renderIndici();
     renderTrend();
+    renderIntermittente();
     renderSeedBar();
   });
 
@@ -1148,6 +1220,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   });
   document.getElementById('tr-prev').addEventListener('click', ()=> stepAtl(-1));
   document.getElementById('tr-next').addEventListener('click', ()=> stepAtl(1));
+
+  /* ---------- intermittente: fonte, serie e distanza ---------- */
+  function imPick(id, set){
+    document.getElementById(id).addEventListener('click', function(ev){
+      const b = ev.target.closest('.sess-btn');
+      if(!b || !this.contains(b)) return;
+      set(b.getAttribute('data-im') || '');
+      renderIntermittente();
+    });
+  }
+  imPick('im-src', v=>{ imSrc = v; });
+  imPick('im-pro', v=>{ imPro = v; });
+  imPick('im-nav', v=>{ imNav = +v; });
 
   // svuota il test aperto: con una sessione scelta tocca solo quella rilevazione
   document.getElementById('tb-reset').addEventListener('click', ()=>{
@@ -1162,7 +1247,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     if(!n){ toast('Nessun dato da svuotare'); return; }
     saveReg();
-    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend();
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderIntermittente();
     toast(curSess ? ('Svuotato il test del '+curSess) : 'Test svuotato');
   });
 
@@ -1188,7 +1273,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
     saveReg();
-    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend();
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderIntermittente();
     toast(n + ' valori importati' + (skip ? ', ' + skip + ' fuori rosa' : ''));
   }
   function renderSeedBar(){
@@ -1439,6 +1524,93 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderTrend();
   }
 
+  // ================= LAVORO INTERMITTENTE =================
+  // Dalla velocita aerobica massima escono i metri da coprire nel tempo di lavoro:
+  // metri = km/h per la percentuale, diviso 3.6, per i secondi di corsa. Con la navetta
+  // si vede anche quante volte si copre la distanza fra i due coni.
+  function lastVal(name, key){
+    const h = histOf(name, key);
+    return h.length ? h[h.length-1].v : null;
+  }
+  function imFrom(name, src){
+    if(src === 'gacon'){
+      const v = lastVal(name, 'gacon');
+      return v == null ? null : { v:v, kind:'VAM', tag:'Gacon 45-15' };
+    }
+    if(src === 'leger'){
+      const v = lastVal(name, 'leger');
+      return v == null ? null : { v:8 + 0.5*v, kind:'VAM', tag:'beep test livello ' + trNum(v) };
+    }
+    if(src === 'ift3015'){
+      const v = lastVal(name, 'ift3015');
+      return v == null ? null : { v:v, kind:'VIFT', tag:'30-15 IFT' };
+    }
+    return imFrom(name, 'gacon') || imFrom(name, 'leger') || imFrom(name, 'ift3015');
+  }
+  function imProDef(){ return IM_PRO.find(p=> p.id === imPro) || IM_PRO[1]; }
+  function imBar(id, items, cur, lab){
+    let h = '<span class="sess-lab">'+esc(lab)+'</span>';
+    items.forEach(it=>{
+      h += '<button class="sess-btn'+(String(it.id)===String(cur)?' active':'')+'" type="button" '+
+           'data-im="'+esc(String(it.id))+'">'+esc(it.label)+'</button>';
+    });
+    document.getElementById(id).innerHTML = h;
+  }
+  function renderIntermittente(){
+    const list  = document.getElementById('im-list');
+    const chips = document.getElementById('im-chips');
+    const note  = document.getElementById('im-note');
+    const pro   = imProDef();
+
+    imBar('im-src', IM_SRC, imSrc, 'Fonte');
+    imBar('im-pro', IM_PRO.map(p=> ({ id:p.id, label:p.id })), imPro, 'Serie');
+    imBar('im-nav', IM_NAV, imNav, 'Distanza');
+
+    const rows = roster.map(n=>{
+      const b = imFrom(n, imSrc);
+      return b ? { name:n, v:b.v, kind:b.kind, tag:b.tag } : null;
+    }).filter(Boolean);
+
+    const avg = rows.length ? rows.reduce((a,r)=> a + r.v, 0) / rows.length : null;
+    chips.innerHTML =
+      '<div class="mchip em"><span class="ml">Con il dato</span><b>'+rows.length+'</b><span class="ml">/'+roster.length+'</span></div>'+
+      '<div class="mchip"><span class="ml">Media</span><b>'+(avg==null?'-':trNum(avg))+'</b><span class="ml">km/h</span></div>';
+
+    if(!rows.length){
+      note.textContent = '';
+      list.innerHTML = '<div class="lb-empty">Serve almeno un test da campo: Gacon 45-15 e 30-15 IFT si scrivono in km/h, '+
+        'il beep test Leger in livelli e diventa VAM da solo (8 km/h piu&#39; mezzo km/h per livello).</div>';
+      return;
+    }
+
+    note.innerHTML = 'Serie <b>'+esc(pro.id)+'</b>: '+pro.w+' secondi di corsa e '+pro.r+' di recupero. '+
+      'Il numero grande sono i <b>metri da coprire nei '+pro.w+' secondi</b>, sotto '+
+      (imNav ? 'quante volte si copre la navetta da '+imNav+' m' : 'la velocita in km/h')+'. '+
+      'Gacon e beep test danno la VAM, il 30-15 la VIFT che e&#39; gia&#39; piu&#39; alta: la percentuale '+
+      'e&#39; sempre riferita al valore scritto nella riga dell&#39; atleta, non a una VAM stimata.';
+
+    rows.sort((a,b)=> (b.v - a.v) || a.name.localeCompare(b.name,'it'));
+
+    list.innerHTML = rows.map(r=>{
+      const cells = IM_PCT.map(p=>{
+        const kmh = r.v * p / 100;
+        const m   = kmh / 3.6 * pro.w;
+        const sub = imNav ? (trNum(m/imNav)+' x '+imNav+' m') : (trNum(kmh)+' km/h');
+        return '<span class="im-c'+(p===100?' key':'')+'" title="'+esc(trNum(kmh)+' km/h per '+pro.w+' secondi')+'">'+
+                 '<span class="pk">'+p+'%</span>'+
+                 '<span class="pm">'+NF.format(Math.round(m))+'</span>'+
+                 '<span class="pn">'+esc(sub)+'</span>'+
+               '</span>';
+      }).join('');
+      return '<div class="im-row">'+
+        '<div class="im-nm"><div class="im-name">'+esc(r.name)+'</div>'+
+          '<div class="im-sub">'+esc(r.kind+' da '+r.tag)+'</div></div>'+
+        '<span class="im-base'+(r.kind==='VIFT'?' vift':'')+'">'+esc(trNum(r.v)+' km/h')+'</span>'+
+        '<div class="im-cells">'+cells+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
   function renderKpis(){
     const kp = [
       { cls:'', label:'Atlete monitorate',
@@ -1661,7 +1833,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const d = b.getAttribute('data-s') || '';
         if(d === curSess) return;
         curSess = d;
-        renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend();
+        renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderIntermittente();
       });
     });
   }
@@ -1735,7 +1907,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     putMeasure(testKey, name, num, when);
     saveReg();
-    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend();
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderIntermittente();
   }
   function inputHtml(def, name, val, cls){
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
