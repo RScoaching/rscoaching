@@ -640,7 +640,15 @@ window.fioPageDataFiles = function() {
 window.fioProbeData = function() {
   if (location.protocol === 'file:') return Promise.reject(new Error('file'));
   var t = Date.now();
-  var lista = window.fioPageDataFiles();
+  var pagina = window.fioPageDataFiles();
+  // Si guardano tutti i file dati, non solo quelli che questa pagina carica: il
+  // timbro piu' fresco racconta com'e' messo il sito per intero, anche quando
+  // la pagina aperta ne usa uno solo. Cambiati restano comunque solo quelli che
+  // la pagina ha davvero in memoria, percio' non si ricarica a vuoto.
+  var lista = pagina.slice();
+  window.FIO_DATA_FILES.forEach(function(f) {
+    if (lista.indexOf(f) < 0) lista.push(f);
+  });
   var jobs = lista.map(function(f) {
     return fetch('./' + f + '?ts=' + t, { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.text() : ''; })
@@ -662,7 +670,7 @@ window.fioProbeData = function() {
       })['catch'](function() { return null; });
   });
   return Promise.all(jobs).then(function(res) {
-    var out = { attesi: lista.length, letti: 0, cambiati: [], sign: '', stamp: '' };
+    var out = { attesi: pagina.length, letti: 0, cambiati: [], sign: '', stamp: '' };
     res.forEach(function(r) {
       if (!r) return;
       out.letti++;
@@ -698,7 +706,16 @@ window.fioRefreshData = function() {
     if (!p.attesi) { fine('nessun dato in questa pagina'); return; }
     if (!p.letti) { fine('rilettura fallita, riprova'); return; }
     if (!p.cambiati.length) {
-      fine(p.stamp ? ('online c\'e\' il dato di ' + window.fioAgeTxt(p.stamp)) : 'nessun dato nuovo');
+      if (!p.stamp) { fine('nessun dato nuovo'); return; }
+      // Distinzione che oggi e' mancata: se online c'e' ancora il dato di ieri
+      // il tasto ha fatto il suo lavoro ed e' la pubblicazione a essere rimasta
+      // indietro. Dirlo chiaro evita di ripigiare aspettando la seduta di oggi.
+      if (window.fioAgeDays(p.stamp) >= 1) {
+        btn.classList.add('vecchio');
+        fine('online fermo a ' + window.fioAgeTxt(p.stamp));
+      } else {
+        fine('gia' + "'" + ' aggiornato, ' + window.fioAgeTxt(p.stamp));
+      }
       return;
     }
     try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
