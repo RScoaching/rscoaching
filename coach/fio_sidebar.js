@@ -1,6 +1,482 @@
 // RS.Coaching - Sidebar area Fiorentina - Premium Glass, ember + viola
 // Espone gli stessi nomi globali della sidebar coach (SIDEBAR_HTML / SIDEBAR_CSS /
 // markActiveNav / initSidebarToggle) cosi' le pagine Fiorentina la montano allo stesso modo.
+
+/* ==========================================================================
+   ACCESSO ALL'AREA FIORENTINA
+   Quattro persone, quattro chiavi diverse: mister, secondo, preparatore e
+   Raoul. Si entra con email e password, poi con un codice di sei cifre che
+   cambia ogni trenta secondi e si legge sull'app dell'autenticazione
+   (Google Authenticator, Authy, le password dell'iPhone: vanno tutte bene).
+   Questo file sta in ogni pagina Fiorentina, percio' il controllo vale anche
+   per chi arriva da un indirizzo diretto senza passare dalla home.
+
+   Una cosa va detta chiara. Qui sotto non c'e' nessun server: il sito e' un
+   pacco di file appoggiati su GitHub, e il controllo gira dentro il browser.
+   Tiene separate le quattro persone, chiude la porta a chi capita di qua per
+   caso e a chi ha visto la password da sopra la spalla senza avere il
+   telefono. Ma chi sa leggere il codice sorgente della pagina lo aggira.
+   Per una porta vera serve un servizio di accesso esterno oppure il sito
+   dentro un archivio privato: e' il passo dopo, non questo.
+   ========================================================================== */
+(function() {
+  'use strict';
+
+  var CHIAVE  = 'fio_accesso_v1';
+  var TENTATI = 'fio_accesso_tentativi';
+  var SEGRETO = 'rs-coaching-fiorentina-2627';
+
+  // Le quattro chiavi. La password non e' scritta da nessuna parte: c'e' solo
+  // l'impronta, che si ottiene dalla password ma non si rivolta indietro.
+  var UTENTI = [
+    { em: 'raoul@rscoaching.it',   nome: 'Raoul Simon', ruolo: 'Preparatore atletico',   liv: 'admin',
+      salt: 'T3DTHRLAGOIRCWHD',
+      pw:   'dtnOmwwt1qoNJJ7+AB0eTMl+lHTyew5BQveSCRjKn/w=',
+      sec:  'R5Z3HJZCCX7ZLZN4H22B3N5Y6OW23V4X' },
+    { em: 'mister@rscoaching.it',  nome: 'Mister',      ruolo: 'Allenatore',             liv: 'staff',
+      salt: 'UCDUX2WEKNGBNPZO',
+      pw:   'VNIKtFUHFlYNCtU/D+47iqiezZW9mVuZeo3OK4hBFjM=',
+      sec:  'G4L7UY3AFF677VODIV3W3NEBLUYEXKE7' },
+    { em: 'secondo@rscoaching.it', nome: 'Secondo',     ruolo: 'Allenatore in seconda',  liv: 'staff',
+      salt: '6IJBKHSIVYMWNVVH',
+      pw:   'jxOPpTV1bk7MKGHHLGCKP40LzC60ZJNla9zIU+ZQI/c=',
+      sec:  'CZ6GQWH72LPZBJUMG66RJUO2LPZTISP4' },
+    { em: 'prof@rscoaching.it',    nome: 'Preparatore', ruolo: 'Preparatore atletico',   liv: 'staff',
+      salt: 'GLJ6DUHXAIAZVBZ3',
+      pw:   'lNDPfreyqJixkLtdv0ZQFFMaVBG0bdQ+5xcTQs1O8Ic=',
+      sec:  '553NDK6MXWVIX2Q77PCS5HGOO5RGWDES' }
+  ];
+
+  // ---- I conti che servono, scritti a mano -------------------------------
+  // Il browser ne avrebbe di suoi, ma funzionano solo sugli indirizzi https.
+  // Da telefono, sulla copia locale in wifi, l'indirizzo e' http e quelli
+  // spariscono: allora l'accesso non funzionerebbe piu'. Scritti qui vanno
+  // sempre, ovunque si apra la pagina.
+
+  function testo(s) {
+    var a = [], i, c;
+    for (i = 0; i < s.length; i++) {
+      c = s.charCodeAt(i);
+      if (c < 128) a.push(c);
+      else if (c < 2048) { a.push(192 | (c >> 6), 128 | (c & 63)); }
+      else { a.push(224 | (c >> 12), 128 | ((c >> 6) & 63), 128 | (c & 63)); }
+    }
+    return new Uint8Array(a);
+  }
+
+  var K256 = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+
+  function sha256(b) {
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var len = b.length, tot = ((len + 9 + 63) >> 6) << 6;
+    var m = new Uint8Array(tot);
+    m.set(b); m[len] = 0x80;
+    var bit = len * 8;
+    m[tot-4]=(bit>>>24)&255; m[tot-3]=(bit>>>16)&255; m[tot-2]=(bit>>>8)&255; m[tot-1]=bit&255;
+    var w = new Int32Array(64), off, i, x, y, s0, s1, a, c, d, e, f, g, h, S0, S1, ch, mj, t1, t2, bb;
+    for (off = 0; off < tot; off += 64) {
+      for (i = 0; i < 16; i++) {
+        w[i] = (m[off+i*4] << 24) | (m[off+i*4+1] << 16) | (m[off+i*4+2] << 8) | m[off+i*4+3];
+      }
+      for (i = 16; i < 64; i++) {
+        x = w[i-15]; y = w[i-2];
+        s0 = ((x>>>7)|(x<<25)) ^ ((x>>>18)|(x<<14)) ^ (x>>>3);
+        s1 = ((y>>>17)|(y<<15)) ^ ((y>>>19)|(y<<13)) ^ (y>>>10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+      }
+      a=H[0]; bb=H[1]; c=H[2]; d=H[3]; e=H[4]; f=H[5]; g=H[6]; h=H[7];
+      for (i = 0; i < 64; i++) {
+        S1 = ((e>>>6)|(e<<26)) ^ ((e>>>11)|(e<<21)) ^ ((e>>>25)|(e<<7));
+        ch = (e & f) ^ (~e & g);
+        t1 = (h + S1 + ch + K256[i] + w[i]) | 0;
+        S0 = ((a>>>2)|(a<<30)) ^ ((a>>>13)|(a<<19)) ^ ((a>>>22)|(a<<10));
+        mj = (a & bb) ^ (a & c) ^ (bb & c);
+        t2 = (S0 + mj) | 0;
+        h=g; g=f; f=e; e=(d+t1)|0; d=c; c=bb; bb=a; a=(t1+t2)|0;
+      }
+      H[0]=(H[0]+a)|0;  H[1]=(H[1]+bb)|0; H[2]=(H[2]+c)|0; H[3]=(H[3]+d)|0;
+      H[4]=(H[4]+e)|0;  H[5]=(H[5]+f)|0;  H[6]=(H[6]+g)|0; H[7]=(H[7]+h)|0;
+    }
+    var out = new Uint8Array(32);
+    for (i = 0; i < 8; i++) {
+      out[i*4]=(H[i]>>>24)&255; out[i*4+1]=(H[i]>>>16)&255;
+      out[i*4+2]=(H[i]>>>8)&255; out[i*4+3]=H[i]&255;
+    }
+    return out;
+  }
+
+  function sha1(b) {
+    var H = [0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
+    var len = b.length, tot = ((len + 9 + 63) >> 6) << 6;
+    var m = new Uint8Array(tot);
+    m.set(b); m[len] = 0x80;
+    var bit = len * 8;
+    m[tot-4]=(bit>>>24)&255; m[tot-3]=(bit>>>16)&255; m[tot-2]=(bit>>>8)&255; m[tot-1]=bit&255;
+    var w = new Int32Array(80), off, i, v, a, bb, c, d, e, f, k, t;
+    for (off = 0; off < tot; off += 64) {
+      for (i = 0; i < 16; i++) {
+        w[i] = (m[off+i*4] << 24) | (m[off+i*4+1] << 16) | (m[off+i*4+2] << 8) | m[off+i*4+3];
+      }
+      for (i = 16; i < 80; i++) {
+        v = w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16];
+        w[i] = (v << 1) | (v >>> 31);
+      }
+      a=H[0]; bb=H[1]; c=H[2]; d=H[3]; e=H[4];
+      for (i = 0; i < 80; i++) {
+        if (i < 20)      { f = (bb & c) | (~bb & d);              k = 0x5a827999; }
+        else if (i < 40) { f = bb ^ c ^ d;                        k = 0x6ed9eba1; }
+        else if (i < 60) { f = (bb & c) | (bb & d) | (c & d);     k = 0x8f1bbcdc; }
+        else             { f = bb ^ c ^ d;                        k = 0xca62c1d6; }
+        t = (((a << 5) | (a >>> 27)) + f + e + k + w[i]) | 0;
+        e=d; d=c; c=(bb << 30) | (bb >>> 2); bb=a; a=t;
+      }
+      H[0]=(H[0]+a)|0; H[1]=(H[1]+bb)|0; H[2]=(H[2]+c)|0; H[3]=(H[3]+d)|0; H[4]=(H[4]+e)|0;
+    }
+    var out = new Uint8Array(20);
+    for (i = 0; i < 5; i++) {
+      out[i*4]=(H[i]>>>24)&255; out[i*4+1]=(H[i]>>>16)&255;
+      out[i*4+2]=(H[i]>>>8)&255; out[i*4+3]=H[i]&255;
+    }
+    return out;
+  }
+
+  function hmac(fn, misura, chiave, msg) {
+    if (chiave.length > 64) chiave = fn(chiave);
+    var k = new Uint8Array(64); k.set(chiave);
+    var dentro = new Uint8Array(64 + msg.length);
+    var fuori  = new Uint8Array(64 + misura), i;
+    for (i = 0; i < 64; i++) { dentro[i] = k[i] ^ 0x36; fuori[i] = k[i] ^ 0x5c; }
+    dentro.set(msg, 64);
+    fuori.set(fn(dentro), 64);
+    return fn(fuori);
+  }
+
+  // L'impronta della password: la stessa operazione ripetuta sessantamila
+  // volte, cosi' provarle tutte a tentativi costa tempo davvero.
+  function impronta(pw, sale, giri) {
+    var P = testo(pw), S = testo(sale);
+    var b = new Uint8Array(S.length + 4);
+    b.set(S); b[S.length+3] = 1;
+    var u = hmac(sha256, 32, P, b), acc = u.slice(), i, j;
+    for (i = 1; i < giri; i++) {
+      u = hmac(sha256, 32, P, u);
+      for (j = 0; j < 32; j++) acc[j] ^= u[j];
+    }
+    var s = '';
+    for (i = 0; i < 32; i++) s += String.fromCharCode(acc[i]);
+    return btoa(s);
+  }
+
+  var ALFA32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+  function da32(s) {
+    s = String(s).toUpperCase().replace(/[^A-Z2-7]/g, '');
+    var bit = 0, val = 0, out = [], i;
+    for (i = 0; i < s.length; i++) {
+      val = (val << 5) | ALFA32.indexOf(s.charAt(i));
+      bit += 5;
+      if (bit >= 8) { out.push((val >>> (bit - 8)) & 255); bit -= 8; }
+    }
+    return new Uint8Array(out);
+  }
+
+  // Il codice a sei cifre: dipende solo dalla chiave e dal minuto corrente,
+  // percio' l'app sul telefono e questa pagina arrivano allo stesso numero
+  // senza essersi mai parlate.
+  function codice(chiave, passo) {
+    var k = da32(chiave), msg = new Uint8Array(8), c = passo, i;
+    for (i = 7; i >= 0; i--) { msg[i] = c & 255; c = Math.floor(c / 256); }
+    var h = hmac(sha1, 20, k, msg);
+    var o = h[19] & 15;
+    var n = ((h[o] & 127) << 24) | (h[o+1] << 16) | (h[o+2] << 8) | h[o+3];
+    var s = String(n % 1000000);
+    while (s.length < 6) s = '0' + s;
+    return s;
+  }
+
+  function codiceGiusto(chiave, digitato) {
+    var ora = Math.floor(Date.now() / 30000), i;
+    // Trenta secondi di margine avanti e indietro: gli orologi non vanno
+    // mai perfettamente d'accordo e non e' il caso di litigarci.
+    for (i = -1; i <= 1; i++) {
+      if (codice(chiave, ora + i) === digitato) return true;
+    }
+    return false;
+  }
+
+  function sigillo(em, fino) {
+    var h = hmac(sha256, 32, testo(SEGRETO), testo(em + '|' + fino)), s = '', i;
+    for (i = 0; i < 16; i++) s += ('0' + h[i].toString(16)).slice(-2);
+    return s;
+  }
+
+  // ---- La sessione -------------------------------------------------------
+
+  function leggi() {
+    var g;
+    try { g = JSON.parse(localStorage.getItem(CHIAVE) || 'null'); } catch (e) { return null; }
+    if (!g || !g.em || !g.fino) return null;
+    if (Date.now() > g.fino) { pulisci(); return null; }
+    if (g.sig !== sigillo(g.em, g.fino)) { pulisci(); return null; }
+    var u = trova(g.em);
+    return u ? u : null;
+  }
+
+  function scrivi(em, giorni) {
+    var fino = Date.now() + giorni * 86400000;
+    try {
+      localStorage.setItem(CHIAVE, JSON.stringify({ em: em, fino: fino, sig: sigillo(em, fino) }));
+    } catch (e) {}
+  }
+
+  function pulisci() {
+    try { localStorage.removeItem(CHIAVE); } catch (e) {}
+  }
+
+  function trova(em) {
+    em = String(em || '').trim().toLowerCase();
+    for (var i = 0; i < UTENTI.length; i++) {
+      if (UTENTI[i].em === em) return UTENTI[i];
+    }
+    return null;
+  }
+
+  // Dopo cinque password sbagliate si aspetta un minuto. Non ferma nessuno
+  // per sempre, ma toglie voglia a chi prova a indovinare a raffica.
+  function bloccatoFino() {
+    var g;
+    try { g = JSON.parse(localStorage.getItem(TENTATI) || 'null'); } catch (e) { return 0; }
+    if (!g || (g.n || 0) < 5) return 0;
+    return (g.quando || 0) + 60000;
+  }
+
+  function segnaErrore() {
+    var g;
+    try { g = JSON.parse(localStorage.getItem(TENTATI) || 'null'); } catch (e) { g = null; }
+    if (!g || Date.now() > (g.quando || 0) + 60000) g = { n: 0, quando: 0 };
+    g.n = (g.n || 0) + 1;
+    g.quando = Date.now();
+    try { localStorage.setItem(TENTATI, JSON.stringify(g)); } catch (e) {}
+  }
+
+  function azzeraErrori() {
+    try { localStorage.removeItem(TENTATI); } catch (e) {}
+  }
+
+  window.fioUtente = function() { return leggi(); };
+  window.fioEsci = function() { pulisci(); location.replace('../index.html'); };
+
+  // ---- La schermata ------------------------------------------------------
+
+  var CSS = ''
+    + 'html.fio-serrato{overflow:hidden;}'
+    + 'html.fio-serrato body > *:not(#fio-gate){display:none !important;}'
+    + '#fio-gate{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;'
+    + 'justify-content:center;padding:22px;overflow:auto;'
+    + 'background:radial-gradient(120% 90% at 50% 0%,rgba(94,44,140,.24),transparent 62%),#0F0C12;'
+    + 'font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#F4F1EC;}'
+    + '#fio-gate .g-card{width:100%;max-width:340px;}'
+    + '#fio-gate .g-brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;}'
+    + '#fio-gate .g-crest{width:34px;height:34px;object-fit:contain;}'
+    + '#fio-gate .g-crest-fb{width:34px;height:34px;border-radius:8px;display:flex;'
+    + 'align-items:center;justify-content:center;font-size:11px;font-weight:700;'
+    + 'background:rgba(94,44,140,.3);color:#C9A6F0;}'
+    + '#fio-gate .g-word{font-size:15px;font-weight:700;letter-spacing:.12em;line-height:1.15;}'
+    + '#fio-gate .g-word span{display:block;font-size:9.5px;font-weight:500;letter-spacing:.06em;'
+    + 'color:rgba(248,250,255,.34);}'
+    + '#fio-gate h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;}'
+    + '#fio-gate .g-hint{font-size:12px;line-height:1.6;color:rgba(248,250,255,.42);margin:0 0 20px;}'
+    + '#fio-gate label{display:block;font-size:10.5px;font-weight:600;letter-spacing:.05em;'
+    + 'text-transform:uppercase;color:rgba(248,250,255,.42);margin:0 0 6px;}'
+    + '#fio-gate input[type=email],#fio-gate input[type=password],#fio-gate input[type=text]{'
+    + 'width:100%;box-sizing:border-box;padding:11px 13px;margin:0 0 14px;border-radius:10px;'
+    + 'font-family:inherit;font-size:15px;color:#F4F1EC;background:rgba(255,255,255,.05);'
+    + 'border:1px solid rgba(255,255,255,.10);transition:border-color .18s ease,background .18s ease;}'
+    + '#fio-gate input:focus{outline:none;border-color:rgba(255,106,46,.55);'
+    + 'background:rgba(255,255,255,.07);}'
+    + '#fio-gate input::placeholder{color:rgba(248,250,255,.24);}'
+    + '#fio-gate .g-cifre{letter-spacing:.42em;text-align:center;font-size:20px;font-weight:600;}'
+    + '#fio-gate .g-ok{width:100%;padding:12px;border-radius:10px;font-family:inherit;'
+    + 'font-size:13.5px;font-weight:600;cursor:pointer;color:#170A03;'
+    + 'background:linear-gradient(135deg,#FF8A3D,#F2621E);border:none;'
+    + 'transition:filter .18s ease,transform .1s ease;}'
+    + '#fio-gate .g-ok:hover{filter:brightness(1.08);}'
+    + '#fio-gate .g-ok:active{transform:scale(.985);}'
+    + '#fio-gate .g-ok[disabled]{cursor:progress;filter:saturate(.4);}'
+    + '#fio-gate .g-riga{display:flex;align-items:center;gap:8px;margin:2px 0 16px;'
+    + 'font-size:11.5px;color:rgba(248,250,255,.5);}'
+    + '#fio-gate .g-riga input{width:15px;height:15px;margin:0;accent-color:#F2621E;}'
+    + '#fio-gate .g-link{display:block;width:100%;margin-top:12px;padding:0;border:none;'
+    + 'background:none;font-family:inherit;font-size:11.5px;color:rgba(248,250,255,.42);'
+    + 'cursor:pointer;text-align:center;transition:color .18s ease;}'
+    + '#fio-gate .g-link:hover{color:rgba(248,250,255,.72);}'
+    + '#fio-gate .g-err{min-height:16px;margin:0 0 12px;font-size:11.5px;line-height:1.5;'
+    + 'color:rgba(255,150,120,.9);}'
+    + '#fio-gate .g-chiave{margin-top:14px;padding:12px 13px;border-radius:10px;'
+    + 'background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);'
+    + 'font-size:11.5px;line-height:1.65;color:rgba(248,250,255,.5);}'
+    + '#fio-gate .g-chiave b{display:block;margin-top:7px;font-family:ui-monospace,Menlo,monospace;'
+    + 'font-size:12.5px;letter-spacing:.08em;color:#FFC79B;word-break:break-all;}'
+    + '#fio-gate .g-foot{margin-top:22px;font-size:10.5px;line-height:1.65;'
+    + 'color:rgba(248,250,255,.22);}'
+    + '@media (prefers-reduced-motion:reduce){#fio-gate *{transition:none !important;}}';
+
+  var HTML = ''
+    + '<div class="g-card">'
+    + '  <div class="g-brand">'
+    + '    <img class="g-crest" src="./fiorentina.png" alt="Stemma Fiorentina"'
+    + '      onerror="this.replaceWith(Object.assign(document.createElement(&#39;div&#39;),'
+    + '{className:&#39;g-crest-fb&#39;,textContent:&#39;ACF&#39;}))">'
+    + '    <div class="g-word">FIORENTINA<span>Primavera U19 F</span></div>'
+    + '  </div>'
+    + '  <h1 id="g-tit">Area riservata</h1>'
+    + '  <p class="g-hint" id="g-sub">Entra con la tua email e la tua password.</p>'
+    + '  <div id="g-p1">'
+    + '    <label for="g-em">Email</label>'
+    + '    <input type="email" id="g-em" autocomplete="username" placeholder="nome@rscoaching.it"'
+    + '      spellcheck="false" autocapitalize="off">'
+    + '    <label for="g-pw">Password</label>'
+    + '    <input type="password" id="g-pw" autocomplete="current-password" placeholder="La tua password">'
+    + '    <p class="g-err" id="g-err"></p>'
+    + '    <button class="g-ok" id="g-avanti" type="button">Continua</button>'
+    + '  </div>'
+    + '  <div id="g-p2" style="display:none">'
+    + '    <label for="g-cd">Codice di sei cifre</label>'
+    + '    <input type="text" id="g-cd" class="g-cifre" inputmode="numeric" maxlength="6"'
+    + '      autocomplete="one-time-code" placeholder="000000">'
+    + '    <div class="g-riga"><input type="checkbox" id="g-resta">'
+    + '      <label for="g-resta" style="margin:0;text-transform:none;letter-spacing:0;'
+    + 'font-size:11.5px;font-weight:400;color:inherit">Resta connesso su questo dispositivo</label></div>'
+    + '    <p class="g-err" id="g-err2"></p>'
+    + '    <button class="g-ok" id="g-entra" type="button">Entra</button>'
+    + '    <button class="g-link" id="g-primo" type="button">Prima volta? Mostra la chiave per l&#39;app</button>'
+    + '    <button class="g-link" id="g-back" type="button">Cambia utente</button>'
+    + '    <div class="g-chiave" id="g-box" style="display:none">'
+    + '      Apri l&#39;app dell&#39;autenticazione, scegli di aggiungere un account a mano e'
+    + '      copia questa chiave. Da quel momento l&#39;app mostra il codice giusto.'
+    + '      <b id="g-sec"></b>'
+    + '    </div>'
+    + '  </div>'
+    + '  <p class="g-foot">Il controllo gira dentro il browser. Tiene separati i quattro accessi,'
+    + '  non sostituisce una porta con la serratura.</p>'
+    + '</div>';
+
+  function mostra() {
+    document.documentElement.classList.add('fio-serrato');
+    var st = document.createElement('style');
+    st.textContent = CSS;
+    document.head.appendChild(st);
+
+    var g = document.createElement('div');
+    g.id = 'fio-gate';
+    g.innerHTML = HTML;
+    document.body.appendChild(g);
+
+    var em = g.querySelector('#g-em'), pw = g.querySelector('#g-pw');
+    var cd = g.querySelector('#g-cd'), err = g.querySelector('#g-err');
+    var err2 = g.querySelector('#g-err2');
+    var p1 = g.querySelector('#g-p1'), p2 = g.querySelector('#g-p2');
+    var avanti = g.querySelector('#g-avanti'), entra = g.querySelector('#g-entra');
+    var utente = null;
+
+    setTimeout(function() { em.focus(); }, 60);
+
+    function attesa() {
+      var fino = bloccatoFino();
+      if (Date.now() >= fino) return 0;
+      return Math.ceil((fino - Date.now()) / 1000);
+    }
+
+    function passo1() {
+      var resta = attesa();
+      if (resta) {
+        err.textContent = 'Troppi tentativi. Riprova fra ' + resta + ' secondi.';
+        return;
+      }
+      var u = trova(em.value);
+      if (!u || !pw.value) {
+        segnaErrore();
+        err.textContent = 'Email o password non corrispondono.';
+        return;
+      }
+      err.textContent = 'Controllo in corso...';
+      avanti.disabled = true;
+      // Il conto sulla password prende qualche decimo di secondo e nel
+      // frattempo la pagina si fermerebbe: gli lascio prima il tempo di
+      // scrivere la riga qui sopra.
+      setTimeout(function() {
+        var giusta = false;
+        try { giusta = impronta(pw.value, u.salt, 60000) === u.pw; } catch (e) {}
+        avanti.disabled = false;
+        if (!giusta) {
+          segnaErrore();
+          err.textContent = 'Email o password non corrispondono.';
+          return;
+        }
+        azzeraErrori();
+        utente = u;
+        err.textContent = '';
+        pw.value = '';
+        p1.style.display = 'none';
+        p2.style.display = '';
+        g.querySelector('#g-tit').textContent = 'Ciao ' + u.nome.split(' ')[0];
+        g.querySelector('#g-sub').textContent =
+          'Apri l' + "'" + 'app dell' + "'" + 'autenticazione e copia il codice del momento.';
+        g.querySelector('#g-sec').textContent = u.sec;
+        setTimeout(function() { cd.focus(); }, 60);
+      }, 40);
+    }
+
+    function passo2() {
+      if (!utente) return;
+      var n = cd.value.replace(/[^0-9]/g, '');
+      if (n.length !== 6) { err2.textContent = 'Servono le sei cifre del codice.'; return; }
+      if (!codiceGiusto(utente.sec, n)) {
+        err2.textContent = 'Codice non valido. Controlla che sia quello di adesso.';
+        return;
+      }
+      scrivi(utente.em, g.querySelector('#g-resta').checked ? 30 : 1);
+      // Ricarico: cosi' la pagina riparte da zero con l'accesso gia' fatto e
+      // non resta niente a meta'.
+      location.reload();
+    }
+
+    avanti.addEventListener('click', passo1);
+    entra.addEventListener('click', passo2);
+    pw.addEventListener('keydown', function(e) { if (e.key === 'Enter') passo1(); });
+    em.addEventListener('keydown', function(e) { if (e.key === 'Enter') pw.focus(); });
+    cd.addEventListener('keydown', function(e) { if (e.key === 'Enter') passo2(); });
+    cd.addEventListener('input', function() {
+      cd.value = cd.value.replace(/[^0-9]/g, '').slice(0, 6);
+      if (cd.value.length === 6) passo2();
+    });
+    g.querySelector('#g-primo').addEventListener('click', function() {
+      var box = g.querySelector('#g-box');
+      box.style.display = box.style.display === 'none' ? '' : 'none';
+    });
+    g.querySelector('#g-back').addEventListener('click', function() {
+      utente = null;
+      p2.style.display = 'none';
+      p1.style.display = '';
+      err2.textContent = '';
+      cd.value = '';
+      g.querySelector('#g-tit').textContent = 'Area riservata';
+      g.querySelector('#g-sub').textContent = 'Entra con la tua email e la tua password.';
+      em.focus();
+    });
+  }
+
+  if (!leggi()) mostra();
+})();
+
 window.SIDEBAR_HTML = `
 <div class="sb-mob-bar" id="sb-mob-bar">
   <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
@@ -98,7 +574,12 @@ window.SIDEBAR_HTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       <span>Cambia area</span>
     </a>
-    <div class="sb-cred"><strong>Raoul Simon</strong>Preparatore Atletico</div>
+    <div class="sb-who" id="fio-who">
+      <div class="sb-cred" id="fio-cred"><strong>Raoul Simon</strong>Preparatore Atletico</div>
+      <button class="sb-esci" id="fio-esci" type="button" aria-label="Esci dall&#39;area Fiorentina" title="Esci">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M13 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/></svg>
+      </button>
+    </div>
   </div>
 </div>`;
 
@@ -748,6 +1229,21 @@ window.fioAutoCheck = function() {
 window.initSidebarToggle = function() {
   window.applyStagioneData();
   window.paintSeasonBanner();
+  // In fondo alla sidebar sta scritto chi e' entrato: con quattro accessi
+  // diversi serve saperlo a colpo d'occhio prima di toccare qualcosa.
+  const chi  = window.fioUtente ? window.fioUtente() : null;
+  const cred = document.getElementById('fio-cred');
+  const esci = document.getElementById('fio-esci');
+  if (cred && chi) {
+    cred.innerHTML = '';
+    const nome = document.createElement('strong');
+    nome.textContent = chi.nome;
+    cred.appendChild(nome);
+    cred.appendChild(document.createTextNode(chi.ruolo));
+  }
+  if (esci) esci.addEventListener('click', function() {
+    if (window.fioEsci) window.fioEsci();
+  });
   const sync = document.getElementById('fio-sync-btn');
   if (sync) {
     window.fioPaintStamp();
@@ -977,8 +1473,19 @@ window.SIDEBAR_CSS = `
 .sb-switch svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
 .sb-switch:hover{color:#F4F1EC;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);}
 .sb-switch:active{transform:scale(.98);}
-.sb-cred{font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;padding:0 4px;}
-.sb-cred strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;}
+.sb-who{display:flex;align-items:center;gap:8px;}
+.sb-cred{font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;padding:0 4px;min-width:0;flex:1;}
+.sb-cred strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-esci{
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:8px;cursor:pointer;
+  color:rgba(248,250,255,.3);background:none;border:1px solid rgba(255,255,255,.06);
+  transition:color .18s ease,background .18s ease,border-color .18s ease;
+}
+.sb-esci svg{width:15px;height:15px;}
+.sb-esci:hover{color:rgba(255,178,122,.9);background:rgba(255,106,46,.10);border-color:rgba(255,106,46,.26);}
+.sb-esci:active{transform:scale(.94);}
 /* -- Mobile bar -- */
 .sb-mob-bar{
   display:none;position:fixed;top:0;left:0;right:0;height:52px;
