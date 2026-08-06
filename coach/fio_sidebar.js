@@ -90,7 +90,7 @@ window.SIDEBAR_HTML = `
     </a>
   </div>
   <div class="sb-foot">
-    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati pubblicati" title="Rilegge i file dati pubblicati e ricarica la pagina se c&#39;e&#39; qualcosa di nuovo. Qui sotto c&#39;e&#39; la data del dato online: se non e&#39; di oggi, i file della cartella della stagione non sono ancora stati rigenerati sul Mac. Per farlo da soli: aggiorna.command sorveglia, che pubblica appena aggiungi un file.">
+    <button class="sb-sync" id="fio-sync-btn" type="button" aria-label="Rileggi i dati pubblicati" title="Rilegge i file dati pubblicati e ricarica la pagina se c&#39;e&#39; qualcosa di nuovo. La cartella della stagione sul Mac viene sorvegliata da sola: quando aggiungi un file i dati si rigenerano e si pubblicano nel giro di un minuto, poi basta questo pulsante. Qui sotto c&#39;e&#39; la data del dato online.">
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
@@ -526,18 +526,29 @@ window.paintSeasonBanner = function() {
 // memoria e, solo se e' cambiato, si riscarica proprio l'indirizzo usato dalla
 // pagina prima di ricaricare. Cosi' il dato nuovo entra davvero, e quando non
 // c'e' niente di nuovo lo si dice invece di ricaricare a vuoto.
+// Sul Mac un servizio in sottofondo tiene d'occhio la cartella della stagione:
+// appena arriva un file nuovo rigenera i dati e li pubblica da solo, senza
+// aprire niente. Il pulsante qui e' quindi solo l'ultimo passo, la rilettura.
 // ---------------------------------------------------------------------------
 window.FIO_DATA_FILES = [
-  { f: 'carico_data.js',        v: 'SNAP_2627' },
-  { f: 'calendario_data.js',    v: 'CAL_2627' },
-  { f: 'esercitazioni_data.js', v: 'ESERC_2627' },
-  { f: 'forza_data.js',         v: 'TEST_2627' }
+  'carico_data.js',
+  'calendario_data.js',
+  'esercitazioni_data.js',
+  'forza_data.js'
 ];
 // Da "05/08/2026 14:13" a "oggi 14:13", "ieri 09:20", "3 giorni fa". Sotto il
 // pulsante c'e' poco spazio e la data per esteso non dice niente a colpo
 // d'occhio: quello che serve sapere e' se il dato online e' di oggi.
+// I blocchi scritti dallo script locale usano due formati: "06/08/2026 13:52" e
+// "2026-08-06T13:52:10". Qui si riporta tutto al primo, cosi' il resto del
+// codice ne conosce uno solo.
+window.fioNormStamp = function(s) {
+  var t = String(s || '').trim();
+  var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(t);
+  return m ? (m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5]) : t;
+};
 window.fioAgeTxt = function(s) {
-  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2}))?/.exec(String(s || '').trim());
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2}))?/.exec(window.fioNormStamp(s));
   if (!m) return String(s || '');
   var ora = m[4] ? (('0' + m[4]).slice(-2) + ':' + m[5]) : '';
   var gg = window.fioAgeDays(s);
@@ -547,7 +558,7 @@ window.fioAgeTxt = function(s) {
   return m[1] + '/' + m[2];
 };
 window.fioAgeDays = function(s) {
-  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || '').trim());
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(window.fioNormStamp(s));
   if (!m) return 0;
   var g = new Date(+m[3], +m[2] - 1, +m[1]);
   if (isNaN(g.getTime())) return 0;
@@ -589,45 +600,75 @@ window.fioPaintStamp = function() {
   }
 };
 
-// Timbro di generazione del blocco di stagione dentro il testo del file appena
-// scaricato. Si guarda solo il pezzo che riguarda quella variabile, cosi' non si
-// prende per sbaglio il timbro del blocco che viene dopo.
-window.fioStampIn = function(txt, v) {
-  var i = txt.indexOf('window.' + v + '=');
-  if (i < 0) return null;
-  var j = txt.indexOf(';window.', i);
-  var seg = txt.slice(i, j < 0 ? txt.length : j);
-  var m = /"generato":"([^"]*)"/.exec(seg);
-  return m ? m[1] : '';
+// Timbri di generazione di tutti i blocchi dentro il testo del file appena
+// scaricato. Si scorre blocco per blocco, cosi' non si prende per sbaglio il
+// timbro di quello che viene dopo, e si tiene solo la stagione 26-27: i blocchi
+// base (SNAP, CAL, ESERC) vengono riscritti in memoria da applyStagioneData e
+// confrontarli darebbe una differenza finta che non sparisce mai.
+window.fioStampsIn = function(txt) {
+  var out = {};
+  var re = /window\.([A-Za-z0-9_]+)\s*=/g;
+  var m;
+  var punti = [];
+  while ((m = re.exec(txt))) punti.push({ v: m[1], i: m.index });
+  punti.forEach(function(p, k) {
+    if (!/_2627$/.test(p.v)) return;
+    var fine = k + 1 < punti.length ? punti[k + 1].i : txt.length;
+    var g = /"generato":"([^"]*)"/.exec(txt.slice(p.i, fine));
+    out[p.v] = g ? g[1] : '';
+  });
+  return out;
+};
+
+// Quali file dati carica davvero questa pagina. Si guardano i tag script veri e
+// propri invece di indovinarlo dalle variabili in memoria: un file puo' esserci
+// senza portare la variabile che ci si aspetta, e in quel caso prima veniva
+// saltato in silenzio.
+window.fioPageDataFiles = function() {
+  var tag = document.querySelectorAll('script[src]');
+  var out = [];
+  for (var i = 0; i < tag.length; i++) {
+    var src = String(tag[i].getAttribute('src') || '').split('?')[0];
+    var nome = src.slice(src.lastIndexOf('/') + 1);
+    if (window.FIO_DATA_FILES.indexOf(nome) >= 0 && out.indexOf(nome) < 0) out.push(nome);
+  }
+  return out;
 };
 
 // Legge i file dati online senza passare dalla cache e dice quali sono cambiati
-// rispetto a quelli caricati adesso. Ogni pagina carica solo i file che le
-// servono, quindi si controllano soltanto quelli presenti in memoria.
+// rispetto a quelli caricati adesso.
 window.fioProbeData = function() {
   if (location.protocol === 'file:') return Promise.reject(new Error('file'));
   var t = Date.now();
-  var attesi = 0;
-  var jobs = window.FIO_DATA_FILES.map(function(d) {
-    if (!window[d.v]) return Promise.resolve(null);
-    attesi++;
-    return fetch('./' + d.f + '?ts=' + t, { cache: 'no-store' })
+  var lista = window.fioPageDataFiles();
+  var jobs = lista.map(function(f) {
+    return fetch('./' + f + '?ts=' + t, { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.text() : ''; })
       .then(function(txt) {
         if (!txt) return null;
-        var s = window.fioStampIn(txt, d.v);
-        if (s === null) return null;
-        return { file: d.f, stamp: s, old: String((window[d.v] || {}).generato || '') };
+        var st = window.fioStampsIn(txt);
+        var vv = Object.keys(st);
+        if (!vv.length) return null;
+        var cambiato = false;
+        var sign = '';
+        var primo = '';
+        vv.sort().forEach(function(v) {
+          sign += v + '=' + st[v] + ';';
+          if (!primo && st[v]) primo = st[v];
+          var vecchio = String((window[v] || {}).generato || '');
+          if (vecchio && st[v] !== vecchio) cambiato = true;
+        });
+        return { file: f, sign: sign, stamp: primo, cambiato: cambiato };
       })['catch'](function() { return null; });
   });
   return Promise.all(jobs).then(function(res) {
-    var out = { attesi: attesi, letti: 0, cambiati: [], sign: '', stamp: '' };
+    var out = { attesi: lista.length, letti: 0, cambiati: [], sign: '', stamp: '' };
     res.forEach(function(r) {
       if (!r) return;
       out.letti++;
-      out.sign += r.file + '=' + r.stamp + ';';
+      out.sign += r.file + ':' + r.sign;
       if (!out.stamp && r.stamp) out.stamp = r.stamp;
-      if (r.stamp !== r.old) out.cambiati.push(r.file);
+      if (r.cambiato) out.cambiati.push(r.file);
     });
     return out;
   });
@@ -656,7 +697,10 @@ window.fioRefreshData = function() {
   window.fioProbeData().then(function(p) {
     if (!p.attesi) { fine('nessun dato in questa pagina'); return; }
     if (!p.letti) { fine('rilettura fallita, riprova'); return; }
-    if (!p.cambiati.length) { fine('gia\' aggiornato'); return; }
+    if (!p.cambiati.length) {
+      fine(p.stamp ? ('online c\'e\' il dato di ' + window.fioAgeTxt(p.stamp)) : 'nessun dato nuovo');
+      return;
+    }
     try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
     return window.fioApplyRefresh(p.cambiati);
   })['catch'](function(e) {
