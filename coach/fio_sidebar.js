@@ -18,9 +18,19 @@
    telefono. Ma chi sa leggere il codice sorgente della pagina lo aggira.
    Per una porta vera serve un servizio di accesso esterno oppure il sito
    dentro un archivio privato: e' il passo dopo, non questo.
+
+   ADESSO L'ACCESSO E' SPENTO. Il codice resta tutto qui sotto, intero e
+   funzionante, ma nessuno lo incontra: si apre l'area e si entra. E' una
+   scelta, non una dimenticanza. Una porta va bene solo se ti riconosce e ti
+   lascia in pace per un mese: finche' rischia di chiedere email, password e
+   codice a ogni apertura, da' piu' fastidio che protezione. Si riaccende
+   cambiando la riga qui sotto in "true", e sara' il giorno in cui il
+   riconoscimento dura davvero trenta giorni.
    ========================================================================== */
 (function() {
   'use strict';
+
+  var ACCESSO = false;   // porta spenta: metti true per rimetterla in funzione
 
   var CHIAVE  = 'fio_accesso_v1';
   var TENTATI = 'fio_accesso_tentativi';
@@ -271,7 +281,8 @@
     try { localStorage.removeItem(TENTATI); } catch (e) {}
   }
 
-  window.fioUtente = function() { return leggi(); };
+  window.fioAccessoAttivo = ACCESSO;
+  window.fioUtente = function() { return ACCESSO ? leggi() : null; };
   window.fioEsci = function() { pulisci(); location.replace('../index.html'); };
 
   // ---- La schermata ------------------------------------------------------
@@ -474,7 +485,7 @@
     });
   }
 
-  if (!leggi()) mostra();
+  if (ACCESSO && !leggi()) mostra();
 })();
 
 window.SIDEBAR_HTML = `
@@ -1231,7 +1242,13 @@ window.initSidebarToggle = function() {
   window.paintSeasonBanner();
   // In fondo alla sidebar sta scritto chi e' entrato: con quattro accessi
   // diversi serve saperlo a colpo d'occhio prima di toccare qualcosa.
+  // Con la porta spenta non c'e' nessun nome da mostrare e nessun posto da cui
+  // uscire: la riga sparisce invece di restare li' a dire una cosa non vera.
   const chi  = window.fioUtente ? window.fioUtente() : null;
+  const who  = document.getElementById('fio-who');
+  if (window.fioAccessoAttivo === false) {
+    if (who) who.remove();
+  }
   const cred = document.getElementById('fio-cred');
   const esci = document.getElementById('fio-esci');
   if (cred && chi) {
