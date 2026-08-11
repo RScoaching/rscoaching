@@ -969,6 +969,9 @@ window.applyStagioneData = function() {
 // registro e le atlete nuove compaiono. Quello inserito a mano resta per tutte
 // le prove che nel foglio non ci sono. Il registro e' lo stesso usato dalle
 // pagine Test, Atleta e Sintesi, quindi il dato arriva ovunque.
+// Il campo "t" e' il testo originale del foglio: la V, la G, la R del fisio e la D
+// dei test di caviglia. Il registro sa tenere solo numeri, quindi il valore viaggia
+// come 2, 1, 0 e la lettera viaggia a fianco: a video si legge la lettera.
 window.fioSeedTestRegister = function() {
   var T = window.TEST_2627;
   if (!T || !T.reg) return;
@@ -983,7 +986,20 @@ window.fioSeedTestRegister = function() {
     var bag = reg[k] || (reg[k] = {});
     Object.keys(src).forEach(function(n) {
       var e = src[n];
-      if (e && e.v !== null && e.v !== undefined) bag[n] = { v: e.v, d: e.d || '' };
+      if (!e || e.v === null || e.v === undefined) return;
+      var m = { v: e.v, d: e.d || '', t: e.t || '' };
+      var old = bag[n];
+      // se la casella c'e' gia' si aggiorna solo la rilevazione con la stessa data,
+      // cosi' le altre misure prese a mano nella stagione non si perdono
+      if (old && Array.isArray(old.h) && old.h.length) {
+        var i = -1, j;
+        for (j = 0; j < old.h.length; j++) { if (old.h[j] && old.h[j].d === m.d) { i = j; break; } }
+        if (i >= 0) old.h[i] = m; else old.h.push(m);
+        old.v = m.v; old.d = m.d; old.t = m.t;
+      } else {
+        m.h = [{ v: m.v, d: m.d, t: m.t }];
+        bag[n] = m;
+      }
     });
   });
   try { localStorage.setItem(key, JSON.stringify(reg)); } catch (e) {}

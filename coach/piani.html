@@ -136,6 +136,10 @@ a{ color:inherit; text-decoration:none; }
 .mchip.em b{ color:var(--orange2); }
 .mchip.vi{ background:var(--violet-bg); border-color:var(--violet-border); }
 .mchip.vi b{ color:var(--violet2); }
+/* conteggi del semaforo del fisio: il colore della cifra e' il colore della prova */
+.mchip.sg b{ color:var(--green); }
+.mchip.sy b{ color:var(--yellow); }
+.mchip.sr b{ color:var(--red); }
 
 /* ---------- leaderboard velocita ---------- */
 .lb-scroll{ display:flex; flex-direction:column; gap:2px; }
@@ -268,6 +272,31 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .tb-in::placeholder{ color:var(--faint); }
 .tb-unit{ font-size:12px; color:var(--muted); min-width:24px; }
 .tb-date{ font-size:11px; color:var(--faint); min-width:58px; text-align:right; }
+
+/* ---------- prove a semaforo: il fisio segna una lettera, non un numero ---------- */
+.tb-in.sem{ width:104px; text-align:left; padding-right:26px; -webkit-appearance:none; appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, var(--faint) 50%), linear-gradient(135deg, var(--faint) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 51%, calc(100% - 9px) 51%;
+  background-size: 5px 5px, 5px 5px; background-repeat:no-repeat; cursor:pointer; }
+.tb-in.sem.sm{ width:88px; }
+.tb-in.sem.ok{   color:var(--green);  border-color:oklch(70% 0.18 152 / .40); }
+.tb-in.sem.warn{ color:var(--yellow); border-color:oklch(80% 0.15 75  / .44); }
+.tb-in.sem.bad{  color:var(--red);    border-color:oklch(62% 0.22 25  / .46); }
+.tb-lev{ flex:0 0 120px; text-align:center; font-size:11.5px; font-weight:600;
+  color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tb-lev.ok{   color:var(--green); }
+.tb-lev.warn{ color:var(--yellow); }
+.tb-lev.bad{  color:var(--red); }
+.tb-tag{ font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--muted);
+  background:var(--surface3); border:1px solid var(--border2); border-radius:999px;
+  padding:2px 8px; flex:0 0 auto; white-space:nowrap; }
+.tb-nm.col{ flex-direction:column; align-items:flex-start; gap:2px; }
+.tb-nmline{ display:flex; align-items:baseline; gap:8px; min-width:0; max-width:100%; }
+.tb-nota{ font-size:11.5px; color:var(--yellow); font-weight:500; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:100%; }
+.tb-void{ margin:0 0 12px; padding:11px 14px; border-radius:var(--r-sm);
+  border:1px dashed var(--border2); background:var(--surface2); font-size:12.5px; color:var(--muted); }
+.tb-void b{ color:var(--ink); font-weight:600; }
 
 /* ---------- test bilaterali: dx e sx sulla stessa riga ---------- */
 .tb-dual{ display:flex; align-items:center; gap:9px; }
@@ -563,7 +592,10 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   .kpis{ grid-template-columns:repeat(2, 1fr); }
   .lb-bar{ display:none; }
   .tb-bar{ display:none; }
+  .tb-lev{ display:none; }
   .tb-in.sm{ width:60px; }
+  .tb-in.sem{ width:92px; padding-left:8px; font-size:13px; }
+  .tb-in.sem.sm{ width:84px; }
   .tb-asym{ min-width:70px; font-size:11px; padding:5px 7px; }
   .ix-row{ flex-wrap:wrap; gap:8px; }
   .ix-nm{ flex:1 1 100%; }
@@ -904,7 +936,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const NF  = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
   const NF2 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
-  function fmtNum(v, def){ if(v==null) return '-'; return (def && def.unit==='pt' ? NF : NF1).format(v); }
+  // Ogni unita' vuole il suo numero di decimali: i punteggi e le ripetizioni sono
+  // interi, la velocita' del VBT vive sulla seconda cifra, il resto sta su una.
+  function unitNF(unit){
+    if(unit==='pt' || unit==='rip' || unit==='tocchi' || unit==='sem') return NF;
+    if(unit==='m/s') return NF2;
+    return NF1;
+  }
+  function fmtNum(v, def){ if(v==null) return '-'; return unitNF(def && def.unit).format(v); }
 
   const MO = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
 
@@ -1000,9 +1039,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'salti', label:'Salti verticali' },
     { key:'oriz',  label:'Salti orizzontali' },
     { key:'fms',   label:'FMS' },
+    { key:'fisio', label:'Fisioterapia' },
     { key:'yb',    label:'Y-balance' },
+    { key:'vbt',   label:'Forza VBT' },
     { key:'campo', label:'Test da campo' }
   ];
+
+  // Le prove che il fisio segna con un colore invece che con un numero. Il registro
+  // tiene solo numeri, quindi verde vale 2, giallo 1, rosso 0: a video torna la lettera.
+  const SEM = [
+    { v:2, code:'V', label:'verde',  lev:'ok',   desc:'nessun deficit' },
+    { v:1, code:'G', label:'giallo', lev:'warn', desc:'deficit lieve' },
+    { v:0, code:'R', label:'rosso',  lev:'bad',  desc:'deficit importante' }
+  ];
+  function semOf(v){
+    if(v==null) return null;
+    const r = Math.round(v);
+    return SEM.find(s=> s.v===r) || null;
+  }
   const TESTS = [
     // salti verticali (cm)
     { key:'sj',       cat:'salti', label:'Squat Jump',          short:'SJ',        unit:'cm',   dir:'high', step:'0.5', ph:'es. 26',   note:'partenza da fermo a 90 gradi, senza contromovimento' },
@@ -1028,6 +1082,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'fms_shoulder_sx',cat:'fms', label:'Mobilita spalle sx',    short:'Spalle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_shoulder', note:'mano sinistra sopra, mani dietro la schiena, 0-3' },
     { key:'fms_aslr_dx',    cat:'fms', label:'Active SLR dx',         short:'ASLR dx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_aslr', note:'sollevamento arto teso destro da supino, 0-3' },
     { key:'fms_aslr_sx',    cat:'fms', label:'Active SLR sx',         short:'ASLR sx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_aslr', note:'sollevamento arto teso sinistro da supino, 0-3' },
+    { key:'fms_ankle_dx',   cat:'fms', label:'Clearing caviglia dx',  short:'Caviglia dx',unit:'sem',dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fms_ankle', note:'piede destro sulla tavoletta, flessione dorsale libera da dolore' },
+    { key:'fms_ankle_sx',   cat:'fms', label:'Clearing caviglia sx',  short:'Caviglia sx',unit:'sem',dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fms_ankle', note:'piede sinistro sulla tavoletta, flessione dorsale libera da dolore' },
     { key:'fms_pushup',     cat:'fms', label:'Trunk Push-up',         short:'Push-up',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, note:'controllo del tronco in piegamento sulle braccia, 0-3' },
     { key:'fms_rotary_dx',  cat:'fms', label:'Rotary Stability dx',   short:'Rotary dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato destro, 0-3' },
     { key:'fms_rotary_sx',  cat:'fms', label:'Rotary Stability sx',   short:'Rotary sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato sinistro, 0-3' },
@@ -1038,6 +1094,29 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'yb_pm_sx',  cat:'yb', label:'Y-bal postero-mediale sx', short:'PM sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 105', side:'sx', pair:'yb_pm', note:'reach postero-mediale in appoggio sull arto sinistro' },
     { key:'yb_pl_dx',  cat:'yb', label:'Y-bal postero-laterale dx', short:'PL dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'dx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto destro' },
     { key:'yb_pl_sx',  cat:'yb', label:'Y-bal postero-laterale sx', short:'PL sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 100', side:'sx', pair:'yb_pl', note:'reach postero-laterale in appoggio sull arto sinistro' },
+    // Screening del fisio: serve alla prevenzione, non alla prestazione. Le prove
+    // segnate a colore usano la scala V G R, le altre contano ripetizioni o centimetri.
+    { key:'fis_ankle_dx',  cat:'fisio', label:'Ankle clearing dx',      short:'Caviglia dx', unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fis_ankle', note:'flessione dorsale della caviglia destra, il fisio segna il colore' },
+    { key:'fis_ankle_sx',  cat:'fisio', label:'Ankle clearing sx',      short:'Caviglia sx', unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fis_ankle', note:'flessione dorsale della caviglia sinistra, il fisio segna il colore' },
+    { key:'fis_slb_dx',    cat:'fisio', label:'Single leg bridge dx',   short:'Bridge dx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'dx', pair:'fis_slb', note:'ponte su appoggio destro, ripetizioni fino a cedimento: resistenza dei flessori' },
+    { key:'fis_slb_sx',    cat:'fisio', label:'Single leg bridge sx',   short:'Bridge sx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'sx', pair:'fis_slb', note:'ponte su appoggio sinistro, ripetizioni fino a cedimento: resistenza dei flessori' },
+    { key:'fis_faber_dx',  cat:'fisio', label:'Faber dx',               short:'Faber dx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'dx', pair:'fis_faber', note:'distanza del ginocchio destro dal lettino, meno centimetri vuol dire anca piu libera' },
+    { key:'fis_faber_sx',  cat:'fisio', label:'Faber sx',               short:'Faber sx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'sx', pair:'fis_faber', note:'distanza del ginocchio sinistro dal lettino, meno centimetri vuol dire anca piu libera' },
+    { key:'fis_thomas_dx', cat:'fisio', label:'Thomas test dx',         short:'Thomas dx',   unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fis_thomas', note:'retrazione del flessore dell anca destra, il fisio segna il colore' },
+    { key:'fis_thomas_sx', cat:'fisio', label:'Thomas test sx',         short:'Thomas sx',   unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fis_thomas', note:'retrazione del flessore dell anca sinistra, il fisio segna il colore' },
+    { key:'fis_calf_dx',   cat:'fisio', label:'Calf raises dx',         short:'Calf dx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'dx', pair:'fis_calf', note:'sollevamenti sul polpaccio destro fino a cedimento' },
+    { key:'fis_calf_sx',   cat:'fisio', label:'Calf raises sx',         short:'Calf sx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'sx', pair:'fis_calf', note:'sollevamenti sul polpaccio sinistro fino a cedimento' },
+    { key:'fis_skater_dx', cat:'fisio', label:'Skater squat dx',        short:'Skater dx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'dx', pair:'fis_skater', note:'squat monopodalico controllato su appoggio destro' },
+    { key:'fis_skater_sx', cat:'fisio', label:'Skater squat sx',        short:'Skater sx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'sx', pair:'fis_skater', note:'squat monopodalico controllato su appoggio sinistro' },
+    { key:'fis_peso',      cat:'fisio', label:'Peso corporeo',          short:'Peso',        unit:'kg', dir:'high', step:'0.1', ph:'es. 58', neutral:true, note:'peso rilevato dal fisio, serve a rapportare i carichi di forza' },
+    { key:'fis_ckcuest',   cat:'fisio', label:'CKCUEST',                short:'CKCUEST',     unit:'tocchi', dir:'high', step:'1', ph:'es. 24', note:'closed kinetic chain upper extremity stability test, tocchi in 15 secondi: prova da portiere' },
+    // VBT: dal foglio arriva una velocita' sola per esercizio, quindi il massimale
+    // e' una stima a punto singolo. La velocita' resta sempre, la stima solo se cade
+    // nella fascia in cui la formula tiene.
+    { key:'vbt_squat_v',   cat:'vbt', label:'Back squat, velocita',  short:'Squat v',   unit:'m/s', dir:'high', step:'0.01', ph:'es. 0,76', note:'velocita media propulsiva sul carico provato al back squat' },
+    { key:'vbt_squat_1rm', cat:'vbt', label:'Back squat, 1RM stimato', short:'Squat 1RM', unit:'kg', dir:'high', step:'0.5', ph:'es. 67', note:'massimale stimato dalla velocita, Sanchez-Medina e Gonzalez-Badillo' },
+    { key:'vbt_ht_v',      cat:'vbt', label:'Hip thrust, velocita',  short:'Hip thrust v', unit:'m/s', dir:'high', step:'0.01', ph:'es. 0,56', note:'velocita media propulsiva sul carico provato all hip thrust' },
+    { key:'vbt_ht_1rm',    cat:'vbt', label:'Hip thrust, 1RM stimato', short:'Hip thrust 1RM', unit:'kg', dir:'high', step:'0.5', ph:'es. 124', note:'massimale stimato dalla velocita, equazione su atlete donne' },
     // test da campo (km/h)
     { key:'leger',   cat:'campo', label:'Beep test Leger', short:'Beep', unit:'liv',  dir:'high', step:'0.5', ph:'es. 9.5',  note:'navetta 20 m, ultimo livello completato: la VAM e 8 + mezzo km/h per livello' },
     { key:'gacon',   cat:'campo', label:'Gacon 45-15', short:'Gacon', unit:'km/h', dir:'high', step:'0.5', ph:'es. 15.5', note:'test intermittente, velocita aerobica massima' },
@@ -1055,6 +1134,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     fms_shoulder: { cat:'fms',   label:'Mobilita spalle',               short:'Spalle',           asym:'pt',  warn:1,  bad:2,  note:'mobilita delle spalle con mani dietro la schiena, 0-3 per lato' },
     fms_aslr:     { cat:'fms',   label:'Active SLR',                    short:'ASLR',             asym:'pt',  warn:1,  bad:2,  note:'flessibilita catena posteriore ad arto teso, 0-3 per lato' },
     fms_rotary:   { cat:'fms',   label:'Rotary Stability',              short:'Rotary',           asym:'pt',  warn:1,  bad:2,  note:'stabilita rotatoria in quadrupedia, 0-3 per lato' },
+    fms_ankle:    { cat:'fms',   label:'Clearing caviglia',             short:'Caviglia',         asym:'pt',  warn:1,  bad:2,  note:'prova di sblocco della caviglia, non fa punteggio FMS ma toglie validita agli schemi se e dolente' },
+    fis_ankle:    { cat:'fisio', label:'Ankle clearing test',           short:'Caviglia',         asym:'pt',  warn:1,  bad:2,  note:'flessione dorsale della caviglia, poca escursione porta al ginocchio valgo in atterraggio' },
+    fis_slb:      { cat:'fisio', label:'Single leg bridge test',        short:'Bridge',           asym:'pt',  warn:3,  bad:5,  note:'resistenza dei flessori della coscia, differenza fra i due lati oltre 3 ripetizioni da attenzionare' },
+    fis_faber:    { cat:'fisio', label:'Faber test',                    short:'Faber',            asym:'cm',  warn:2,  bad:4,  note:'mobilita dell anca, il foglio del fisio considera buono sotto i 10 cm' },
+    fis_thomas:   { cat:'fisio', label:'Thomas test',                   short:'Thomas',           asym:'pt',  warn:1,  bad:2,  note:'retrazione dei flessori dell anca, incide su lombalgia e scatti' },
+    fis_calf:     { cat:'fisio', label:'Single leg calf raises',        short:'Calf raises',      asym:'pt',  warn:3,  bad:5,  note:'resistenza del polpaccio, differenza fra i due lati oltre 3 ripetizioni da attenzionare' },
+    fis_skater:   { cat:'fisio', label:'Skater squat',                  short:'Skater squat',     asym:'pt',  warn:2,  bad:4,  note:'controllo monopodalico del ginocchio, e la prova piu vicina al gesto di atterraggio' },
     yb_ant:       { cat:'yb',    label:'Y-balance anteriore',           short:'Anteriore',        asym:'cm',  warn:4,  bad:6,  note:'reach anteriore, differenza fra i due arti oltre 4 cm da attenzionare' },
     yb_pm:        { cat:'yb',    label:'Y-balance postero-mediale',     short:'Postero-mediale',  asym:'cm',  warn:4,  bad:6,  note:'reach postero-mediale, confronto fra i due arti' },
     yb_pl:        { cat:'yb',    label:'Y-balance postero-laterale',    short:'Postero-laterale', asym:'cm',  warn:4,  bad:6,  note:'reach postero-laterale, confronto fra i due arti' }
@@ -1138,6 +1224,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function viewsIn(cat){ return VIEWS.filter(v=> v.cat===cat); }
   function viewById(id){ return VIEWS.find(v=> v.id===id) || VIEWS[0]; }
   function keysOf(v){ return v.kind==='pair' ? [v.dx.key, v.sx.key] : [v.def.key]; }
+  // Non tutte le prove hanno un record. Il semaforo del fisio dice solo se una cosa
+  // e' a posto, e il peso corporeo non e' una gara: fuori dai primati.
+  function noRecord(v){
+    const d = v.kind==='pair' ? v.dx : v.def;
+    return !!(d && (d.scale==='sem' || d.neutral));
+  }
 
   let curCat  = CATS[0].key;
   let curView = (viewsIn(curCat)[0] || VIEWS[0]).id;
@@ -1203,7 +1295,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       Object.keys(bag).forEach(n=>{
         const e = bag[n];
         if(!e || typeof e!=='object') { delete bag[n]; return; }
-        if(!Array.isArray(e.h) || !e.h.length) e.h = [{ v:e.v, d:e.d||'' }];
+        if(!Array.isArray(e.h) || !e.h.length) e.h = [{ v:e.v, d:e.d||'', t:e.t||'' }];
         sealEntry(e);
         if(!e.h.length) delete bag[n];
       });
@@ -1221,18 +1313,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // riordina lo storico, butta le misure vuote e riallinea v/d all' ultima
   function sealEntry(e){
     e.h = (e.h||[]).filter(x=> x && x.v!=null && x.v!=='' && !isNaN(+x.v))
-                   .map(x=> ({ v:+x.v, d:x.d||'' }));
+                   .map(x=> ({ v:+x.v, d:x.d||'', t:x.t||'' }));
     e.h.sort((a,b)=> dOrd(a.d) - dOrd(b.d));
     const last = e.h[e.h.length-1];
-    if(last){ e.v = last.v; e.d = last.d; } else { e.v = null; e.d = ''; }
+    if(last){ e.v = last.v; e.d = last.d; e.t = last.t||''; }
+    else { e.v = null; e.d = ''; e.t = ''; }
     return e;
   }
   // la misura da usare: quella della sessione scelta, oppure l' ultima se sono tutte
   function pick(e){
     if(!e) return null;
-    if(!curSess){ return (e.v!=null && e.v!=='' && !isNaN(+e.v)) ? { v:+e.v, d:e.d||'' } : null; }
+    if(!curSess){ return (e.v!=null && e.v!=='' && !isNaN(+e.v)) ? { v:+e.v, d:e.d||'', t:e.t||'' } : null; }
     const h = e.h || [];
-    for(let i=h.length-1; i>=0; i--){ if(h[i].d === curSess) return { v:+h[i].v, d:h[i].d }; }
+    for(let i=h.length-1; i>=0; i--){ if(h[i].d === curSess) return { v:+h[i].v, d:h[i].d, t:h[i].t||'' }; }
     return null;
   }
   // elenco delle sessioni presenti nel registro, in ordine cronologico
@@ -1253,7 +1346,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const bag = REG[testKey]||{};
     return roster.map(name=>{
       const p = pick(bag[name]);
-      return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', v:p?p.v:null, d:p?p.d:'' };
+      return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', v:p?p.v:null, d:p?p.d:'', t:p?p.t:'' };
     });
   }
   function statsFor(testKey, def){
@@ -1274,8 +1367,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function fmtTest(v, unit){
     if(v==null) return '-';
-    const s = (unit==='cm'||unit==='m') ? NF.format(v) : (unit==='liv' ? NF1.format(v) : NF2.format(v));
-    return s+' '+unit;
+    if(unit==='sem'){ const s = semOf(v); return s ? s.code : NF.format(v); }
+    return unitNF(unit).format(v)+' '+unit;
   }
 
   // ---- test bilaterali: righe dx/sx con calcolo dell asimmetria ----
@@ -1286,6 +1379,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function dateOf(bag, name){
     const p = pick(bag[name]);
     return p ? p.d : '';
+  }
+  function txtOf(bag, name){
+    const p = pick(bag[name]);
+    return p ? (p.t||'') : '';
   }
   function pairRows(v){
     const bd = REG[v.dx.key]||{}, bs = REG[v.sx.key]||{};
@@ -1302,15 +1399,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       return { name, role:(PLAYERS[name]&&PLAYERS[name].role)||'', d:d, s:s,
                gap:gap, pct:pct, amt:amt, lev:lev, low:low,
-               dd:dateOf(bd, name), ds:dateOf(bs, name) };
+               dd:dateOf(bd, name), ds:dateOf(bs, name),
+               td:txtOf(bd, name), ts:txtOf(bs, name) };
     });
   }
+  // Nelle prove a semaforo la differenza si conta in livelli di colore, non in punti:
+  // dire "un livello" e' quello che il fisio si aspetta di leggere.
   function asymText(v, r){
     if(r.amt==null) return '-';
     if(v.asym==='pct') return NF1.format(r.pct)+'%';
-    if(v.asym==='pt')  return (r.gap===0?'pari':NF.format(r.gap)+' pt');
+    if(v.asym==='pt'){
+      if(r.gap===0) return 'pari';
+      if(isSemPair(v)) return NF.format(r.gap)+(r.gap===1?' livello':' livelli');
+      return NF.format(r.gap)+' pt';
+    }
     return NF1.format(r.gap)+' cm';
   }
+  function isSemPair(v){ return !!(v && v.dx && v.dx.scale==='sem'); }
   function pairStats(v){
     const rows = pairRows(v);
     const both = rows.filter(r=> r.d!=null && r.s!=null);
@@ -1490,12 +1595,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                         meta:[(b.f.complete ? '7 schemi su 7' : b.f.nPat+' schemi su 7')] });
       } else {
         viewsIn(c.key).forEach(v=>{
+          if(noRecord(v)) return;
           if(v.kind==='pair'){
             const b = pairBest(v);
-            if(b) rr.push({ lab:v.label, val:recNum(b.v, v.unit), unit:v.unit, who:b.name, meta:['lato '+b.side, b.d] });
+            if(b) rr.push({ lab:v.label, val:recNum(b.v, v.unit), unit:unitLabel(v.unit), who:b.name, meta:['lato '+b.side, b.d] });
           } else {
             const st = statsFor(v.def.key, v.def);
-            if(st.n) rr.push({ lab:v.label, val:recNum(st.best, v.unit), unit:v.unit, who:st.bestName,
+            if(st.n) rr.push({ lab:v.label, val:recNum(st.best, v.unit), unit:unitLabel(v.unit), who:st.bestName,
                                meta:[dateOf(REG[v.def.key]||{}, st.bestName)] });
           }
         });
@@ -1806,10 +1912,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // guarda come cambia ogni test da una data all' altra. La barra Rilevazione non
   // conta, questa scheda mostra sempre tutta la stagione.
   function nx(x){ return Math.round(x*10)/10; }
-  function trNum(v){
+  // Numero da leggere in riga: la velocita' del VBT vuole due cifre o si perde il senso,
+  // il semaforo torna lettera, tutto il resto resta come prima.
+  function trNum(v, unit){
     if(v==null) return '-';
+    if(unit==='sem'){ const s = semOf(v); if(s) return s.code; }
+    if(unit==='m/s') return NF2.format(v);
     return (Math.abs(v - Math.round(v)) < 0.05) ? NF.format(Math.round(v)) : NF1.format(v);
   }
+  // "sem" non si scrive mai per esteso a video: dietro la sigla c e' il semaforo del fisio
+  function unitWord(unit){ return unit==='sem' ? 'semaforo' : unit; }
+  function unitAfter(unit){ return unit==='sem' ? '' : (' '+unit); }
   function histOf(name, key){
     const e = (REG[key]||{})[name];
     if(!e || !Array.isArray(e.h)) return [];
@@ -1843,8 +1956,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const delta = got.length > 1 ? (last.v - first.v) : null;
       let lev = 'flat';
       if(delta != null){
-        const th = t.unit==='pt' ? 0.5 : (t.unit==='km/h' ? 0.1 : 0.4);
-        if(delta > th) lev = 'up'; else if(delta < -th) lev = 'down';
+        const th = (t.unit==='pt' || t.unit==='sem') ? 0.5 : (t.unit==='km/h' ? 0.1 : (t.unit==='m/s' ? 0.03 : 0.4));
+        // sul Faber e sulle prove a tempo il numero che cala e' un miglioramento:
+        // il verso del test decide se la freccia va su o giu
+        const g = (t.dir==='low') ? -delta : delta;
+        if(g > th) lev = 'up'; else if(g < -th) lev = 'down';
       }
       out.push({ t:t, cells:cells, n:got.length, first:first, last:last, delta:delta, lev:lev });
     });
@@ -1873,27 +1989,36 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function trDelta(r){
     if(r.delta == null) return 'unica misura';
     const s = r.delta > 0 ? '+' : (r.delta < 0 ? '-' : '');
-    return s + trNum(Math.abs(r.delta)) + ' ' + r.t.unit;
+    const a = Math.abs(r.delta);
+    // sul semaforo lo scarto si conta in livelli di colore, non in punti
+    if(r.t.unit==='sem'){
+      const n = Math.round(a);
+      return s + NF.format(n) + (n===1 ? ' livello' : ' livelli');
+    }
+    return s + trNum(a, r.t.unit) + unitAfter(r.t.unit);
   }
   function trendRow(r){
     const lastD = r.last ? r.last.d : '';
+    const u = r.t.unit;
     const cells = r.cells.map(c=>{
       const isL = (c.v != null && c.d === lastD);
       const cls = 'tr-c' + (c.v==null ? ' miss' : '') + (isL ? ' last' : '');
-      const av  = c.a == null ? '' : ('media ' + trNum(c.a));
+      // la media della squadra su una prova a colori resta un numero: 1,6 dice
+      // che il gruppo sta fra il giallo e il verde, la lettera non lo direbbe
+      const av  = c.a == null ? '' : ('media ' + trNum(c.a, u==='sem' ? '' : u));
       return '<span class="'+cls+'">'+
                '<span class="cd">'+esc(c.d)+'</span>'+
-               '<span class="cv">'+esc(trNum(c.v))+'</span>'+
+               '<span class="cv">'+esc(trNum(c.v, u))+'</span>'+
                '<span class="ct">'+esc(av)+'</span>'+
              '</span>';
     }).join('');
     const tit = r.delta == null
       ? 'una sola misura registrata, il ' + r.last.d
-      : 'dal ' + r.first.d + ' (' + trNum(r.first.v) + ' ' + r.t.unit + ') al ' +
-        r.last.d + ' (' + trNum(r.last.v) + ' ' + r.t.unit + ')';
+      : 'dal ' + r.first.d + ' (' + trNum(r.first.v, u) + unitAfter(u) + ') al ' +
+        r.last.d + ' (' + trNum(r.last.v, u) + unitAfter(u) + ')';
     return '<div class="tr-row '+r.lev+'">'+
       '<div class="tr-nm"><div class="tr-name">'+esc(r.t.label)+'</div>'+
-        '<div class="tr-sub">'+esc(r.t.unit)+' &#183; '+r.n+(r.n===1?' misura':' misure')+'</div></div>'+
+        '<div class="tr-sub">'+esc(unitWord(u))+' &#183; '+r.n+(r.n===1?' misura':' misure')+'</div></div>'+
       sparkSvg(r.cells)+
       '<div class="tr-cells">'+cells+'</div>'+
       '<span class="tr-d '+r.lev+'" title="'+esc(tit)+'">'+esc(trDelta(r))+'</span>'+
@@ -2027,15 +2152,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     sel.disabled = false;
     sel.innerHTML = cmpMenu(cmpTests());
 
+    // in cima chi sta meglio: sul Faber e sulle prove a tempo vuol dire il numero piu basso
     const rows = entriesFor(def.key).filter(e=> e.v!=null)
-                   .sort((a,b)=> (b.v - a.v) || a.name.localeCompare(b.name,'it'));
+                   .sort((a,b)=> (def.dir==='low' ? (a.v - b.v) : (b.v - a.v)) || a.name.localeCompare(b.name,'it'));
     const st = cmpStats(rows.map(e=> e.v));
     const th = st.sd * 0.5;
 
+    const cu = unitLabel(def.unit);
     chips.innerHTML =
       '<div class="mchip em"><span class="ml">Con il dato</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>'+
-      '<div class="mchip"><span class="ml">Media</span><b>'+trNum(st.avg)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
-      '<div class="mchip vi"><span class="ml">Scarto</span><b>'+trNum(st.max - st.min)+'</b><span class="ml">'+esc(def.unit)+'</span></div>';
+      '<div class="mchip"><span class="ml">Media</span><b>'+trNum(st.avg)+'</b><span class="ml">'+esc(cu)+'</span></div>'+
+      '<div class="mchip vi"><span class="ml">Scarto</span><b>'+trNum(st.max - st.min)+'</b><span class="ml">'+esc(cu)+'</span></div>';
 
     note.innerHTML = 'Ogni pallino e&#39; una atleta, dal valore piu&#39; basso a sinistra al piu&#39; alto a destra. '+
       'La fascia arancione tiene la <b>meta&#39; centrale del gruppo</b>, la riga viola tratteggiata e&#39; la <b>media</b>: '+
@@ -2052,24 +2179,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<span class="cm-mean" style="left:'+nx(pm)+'%"></span>';
     rows.forEach(e=>{
       ph += '<span class="cm-dot'+(e.name===curAtl?' me':'')+'" style="left:'+nx(cmpPos(e.v, st))+'%" '+
-            'title="'+esc(e.name+': '+trNum(e.v)+' '+def.unit)+'"></span>';
+            'title="'+esc(e.name+': '+trNum(e.v, def.unit)+unitAfter(def.unit))+'"></span>';
     });
     ph += '</div><div class="cm-scale">'+
-      '<span class="s0">'+esc(trNum(st.min)+' '+def.unit)+'</span>'+
+      '<span class="s0">'+esc(trNum(st.min, def.unit)+unitAfter(def.unit))+'</span>'+
       '<span class="sm" style="left:'+nx(lm)+'%">media '+esc(trNum(st.avg))+'</span>'+
-      '<span class="s1">'+esc(trNum(st.max)+' '+def.unit)+'</span></div>';
+      '<span class="s1">'+esc(trNum(st.max, def.unit)+unitAfter(def.unit))+'</span></div>';
     plot.innerHTML = ph;
 
     list.innerHTML = rows.map((e, i)=>{
       const d   = e.v - st.avg;
-      const lev = (th > 0 && Math.abs(d) >= th) ? (d > 0 ? 'up' : 'down') : 'flat';
+      // sul Faber stare sopra la media e' stare peggio: il verso del test decide il colore
+      const g   = (def.dir==='low') ? -d : d;
+      const lev = (th > 0 && Math.abs(d) >= th) ? (g > 0 ? 'up' : 'down') : 'flat';
       const sg  = d > 0 ? '+' : (d < 0 ? '-' : '');
       return '<div class="cm-row'+(e.name===curAtl?' me':'')+'">'+
         '<span class="cm-rk">'+(i+1)+'</span>'+
         '<div class="cm-nm"><div class="cm-name">'+esc(e.name)+'</div>'+
           '<div class="cm-sub">'+esc(e.role||'-')+(e.d ? (' &#183; '+esc(e.d)) : '')+'</div></div>'+
-        '<span class="cm-v">'+esc(trNum(e.v))+'<em>'+esc(def.unit)+'</em></span>'+
-        '<span class="cm-d '+lev+'">'+esc(sg + trNum(Math.abs(d)) + ' ' + def.unit)+'</span>'+
+        '<span class="cm-v">'+esc(trNum(e.v, def.unit))+(cu?'<em>'+esc(cu)+'</em>':'')+'</span>'+
+        '<span class="cm-d '+lev+'">'+esc(sg + trNum(Math.abs(d)) + (cu?' '+cu:''))+'</span>'+
         '<span class="cm-pc">'+esc(cmpRank(i, rows.length))+'</span>'+
       '</div>';
     }).join('');
@@ -2190,7 +2319,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // valore piu' alto fra i due arti, non ha senso spezzarlo in due.
   // L FMS non si spacchetta per schema: un 3 su Deep Squat lo prendono in dieci,
   // quello che conta e' il totale.
-  function recNum(v, unit){ return (unit==='pt' ? NF : NF1).format(v); }
+  // Il record si legge con le cifre della sua unita': il semaforo torna lettera,
+  // la velocita' del VBT resta sulla seconda cifra, punti e ripetizioni restano interi.
+  function recNum(v, unit){
+    if(v==null) return '-';
+    if(unit==='sem'){ const s = semOf(v); if(s) return s.code; }
+    return unitNF(unit).format(v);
+  }
   function recTile(cls, lab, val, unit, who, metaHtml, href){
     const inner =
       '<div class="rc-lab">'+esc(lab)+'</div>'+
@@ -2275,15 +2410,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         }
       } else {
         viewsIn(c.key).forEach(v=>{
+          if(noRecord(v)) return;
           if(v.kind==='pair'){
             const b = pairBest(v);
             if(!b) return;
-            tiles.push(recTile('', v.label, recNum(b.v, v.unit), v.unit, b.name,
+            tiles.push(recTile('', v.label, recNum(b.v, v.unit), unitLabel(v.unit), b.name,
               recMeta(['lato '+b.side, esc(b.d||''), atlText(b.n)]), ''));
           } else {
             const st = statsFor(v.def.key, v.def);
             if(!st.n) return;
-            tiles.push(recTile('', v.label, recNum(st.best, v.unit), v.unit, st.bestName,
+            tiles.push(recTile('', v.label, recNum(st.best, v.unit), unitLabel(v.unit), st.bestName,
               recMeta([esc(dateOf(REG[v.def.key]||{}, st.bestName)), atlText(st.n)]), ''));
           }
         });
@@ -2433,15 +2569,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   // mette una misura nello storico di una casella, su una data precisa
-  function putMeasure(testKey, name, num, when){
+  // txt e' il testo originale della prova, la lettera del semaforo o la nota del fisio
+  function putMeasure(testKey, name, num, when, txt){
     if(!REG[testKey]) REG[testKey] = {};
     const bag = REG[testKey];
-    const e = bag[name] || (bag[name] = { v:null, d:'', h:[] });
-    if(!Array.isArray(e.h)) e.h = (e.v!=null && e.v!=='') ? [{ v:e.v, d:e.d||'' }] : [];
+    const e = bag[name] || (bag[name] = { v:null, d:'', t:'', h:[] });
+    if(!Array.isArray(e.h)) e.h = (e.v!=null && e.v!=='') ? [{ v:e.v, d:e.d||'', t:e.t||'' }] : [];
     const i = e.h.findIndex(x=> x.d === when);
     if(num==null){ if(i>=0) e.h.splice(i,1); }
-    else if(i>=0) e.h[i].v = num;
-    else e.h.push({ v:num, d:when });
+    else if(i>=0){ e.h[i].v = num; e.h[i].t = txt||''; }
+    else e.h.push({ v:num, d:when, t:txt||'' });
     sealEntry(e);
     if(!e.h.length) delete bag[name];
     if(!Object.keys(bag).length) delete REG[testKey];
@@ -2451,16 +2588,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function writeVal(testKey, def, name, raw){
     const when = curSess || todayShort();
     const s = String(raw==null?'':raw).trim();
-    let num = null;
+    let num = null, txt = '';
     if(s!==''){
       const x = +s;
-      if(!isNaN(x)) num = (def && def.fms) ? Math.max(0, Math.min(3, Math.round(x))) : x;
+      if(!isNaN(x)){
+        if(def && def.scale==='sem') num = Math.max(0, Math.min(2, Math.round(x)));
+        else if(def && def.fms)      num = Math.max(0, Math.min(3, Math.round(x)));
+        else                         num = x;
+      }
     }
-    putMeasure(testKey, name, num, when);
+    if(num!=null && def && def.scale==='sem'){ const sm = semOf(num); txt = sm ? sm.code : ''; }
+    putMeasure(testKey, name, num, when, txt);
     saveReg();
     renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderConfronto(); renderIntermittente(); renderPrint();
   }
+  // le prove a semaforo si compilano da una tendina con le tre lettere del fisio,
+  // le altre restano una casella numerica come sempre
   function inputHtml(def, name, val, cls){
+    if(def.scale==='sem'){
+      const cur = (val==null || val==='') ? null : Math.round(+val);
+      const sm  = semOf(cur);
+      const opts = '<option value=""'+(cur==null?' selected':'')+'>-</option>' +
+        SEM.map(s=> '<option value="'+s.v+'"'+(cur===s.v?' selected':'')+'>'+s.code+'  '+esc(s.label)+'</option>').join('');
+      return '<select class="tb-in sem'+(cls?' '+cls:'')+(sm?' '+sm.lev:'')+'" '+
+        'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+name)+'">'+opts+'</select>';
+    }
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
       (def.max?' max="'+def.max+'"':'')+' value="'+(val!=null?val:'')+'" placeholder="'+esc(def.ph)+'" '+
       'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+name)+'">';
@@ -2488,42 +2640,112 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     else                renderSingle(v, list, leg);
   }
 
+  // "sem" non e' una unita' di misura, e' una scala di colori: sotto la casella non
+  // si scrive niente. Il peso non ha nemmeno un verso migliore, resta un dato e basta.
+  function unitLabel(unit){ return unit==='sem' ? '' : unit; }
+  // quante verdi, quante gialle, quante rosse in una prova a semaforo
+  function semCounts(entries){
+    const c = { 2:0, 1:0, 0:0 };
+    entries.forEach(e=>{ if(e.v==null) return; const r = Math.round(e.v); if(c[r]!=null) c[r]++; });
+    return c;
+  }
+  // le note del fisio arrivano dal foglio della stagione in corso, non da altre annate
+  function physioNote(name){
+    if(seasonId()!=='26-27') return '';
+    const T = window.TEST_2627;
+    if(!T || !T.note) return '';
+    return T.note[name] || '';
+  }
+  // avviso per le prove che nessuno ha mai fatto: il trunk stability e il rotary
+  // stability sono rimasti fuori dalla batteria FMS del prof, e si deve vedere
+  function voidHtml(label){
+    const quando = curSess ? ('nella rilevazione del '+curSess) : 'in questa stagione';
+    return '<div class="tb-void"><b>'+esc(label)+'</b>: non eseguito '+esc(quando)+'. '+
+      'Nessuna atleta ha una misura, la casella resta aperta per quando la prova si fara.</div>';
+  }
+
   function renderSingle(v, list, leg){
     const def = v.def;
     const st  = statsFor(def.key, def);
-    leg.innerHTML = '';
-
-    document.getElementById('tb-strip').innerHTML =
-      '<div class="mchip em"><span class="ml">Migliore</span><b>'+fmtNum(st.best,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
-      '<div class="mchip"><span class="ml">Media</span><b>'+fmtNum(st.avg,def)+'</b><span class="ml">'+esc(def.unit)+'</span></div>'+
-      '<div class="mchip vi"><span class="ml">Top</span><b style="font-size:13px">'+(st.bestName?esc(st.bestName):'-')+'</b></div>'+
-      '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+    const sem = def.scale==='sem';
+    const neu = !!def.neutral;
+    const un  = unitLabel(def.unit);
+    leg.innerHTML = sem ? SEM.map(s=>
+      '<span><i class="'+s.lev+'"></i>'+esc(s.code+', '+s.label+': '+s.desc)+'</span>').join('') : '';
 
     const entries = entriesFor(def.key);
-    // ordina: prima chi ha un valore (per merito), poi i vuoti in ordine alfabetico
-    const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> def.dir==='high' ? (b.v-a.v) : (a.v-b.v));
-    const noVal   = entries.filter(e=> e.v==null);
-    const ordered = withVal.concat(noVal);
+
+    if(sem){
+      const c = semCounts(entries);
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip sg"><span class="ml">Verde</span><b>'+c[2]+'</b></div>'+
+        '<div class="mchip sy"><span class="ml">Giallo</span><b>'+c[1]+'</b></div>'+
+        '<div class="mchip sr"><span class="ml">Rosso</span><b>'+c[0]+'</b></div>'+
+        '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+    } else if(neu){
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip"><span class="ml">Media</span><b>'+fmtNum(st.avg,def)+'</b><span class="ml">'+esc(un)+'</span></div>'+
+        '<div class="mchip"><span class="ml">Minimo</span><b>'+fmtNum(st.worst,def)+'</b><span class="ml">'+esc(un)+'</span></div>'+
+        '<div class="mchip"><span class="ml">Massimo</span><b>'+fmtNum(st.best,def)+'</b><span class="ml">'+esc(un)+'</span></div>'+
+        '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+    } else {
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip em"><span class="ml">Migliore</span><b>'+fmtNum(st.best,def)+'</b><span class="ml">'+esc(un)+'</span></div>'+
+        '<div class="mchip"><span class="ml">Media</span><b>'+fmtNum(st.avg,def)+'</b><span class="ml">'+esc(un)+'</span></div>'+
+        '<div class="mchip vi"><span class="ml">Top</span><b style="font-size:13px">'+(st.bestName?esc(st.bestName):'-')+'</b></div>'+
+        '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+    }
+
+    let ordered;
+    if(neu){
+      // il peso non ha un migliore: si legge in ordine alfabetico come un elenco
+      ordered = entries.slice().sort((a,b)=> a.name.localeCompare(b.name,'it'));
+    } else if(sem){
+      // prima le rosse, poi le gialle: chi ha bisogno di lavoro sta in cima
+      const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> (a.v-b.v) || a.name.localeCompare(b.name,'it'));
+      ordered = withVal.concat(entries.filter(e=> e.v==null).sort((a,b)=> a.name.localeCompare(b.name,'it')));
+    } else {
+      const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> def.dir==='high' ? (b.v-a.v) : (a.v-b.v));
+      ordered = withVal.concat(entries.filter(e=> e.v==null));
+    }
 
     const best = st.best;
-    list.innerHTML = ordered.map(e=>{
-      const isBest = (e.v!=null && best!=null && e.v===best);
-      let w = 0;
-      if(e.v!=null && best!=null && best>0){
-        w = def.dir==='high' ? (e.v/best*100) : (best/e.v*100);
-        w = Math.max(6, Math.min(100, w));
+    const rows = ordered.map(e=>{
+      const isBest = (!sem && !neu && e.v!=null && best!=null && e.v===best);
+      const s = sem ? semOf(e.v) : null;
+      let mid;
+      if(sem){
+        mid = '<span class="tb-lev'+(s?' '+s.lev:'')+'">'+(s?esc(s.desc):'')+'</span>';
+      } else if(neu){
+        mid = '<span class="tb-lev"></span>';
+      } else {
+        let w = 0;
+        if(e.v!=null && best!=null && best>0){
+          w = def.dir==='high' ? (e.v/best*100) : (best/e.v*100);
+          w = Math.max(6, Math.min(100, w));
+        }
+        mid = '<div class="tb-bar"><div class="tb-barfill" data-w="'+(e.v!=null?Math.round(w):0)+'"></div></div>';
       }
+      // il testo originale del foglio vale solo dove non e' gia' la lettera del semaforo:
+      // sul Faber il fisio ha scritto "ok" e quel 9 non e' una misura vera
+      const tag  = (!sem && e.t) ? '<span class="tb-tag">'+esc(e.t)+'</span>' : '';
+      const nota = (def.cat==='fisio') ? physioNote(e.name) : '';
       return '<div class="tb-row'+(isBest?' best':'')+'">'+
-        '<div class="tb-nm"><span class="tb-name">'+esc(e.name)+'</span>'+
-          (isBest?'<span class="tb-best-tag">top</span>':'')+'</div>'+
+        '<div class="tb-nm col">'+
+          '<span class="tb-nmline"><span class="tb-name">'+esc(e.name)+'</span>'+
+            (isBest?'<span class="tb-best-tag">top</span>':'')+tag+'</span>'+
+          (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
+        '</div>'+
         '<div class="tb-right">'+
-          '<div class="tb-bar"><div class="tb-barfill" data-w="'+(e.v!=null?Math.round(w):0)+'"></div></div>'+
+          mid+
           '<span class="tb-date">'+(e.d?esc(e.d):'')+'</span>'+
           '<span class="tb-inwrap">'+inputHtml(def, e.name, e.v)+
-            '<span class="tb-unit">'+esc(def.unit)+'</span></span>'+
+            (un?'<span class="tb-unit">'+esc(un)+'</span>':'')+'</span>'+
         '</div>'+
       '</div>';
     }).join('');
+
+    list.innerHTML = (st.n===0 ? voidHtml(def.label) : '') + rows;
 
     const map = {}; map[def.key] = def;
     bindInputs(list, map);
@@ -2533,19 +2755,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   function renderPair(v, list, leg){
-    const st = pairStats(v);
-    const un = v.asym==='pct' ? '%' : (v.asym==='pt' ? 'pt' : 'cm');
+    const st  = pairStats(v);
+    const sem = isSemPair(v);
+    const un  = v.asym==='pct' ? '%' : (v.asym==='pt' ? (sem?'livelli':'pt') : 'cm');
+    const uc  = unitLabel(v.unit);
 
-    document.getElementById('tb-strip').innerHTML =
-      '<div class="mchip em"><span class="ml">Media dx</span><b>'+fmtNum(st.avgD,v)+'</b><span class="ml">'+esc(v.unit)+'</span></div>'+
-      '<div class="mchip em"><span class="ml">Media sx</span><b>'+fmtNum(st.avgS,v)+'</b><span class="ml">'+esc(v.unit)+'</span></div>'+
-      '<div class="mchip vi"><span class="ml">Asimmetrie</span><b>'+(st.nWarn+st.nBad)+'</b><span class="ml">oltre '+NF1.format(v.warn)+' '+un+'</span></div>'+
-      '<div class="mchip"><span class="ml">Completi</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
-
-    leg.innerHTML =
-      '<span><i class="ok"></i>sotto '+NF1.format(v.warn)+' '+un+', equilibrata</span>'+
-      '<span><i class="warn"></i>da '+NF1.format(v.warn)+' a '+NF1.format(v.bad)+' '+un+', da monitorare</span>'+
-      '<span><i class="bad"></i>oltre '+NF1.format(v.bad)+' '+un+', lavoro compensativo</span>';
+    if(sem){
+      // su una prova a colori la media non vuol dire niente: contano quanti lati
+      // sono usciti gialli o rossi, uno per uno
+      const cd = semCounts(st.rows.map(r=> ({ v:r.d })));
+      const cs = semCounts(st.rows.map(r=> ({ v:r.s })));
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip sg"><span class="ml">Verde</span><b>'+(cd[2]+cs[2])+'</b><span class="ml">lati</span></div>'+
+        '<div class="mchip sy"><span class="ml">Giallo</span><b>'+(cd[1]+cs[1])+'</b><span class="ml">lati</span></div>'+
+        '<div class="mchip sr"><span class="ml">Rosso</span><b>'+(cd[0]+cs[0])+'</b><span class="ml">lati</span></div>'+
+        '<div class="mchip"><span class="ml">Completi</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+      leg.innerHTML =
+        SEM.map(s=> '<span><i class="'+s.lev+'"></i>'+esc(s.code+', '+s.label+': '+s.desc)+'</span>').join('')+
+        '<span><i class="warn"></i>un livello di differenza fra i due lati, da monitorare</span>';
+    } else {
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip em"><span class="ml">Media dx</span><b>'+fmtNum(st.avgD,v)+'</b><span class="ml">'+esc(uc)+'</span></div>'+
+        '<div class="mchip em"><span class="ml">Media sx</span><b>'+fmtNum(st.avgS,v)+'</b><span class="ml">'+esc(uc)+'</span></div>'+
+        '<div class="mchip vi"><span class="ml">Asimmetrie</span><b>'+(st.nWarn+st.nBad)+'</b><span class="ml">oltre '+NF1.format(v.warn)+' '+un+'</span></div>'+
+        '<div class="mchip"><span class="ml">Completi</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
+      leg.innerHTML =
+        '<span><i class="ok"></i>sotto '+NF1.format(v.warn)+' '+un+', equilibrata</span>'+
+        '<span><i class="warn"></i>da '+NF1.format(v.warn)+' a '+NF1.format(v.bad)+' '+un+', da monitorare</span>'+
+        '<span><i class="bad"></i>oltre '+NF1.format(v.bad)+' '+un+', lavoro compensativo</span>';
+    }
 
     // ordino per gravita dell asimmetria, poi chi ha un solo lato, poi i vuoti
     const rows = st.rows.slice();
@@ -2553,15 +2791,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rows.sort((a,b)=>{
       const ra=rank(a), rb=rank(b);
       if(ra!==rb) return ra-rb;
-      if(ra===0) return b.amt-a.amt;
+      if(ra===0){
+        // a parita' di differenza sale chi ha il lato messo peggio
+        if(b.amt!==a.amt) return b.amt-a.amt;
+        if(sem) return Math.min(a.d,a.s) - Math.min(b.d,b.s);
+      }
       return a.name.localeCompare(b.name,'it');
     });
 
-    list.innerHTML = rows.map(r=>{
+    const html = rows.map(r=>{
       const cls = r.lev==='bad' ? ' alert' : (r.lev==='warn' ? ' watch' : '');
       const dt  = r.dd || r.ds || '';
+      const tag = (!sem && (r.td || r.ts)) ? '<span class="tb-tag">'+esc(r.td || r.ts)+'</span>' : '';
+      const nota = (v.cat==='fisio') ? physioNote(r.name) : '';
       return '<div class="tb-row'+cls+'">'+
-        '<div class="tb-nm"><span class="tb-name">'+esc(r.name)+'</span></div>'+
+        '<div class="tb-nm col">'+
+          '<span class="tb-nmline"><span class="tb-name">'+esc(r.name)+'</span>'+tag+'</span>'+
+          (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
+        '</div>'+
         '<div class="tb-right">'+
           '<span class="tb-date">'+(dt?esc(dt):'')+'</span>'+
           '<span class="tb-dual">'+
@@ -2569,12 +2816,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
               inputHtml(v.dx, r.name, r.d, 'sm')+'</span>'+
             '<span class="tb-side'+(r.low==='sx'?' low':'')+'"><span class="tb-sl">sx</span>'+
               inputHtml(v.sx, r.name, r.s, 'sm')+'</span>'+
-            '<span class="tb-unit">'+esc(v.unit)+'</span>'+
+            (uc?'<span class="tb-unit">'+esc(uc)+'</span>':'')+
           '</span>'+
           '<span class="tb-asym'+(r.lev?' '+r.lev:'')+'">'+esc(asymText(v, r))+'</span>'+
         '</div>'+
       '</div>';
     }).join('');
+
+    list.innerHTML = ((st.nD===0 && st.nS===0) ? voidHtml(v.label) : '') + html;
 
     const map = {}; map[v.dx.key] = v.dx; map[v.sx.key] = v.sx;
     bindInputs(list, map);
