@@ -434,6 +434,13 @@ tr.r-teamref td.num{ color:var(--ink); }
 .grid tr.r-moved td.col-day{ box-shadow: inset 2px 0 0 var(--orange), 1px 0 0 var(--border); }
 .grid td.col-day .lb-recalc{ font-size:9.5px; font-weight:600; color:var(--orange2);
   letter-spacing:.02em; margin-left:6px; text-transform:none; }
+/* sigla della seduta fuori squadra: FT prima squadra, diff lavoro differenziato */
+.grid td.col-day .solo-tag{ display:inline-block; margin-left:6px; padding:1px 5px;
+  font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:none; line-height:1.5;
+  color:var(--violet2); background:var(--violet-bg); border:1px solid var(--violet-border);
+  border-radius:5px; vertical-align:1px; }
+.grid td.col-day .solo-tag.ft{ color:var(--orange2); background:var(--ember-bg);
+  border-color:var(--ember-border); }
 #mv-reset{ margin-left:auto; }
 #mv-reset[hidden]{ display:none; }
 @media (prefers-reduced-motion: reduce){
@@ -695,6 +702,10 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .grid td.col-day .mvbar{ display:none !important; }
   .grid tr.r-moved td.col-day{ box-shadow:none !important; }
   .grid td.col-day .mvfrom, .grid td.col-day .lb-recalc{ color:#a8461a !important; }
+  .grid td.col-day .solo-tag{ color:#5b3f8a !important; background:#efe9f6 !important;
+    border-color:#cbb8e6 !important; }
+  .grid td.col-day .solo-tag.ft{ color:#a8461a !important; background:#fbe3d3 !important;
+    border-color:#e8b795 !important; }
   tr.wkband .wk-drop{ display:none !important; }
   tr.r-match td, tr.r-match td.col-day{ background:#faf1ea !important; }
   tr.r-match td.col-day .lb{ color:#b8531f !important; }
@@ -1284,8 +1295,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const d = new Date(sy, sm-1, d1); d.setHours(0,0,0,0);
     return (d.getMonth() === sm-1 && d.getDate() === d1) ? d : null;
   }
+  // Sedute fuori squadra: "12AM FT" e' l'allenamento con la prima squadra,
+  // "12AM diff" il lavoro differenziato. Non entrano nel carico squadra, quindi
+  // compaiono solo quando si guarda la singola atleta.
+  const SOLO_RE = /\s+(FT|diff)$/;
+  function soloOf(label){ const m = SOLO_RE.exec(String(label||'').trim()); return m ? m[1] : ''; }
+  function soloBase(label){ return String(label||'').replace(SOLO_RE, ''); }
+  function soloTag(sg){
+    if(!sg) return '';
+    const t = sg==='FT' ? 'Allenamento con la prima squadra, fuori dal carico squadra'
+                        : 'Lavoro differenziato, fuori dal carico squadra';
+    return '<span class="solo-tag'+(sg==='FT'?' ft':'')+'" title="'+esc(t)+'">'+esc(sg)+'</span>';
+  }
   // slot della seduta: nelle doppie giornate c'e' una riga AM e una PM
-  function slotOf(label){ const m = /(AM|PM)\s*$/i.exec(String(label||'').trim()); return m ? m[1].toUpperCase() : ''; }
+  function slotOf(label){ const m = /(AM|PM)\s*$/i.exec(soloBase(String(label||'').trim())); return m ? m[1].toUpperCase() : ''; }
   function slotOrd(s){ return s==='AM' ? 0 : (s==='PM' ? 2 : 1); }
   // data vera della riga: col numero del giorno si cerca dentro i sette giorni della
   // settimana, senza numero decide il giorno gia' scritto nel foglio
@@ -2270,12 +2293,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         return;
       }
       const cls = ROWCLS[r.type] || 'r-day';
-      const clickable = (r.type==='day' || r.type==='match');
+      const sg = soloOf(r.label);
+      // la seduta fuori squadra non ha una scheda seduta: non c'e' la squadra
+      // con cui confrontarla, quindi resta un'etichetta e basta
+      const clickable = (r.type==='day' || r.type==='match') && !sg;
       // il testo mostra sempre il giorno, il data-l resta l'etichetta originale del foglio
       const txt = clickable ? dayLabel(r, rowDate(r, wkNow, mon.key)) : r.label;
       let lb = clickable
         ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(txt)+'</button>'
-        : '<span class="lb">'+esc(r.label)+(r.recalc?'<span class="lb-recalc">ricalcolato</span>':'')+'</span>';
+        : '<span class="lb">'+esc(soloBase(txt))+soloTag(sg)+(r.recalc?'<span class="lb-recalc">ricalcolato</span>':'')+'</span>';
       let trCls = cls, extra = '';
       if(clickable){
         const home = r.wk0 || wkNow;
