@@ -344,12 +344,15 @@ svg.chart .acwr-dot:hover{ r:6.5; }
 .tscroll::-webkit-scrollbar-thumb{ background:var(--border3); border-radius:4px; }
 table.grid{ border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px; white-space:nowrap; }
 table.grid th, table.grid td{ padding:7px 10px; text-align:right; border-bottom:1px solid var(--border); }
+/* I nomi dei parametri erano grigio spento su fondo scuro e si leggevano male.
+   Adesso stanno sul chiaro pieno, con l unita' di misura appena sotto in un
+   grigio che regge comunque il contrasto. */
 table.grid thead th{
-  position:sticky; top:0; z-index:3; background:var(--surface2); color:var(--muted);
-  font-weight:600; font-size:11px; letter-spacing:.02em; border-bottom:1px solid var(--border2);
+  position:sticky; top:0; z-index:3; background:var(--surface2); color:var(--ink);
+  font-weight:700; font-size:11.5px; letter-spacing:.02em; border-bottom:1px solid var(--border3);
   cursor:default;
 }
-table.grid thead th .u{ display:block; font-size:9.5px; color:var(--faint); font-weight:500; margin-top:1px; }
+table.grid thead th .u{ display:block; font-size:10px; color:var(--text); font-weight:500; margin-top:1px; }
 table.grid th.col-day, table.grid td.col-day{
   text-align:left; position:sticky; left:0; z-index:2; background:var(--surface);
   border-right:1px solid var(--border2); min-width:118px; box-shadow: 1px 0 0 var(--border);
@@ -513,6 +516,18 @@ tr.wkband.dropzone .wk-drop{ opacity:1; }
 tr.wkband.dragover td{ background:linear-gradient(90deg, var(--ember-bg), transparent);
   color:var(--orange2); border-top-color:var(--ember-border); border-bottom-color:var(--ember-border); }
 tr.wkband.dragover .wk-drop{ opacity:1; color:var(--orange2); }
+/* La fila dei nomi torna sotto la fascia di ogni microciclo. Scorrendo un mese
+   intero l intestazione in cima resta lontana e a meta' tabella non si capisce
+   piu' quale colonna si sta leggendo: qui il promemoria arriva dove serve,
+   cioe' appena si apre una settimana nuova. */
+tr.wkhead td{
+  text-align:right; background:var(--surface2); color:var(--ink);
+  font-weight:700; font-size:11.5px; letter-spacing:.02em;
+  padding:6px 10px; border-bottom:1px solid var(--border3);
+}
+tr.wkhead td.col-day{ text-align:left; background:var(--surface2); color:var(--muted); font-weight:600; }
+tr.wkhead td.key{ background:oklch(18% 0.020 38); color:var(--orange2); }
+tr.wkhead td .u{ display:block; font-size:10px; color:var(--text); font-weight:500; margin-top:1px; }
 
 /* partite table sort */
 table.partite thead th.sortable{ cursor:pointer; user-select:none; }
@@ -718,6 +733,11 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
   tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td{ color:#6a625c !important; }
   tr.wkband td{ background:#efe9f6 !important; color:#5b3f8a !important; }
+  tr.wkhead td, tr.wkhead td.col-day{ background:#f0f0f0 !important; color:#14110f !important;
+    border-bottom:1px solid #bbb !important; }
+  tr.wkhead td.col-day{ color:#5a524c !important; }
+  tr.wkhead td.key{ background:#faf1ea !important; color:#b8531f !important; }
+  tr.wkhead td .u{ color:#5a524c !important; }
   table.partite td.sigla{ color:#14110f !important; }
   table.partite td.data{ color:#5a524c !important; }
   table.partite thead th .arw{ display:none !important; }
@@ -2266,6 +2286,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return h+'</tr></thead>';
   }
+  // stessa fila dell intestazione, ma dentro il corpo: torna sotto la fascia di
+  // ogni microciclo, cosi' a meta' mese si sa ancora quale colonna si sta leggendo
+  // il data-wk e' lo stesso della fascia sopra: la riga sta proprio dove uno mira
+  // quando trascina una seduta, e lasciarla qui deve valere come lasciarla sulla fascia
+  function wkHeadHTML(V, wk){
+    let h = '<tr class="wkhead" data-wk="'+esc(wk||'')+'"><td class="col-day">Giorno</td>';
+    V.forEach(i=>{
+      h += '<td class="'+(KEY.has(i)?'key':'')+'" title="'+esc(M[i])+(UNIT[i]?' ('+esc(UNIT[i])+')':'')+'">'+
+             esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span></td>';
+    });
+    return h+'</tr>';
+  }
   function renderGrid(){
     const host = document.getElementById('grid-scroll');
     const mon = activeMonth();
@@ -2290,6 +2322,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         wkNow = r.label||'';
         body += '<tr class="wkband" data-wk="'+esc(wkNow)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
                 '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span></td></tr>';
+        body += wkHeadHTML(V, wkNow);
         return;
       }
       const cls = ROWCLS[r.type] || 'r-day';
