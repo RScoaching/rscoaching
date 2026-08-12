@@ -972,6 +972,42 @@ window.applyStagioneData = function() {
 // Il campo "t" e' il testo originale del foglio: la V, la G, la R del fisio e la D
 // dei test di caviglia. Il registro sa tenere solo numeri, quindi il valore viaggia
 // come 2, 1, 0 e la lettera viaggia a fianco: a video si legge la lettera.
+// Una batteria di test si spalma su piu' giorni (i salti il 3, il VBT il 6, l' FMS
+// il 10) ma resta una rilevazione sola: le sessioni si chiamano col mese. Il registro
+// 26/27 nato con le etichette a giorno si accorpa qui, una volta per etichetta.
+var FIO_MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+                'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+var FIO_MESI_AB = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu',
+                   'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+
+function fioMeseSessioni(reg) {
+  function mese(d) {
+    var m = String(d == null ? '' : d).trim().toLowerCase().match(/^(\d{1,2})\s+([a-z]{3})$/);
+    if (!m) return d || '';
+    var i = FIO_MESI_AB.indexOf(m[2]);
+    return i < 0 ? d : FIO_MESI[i];
+  }
+  Object.keys(reg).forEach(function(k) {
+    var bag = reg[k];
+    if (!bag || typeof bag !== 'object') return;
+    Object.keys(bag).forEach(function(n) {
+      var e = bag[n];
+      if (!e || typeof e !== 'object' || !Array.isArray(e.h)) return;
+      var out = [];
+      e.h.forEach(function(x) {
+        if (!x) return;
+        x.d = mese(x.d);
+        var i = -1, j;
+        for (j = 0; j < out.length; j++) { if (out[j].d === x.d) { i = j; break; } }
+        if (i >= 0) out[i] = x; else out.push(x);
+      });
+      e.h = out;
+      var last = out[out.length - 1];
+      if (last) { e.v = last.v; e.d = last.d; e.t = last.t || ''; }
+    });
+  });
+}
+
 window.fioSeedTestRegister = function() {
   var T = window.TEST_2627;
   if (!T || !T.reg) return;
@@ -981,6 +1017,7 @@ window.fioSeedTestRegister = function() {
     var raw = JSON.parse(localStorage.getItem(key));
     if (raw && typeof raw === 'object') reg = raw;
   } catch (e) {}
+  fioMeseSessioni(reg);
   Object.keys(T.reg).forEach(function(k) {
     var src = T.reg[k] || {};
     var bag = reg[k] || (reg[k] = {});

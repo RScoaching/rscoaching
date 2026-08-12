@@ -946,11 +946,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function fmtNum(v, def){ if(v==null) return '-'; return unitNF(def && def.unit).format(v); }
 
   const MO = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+  const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                'luglio','agosto','settembre','ottobre','novembre','dicembre'];
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function pad(n){ return (n<10?'0':'')+n; }
   function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), 2600); }
   function todayShort(){ const d=new Date(); return d.getDate()+' '+MO[d.getMonth()]; }
+  // le sessioni di test si chiamano col mese: una batteria si spalma su piu'
+  // giorni ma resta una rilevazione sola
+  function meseOggi(){ return MESI[new Date().getMonth()]; }
 
   // ---- indici metriche robusti ----
   const LABELS = (SNAP.metrics_full||[]).map(x=>String(x||'').toLowerCase());
@@ -1302,13 +1307,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return reg;
   }
-  // la stagione parte a luglio: i mesi da luglio a dicembre vengono prima di quelli dopo
+  // la stagione parte a luglio: i mesi da luglio a dicembre vengono prima di quelli dopo.
+  // Regge sia le etichette a mese ("agosto") sia le vecchie a giorno ("11 ago")
   function dOrd(d){
-    const m = String(d||'').trim().match(/^(\d{1,2})\s+([a-z]{3})/i);
-    if(!m) return 0;
-    const mi = MO.indexOf(m[2].toLowerCase());
+    const s = String(d||'').trim().toLowerCase();
+    const m = s.match(/^(\d{1,2})\s+([a-z]{3})/);
+    const mi = MO.indexOf(m ? m[2] : s.slice(0,3));
     if(mi < 0) return 0;
-    return (mi>=6 ? mi : mi+12) * 100 + (+m[1]||0);
+    return (mi>=6 ? mi : mi+12) * 100 + (m ? (+m[1]||0) : 0);
   }
   // riordina lo storico, butta le misure vuote e riallinea v/d all' ultima
   function sealEntry(e){
@@ -1554,7 +1560,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!st){ st = document.createElement('style'); st.id = 'pr-page'; document.head.appendChild(st); }
     st.textContent = '@page{ size:A4 '+(landscape?'landscape':'portrait')+'; margin:'+(landscape?'9mm':'14mm')+'; }';
   }
-  function prWhen(){ return curSess ? ('rilevazione del '+curSess) : 'tutte le rilevazioni'; }
+  function prWhen(){ return curSess ? ('rilevazione di '+curSess) : 'tutte le rilevazioni'; }
   function prMeta(parts){ return parts.filter(Boolean).map(esc).join(' &#183; '); }
   function prHead(titolo){
     return '<div class="pr-h">'+esc(titolo)+'</div>'+
@@ -1783,7 +1789,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!n){ toast('Nessun dato da svuotare'); return; }
     saveReg();
     renderSessBar(); renderBattery(); renderKpis(); renderRecords(); buildCats(); renderIndici(); renderTrend(); renderConfronto(); renderIntermittente(); renderPrint();
-    toast(curSess ? ('Svuotato il test del '+curSess) : 'Test svuotato');
+    toast(curSess ? ('Svuotato il test di '+curSess) : 'Test svuotato');
   });
 
   /* ---------- import storico test ---------- */
@@ -2013,8 +2019,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
              '</span>';
     }).join('');
     const tit = r.delta == null
-      ? 'una sola misura registrata, il ' + r.last.d
-      : 'dal ' + r.first.d + ' (' + trNum(r.first.v, u) + unitAfter(u) + ') al ' +
+      ? 'una sola misura registrata: ' + r.last.d
+      : 'da ' + r.first.d + ' (' + trNum(r.first.v, u) + unitAfter(u) + ') a ' +
         r.last.d + ' (' + trNum(r.last.v, u) + unitAfter(u) + ')';
     return '<div class="tr-row '+r.lev+'">'+
       '<div class="tr-nm"><div class="tr-name">'+esc(r.t.label)+'</div>'+
@@ -2143,7 +2149,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       note.textContent = '';
       plot.innerHTML = '';
       list.innerHTML = '<div class="lb-empty">' + (curSess
-        ? ('Nella rilevazione del ' + esc(curSess) + ' non c&#39; e&#39; nessun valore. Scegli un&#39; altra data nella barra Rilevazione oppure compila la batteria.')
+        ? ('Nella rilevazione di ' + esc(curSess) + ' non c&#39; e&#39; nessun valore. Scegli un&#39; altra rilevazione nella barra oppure compila la batteria.')
         : 'Compila almeno un test nella batteria qui sopra.') + '</div>';
       return;
     }
@@ -2169,7 +2175,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       'se la fascia e&#39; stretta la squadra e&#39; omogenea, se e&#39; larga le distanze sono vere. '+
       'Sotto, la classifica con lo scarto dalla media, verde per chi sta chiaramente sopra e rosso per chi sta '+
       'chiaramente sotto; chi resta vicino alla media resta neutro. '+
-      (curSess ? ('Si legge la rilevazione del <b>'+esc(curSess)+'</b>.')
+      (curSess ? ('Si legge la rilevazione di <b>'+esc(curSess)+'</b>.')
                : 'Di ogni atleta vale la misura registrata per ultima.');
 
     const p0 = cmpPos(st.q1, st), p1 = cmpPos(st.q3, st), pm = cmpPos(st.avg, st);
@@ -2433,7 +2439,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     if(!groups.length){
       list.innerHTML = curSess
-        ? '<div class="rc-empty">Nessun valore registrato il '+esc(curSess)+'. Scegli un' + "'" +
+        ? '<div class="rc-empty">Nessun valore registrato in '+esc(curSess)+'. Scegli un' + "'" +
           'altra rilevazione oppure torna su Tutte.</div>'
         : '<div class="rc-empty">Ancora nessun record: servono i dati GPS del monitoraggio '+
           'oppure qualche valore nella batteria test qui sotto.</div>';
@@ -2512,7 +2518,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
              esc(s.d)+'<span class="sn">'+s.n+'</span></button>';
     });
     h += '<p class="sess-note">'+(curSess
-      ? 'Batteria, indici e record leggono solo la rilevazione del '+esc(curSess)+'. Scrivendo un valore si corregge quella misura, invece di aggiungerne una di oggi.'
+      ? 'Batteria, indici e record leggono solo la rilevazione di '+esc(curSess)+'. Scrivendo un valore si corregge quella misura, invece di aggiungerne una di oggi.'
       : 'Di ogni atleta vale la misura registrata per ultima. Scegli una data per vedere quella rilevazione da sola.')+'</p>';
     bar.innerHTML = h;
     bar.querySelectorAll('.sess-btn').forEach(b=>{
@@ -2586,7 +2592,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // scrive un valore nel registro e ridisegna
   // con una sessione scelta si corregge quella rilevazione li', altrimenti si scrive oggi
   function writeVal(testKey, def, name, raw){
-    const when = curSess || todayShort();
+    const when = curSess || meseOggi();
     const s = String(raw==null?'':raw).trim();
     let num = null, txt = '';
     if(s!==''){
@@ -2659,7 +2665,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // avviso per le prove che nessuno ha mai fatto: il trunk stability e il rotary
   // stability sono rimasti fuori dalla batteria FMS del prof, e si deve vedere
   function voidHtml(label){
-    const quando = curSess ? ('nella rilevazione del '+curSess) : 'in questa stagione';
+    const quando = curSess ? ('nella rilevazione di '+curSess) : 'in questa stagione';
     return '<div class="tb-void"><b>'+esc(label)+'</b>: non eseguito '+esc(quando)+'. '+
       'Nessuna atleta ha una misura, la casella resta aperta per quando la prova si fara.</div>';
   }
