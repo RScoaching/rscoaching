@@ -273,6 +273,13 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .ttab:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
 .ttab.active{ color:#1a0d05; background:var(--orange); border-color:transparent; box-shadow: var(--shadow-btn); }
 .ttab.active:hover{ background:var(--orange2); color:#1a0d05; }
+/* prova che nessuno ha fatto: il tab si distingue prima di aprirlo, con il bordo
+   tratteggiato e il pallino vuoto, cosi' non si clicca per scoprire che e' vuota */
+.ttab.void{ border-style:dashed; }
+.ttab.void::before{ content:''; display:inline-block; width:6px; height:6px; margin-right:7px;
+  border-radius:50%; border:1px solid var(--border3); vertical-align:1px; }
+.ttab.void.active{ border-style:dashed; border-color:rgba(26,13,5,.35); }
+.ttab.void.active::before{ border-color:rgba(26,13,5,.55); }
 .tb-strip{ display:flex; gap:14px; flex-wrap:wrap; margin:16px 0 6px; }
 .tb-dir{ font-size:12px; color:var(--muted); margin-bottom:12px; }
 .tb-row{ display:flex; align-items:center; gap:14px; padding:9px 12px; border-radius:var(--r-sm);
@@ -1592,22 +1599,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // 3) FMS: totale sul lato peggiore, con red flag su zeri, uno e asimmetrie
   function idxFms(name){
     let tot = 0, nPat = 0;
-    const zeros = [], ones = [], asym = [];
+    const zeros = [], ones = [], asym = [], missing = [];
     FMS_PAT.forEach(p=>{
       const vs = p.keys.map(k=> tval(k,name)).filter(v=> v!=null);
-      if(!vs.length) return;
+      // schema senza nessuna misura: non fa punteggio, ma il nome serve piu' avanti
+      // per dire quale prova manca invece del solo conteggio
+      if(!vs.length){ missing.push(p.label); return; }
       const sc = Math.min.apply(null, vs);
       nPat++; tot += sc;
       if(sc===0) zeros.push(p.label);
       else if(sc===1) ones.push(p.label);
       if(p.keys.length===2 && vs.length===2 && vs[0]!==vs[1]) asym.push(p.label);
     });
-    if(!nPat) return { has:false };
+    if(!nPat) return { has:false, missing:missing };
     const complete = nPat===FMS_PAT.length;
     const lev = (zeros.length || (complete && tot<=IX.fmsRisk)) ? 'bad'
               : ((ones.length || asym.length) ? 'warn' : 'ok');
     return { has:true, val:tot, nPat:nPat, complete:complete, lev:lev,
-             zeros:zeros, ones:ones, asym:asym };
+             zeros:zeros, ones:ones, asym:asym, missing:missing };
+  }
+  // elenco leggibile in italiano: "Push-up", "Push-up e Rotary", "Spalle, Push-up e Rotary"
+  function elencoIt(a){
+    if(!a || !a.length) return '';
+    if(a.length===1) return a[0];
+    return a.slice(0,-1).join(', ')+' e '+a[a.length-1];
   }
 
   // 4) Y-balance: differenza massima fra i due arti nelle tre direzioni
@@ -2052,8 +2067,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                     'peggiore: '+r.l.label+', lato debole '+r.l.low)
                 : ixBadge('na', 'LSI', '-', 'servono i test monopodalici dx e sx'),
         r.f.has ? ixBadge(r.f.lev, 'FMS', NF.format(r.f.val)+'/'+(r.f.nPat*3),
-                    r.f.complete ? '7 schemi su 7' : (r.f.nPat+' schemi su 7'))
-                : ixBadge('na', 'FMS', '-', 'nessuno schema FMS compilato'),
+                    r.f.complete ? '7 schemi su 7'
+                                 : (r.f.nPat+' schemi su 7, manca'+(r.f.missing.length===1?' ':'no ')+
+                                    elencoIt(r.f.missing)))
+                : ixBadge('na', 'FMS', '-', 'nessuno schema FMS compilato: mancano '+elencoIt(r.f.missing)),
         r.y.has ? ixBadge(r.y.lev, 'Y-bal', NF1.format(r.y.val)+' cm',
                     'differenza massima: '+r.y.label+', lato corto '+r.y.low)
                 : ixBadge('na', 'Y-bal', '-', 'servono le tre direzioni dx e sx')
@@ -2716,12 +2733,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
   }
+  // quante misure ha una scheda nella rilevazione scelta. Al VBT conta anche la
+  // velocita': la stima puo' mancare, ma la prova quel giorno e' stata fatta.
+  function viewFilled(v){
+    const d  = v.kind==='pair' ? v.dx : v.def;
+    const ks = keysOf(v);
+    if(d && d.ctxKey) ks.push(d.ctxKey);
+    let c = 0;
+    ks.forEach(k=>{ const bag = REG[k]||{}; roster.forEach(n=>{ if(pick(bag[n])) c++; }); });
+    return c;
+  }
   function buildTabs(){
     const tabs = document.getElementById('test-tabs');
     const inCat = viewsIn(curCat);
-    tabs.innerHTML = inCat.map(v=>(
-      '<button class="ttab'+(v.id===curView?' active':'')+'" type="button" data-k="'+esc(v.id)+'">'+esc(v.short)+'</button>'
-    )).join('');
+    const quando = curSess ? ('nella rilevazione di '+curSess) : 'in questa stagione';
+    tabs.innerHTML = inCat.map(v=>{
+      // prova mai eseguita: si marca il tab, altrimenti la si scopre solo aprendola
+      const vuoto = viewFilled(v)===0;
+      return '<button class="ttab'+(v.id===curView?' active':'')+(vuoto?' void':'')+'" type="button"'+
+        (vuoto ? ' title="'+esc(v.label+': non eseguito '+quando)+'"' : '')+
+        ' data-k="'+esc(v.id)+'">'+esc(v.short)+'</button>';
+    }).join('');
     tabs.querySelectorAll('.ttab').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         curView = btn.dataset.k;
@@ -2790,6 +2822,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   function renderBattery(){
     const v = viewById(curView);
+    // i tab si ridisegnano insieme alla scheda: la marcatura dei test non eseguiti
+    // deve seguire la rilevazione scelta e i valori appena scritti
+    buildTabs();
     document.getElementById('tb-dir').textContent = v.note || '';
     const list = document.getElementById('tb-list');
     const leg  = document.getElementById('tb-legend');
@@ -2869,7 +2904,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const entries = entriesFor(def.key);
 
-    if(sem){
+    if(st.n===0){
+      // senza nemmeno una misura Migliore, Media e Top restano caselle vuote: fanno
+      // rumore e basta. Resta il conteggio, che e' l' unico dato vero della scheda.
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip"><span class="ml">Compilati</span><b>0</b><span class="ml">/'+roster.length+'</span></div>';
+    } else if(sem){
       const c = semCounts(entries);
       document.getElementById('tb-strip').innerHTML =
         '<div class="mchip sg"><span class="ml">Verde</span><b>'+c[2]+'</b></div>'+
@@ -2974,7 +3014,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const un  = v.asym==='pct' ? '%' : (v.asym==='pt' ? (sem?'livelli':'pt') : 'cm');
     const uc  = unitLabel(v.unit);
 
-    if(sem){
+    if(st.nD===0 && st.nS===0){
+      // nessuno dei due lati e' stato provato: le medie e il conto delle asimmetrie
+      // sarebbero caselle vuote, resta solo quanti profili sono completi
+      document.getElementById('tb-strip').innerHTML =
+        '<div class="mchip"><span class="ml">Completi</span><b>0</b><span class="ml">/'+roster.length+'</span></div>';
+      leg.innerHTML = '';
+    } else if(sem){
       // su una prova a colori la media non vuol dire niente: contano quanti lati
       // sono usciti gialli o rossi, uno per uno
       const cd = semCounts(st.rows.map(r=> ({ v:r.d })));
