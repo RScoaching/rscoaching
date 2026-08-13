@@ -686,6 +686,139 @@ window.fioRosterPrev = function() {
 };
 
 // ---------------------------------------------------------------------------
+// RUOLI: fonte unica.
+// Il ruolo di partenza arriva dai fogli del mister. Quello riscritto a mano in
+// Atlete sta in localStorage sotto "rs_fio_roles" (chiave per stagione) e vince
+// sempre, anche quando e' vuoto: la casella svuotata a mano vuol dire "questa
+// atleta il ruolo non ce l'ha", non "riprendi quello del foglio".
+// Prima ogni pagina si leggeva la chiave per conto suo, con tre regole diverse:
+// Atlete e Calendario davano la precedenza all'override anche vuoto, il Piano
+// solo se pieno, e Sessioni e Report la chiave non la leggevano proprio. Da qui
+// il bug: un ruolo assegnato in Atlete non arrivava alle altre sezioni e il
+// filtro per ruolo nei Report mostrava solo una parte della rosa.
+// Adesso la regola sta scritta una volta sola e tutte le pagine passano di qui.
+// ---------------------------------------------------------------------------
+window.FIO_RUOLI = ['Portiere', 'Difensore centrale', 'Terzino', 'Play', 'Mezzala', 'Esterno', 'Punta'];
+window.FIO_RUOLO_VUOTO = 'Da assegnare';
+
+// Un ruolo scritto male vale come ruolo assente. Dal foglio arriva "nan" quando
+// la casella e' vuota, e in qualche riga vecchia c'e' un trattino.
+window.fioNormRuolo = function(r) {
+  r = String(r == null ? '' : r).trim();
+  if (!r || r.toLowerCase() === 'nan' || r === '-') return '';
+  return r;
+};
+
+// Le due letture da localStorage sono in cache: il ruolo si chiede una volta per
+// atleta per ogni tabella, e in Report sono 33 nomi per riga di calcolo.
+var FIO_RUOLI_OV = null, FIO_RUOLI_OV_K = null;
+var FIO_RUOLI_BASE = null, FIO_RUOLI_BASE_K = null;
+
+window.fioRuoliChiave = function() { return window.fioKey('rs_fio_roles'); };
+
+function fioRuoliLeggi() {
+  var k = window.fioRuoliChiave();
+  if (FIO_RUOLI_OV && FIO_RUOLI_OV_K === k) return FIO_RUOLI_OV;
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(k) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  FIO_RUOLI_OV = o; FIO_RUOLI_OV_K = k;
+  return o;
+}
+
+// Copia degli override, per chi deve mostrarli o contarli senza modificarli.
+window.fioRuoliOverride = function() {
+  var o = fioRuoliLeggi(), out = {};
+  Object.keys(o).forEach(function(n) { out[n] = o[n]; });
+  return out;
+};
+window.fioHaRuoloScritto = function(name) {
+  return Object.prototype.hasOwnProperty.call(fioRuoliLeggi(), String(name == null ? '' : name).trim());
+};
+
+// Ruolo di partenza: quello dei fogli, piu' le atlete aggiunte a mano.
+window.fioRuoloBase = function(name) {
+  var k = window.getStagione();
+  if (!FIO_RUOLI_BASE || FIO_RUOLI_BASE_K !== k) {
+    var m = {};
+    window.fioRoster().forEach(function(p) { if (m[p.name] == null) m[p.name] = p.role; });
+    try {
+      var c = JSON.parse(localStorage.getItem(window.fioKey('rs_fio_custom')) || '{}');
+      if (c && typeof c === 'object' && !Array.isArray(c)) {
+        Object.keys(c).forEach(function(n) { if (m[n] == null) m[n] = c[n]; });
+      }
+    } catch (e) {}
+    FIO_RUOLI_BASE = m; FIO_RUOLI_BASE_K = k;
+  }
+  return window.fioNormRuolo(FIO_RUOLI_BASE[String(name == null ? '' : name).trim()]);
+};
+
+// Il ruolo buono di un'atleta. Il secondo argomento e' il ruolo del foglio, per
+// chi ce l'ha gia' sotto mano e non vuole farlo ricercare; se manca si cerca.
+window.fioRuolo = function(name, base) {
+  name = String(name == null ? '' : name).trim();
+  if (!name) return '';
+  var o = fioRuoliLeggi();
+  if (Object.prototype.hasOwnProperty.call(o, name)) return window.fioNormRuolo(o[name]);
+  return window.fioNormRuolo(base === undefined ? window.fioRuoloBase(name) : base);
+};
+
+// Rosa della stagione con il ruolo gia' risolto.
+window.fioRosterRuoli = function() {
+  return window.fioRoster().map(function(p) {
+    return { name: p.name, role: window.fioRuolo(p.name, p.role), tipo: p.tipo };
+  });
+};
+
+// Scrittura: la usa Atlete. Se il ruolo torna a essere quello del foglio
+// l'override sparisce, cosi' la chiave non si riempie di righe inutili e se
+// domani il foglio cambia il dato nuovo passa.
+window.fioSetRuolo = function(name, role) {
+  name = String(name == null ? '' : name).trim();
+  if (!name) return '';
+  var v = window.fioNormRuolo(role);
+  var o = window.fioRuoliOverride();
+  if (v === window.fioRuoloBase(name)) delete o[name];
+  else o[name] = v;
+  try { localStorage.setItem(window.fioRuoliChiave(), JSON.stringify(o)); } catch (e) {}
+  FIO_RUOLI_OV = o; FIO_RUOLI_OV_K = window.fioRuoliChiave();
+  try {
+    document.dispatchEvent(new CustomEvent('fio:ruoli', { detail: { nome: name, ruolo: v } }));
+  } catch (e) {}
+  return v;
+};
+
+// Da chiamare quando la chiave viene riscritta in blocco (import, ripristino,
+// cambio stagione): la prossima lettura riparte da localStorage.
+window.fioRuoliRicarica = function() {
+  FIO_RUOLI_OV = null; FIO_RUOLI_OV_K = null;
+  FIO_RUOLI_BASE = null; FIO_RUOLI_BASE_K = null;
+};
+
+// Ordine di lettura di una rosa divisa per ruolo: prima i ruoli canonici nel
+// loro ordine di campo, poi eventuali ruoli scritti a mano, poi chi non ne ha.
+window.fioOrdineRuoli = function(chiavi) {
+  var pres = {}, out = [];
+  (chiavi || []).forEach(function(r) { pres[r] = 1; });
+  window.FIO_RUOLI.forEach(function(r) { if (pres[r]) { out.push(r); delete pres[r]; } });
+  Object.keys(pres)
+    .filter(function(r) { return r !== window.FIO_RUOLO_VUOTO; })
+    .sort(function(a, b) { return a.localeCompare(b, 'it'); })
+    .forEach(function(r) { out.push(r); });
+  if (pres[window.FIO_RUOLO_VUOTO]) out.push(window.FIO_RUOLO_VUOTO);
+  return out;
+};
+
+// Il ruolo cambiato in un'altra scheda del browser vale anche qui.
+window.addEventListener('storage', function(ev) {
+  if (!ev || ev.key !== window.fioRuoliChiave()) return;
+  window.fioRuoliRicarica();
+  try { document.dispatchEvent(new CustomEvent('fio:ruoli', { detail: { nome: '', ruolo: '' } })); } catch (e) {}
+});
+
+// ---------------------------------------------------------------------------
 // Controllo di plausibilita' dei dati GPS.
 // Ogni tanto un giubbotto sbaglia una lettura e restituisce un valore
 // impossibile: il 15/11 Fontana risulta a 43,3 km/h, quando in tutta la
@@ -962,6 +1095,10 @@ window.applyStagioneData = function() {
   if (window.ESERC_2627) n += (window.ESERC_2627.sessions || []).length;
   if (window.TEST_2627)  n += (window.TEST_2627.n_valori || 0);
   window.FIO_CLEAN_SEASON = (n === 0);
+
+  // La rosa di partenza dei ruoli e' appena cambiata sotto i piedi: la cache va
+  // buttata, altrimenti resta quella costruita sui dati della 25/26.
+  window.fioRuoliRicarica();
 };
 
 // Test presi dal foglio nella cartella della stagione.

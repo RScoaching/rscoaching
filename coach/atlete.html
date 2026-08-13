@@ -695,23 +695,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Ruoli, note e stati sono scritti a mano e valgono per l'anno in corso: la chiave
   // di memoria porta la stagione, cosi' la 26/27 parte pulita e la 25/26 resta com'e'.
   const K = window.fioKey || function(b){ return b; };
-  const LS_KEY = K('rs_fio_roles');
   const LS_BIO = K('rs_fio_bio');
 
-  // ruoli canonici assegnabili (portiere separato, poi difesa -> attacco)
-  const ROLES = ['Portiere','Difensore centrale','Terzino','Play','Mezzala','Esterno','Punta'];
-  const UNASSIGNED = 'Da assegnare';
+  // Il ruolo lo tiene `fio_sidebar.js`: qui si legge e si scrive solo passando da
+  // li', cosi' quello assegnato in questa pagina arriva a tutte le altre.
+  const ROLES = window.FIO_RUOLI;
+  const UNASSIGNED = window.FIO_RUOLO_VUOTO;
 
   const iMin  = M.indexOf('Minuti') >= 0 ? M.indexOf('Minuti') : 0;
   const iDist = M.indexOf('Dist tot') >= 0 ? M.indexOf('Dist tot') : 1;
 
   // ---------- helpers ----------
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function normRole(r){
-    const v = (r==null?'':String(r)).trim();
-    if(!v || v.toLowerCase()==='nan') return '';
-    return v;
-  }
+  const normRole = window.fioNormRuolo;
   function initials(name){
     const parts = String(name||'').trim().split(/\s+/).filter(Boolean);
     if(!parts.length) return '?';
@@ -719,15 +715,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return (parts[0][0]+parts[1][0]).toUpperCase();
   }
 
-  // ---------- overrides (localStorage) ----------
-  function loadOverrides(){
-    try{ const o = JSON.parse(localStorage.getItem(LS_KEY)||'{}'); return (o && typeof o==='object') ? o : {}; }
-    catch(e){ return {}; }
+  // ---------- ruoli riscritti a mano ----------
+  // La scrittura passa da `window.fioSetRuolo`, che decide da sola se tenere
+  // l'override o toglierlo quando il ruolo torna quello del foglio.
+  function overrideCount(){ return Object.keys(window.fioRuoliOverride()).length; }
+  function setRole(name, val){ return window.fioSetRuolo(name, val); }
+  function clearRoles(){
+    try{ localStorage.removeItem(window.fioRuoliChiave()); }catch(e){}
+    window.fioRuoliRicarica();
+    document.dispatchEvent(new CustomEvent('fio:ruoli', { detail:{ nome:'', ruolo:'' } }));
   }
-  function saveOverrides(o){
-    try{ localStorage.setItem(LS_KEY, JSON.stringify(o)); }catch(e){}
-  }
-  let overrides = loadOverrides();
 
   // ---------- anagrafica e infortuni (localStorage) ----------
   function loadBio(){
@@ -875,10 +872,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   let PLAYERS = buildPlayers();
 
-  function effRole(pl){
-    if(Object.prototype.hasOwnProperty.call(overrides, pl.name)) return normRole(overrides[pl.name]);
-    return pl.snapRole;
-  }
+  function effRole(pl){ return window.fioRuolo(pl.name, pl.snapRole); }
 
   // ---------- state ----------
   const state = { q:'', sort:'nome', filter:'__all__' };
@@ -1239,9 +1233,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const roleSel = document.getElementById('sh-role');
     if(roleSel) roleSel.addEventListener('change', ()=>{
       const val = normRole(roleSel.value);
-      if(val === pl.snapRole) delete overrides[pl.name];
-      else overrides[pl.name] = val;
-      saveOverrides(overrides);
+      setRole(pl.name, val);
       setSheetSub(val);
       renderKPIs(); renderPills(); renderGrid(); updateResetBtn(); buildPrintRoster();
       toast('Ruolo aggiornato: '+pl.name);
@@ -1368,10 +1360,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const val = normRole(sel.value);
     const pl = PLAYERS.find(p=> p.name===name);
     if(!pl) return;
-    // salva override solo se diverso dallo snapshot, altrimenti rimuovi
-    if(val === pl.snapRole){ delete overrides[name]; }
-    else { overrides[name] = val; }
-    saveOverrides(overrides);
+    // l'override si tiene solo se diverso dal foglio: ci pensa fioSetRuolo
+    setRole(name, val);
     // aggiorna solo lo stile del chip senza ridisegnare tutta la griglia (evita perdita di focus)
     const wrap = sel.closest('.role-wrap');
     if(wrap) wrap.classList.toggle('unassigned', !val);
@@ -1387,7 +1377,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   function updateResetBtn(){
     const btn = document.getElementById('btn-reset');
-    const has = Object.keys(overrides).length>0;
+    const has = overrideCount()>0;
     btn.disabled = !has;
   }
 
@@ -1505,8 +1495,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- reset overrides ----------
   function resetOverrides(){
-    if(!Object.keys(overrides).length) return;
-    overrides = {}; saveOverrides(overrides);
+    if(!overrideCount()) return;
+    clearRoles();
     renderKPIs(); renderPills(); renderGrid(); updateResetBtn();
     toast('Modifiche ai ruoli annullate');
   }

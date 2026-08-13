@@ -654,7 +654,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function niceRole(r){ r=(r==null?'':String(r)).trim(); return (r && r.toLowerCase()!=='nan') ? r : ''; }
+  // Il ruolo lo risolve `fio_sidebar.js`: quello dei fogli del mister piu' quello
+  // riscritto a mano in Atlete. Prima qui l'override non si leggeva, e chi aveva
+  // il ruolo assegnato a mano restava fuori dal filtro e dai reparti.
+  function roleOf(name){ return window.fioRuolo(name, PLAYERS[name] && PLAYERS[name].role); }
   function decForUnit(u){ if(u==='m'||u==='n'||u==='min') return 0; return 1; }
   function fmtVal(v,u){ if(v==null||Number.isNaN(v)) return null; const d=decForUnit(u); return (d?NF1:NF0).format(v); }
   function fmtKm(m){ m=Number(m)||0; return NF1.format(m/1000); }
@@ -667,7 +670,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const names = Object.keys(PLAYERS).sort((a,b)=> a.localeCompare(b,'it'));
     let scHtml = '<option value="'+TEAM+'">Squadra (intera rosa)</option>';
     scHtml += '<optgroup label="Atlete">' + names.map(n=>{
-      const role = niceRole(PLAYERS[n] && PLAYERS[n].role);
+      const role = roleOf(n);
       return '<option value="'+esc(n)+'">'+esc(n)+(role?' · '+esc(role):'')+'</option>';
     }).join('') + '</optgroup>';
     sc.innerHTML = scHtml;
@@ -704,7 +707,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- rendering report ----------
   function scopeLabel(scope){
     if(scope===TEAM) return { name:'Squadra', role:'', sub:'Fiorentina Primavera U19W · intera rosa' };
-    const role = niceRole(PLAYERS[scope] && PLAYERS[scope].role);
+    const role = roleOf(scope);
     return { name:scope, role:role, sub:'Fiorentina Primavera U19W' };
   }
   function periodLabel(monthKey){
@@ -740,7 +743,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const pools = {}; const counts = {};
     REPARTI.forEach(rp=>{ pools[rp.key]=[]; counts[rp.key]=new Set(); });
     Object.keys(PLAYERS).forEach(name=>{
-      const rk = repartoOf(PLAYERS[name] && PLAYERS[name].role);
+      const rk = repartoOf(roleOf(name));
       if(!rk) return;
       const months = (PLAYERS[name].months||[]).filter(m=> !monthKey || m.key===monthKey);
       let used=false;
@@ -1158,7 +1161,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       (mo.rows||[]).forEach(function(r){
         if(r.type==='day' && String(r.label)===String(label) && Array.isArray(r.v)) row = r;
       });
-      if(row) out.push({ name:name, role:niceRole(p.role), v:row.v });
+      if(row) out.push({ name:name, role:roleOf(name), v:row.v });
     });
     return out;
   }
@@ -1323,7 +1326,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const names = Object.keys(PLAYERS).sort(function(a,b){ return a.localeCompare(b,'it'); });
     host.innerHTML = names.map(function(name){
       const on = selAthletes.has(name) ? ' checked' : '';
-      const role = niceRole(PLAYERS[name] && PLAYERS[name].role);
+      const role = roleOf(name);
       return '<label class="mrow"><input type="checkbox" data-n="'+esc(name)+'"'+on+'>'+
         '<span class="mr-name">'+esc(name)+'</span>'+
         '<span class="mr-unit">'+esc(role)+'</span></label>';

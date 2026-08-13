@@ -1095,6 +1095,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return out.length ? out : null;
   }
 
+  // Il ruolo lo risolve `fio_sidebar.js`: quello dei fogli del mister piu' quello
+  // riscritto a mano in Atlete, uguale in tutte le pagine.
+  function roleOf(name){
+    const p = S.players && S.players[name];
+    return window.fioRuolo(name, p && p.role);
+  }
+
   // ---------- state ----------
   const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartFrom:null, chartTo:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1), acwrIdx:1 };
   const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
@@ -2611,7 +2618,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const p = S.players[name];
       const mon = (p.months||[]).find(m=> m.key===monthKey);
       const row = findDayRow(mon, label);
-      if(row) out.push({ name, role:(p.role||''), v:row.v||[] });
+      if(row) out.push({ name, role:roleOf(name), v:row.v||[] });
     });
     return out;
   }
@@ -2820,8 +2827,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const rows = [];
     rows.push(['Carico', who]);
     if(state.level==='player'){
-      const p = S.players && S.players[state.player];
-      if(p && p.role) rows.push(['Ruolo', p.role]);
+      const rl = roleOf(state.player);
+      if(rl) rows.push(['Ruolo', rl]);
     }
     rows.push(['Periodo', mon ? mon.title : '']);
     rows.push(['Stagione', S.stagione || '']);
@@ -2865,7 +2872,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function exportXLS(){
     const mon = activeMonth();
     const who = state.level==='team' ? (S.squadra||'Squadra') : (state.player||'');
-    const role = state.level==='player' ? ((S.players&&S.players[state.player]&&S.players[state.player].role)||'') : '';
+    const role = state.level==='player' ? roleOf(state.player) : '';
     const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472', EMB='#faf1ea', EMBT='#b8531f', KEYBG='#fbf3db';
     const V = VIS();
     const ncol = V.length + 1;
@@ -2933,8 +2940,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function updateRole(){
     const badge = document.getElementById('role-badge');
     if(state.level!=='player'){ badge.classList.add('hide'); return; }
-    const p = S.players && S.players[state.player];
-    const role = p && p.role ? p.role : '';
+    const role = roleOf(state.player);
     if(role){ badge.textContent = role; badge.classList.remove('hide'); } else badge.classList.add('hide');
   }
 
