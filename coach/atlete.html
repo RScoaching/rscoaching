@@ -372,6 +372,14 @@ select.picker:hover{ border-color:var(--border3); }
 }
 .sh-link:hover{ background:oklch(68% 0.19 42 / 0.16); }
 .sh-link svg{ width:15px; height:15px; }
+.sh-links{ display:grid; grid-template-columns:repeat(auto-fit, minmax(184px, 1fr)); gap:8px; }
+.fld-hint{ font-size:11px; line-height:1.45; color:var(--faint); }
+.lnk-btn{
+  appearance:none; background:none; border:0; padding:0; font-family:inherit; font-size:11px;
+  font-weight:700; color:var(--orange2); cursor:pointer; text-decoration:underline;
+  text-underline-offset:2px; transition: color .18s var(--ease);
+}
+.lnk-btn:hover{ color:var(--ink); }
 .inf-add{ display:grid; grid-template-columns:132px 1fr 128px; gap:8px; align-items:end; margin-bottom:12px; }
 .inf-add .btn{ min-height:42px; }
 .inf-list{ display:flex; flex-direction:column; gap:8px; }
@@ -404,6 +412,8 @@ select.picker:hover{ border-color:var(--border3); }
 .tgrp{ margin-bottom:14px; }
 .tgrp:last-child{ margin-bottom:0; }
 .tgrp-h{ font-size:11.5px; font-weight:700; color:var(--violet2); margin-bottom:6px; }
+.tgrp-h.g{ color:var(--green); }
+.tgrp-h.b{ color:oklch(74% 0.17 25); }
 table.ttbl{ width:100%; border-collapse:collapse; font-size:12.5px; }
 table.ttbl td{ padding:6px 8px; border-bottom:1px solid var(--border); }
 table.ttbl tr:last-child td{ border-bottom:0; }
@@ -414,6 +424,7 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
   background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
 .asy.w{ background:oklch(78% 0.15 85 / 0.12); border-color:oklch(78% 0.15 85 / 0.28); color:oklch(80% 0.14 85); }
 .asy.b{ background:oklch(62% 0.22 25 / 0.12); border-color:oklch(62% 0.22 25 / 0.28); color:oklch(72% 0.18 25); }
+.asy.g{ background:oklch(70% 0.18 152 / 0.12); border-color:oklch(70% 0.18 152 / 0.28); color:var(--green); }
 .fms-tot{ display:flex; align-items:baseline; gap:8px; margin-bottom:12px; padding:10px 12px;
   background:var(--violet-bg); border:1px solid var(--violet-border); border-radius:10px; }
 .fms-tot b{ font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.4px; color:var(--violet2); line-height:1; }
@@ -809,6 +820,40 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { cat:'campo', label:'Gacon 45-15',           unit:'km/h', k:'gacon' },
     { cat:'campo', label:'30-15 IFT',             unit:'km/h', k:'ift3015' }
   ];
+  // Il peso corporeo lo registra il fisio nella pagina Test con questa chiave.
+  // Qui non e' un test come gli altri (non si confronta con la squadra), serve
+  // solo a riempire da solo il campo Peso della scheda.
+  const K_PESO = 'fis_peso';
+  function pesoTest(nm, reg){
+    const r = reg || loadReg();
+    const v = regVal(r, K_PESO, nm);
+    if(v==null) return null;
+    return { v:v, d:regDay(r, K_PESO, nm) };
+  }
+  // Valore unico di un test per l'atleta. Sui bilaterali l'FMS prende il lato
+  // peggiore, che e' la regola del punteggio; gli altri la media dei due lati.
+  function testVal(reg, t, nm){
+    if(t.k) return regVal(reg, t.k, nm);
+    const dx = regVal(reg, t.dx, nm), sx = regVal(reg, t.sx, nm);
+    if(dx==null && sx==null) return null;
+    if(dx==null) return sx;
+    if(sx==null) return dx;
+    return t.fms ? Math.min(dx, sx) : (dx + sx) / 2;
+  }
+  // Differenza destra/sinistra: percentuale sui salti, punti sull'FMS, cm sullo Y-balance.
+  function asymOf(t, dx, sx){
+    if(dx==null || sx==null) return null;
+    let d, txt;
+    if(t.asym==='pct'){
+      const mx = Math.max(dx, sx);
+      d = mx>0 ? Math.abs(dx-sx)/mx*100 : 0;
+      txt = NF1.format(d)+'%';
+    } else {
+      d = Math.abs(dx-sx);
+      txt = NF1.format(d)+(t.asym==='cm' ? ' cm' : ' pt');
+    }
+    return { d:d, txt:txt, cls:(d>=t.bad ? 'b' : (d>=t.warn ? 'w' : '')) };
+  }
 
   // ---------- atlete custom (localStorage) ----------
   const LS_CUSTOM = K('rs_fio_custom');
@@ -1075,7 +1120,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const pl = PLAYERS.find(p=> p.name===shName);
     if(!pl){ host.innerHTML = ''; return; }
     const keep = host.scrollTop;
-    host.innerHTML = secCarico(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secRosa(pl);
+    host.innerHTML = secCarico(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
     host.scrollTop = keep; // mantiene la posizione tra i redraw
     wireSheet(pl);
   }
@@ -1100,12 +1145,33 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const r = effRole(pl);
     const opts = '<option value=""'+(!r?' selected':'')+'>'+esc(UNASSIGNED)+'</option>'+
       ROLES.map(role=> '<option value="'+esc(role)+'"'+(role===r?' selected':'')+'>'+esc(role)+'</option>').join('');
+    // Il peso arriva da solo dall'ultima rilevazione del fisio nella pagina Test.
+    // Se qui dentro c'e' un valore scritto a mano quello vince, con il pulsante
+    // per tornare al dato dei test.
+    const auto = pesoTest(pl.name);
+    const man  = String(b.peso||'').trim();
+    // la rilevazione a volte e' datata (2026-08-12), a volte e' la sessione ("agosto")
+    const quando = auto ? (fmtDay(auto.d) || String(auto.d||'')) : '';
+    let pesoVal = man, hint = '';
+    if(auto && !man){
+      pesoVal = fmtNum(auto.v).replace(',', '.');
+      hint = '<span class="fld-hint">Preso dai test'+(quando ? ' di '+esc(quando) : '')+'. Scrivendo qui vince il valore a mano.</span>';
+    } else if(auto && man){
+      const diverso = Math.abs((+man.replace(',', '.')) - auto.v) >= 0.05;
+      hint = '<span class="fld-hint">Nei test '+esc(fmtNum(auto.v))+' kg'+(quando ? ' di '+esc(quando) : '')+'.'+
+        (diverso ? ' <button type="button" class="lnk-btn" id="peso-auto">Usa quello dei test</button>' : '')+'</span>';
+    } else if(man){
+      hint = '<span class="fld-hint">Scritto a mano: nei test della stagione il peso non c\'e\'.</span>';
+    } else {
+      hint = '<span class="fld-hint">Se il fisio lo registra nei test compare qui da solo.</span>';
+    }
     return '<section class="sh-sec">'+
       '<h3 class="sh-h">Anagrafica</h3>'+
       '<div class="sh-grid">'+
         '<div class="fld wide"><span>Ruolo</span><select id="sh-role" aria-label="Ruolo">'+opts+'</select></div>'+
         '<div class="fld"><span>Peso (kg)</span>'+
-          '<input id="sh-peso" type="number" inputmode="decimal" min="35" max="110" step="0.1" placeholder="es. 58.5" value="'+esc(b.peso||'')+'">'+
+          '<input id="sh-peso" type="number" inputmode="decimal" min="35" max="110" step="0.1" placeholder="es. 58.5" value="'+esc(pesoVal)+'">'+
+          hint+
         '</div>'+
         '<div class="fld"><span>Altezza (cm)</span>'+
           '<input id="sh-alt" type="number" inputmode="numeric" min="140" max="200" step="1" placeholder="es. 168" value="'+esc(b.alt||'')+'">'+
@@ -1157,14 +1223,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let fmsTot = 0, fmsN = 0;
     TVIEWS.forEach(t=>{
       if(!t.fms) return;
-      let v = null;
-      if(t.k) v = regVal(reg, t.k, nm);
-      else {
-        const a = regVal(reg, t.dx, nm), c = regVal(reg, t.sx, nm);
-        if(a!=null && c!=null) v = Math.min(a, c);
-        else if(a!=null) v = a;
-        else if(c!=null) v = c;
-      }
+      const v = testVal(reg, t, nm);
       if(v!=null){ fmsTot += v; fmsN++; }
     });
     let out = '';
@@ -1183,18 +1242,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const dx = regVal(reg, t.dx, nm), sx = regVal(reg, t.sx, nm);
         if(dx==null && sx==null) return;
         let asy = '';
-        if(dx!=null && sx!=null){
-          let d, txt;
-          if(t.asym==='pct'){
-            const mx = Math.max(dx, sx);
-            d = mx>0 ? Math.abs(dx-sx)/mx*100 : 0;
-            txt = NF1.format(d)+'%';
-          } else {
-            d = Math.abs(dx-sx);
-            txt = NF1.format(d)+(t.asym==='cm' ? ' cm' : ' pt');
-          }
-          const cls = d>=t.bad ? ' b' : (d>=t.warn ? ' w' : '');
-          asy = '<span class="asy'+cls+'" title="Differenza destra/sinistra">'+esc(txt)+'</span>';
+        const a = asymOf(t, dx, sx);
+        if(a){
+          asy = '<span class="asy'+(a.cls?' '+a.cls:'')+'" title="Differenza destra/sinistra">'+esc(a.txt)+'</span>';
         }
         const val = (dx!=null?fmtNum(dx):'-')+' / '+(sx!=null?fmtNum(sx):'-');
         const day = regDay(reg, t.dx, nm) || regDay(reg, t.sx, nm);
@@ -1225,6 +1275,82 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     '</section>';
   }
 
+  // sezione 5: dove va bene e dove no, misurato sulla squadra
+  // Il confronto e' con le atlete in rosa che hanno fatto lo stesso test: sotto le
+  // quattro un piazzamento non vuole dire niente, quindi il test resta fuori.
+  function secSintesi(pl){
+    const reg = loadReg();
+    const nm  = pl.name;
+    const nomi = activeRoster().map(p=> p.name);
+    if(nomi.indexOf(nm) < 0) nomi.push(nm); // anche se e' fuori rosa, il suo dato si confronta
+
+    const righe = [];
+    TVIEWS.forEach(t=>{
+      const v = testVal(reg, t, nm);
+      if(v==null) return;
+      const vals = [];
+      nomi.forEach(o=>{ const x = testVal(reg, t, o); if(x!=null) vals.push(x); });
+      if(vals.length < 4) return;
+      let meglio = 0, pari = 0;
+      // in questi test il numero alto e' sempre il migliore
+      vals.forEach(x=>{ if(x > v) meglio++; else if(x === v) pari++; });
+      const ord = vals.slice().sort((a,b)=> a-b);
+      const mid = Math.floor(ord.length/2);
+      const med = ord.length%2 ? ord[mid] : (ord[mid-1]+ord[mid])/2;
+      // Sull'FMS meta' squadra prende 3: un primo posto in dieci a pari merito non e'
+      // un punto di forza. Per l'ordine conta il centro del gruppo dei pari.
+      righe.push({ label:t.label, unit:t.unit, v:v, med:med, pos:meglio+1, n:vals.length, pari:pari-1,
+                   r:(vals.length>1) ? (meglio + (pari-1)/2) / (vals.length-1) : 0 });
+    });
+    righe.sort((a,b)=> a.r - b.r || a.label.localeCompare(b.label,'it'));
+
+    // asimmetrie oltre la soglia rossa: sono critiche a prescindere dalla squadra
+    const asimm = [];
+    TVIEWS.forEach(t=>{
+      if(!t.dx) return;
+      const a = asymOf(t, regVal(reg, t.dx, nm), regVal(reg, t.sx, nm));
+      if(a && a.cls==='b') asimm.push({ label:t.label, txt:a.txt });
+    });
+
+    let top = [], bot = [];
+    if(righe.length===1) top = righe.slice();
+    else if(righe.length>1){
+      const k = Math.min(3, Math.floor(righe.length/2));
+      top = righe.slice(0, k);
+      bot = righe.slice(righe.length - k).reverse();
+    }
+
+    function tab(list){
+      return '<table class="ttbl"><tbody>'+ list.map(r=>
+        '<tr><td class="l">'+esc(r.label)+
+          '<span class="asy'+(r.r<=0.34?' g':(r.r>=0.66?' b':''))+'" title="'+
+            (r.pari>0 ? 'Piazzamento in squadra, a pari merito con altre '+r.pari : 'Piazzamento in squadra')+'">'+
+            (r.pari>0 ? '= ' : '')+r.pos+'a su '+r.n+'</span></td>'+
+          '<td class="v">'+fmtNum(r.v)+' '+esc(r.unit)+'</td>'+
+          '<td class="d">mediana '+fmtNum(r.med)+'</td></tr>').join('') +'</tbody></table>';
+    }
+
+    let out = '';
+    if(top.length) out += '<div class="tgrp"><div class="tgrp-h g">Dove va meglio</div>'+tab(top)+'</div>';
+    if(bot.length) out += '<div class="tgrp"><div class="tgrp-h b">Dove serve lavorare</div>'+tab(bot)+'</div>';
+    if(asimm.length){
+      out += '<div class="tgrp"><div class="tgrp-h b">Asimmetrie oltre la soglia</div>'+
+        '<table class="ttbl"><tbody>'+ asimm.map(a=>
+          '<tr><td class="l">'+esc(a.label)+'</td><td class="v">'+esc(a.txt)+'</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+    if(!out) out = '<div class="sh-none">Per il confronto serve lo stesso test su almeno quattro atlete della rosa.</div>';
+
+    return '<section class="sh-sec">'+
+      '<h3 class="sh-h">Punti forti e critici <span class="n">confronto squadra</span></h3>'+
+      out +
+      '<div class="sh-links">'+
+        '<a class="sh-link" href="piani.html">Registra i test'+ARROW+'</a>'+
+        '<a class="sh-link" href="carico.html?atleta='+encodeURIComponent(pl.name)+'">Vedi il carico'+ARROW+'</a>'+
+      '</div>'+
+    '</section>';
+  }
+
   // wiring dei campi della scheda
   function wireSheet(pl){
     const b = bioOf(pl.name);
@@ -1245,8 +1371,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       el.addEventListener('change', ()=>{
         b[pair[1]] = String(el.value||'').trim();
         saveBio();
+        if(pair[1]==='peso') renderSheetBody(); // la riga sotto il campo cambia insieme al valore
         toast('Scheda salvata: '+pl.name);
       });
+    });
+
+    // torna al peso rilevato nei test: si cancella il valore scritto a mano
+    const pesoAuto = document.getElementById('peso-auto');
+    if(pesoAuto) pesoAuto.addEventListener('click', ()=>{
+      b.peso = '';
+      saveBio(); renderSheetBody();
+      toast('Peso ripreso dai test');
     });
 
     const addBtn = document.getElementById('inf-add');
