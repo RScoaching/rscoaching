@@ -388,8 +388,16 @@ table.rmtbl tr:last-child td{ border-bottom:0; }
 .rm-in{ appearance:none; font-family:inherit; font-size:13px; color:var(--text); text-align:center;
   background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:6px 4px; min-height:34px; width:74px; }
 .rm-in:focus{ border-color:var(--border3); }
-.rm-in.set{ border-color:var(--violet-border); color:var(--violet2); font-weight:600; }
+.rm-in.set{ border-color:var(--border3); color:var(--ink); font-weight:600; }
+.rm-in.vbt{ border-style:dashed; border-color:var(--violet-border); color:var(--violet2); font-weight:600; }
 .rm-empty{ padding:22px 10px; text-align:center; color:var(--muted); font-size:13px; }
+/* da dove arriva il massimale: stima del test VBT oppure scritto a mano */
+.rm-cell{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+.rm-src{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--violet2); white-space:nowrap; }
+.rm-undo{ appearance:none; border:0; background:none; padding:0; margin:0; font-family:inherit;
+  font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+  cursor:pointer; border-bottom:1px solid currentColor; white-space:nowrap; }
+.rm-undo:hover{ color:var(--ink); }
 .fb-rmprev{ padding:4px 18px 14px; }
 .fb-rmprev:empty{ display:none; }
 .fb-rmprev .rp-h{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin:6px 0 8px; }
@@ -580,6 +588,8 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
 .fmxtbl input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; }
 .fmxtbl input[type=number]:hover{ border-color:var(--border3); }
 .fmxtbl input[type=number]:focus{ border-color:var(--violet-border); }
+.fmxtbl input[type=number].vbt{ border-style:dashed; border-color:var(--violet-border); color:var(--violet2); font-weight:600; }
+.fmx-cell{ display:flex; flex-direction:column; align-items:center; gap:3px; }
 .fmaxes-note{ padding:10px 20px; font-size:11px; color:var(--faint); }
 </style>
 </head>
@@ -667,7 +677,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fmaxes-head" id="fmaxes-head" role="button" aria-expanded="false" aria-controls="fmaxes-body" tabindex="0">
           <div class="fmaxes-lbl">
             <div class="fmaxes-title">Massimali 1RM</div>
-            <div class="fmaxes-sub">Squat, stacco, hip thrust per atleta - usati per calcolare i kg nella stampa della seduta</div>
+            <div class="fmaxes-sub">Squat e hip thrust arrivano gia' pieni dalla stima del test VBT, lo stacco si scrive a mano - da qui escono i kg della stampa</div>
           </div>
           <div class="fmaxes-chev" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
@@ -680,7 +690,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
               <tbody id="fmxtbl-body"></tbody>
             </table>
           </div>
-          <div class="fmaxes-note">Massimale verificato o stimato. Lascia vuoto se non disponibile. Salvato su questo dispositivo.</div>
+          <div class="fmaxes-note">Le caselle con il bordo tratteggiato sono la stima del test VBT: scrivendo un numero sopra vince quello, e il pulsantino sotto riporta al valore del test. Salvato su questo dispositivo.</div>
         </div>
       </div>
 
@@ -819,11 +829,11 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
 <dialog class="fbdlg rmdlg" id="rm-dlg" aria-label="Massimali 1RM per atleta">
   <div class="fbdlg-head">
     <h3>Massimali 1RM</h3>
-    <p>Inserisci il massimale in kg. I carichi della seduta vengono calcolati dalla percentuale e stampati nella scheda, arrotondati a 2,5 kg.</p>
+    <p>Squat e hip thrust partono dalla stima del test VBT, con il bordo tratteggiato; lo stacco non ha una prova VBT e si scrive a mano. Scrivendo un numero quello vince sul test, e il pulsantino sotto la casella riporta alla stima. I carichi della seduta escono da qui, arrotondati a 2,5 kg.</p>
   </div>
   <div class="rm-top">
     <input id="rm-find" type="search" placeholder="Cerca atleta..." aria-label="Cerca atleta">
-    <button class="btn" id="rm-clear" type="button">Azzera tutto</button>
+    <button class="btn" id="rm-clear" type="button" title="Cancella solo i numeri scritti a mano: le stime del test VBT restano">Azzera scritti a mano</button>
   </div>
   <div class="rm-wrap" id="rm-wrap"></div>
   <div class="fbdlg-foot">
@@ -1447,6 +1457,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function hasEx(r){ return r && r.ex && String(r.ex).trim(); }
 
   /* ---- massimali 1RM per atleta ---- */
+  /* Il test VBT stima gia' il massimale di back squat e hip thrust dalla velocita'
+     del bilanciere: quella stima fa da valore di partenza qui, cosi' non si
+     riscrive a mano quello che il test ha appena misurato. Lo stacco non ha una
+     prova VBT e resta solo a mano. Appena si scrive un numero in una casella,
+     quello vince sul test; svuotandola si torna alla stima. */
   var RM_LIFTS = [
     { key:'squat',  label:'Squat' },
     { key:'stacco', label:'Stacco' },
@@ -1455,6 +1470,40 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   var RM_LAB = { squat:'Squat', stacco:'Stacco', hip:'Hip thrust' };
   var RM = {};
 
+  var VBT_KEY = { squat:'vbt_squat_1rm', hip:'vbt_ht_1rm' };
+  var VBT = {};
+
+  function seasonId(){
+    try{ if(window.getStagione) return window.getStagione(); }catch(e){}
+    return '25-26';
+  }
+  /* legge il registro test e tiene solo le due stime 1RM: { nome: { squat:{v,d}, hip:{v,d} } } */
+  function vbtLoad(){
+    var out = {}, reg = null;
+    try{
+      var raw = localStorage.getItem('fio_test_register_v2_' + seasonId());
+      reg = raw ? JSON.parse(raw) : null;
+    }catch(e){ reg = null; }
+    if(!reg || typeof reg !== 'object') return out;
+    Object.keys(VBT_KEY).forEach(function(lift){
+      var bag = reg[VBT_KEY[lift]];
+      if(!bag || typeof bag !== 'object') return;
+      Object.keys(bag).forEach(function(name){
+        var e = bag[name];
+        if(!e || e.v == null || e.v === '') return;
+        var v = parseFloat(e.v);
+        if(!isFinite(v) || v <= 0) return;
+        if(!out[name]) out[name] = {};
+        out[name][lift] = { v: Math.round(v * 10) / 10, d: e.d || '' };
+      });
+    });
+    return out;
+  }
+  function vbtGet(name, key){
+    var o = VBT[name];
+    return (o && o[key]) ? o[key] : null;
+  }
+
   function rmLoad(){
     try{ var raw = localStorage.getItem(RM_KEY);
       if(raw){ var o = JSON.parse(raw); if(o && typeof o === 'object' && !Array.isArray(o)) return o; }
@@ -1462,10 +1511,18 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return {};
   }
   function rmSave(){ try{ localStorage.setItem(RM_KEY, JSON.stringify(RM)); }catch(e){} }
-  function rmGet(name, key){
+  /* il numero scritto a mano, se c'e' */
+  function rmMan(name, key){
     var o = RM[name]; if(!o) return null;
     var v = parseFloat(o[key]);
     return (isFinite(v) && v > 0) ? v : null;
+  }
+  /* il massimale che conta: quello a mano, altrimenti la stima del test VBT */
+  function rmGet(name, key){
+    var m = rmMan(name, key);
+    if(m != null) return m;
+    var t = vbtGet(name, key);
+    return t ? t.v : null;
   }
   function rmSet(name, key, val){
     var v = parseFloat(String(val).replace(',', '.'));
@@ -1689,6 +1746,74 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var n = rmCount();
     el.textContent = n + (n === 1 ? ' atleta con massimale' : ' atlete con massimale');
   }
+  /* Una casella del massimale. Sotto al numero si dice sempre da dove arriva:
+     se il valore e' la stima del test VBT lo si scrive, se invece e' stato scritto
+     a mano resta un pulsantino che riporta al numero del test. */
+  function rmCell(name, L, inCls, boxCls, srcCls, undoCls, numerico){
+    var man = rmMan(name, L.key);
+    var est = vbtGet(name, L.key);
+    var v = (man != null) ? man : (est ? est.v : null);
+    var cls = inCls + (man != null ? ' set' : (est ? ' vbt' : ''));
+    /* la casella numerica del browser accetta solo il punto: 66,3 le farebbe
+       buttare via il valore, quindi li' si scrive 66.3 */
+    var txt = (v == null) ? '' : (numerico ? String(v) : kgTxt(v));
+    var inp = '<input class="'+cls+'" '
+      + (numerico ? 'type="number" min="10" max="300" step="0.1"' : 'type="text" inputmode="decimal"')
+      + ' data-n="'+esc(name)+'" data-k="'+L.key+'" value="'+esc(txt)+'"'
+      + ' placeholder="-" aria-label="'+esc(L.label+' '+name)+'">';
+    var sotto = '';
+    if(est && man == null){
+      sotto = '<span class="'+srcCls+'">test VBT'+(est.d ? ' &#183; '+esc(est.d) : '')+'</span>';
+    }else if(est){
+      sotto = '<button class="'+undoCls+'" type="button" data-undo="'+esc(name)+'" data-k="'+L.key+'"'
+        + ' title="Torna alla stima del test VBT">test '+esc(kgTxt(est.v))+'</button>';
+    }
+    return '<div class="'+boxCls+'">'+inp+sotto+'</div>';
+  }
+  /* Rinfresca una casella dopo la modifica senza rifare tutta la tabella:
+     cambia il bordo e riscrive la riga sotto con la provenienza aggiornata. */
+  function rmSync(inp){
+    var name = inp.getAttribute('data-n'), key = inp.getAttribute('data-k');
+    var man = rmMan(name, key), est = vbtGet(name, key);
+    inp.classList.toggle('set', man != null);
+    inp.classList.toggle('vbt', man == null && !!est);
+    var box = inp.parentNode;
+    if(!box || !box.classList) return;
+    if(!box.classList.contains('rm-cell') && !box.classList.contains('fmx-cell')) return;
+    var vecchio = box.querySelector('.rm-src, .rm-undo');
+    if(vecchio) box.removeChild(vecchio);
+    if(!est) return;
+    if(man == null){
+      var s = document.createElement('span');
+      s.className = 'rm-src';
+      s.innerHTML = 'test VBT' + (est.d ? ' &#183; ' + esc(est.d) : '');
+      box.appendChild(s);
+    }else{
+      var b = document.createElement('button');
+      b.className = 'rm-undo'; b.type = 'button';
+      b.setAttribute('data-undo', name); b.setAttribute('data-k', key);
+      b.title = 'Torna alla stima del test VBT';
+      b.textContent = 'test ' + kgTxt(est.v);
+      box.appendChild(b);
+    }
+  }
+  /* a casella lasciata vuota si rimette in vista la stima del test */
+  function rmRefill(inp){
+    var name = inp.getAttribute('data-n'), key = inp.getAttribute('data-k');
+    if(rmMan(name, key) != null) return;
+    var est = vbtGet(name, key);
+    if(!est){ inp.value = ''; return; }
+    inp.value = (inp.type === 'number') ? String(est.v) : kgTxt(est.v);
+  }
+  /* click sul pulsantino "test": si cancella il numero a mano e torna la stima */
+  function rmUndo(btn){
+    var name = btn.getAttribute('data-undo'), key = btn.getAttribute('data-k');
+    rmSet(name, key, '');
+    var box = btn.parentNode;
+    var inp = box ? box.querySelector('input') : null;
+    if(inp){ rmRefill(inp); rmSync(inp); }
+    rmBadge(); rmFoot(); renderRmPrev();
+  }
   function rmRender(filter){
     var host = document.getElementById('rm-wrap'); if(!host) return;
     var q = String(filter || '').trim().toLowerCase();
@@ -1701,10 +1826,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     list.forEach(function(p){
       var tds = '';
       RM_LIFTS.forEach(function(L){
-        var v = rmGet(p.name, L.key);
-        tds += '<td><input class="rm-in'+(v!=null?' set':'')+'" type="text" inputmode="decimal" '
-          + 'data-n="'+esc(p.name)+'" data-k="'+L.key+'" value="'+(v!=null?esc(kgTxt(v)):'')+'" '
-          + 'placeholder="-" aria-label="'+esc(L.label+' '+p.name)+'"></td>';
+        tds += '<td>'+rmCell(p.name, L, 'rm-in', 'rm-cell', 'rm-src', 'rm-undo')+'</td>';
       });
       body += '<tr><td class="l">'+esc(p.name)+(p.role?'<small>'+esc(p.role)+'</small>':'')+'</td>'+tds+'</tr>';
     });
@@ -1981,8 +2103,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       + kgBlock
       + players
       + '<div class="fsp-foot">'+(kgBlock
-          ? 'Carichi in kg calcolati dal massimale 1RM registrato per ogni atleta e arrotondati a 2,5 kg. Adatta il carico alla condizione del giorno.'
-          : 'Carichi in percentuale del massimale. Inserisci i massimali 1RM per stampare anche i kg di ogni atleta.')
+          ? 'Carichi in kg dal massimale di ogni atleta, stima del test VBT o numero scritto a mano, arrotondati a 2,5 kg. Adatta il carico alla condizione del giorno.'
+          : 'Carichi in percentuale del massimale. Fai il test VBT o scrivi i massimali a mano per stampare anche i kg di ogni atleta.')
         + ' Scheda generata dal costruttore forza.</div>'
       + '</div>';
     document.getElementById('fs-print').innerHTML = html;
@@ -2012,7 +2134,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       body += '<tr><td class="fsp-ex">'+esc(n)+'</td>'+tds+'</tr>';
     });
     return '<div class="fsp-sec"><div class="t">Carichi in kg per atleta</div>'
-      + '<div class="s">Dal massimale 1RM registrato, arrotondato a 2,5 kg. '+atl.length
+      + '<div class="s">Dal massimale di ogni atleta, stima del test VBT o scritto a mano, arrotondato a 2,5 kg. '+atl.length
       + (atl.length===1 ? ' atleta con massimale.' : ' atlete con massimale.')+'</div></div>'
       + '<table class="fsptbl kg"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
   }
@@ -2025,6 +2147,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function boot(){
     FB = fbLoad();
     RM = rmLoad();
+    VBT = vbtLoad();
+    /* cambiando stagione cambiano i test, quindi cambiano anche le stime */
+    document.addEventListener('fio:stagione', function(){
+      VBT = vbtLoad();
+      rmBadge(); renderRmPrev();
+      var d = document.getElementById('rm-dlg');
+      if(d && d.open){ var f = document.getElementById('rm-find'); rmRender(f ? f.value : ''); }
+    });
     var tpl = document.getElementById('fb-tpl');
     var name = document.getElementById('fb-name');
     var date = document.getElementById('fb-date');
@@ -2104,19 +2234,31 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var rmFind = document.getElementById('rm-find');
     if(rmFind) rmFind.addEventListener('input', function(){ rmRender(rmFind.value); });
     var rmWrap = document.getElementById('rm-wrap');
-    if(rmWrap) rmWrap.addEventListener('input', function(e){
-      var t = e.target;
-      if(!t.classList || !t.classList.contains('rm-in')) return;
-      rmSet(t.getAttribute('data-n'), t.getAttribute('data-k'), t.value);
-      var ok = rmGet(t.getAttribute('data-n'), t.getAttribute('data-k')) != null;
-      t.classList.toggle('set', ok);
-      rmBadge(); rmFoot();
-    });
+    if(rmWrap){
+      rmWrap.addEventListener('input', function(e){
+        var t = e.target;
+        if(!t.classList || !t.classList.contains('rm-in')) return;
+        rmSet(t.getAttribute('data-n'), t.getAttribute('data-k'), t.value);
+        rmSync(t); rmBadge(); rmFoot();
+      });
+      /* uscendo dalla casella: se e' rimasta vuota torna in vista la stima del test */
+      rmWrap.addEventListener('change', function(e){
+        var t = e.target;
+        if(!t.classList || !t.classList.contains('rm-in')) return;
+        rmRefill(t); rmSync(t); rmBadge(); rmFoot();
+      });
+      rmWrap.addEventListener('click', function(e){
+        var b = e.target.closest ? e.target.closest('.rm-undo') : null;
+        if(b) rmUndo(b);
+      });
+    }
+    /* Si azzerano solo i numeri scritti a mano: le stime del test VBT restano,
+       sono il dato di partenza e non si cancellano da qui. */
     document.getElementById('rm-clear').addEventListener('click', function(){
       var prev = JSON.stringify(RM);
       RM = {}; rmSave();
       rmRender(rmFind ? rmFind.value : ''); rmBadge(); renderRmPrev();
-      fbToast('Massimali azzerati', function(){
+      fbToast('Valori a mano azzerati', function(){
         try{ RM = JSON.parse(prev); }catch(e){ RM = {}; }
         rmSave(); rmRender(rmFind ? rmFind.value : ''); rmBadge(); renderRmPrev();
       });
@@ -2132,20 +2274,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(!NAMES.length){ fmTbody.innerHTML='<tr><td colspan="4" style="padding:16px;color:var(--muted);font-size:13px;">Nessuna atleta selezionata</td></tr>'; return; }
         fmTbody.innerHTML = NAMES.map(function(nm){
           var tds = RM_LIFTS.map(function(L){
-            var v = rmGet(nm, L.key);
-            var vTxt = (v != null) ? kgTxt(v) : '';
-            return '<td class="r"><input class="fmx-in" type="number" min="10" max="300" step="2.5" placeholder="-"'
-              +' data-n="'+nm.replace(/"/g,'&quot;')+'" data-k="'+L.key+'" value="'+vTxt+'"></td>';
+            return '<td class="r">'+rmCell(nm, L, 'fmx-in', 'fmx-cell', 'rm-src', 'rm-undo', true)+'</td>';
           }).join('');
-          return '<tr><td class="nm">'+nm+'</td>'+tds+'</tr>';
+          return '<tr><td class="nm">'+esc(nm)+'</td>'+tds+'</tr>';
         }).join('');
         fmTbody.querySelectorAll('.fmx-in').forEach(function(inp){
           inp.addEventListener('change', function(){
             rmSet(inp.getAttribute('data-n'), inp.getAttribute('data-k'), inp.value);
+            rmRefill(inp); rmSync(inp);
             rmBadge(); renderRmPrev();
           });
         });
       }
+      /* il pulsantino sotto la casella cancella il numero a mano e fa tornare la stima */
+      if(fmTbody) fmTbody.addEventListener('click', function(e){
+        var b = e.target.closest ? e.target.closest('.rm-undo') : null;
+        if(b) rmUndo(b);
+      });
       if(fmHead && fmBox){
         fmHead.addEventListener('click', function(){
           fmBox.classList.toggle('open');
@@ -2154,6 +2299,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         });
         fmHead.addEventListener('keydown', function(e){
           if(e.key==='Enter' || e.key===' '){ e.preventDefault(); fmHead.click(); }
+        });
+        /* se il pannello e' gia' aperto e si cambia stagione, le stime vanno riscritte */
+        document.addEventListener('fio:stagione', function(){
+          if(fmBox.classList.contains('open')) renderFmPanel();
         });
       }
     })();
