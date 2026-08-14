@@ -279,6 +279,10 @@ a{ color:inherit; text-decoration:none; }
 .dbtn svg{ width:14px; height:14px; transition: transform .18s var(--ease); }
 .dbtn.on{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
 .dbtn.on svg{ transform:rotate(90deg); }
+/* link diretto alla pagina esercitazioni di quella seduta */
+a.dbtn.xgo{ text-decoration:none; background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
+a.dbtn.xgo:hover{ background:var(--violet-border); color:var(--ink); border-color:var(--violet-border); }
+a.dbtn.xgo svg{ transform:none; }
 .sdet{ margin-top:12px; border-top:1px solid var(--border); padding-top:12px; }
 .sdet h4{ margin:0 0 8px; font-size:10.5px; font-weight:700; color:var(--muted);
   text-transform:uppercase; letter-spacing:.05em; }
@@ -286,9 +290,12 @@ a{ color:inherit; text-decoration:none; }
 .ftl{ font-size:12.5px; color:var(--muted); }
 .ftl b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
 .exl{ list-style:none; margin:0; padding:0; }
-.exl li{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; padding:7px 0;
-  border-bottom:1px solid var(--border); font-size:12.5px; }
+.exl li{ padding:0; border-bottom:1px solid var(--border); font-size:12.5px; }
 .exl li:last-child{ border-bottom:0; }
+.exl li > a{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; padding:8px 8px 8px 0;
+  border-radius:8px; color:inherit; transition: background .16s var(--ease), padding-left .16s var(--ease); }
+.exl li > a:hover{ background:var(--surface3); padding-left:8px; }
+.exl li > a:hover .xn{ color:var(--violet2); }
 .exl .xn{ flex:1 1 auto; min-width:130px; color:var(--ink); font-weight:600; }
 .exl .xv{ color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .exl .xa{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
@@ -966,6 +973,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>';
   const XSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   const CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 6 6 6-6 6"/></svg>';
+  const GOSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
 
   // ---------- helpers ----------
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -1411,6 +1419,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
     return !!(ex.ft || (ex.drills && ex.drills.length) || (ex.assenti && ex.assenti.length));
   }
 
+  // link alla pagina esercitazioni: seduta intera oppure una singola esercitazione
+  function exLink(date, slot, i){
+    let u = './esercitazioni.html?d='+encodeURIComponent(String(date||''));
+    if(slot) u += '&s='+encodeURIComponent(String(slot));
+    if(i!=null) u += '&e='+i;
+    return u;
+  }
+
   function exPanel(ex){
     if(!ex) return '';
     const dl = ex.drills || [];
@@ -1430,17 +1446,19 @@ window.RS_ROSTER = window.RS_ROSTER || [
 
     // le singole esercitazioni col GPS di ciascuna
     if(dl.length){
-      h += '<h4>Esercitazioni ('+dl.length+')</h4><ul class="blk exl">'+ dl.map(d=>{
+      h += '<h4>Esercitazioni ('+dl.length+')</h4><ul class="blk exl">'+ dl.map((d,i)=>{
         const L = d.load || null;
         const mn = vObj(L, IX_MIN), ds = vObj(L, IX_DIST);
         const na = d.atlete ? Object.keys(d.atlete).length : (Number(d.n)||0);
         const v = [];
         if(mn!=null) v.push(NF1.format(mn)+' min');
         if(ds!=null) v.push(NF0.format(ds)+' m');
-        return '<li><span class="xn">'+esc(d.descrizione||'esercitazione')+'</span>'+
+        const desc = esc(d.descrizione||'esercitazione');
+        return '<li><a href="'+esc(exLink(ex.date, ex.slot, i))+'" title="Apri '+desc+' nella pagina esercitazioni">'+
+          '<span class="xn">'+desc+'</span>'+
           (d.dup?'<span class="xa">doppione</span>':'')+
           (na?'<span class="xa">'+na+(na===1?' atleta':' atlete')+'</span>':'')+
-          (v.length?'<span class="xv">'+v.join(' &#183; ')+'</span>':'')+'</li>';
+          (v.length?'<span class="xv">'+v.join(' &#183; ')+'</span>':'')+'</a></li>';
       }).join('')+'</ul>';
     }
 
@@ -1516,6 +1534,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const detBtn = hasDet ? '<button class="dbtn" type="button" data-act="det" data-id="'+esc(s.id)+'"'+
       ' aria-expanded="false" aria-controls="sd-'+esc(s.id)+'">'+CHEV+'<span>Dettaglio</span></button>' : '';
     const detPan = hasDet ? '<div id="sd-'+esc(s.id)+'" hidden>'+exPanel(ex)+'</div>' : '';
+    // dal calendario si entra nella pagina esercitazioni di quella seduta
+    const goBtn = ex ? '<a class="dbtn xgo" href="'+esc(exLink(ex.date, ex.slot, null))+'">'+
+      GOSVG+'<span>Esercitazioni</span></a>' : '';
 
     return '<div class="srow'+(s.is_match?' match':'')+'" data-date="'+esc(s.data)+'">'+
       '<div class="s-date"><span class="s-dow">'+esc(dow)+'</span><span class="s-day">'+dnum+'</span></div>'+
@@ -1523,7 +1544,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '<div class="s-head"><span class="s-kind">'+esc(label)+'</span>'+manBadge+del+'</div>'+
         (chips.length? '<div class="s-chips">'+chips.join('')+'</div>' : '')+
         note+
-        '<div class="s-foot">'+svBtn+detBtn+'</div>'+
+        '<div class="s-foot">'+svBtn+detBtn+goBtn+'</div>'+
         detPan+
       '</div>'+
     '</div>';

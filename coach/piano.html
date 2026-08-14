@@ -231,6 +231,41 @@ svg.wc-svg text{ font-family:'Inter',sans-serif; }
 svg.ac-svg{ display:block; width:100%; }
 svg.ac-svg text{ font-family:'Inter',sans-serif; }
 
+/* ---------- cosa si e' fatto: seduta caricata dai file GPS ---------- */
+.done-band{ display:flex; flex-wrap:wrap; gap:8px; }
+.done-cell{ flex:1 1 120px; min-width:110px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:var(--r-sm); padding:10px 12px; }
+.done-cell .dl{ font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+.done-cell .dv{ margin-top:4px; font-family:'Bebas Neue',sans-serif; font-size:25px; letter-spacing:.4px;
+  color:var(--ink); line-height:1; }
+.done-cell .dv small{ font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--faint);
+  letter-spacing:0; margin-left:4px; }
+.done-cell.key .dv{ color:var(--orange2); }
+.done-list{ margin-top:14px; list-style:none; padding:0; }
+.done-list ul{ list-style:none; margin:0; padding:0; }
+.done-list li{ border-bottom:1px solid var(--border); }
+.done-list li:last-child{ border-bottom:0; }
+.done-list li > a{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; padding:9px 8px 9px 0;
+  border-radius:var(--r-sm); color:inherit; text-decoration:none;
+  transition: background .16s var(--ease), padding-left .16s var(--ease); }
+.done-list li > a:hover{ background:var(--surface3); padding-left:8px; }
+.done-list .dn{ flex:1 1 auto; min-width:140px; font-size:13px; font-weight:600; color:var(--ink); }
+.done-list li > a:hover .dn{ color:var(--violet2); }
+.done-list .dt{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.done-list .dc{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  padding:2px 8px; border-radius:999px; background:var(--surface3); border:1px solid var(--border2);
+  color:var(--muted); white-space:nowrap; }
+.done-list .dc.warn{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
+.done-foot{ margin-top:14px; display:flex; align-items:center; flex-wrap:wrap; gap:10px;
+  font-size:12px; color:var(--muted); }
+.done-foot a.dgo{ margin-left:auto; display:inline-flex; align-items:center; gap:7px;
+  font-size:12.5px; font-weight:600; text-decoration:none; color:var(--violet2);
+  background:var(--violet-bg); border:1px solid var(--violet-border); border-radius:var(--r-sm);
+  padding:8px 13px; min-height:36px;
+  transition: background .16s var(--ease), color .16s var(--ease); }
+.done-foot a.dgo:hover{ background:var(--violet-border); color:var(--ink); }
+.done-foot a.dgo svg{ width:14px; height:14px; }
+
 /* ---------- obiettivi da colpire oggi ---------- */
 .tg-roles{ display:flex; flex-wrap:wrap; gap:8px; }
 .tg-role{
@@ -830,6 +865,19 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
       <!-- KPI strip -->
       <div class="kpis reveal" id="kpis" style="--i:0"></div>
 
+      <!-- Cosa si e' fatto: si compila da solo appena arrivano i file GPS della seduta -->
+      <section class="card reveal" id="done-card" style="--i:1" hidden>
+        <div class="card-head">
+          <h2 id="done-title">Allenamento di oggi</h2>
+          <span class="hint" id="done-hint"></span>
+        </div>
+        <div class="card-body">
+          <div class="done-band" id="done-band"></div>
+          <div class="done-list" id="done-list"></div>
+          <div class="done-foot" id="done-foot"></div>
+        </div>
+      </section>
+
       <!-- Carico acuto su cronico: primo grafico della pagina -->
       <section class="card reveal" id="acwr-card" style="--i:1">
         <div class="card-head">
@@ -1099,6 +1147,13 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 <script>
 window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19 Femminile',
   metric:'Dist tot',scale:1,range:{min:'',max:''},n_sedute:0,n_partite_giocate:0,n_fixtures:0,days:[],fixtures:[]};
+</script>
+
+<!-- esercitazioni con i GPS di ogni seduta (window.ESERC) -->
+<script src="./esercitazioni_data.js"></script>
+<script>
+window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',load_cols:[],load_unit:{},
+  n_sessions:0,n_drills:0,sessions:[]};
 </script>
 
 <!-- rosa condivisa con la pagina forza (window.FORZA.roster) -->
@@ -4314,6 +4369,125 @@ window.FORZA = window.FORZA || { roster:[] };
     });
   }
 
+  // ================= COSA SI E' FATTO =================
+  // La seduta arriva dai file GPS: appena il generatore li legge, la card si
+  // compila da sola. Il carico della giornata e' il Full Training, non la somma
+  // delle esercitazioni: a squadra divisa due gruppi lavorano in parallelo.
+  const DONE_EX   = window.ESERC || null;
+  const DONE_COLS = (DONE_EX && Array.isArray(DONE_EX.load_cols)) ? DONE_EX.load_cols : [];
+  const DI_MIN  = DONE_COLS.indexOf('Minuti');
+  const DI_DIST = DONE_COLS.indexOf('Dist tot');
+  const DI_ALTA = DONE_COLS.indexOf('DIST > 23km/h');
+  const DI_MMIN = DONE_COLS.indexOf('Dist (m/min)');
+  const DONE_GO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+
+    '<path d="M5 12h13M13 6l6 6-6 6"/></svg>';
+
+  function doneVal(o, i){
+    if(!o || i<0) return null;
+    const v = o[DONE_COLS[i]];
+    return (v==null || isNaN(v)) ? null : Number(v);
+  }
+  // il numero di atlete atteso si legge nel nome: 4c4+2j fa 10, 10c10 fa 20
+  function doneAttese(desc){
+    const t = String(desc||'').toLowerCase();
+    let n = 0, trovato = false, m;
+    const re = /(\d{1,2})\s*[cv]\s*(\d{1,2})/g;
+    while((m = re.exec(t))){ n += (+m[1]) + (+m[2]); trovato = true; }
+    if(!trovato) return null;
+    const re2 = /\+\s*(\d{1,2})\s*(?!\s*[cv]\s*\d)/g;
+    while((m = re2.exec(t))){ n += (+m[1]); }
+    return n>0 ? n : null;
+  }
+  function doneLink(s, i){
+    let u = './esercitazioni.html?d='+encodeURIComponent(String(s.date||''));
+    if(s.slot) u += '&s='+encodeURIComponent(String(s.slot));
+    if(i!=null) u += '&e='+i;
+    return u;
+  }
+
+  function renderDone(){
+    const card = document.getElementById('done-card');
+    if(!card) return;
+    const all = (DONE_EX && Array.isArray(DONE_EX.sessions)) ? DONE_EX.sessions.slice() : [];
+    if(!all.length){ card.setAttribute('hidden',''); return; }
+    all.sort(function(a,b){ return String(a.date)<String(b.date)?-1:String(a.date)>String(b.date)?1:0; });
+
+    const oggi = all.filter(function(s){ return String(s.date) === TSTR; });
+    let list = oggi, ultimo = false;
+    if(!list.length){
+      const last = all[all.length-1];
+      list = all.filter(function(s){ return String(s.date) === String(last.date); });
+      ultimo = true;
+    }
+    if(!list.length){ card.setAttribute('hidden',''); return; }
+    card.removeAttribute('hidden');
+
+    // se la giornata ha due slot si mostra quello con piu' esercitazioni
+    let s = list[0];
+    list.forEach(function(x){ if((x.drills||[]).length > (s.drills||[]).length) s = x; });
+
+    const dt = parse(String(s.date));
+    document.getElementById('done-title').textContent = ultimo ? 'Ultimo allenamento caricato' : 'Allenamento di oggi';
+    document.getElementById('done-hint').innerHTML =
+      esc(dt ? itDate(dt) : String(s.date)) + (s.slot ? (' &#183; ' + esc(s.slot)) : '') +
+      (s.kind ? (' &#183; ' + esc(s.kind)) : '');
+
+    // la banda porta il Full Training quando c'e'
+    const L  = (s.ft && s.ft.load) ? s.ft.load : (s.load || null);
+    const ft = !!(s.ft && s.ft.load);
+    const cells = [];
+    const nAth = (s.ft && s.ft.n) ? s.ft.n : (s.n_atlete || 0);
+    if(nAth) cells.push({ l:'Atlete', v:NF.format(nAth), u:'' });
+    const mn = doneVal(L, DI_MIN), ds = doneVal(L, DI_DIST), al = doneVal(L, DI_ALTA), mm = doneVal(L, DI_MMIN);
+    if(mn!=null) cells.push({ l:'Minuti', v:NF1.format(mn), u:'min' });
+    if(ds!=null) cells.push({ l:'Distanza', v:NF.format(ds), u:'m', key:true });
+    if(mm!=null) cells.push({ l:'Ritmo', v:NF.format(mm), u:'m/min' });
+    if(al!=null) cells.push({ l:'Oltre 23 km/h', v:NF1.format(al), u:'m' });
+    cells.push({ l:'Esercitazioni', v:NF.format((s.drills||[]).length), u:'' });
+
+    document.getElementById('done-band').innerHTML = cells.map(function(c){
+      return '<div class="done-cell'+(c.key?' key':'')+'"><div class="dl">'+esc(c.l)+'</div>'+
+        '<div class="dv tnum">'+c.v+(c.u?'<small>'+esc(c.u)+'</small>':'')+'</div></div>';
+    }).join('');
+
+    const dl = s.drills || [];
+    document.getElementById('done-list').innerHTML = dl.length
+      ? '<ul>'+dl.map(function(d, i){
+          const dL = d.load || null;
+          const dm = doneVal(dL, DI_MIN), dd = doneVal(dL, DI_DIST);
+          const na = d.atlete ? Object.keys(d.atlete).length : (Number(d.n)||0);
+          const att = doneAttese(d.descrizione);
+          const bits = [];
+          if(dm!=null) bits.push(NF1.format(dm)+' min');
+          if(dd!=null) bits.push(NF.format(dd)+' m');
+          const desc = esc(d.descrizione || 'esercitazione');
+          let tag = '';
+          if(na){
+            const bad = (att!=null && att!==na);
+            tag = '<span class="dc'+(bad?' warn':'')+'">'+na+(na===1?' atleta':' atlete')+
+              (bad?(' su '+att):'')+'</span>';
+          }
+          return '<li><a href="'+esc(doneLink(s, i))+'" title="Apri '+desc+' nella pagina esercitazioni">'+
+            '<span class="dn">'+desc+'</span>'+tag+
+            (bits.length?'<span class="dt">'+bits.join(' &#183; ')+'</span>':'')+'</a></li>';
+        }).join('')+'</ul>'
+      : '';
+
+    const nWarn = dl.filter(function(d){
+      const na = d.atlete ? Object.keys(d.atlete).length : 0;
+      const att = doneAttese(d.descrizione);
+      return na && att!=null && att!==na;
+    }).length;
+    let txt = ft
+      ? 'Il carico della giornata e\' il Full Training.'
+      : 'Nessun file di squadra per questa seduta: i numeri sono la somma delle esercitazioni.';
+    if(nWarn) txt += ' ' + nWarn + (nWarn===1 ? ' esercitazione non torna' : ' esercitazioni non tornano') +
+      ' con il numero letto dal nome: puo\' essere entrato qualcuno dello staff.';
+    document.getElementById('done-foot').innerHTML =
+      '<span>'+esc(txt)+'</span>'+
+      '<a class="dgo" href="'+esc(doneLink(s, null))+'">'+DONE_GO+'<span>Apri la seduta</span></a>';
+  }
+
   function buildTargets(){
     renderTargets();
     const roles = document.getElementById('tg-roles');
@@ -4345,6 +4519,7 @@ window.FORZA = window.FORZA || { roster:[] };
   buildYd();
   renderLw();
   buildTargets();
+  renderDone();
 
 })();
 </script>

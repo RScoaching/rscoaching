@@ -235,6 +235,64 @@ a{ color:inherit; text-decoration:none; }
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ath .row .vv{ font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
 
+/* tabella atlete dentro l'esercitazione, stessa griglia ordinabile di Sessioni */
+.gwrap{ margin-top:12px; overflow-x:auto; border:1px solid var(--border); border-radius:var(--r); background:var(--surface2); }
+table.gtbl{ width:100%; border-collapse:collapse; font-size:12.5px; }
+table.gtbl th{ background:var(--surface3); color:var(--muted); font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em; text-align:right; padding:8px 10px; white-space:nowrap;
+  border-bottom:1px solid var(--border2); }
+table.gtbl th.nm{ text-align:left; }
+table.gtbl th.sortable{ cursor:pointer; user-select:none; }
+table.gtbl th.sortable:hover{ color:var(--ink); }
+table.gtbl th .u{ display:block; font-size:9px; font-weight:600; color:var(--faint); letter-spacing:.02em; text-transform:none; }
+table.gtbl th .arw{ color:var(--orange2); font-size:9px; }
+table.gtbl td{ padding:7px 10px; text-align:right; border-bottom:1px solid var(--border); color:var(--text);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+table.gtbl td.nm{ text-align:left; font-weight:600; color:var(--ink); }
+table.gtbl td.key{ color:var(--orange2); font-weight:600; }
+table.gtbl tbody tr:last-child td{ border-bottom:0; }
+table.gtbl tbody tr:hover td{ background:var(--surface3); }
+table.gtbl tfoot td{ background:var(--surface3); color:var(--muted); font-weight:700; border-bottom:0; }
+table.gtbl tfoot td.nm{ color:var(--ink); }
+
+/* numero atlete atteso ricavato dal nome, avviso quando non torna */
+.badge.warn{ background:oklch(68% 0.19 42 / 0.14); border:1px solid var(--ember-border); color:var(--orange2); }
+.warnline{ margin-top:10px; display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--orange2);
+  background:var(--ember-bg); border:1px solid var(--ember-border); border-radius:var(--r-sm); padding:9px 11px; }
+.warnline svg{ width:15px; height:15px; flex:0 0 15px; margin-top:1px; }
+.warnline b{ color:var(--ink); font-weight:600; }
+
+/* dettagli a mano della singola esercitazione: step, serie, metraggi */
+.dnote{ margin-top:12px; border:1px solid var(--border2); border-radius:var(--r); background:var(--surface2); padding:11px 12px; }
+.dnote .nh{ font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+.dnote .ng{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:9px; }
+.dnote .nf{ display:flex; flex-direction:column; gap:4px; }
+.dnote .nf label{ font-size:10.5px; font-weight:600; color:var(--faint); }
+.dnote .nf input{ appearance:none; font-family:inherit; font-size:13px; color:var(--text);
+  background:var(--surface); border:1px solid var(--border2); border-radius:8px; padding:8px 10px; min-height:38px; }
+.dnote .nf input::placeholder{ color:var(--faint); }
+.dnote .nf input:hover{ border-color:var(--border3); }
+.dnote .nf input:focus{ border-color:var(--orange); }
+.dnote .nsaved{ margin-top:7px; font-size:11px; color:var(--green); opacity:0; transition:opacity .2s var(--ease); }
+.dnote .nsaved.on{ opacity:1; }
+.badge.det{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+
+/* barra della seduta aperta dal calendario */
+.focusbar{ display:none; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); border-radius:var(--r); padding:11px 14px; }
+.focusbar.on{ display:flex; }
+.focusbar .ft{ font-size:13px; color:var(--ink); font-weight:600; }
+.focusbar .fs{ font-size:12px; color:var(--violet2); }
+.focusbar a.fx{ margin-left:auto; font-size:12.5px; font-weight:600; color:var(--violet2);
+  border:1px solid var(--violet-border); border-radius:999px; padding:6px 13px; }
+.focusbar a.fx:hover{ background:var(--violet-border); color:var(--ink); }
+
+/* etichetta sopra la striscia di carico della seduta */
+.loadcap{ margin-top:14px; margin-bottom:-8px; font-size:11px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.05em; }
+.loadcap b{ color:var(--orange2); }
+.loadcap.sum b{ color:var(--muted); }
+
 /* riepilogo seduta: gruppi, confronto Full Training, assenti */
 .recap{ margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
 .recap h4{ margin:0 0 8px; font-size:11px; font-weight:700; color:var(--muted);
@@ -366,6 +424,9 @@ a{ color:inherit; text-decoration:none; }
     </header>
 
     <div class="wrap">
+      <!-- seduta aperta dal calendario o da oggi -->
+      <div class="focusbar" id="focusbar" role="status"></div>
+
       <!-- KPIs -->
       <div class="kpis reveal" id="kpis" style="--i:0"></div>
 
@@ -436,6 +497,27 @@ a{ color:inherit; text-decoration:none; }
 <script>
 window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
   load_cols:[],load_unit:{},sessions:[]};
+
+// Chi arriva da calendario o da oggi porta una data nel link. Se quella seduta
+// vive nell'altra stagione si sposta la stagione attiva prima che la sidebar la
+// legga, altrimenti la pagina si apre vuota. Gira prima di fio_sidebar.js.
+(function(){
+  var d = '';
+  try{ d = (new URLSearchParams(location.search).get('d')||'').trim(); }catch(e){ return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+  function ha(o){
+    if(!o || !Array.isArray(o.sessions)) return false;
+    for(var i=0;i<o.sessions.length;i++){ if(String(o.sessions[i].date)===d) return true; }
+    return false;
+  }
+  var qui = ha(window.ESERC), la = ha(window.ESERC_2627);
+  var att = '25-26';
+  try{ var s = localStorage.getItem('fio_stagione'); if(s==='26-27'||s==='25-26') att = s; }catch(e){}
+  var vuoi = null;
+  if(att === '25-26' && !qui && la) vuoi = '26-27';
+  else if(att === '26-27' && !la && qui) vuoi = '25-26';
+  if(vuoi){ try{ localStorage.setItem('fio_stagione', vuoi); }catch(e){} }
+})();
 </script>
 
 <!-- sidebar area Fiorentina -->
@@ -466,6 +548,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   const state = { slot:'all', q:'' };
 
+  // seduta aperta da calendario o da oggi: esercitazioni.html?d=2026-08-10&s=AM&e=3
+  const FOCUS = (function(){
+    let p;
+    try{ p = new URLSearchParams(location.search); }catch(e){ return null; }
+    const d = (p.get('d')||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+    const sl = (p.get('s')||'').trim().toUpperCase();
+    const ex = parseInt(p.get('e'), 10);
+    return { date:d, slot:(sl==='PM'?'PM':(sl==='AM'?'AM':'')), e:(isFinite(ex)&&ex>=0)?ex:null };
+  })();
+
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
   function fmtLoad(c, v){
@@ -479,6 +572,43 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     catch(e){ return []; }
   }
   function saveManual(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch(e){} }
+
+  // ---------- dettagli a mano della singola esercitazione ----------
+  // step, serie per ripetizioni, metraggi, recupero, note. Salvati su questo
+  // dispositivo con chiave data|slot|indice, cosi' restano attaccati alla seduta.
+  const LS_DET = 'rs_fio_eserc_det';
+  const DET_FIELDS = [
+    { n:'step',  l:'Step',                 p:'es. 2 blocchi' },
+    { n:'serie', l:'Serie x ripetizioni',  p:'es. 4 x 3' },
+    { n:'metri', l:'Metraggi',             p:'es. 40 x 30 m' },
+    { n:'rec',   l:'Recupero',             p:'es. 90 sec' },
+    { n:'note',  l:'Note',                 p:'obiettivo, regole' }
+  ];
+  function loadDet(){
+    try{ const o=JSON.parse(localStorage.getItem(LS_DET)||'{}'); return (o && typeof o==='object' && !Array.isArray(o))?o:{}; }
+    catch(e){ return {}; }
+  }
+  function saveDet(o){ try{ localStorage.setItem(LS_DET, JSON.stringify(o)); }catch(e){} }
+  function detKey(s, d){ return s.date+'|'+s.slot+'|'+(d.manual ? ('m'+d.id) : ('i'+d.i)); }
+  function hasDet(s, d){
+    const v = loadDet()[detKey(s,d)];
+    return !!(v && DET_FIELDS.some(f=> String(v[f.n]||'').trim()));
+  }
+
+  // ---------- numero di atlete atteso ricavato dal nome ----------
+  // 4c4+2j = 10, 10c10 = 20, possesso 5c3+2 = 10, 7c6 = 13, 3c2 = 5,
+  // contrapposizione 7c6 + 3c2 = 18. I "+N" che introducono un'altra
+  // contrapposizione non si sommano due volte.
+  function attese(desc){
+    const t = String(desc||'').toLowerCase();
+    let n = 0, trovato = false, m;
+    const re = /(\d{1,2})\s*[cv]\s*(\d{1,2})/g;
+    while((m = re.exec(t))){ n += (+m[1]) + (+m[2]); trovato = true; }
+    if(!trovato) return null;
+    const re2 = /\+\s*(\d{1,2})\s*(?!\s*[cv]\s*\d)/g;
+    while((m = re2.exec(t))){ n += (+m[1]); }
+    return n>0 ? n : null;
+  }
 
   // ---------- merge snapshot + manual into session list ----------
   function buildSessions(){
@@ -512,6 +642,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function filtered(all){
     const q = state.q.trim().toLowerCase();
     return all.map(s=>{
+      if(FOCUS){
+        if(s.date!==FOCUS.date) return null;
+        if(FOCUS.slot && s.slot!==FOCUS.slot) return null;
+      }
       if(state.slot!=='all' && s.slot!==state.slot) return null;
       let drills = s.drills;
       if(q){ drills = drills.filter(d=> d.descrizione.toLowerCase().includes(q)); if(!drills.length) return null; }
@@ -524,8 +658,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const host = document.getElementById('kpis');
     const nSess = all.length;
     const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
-    const withLoad = all.filter(s=> s.load && typeof s.load['Dist tot']==='number');
-    const avgDist = withLoad.length ? withLoad.reduce((a,s)=> a + s.load['Dist tot'], 0)/withLoad.length : null;
+    // media sul Full Training, che e' il carico vero della giornata
+    const bands = all.map(s=> (s.ft && s.ft.load) ? s.ft.load : s.load)
+      .filter(l=> l && typeof l['Dist tot']==='number');
+    const avgDist = bands.length ? bands.reduce((a,l)=> a + l['Dist tot'], 0)/bands.length : null;
     const last = all.length ? parseDate(all[0].date) : null;
     const cards = [
       { c:'',  label:'Sedute', val: nSess==null?'-':NF0.format(nSess), unit:'' },
@@ -579,20 +715,78 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const I_ALTA = LOAD.indexOf('DIST > 23km/h');
   function vnum(vec, i){ return (vec && i>=0 && typeof vec[i]==='number') ? vec[i] : null; }
 
-  // riga per atleta dentro il dettaglio di una esercitazione
-  function athList(atlete){
-    const names = Object.keys(atlete||{}).sort((a,b)=> a.localeCompare(b,'it'));
+  // tabella completa delle calciatrici dentro l'esercitazione, ordinabile su
+  // ogni parametro come la griglia della sezione Sessioni
+  const SORT = {};   // chiave pannello -> { c:'nm' oppure indice metrica, dir:1|-1 }
+  const PANEL = {};  // chiave pannello -> { s, d } per ricostruire il contenuto
+  function athTableHTML(atlete, key){
+    const names = Object.keys(atlete||{});
     if(!names.length) return '';
-    return '<div class="ath">'+names.map(nm=>{
-      const v = atlete[nm];
-      const mn = vnum(v, I_MIN), ds = vnum(v, I_DIST), al = vnum(v, I_ALTA);
-      const bits = [];
-      if(mn!=null) bits.push(NF.format(mn)+"'");
-      if(ds!=null) bits.push(NF0.format(Math.round(ds))+' m');
-      if(al!=null && al>0) bits.push(NF.format(al)+' m >23');
-      return '<div class="row"><span class="nm">'+esc(nm)+'</span>'+
-        '<span class="vv">'+esc(bits.join(' &#183; '))+'</span></div>';
-    }).join('')+'</div>';
+    const st = SORT[key] || (SORT[key] = { c:'nm', dir:1 });
+    const rows = names.map(nm=> ({ nm:nm, v:atlete[nm]||[] }));
+    rows.sort((a,b)=>{
+      if(st.c==='nm') return a.nm.localeCompare(b.nm,'it') * st.dir;
+      const av = vnum(a.v, st.c), bv = vnum(b.v, st.c);
+      if(av==null && bv==null) return a.nm.localeCompare(b.nm,'it');
+      if(av==null) return 1;
+      if(bv==null) return -1;
+      return (av-bv) * st.dir;
+    });
+    function arw(c){ return st.c===c ? (st.dir>0?'&#9650;':'&#9660;') : ''; }
+    function aria(c){ return st.c===c ? (st.dir>0?'ascending':'descending') : 'none'; }
+    let h = '<div class="gwrap"><table class="gtbl"><thead><tr>'+
+      '<th class="nm sortable" data-c="nm" aria-sort="'+aria('nm')+'" scope="col">Atleta <span class="arw">'+arw('nm')+'</span></th>';
+    LOAD.forEach((c,i)=>{
+      h += '<th class="sortable" data-c="'+i+'" aria-sort="'+aria(i)+'" scope="col">'+esc(c)+
+        (UNIT[c] ? '<span class="u">'+esc(UNIT[c])+'</span>' : '')+
+        ' <span class="arw">'+arw(i)+'</span></th>';
+    });
+    h += '</tr></thead><tbody>';
+    rows.forEach(r=>{
+      h += '<tr><td class="nm">'+esc(r.nm)+'</td>';
+      LOAD.forEach((c,i)=>{
+        const v = vnum(r.v, i);
+        h += '<td'+(i===I_DIST?' class="key"':'')+'>'+(v==null?'&#8211;':fmtLoad(c, v))+'</td>';
+      });
+      h += '</tr>';
+    });
+    h += '</tbody><tfoot><tr><td class="nm">Media di '+rows.length+'</td>';
+    LOAD.forEach((c,i)=>{
+      let sum = 0, k = 0;
+      rows.forEach(r=>{ const v = vnum(r.v, i); if(v!=null){ sum += v; k++; } });
+      h += '<td>'+(k ? fmtLoad(c, sum/k) : '&#8211;')+'</td>';
+    });
+    h += '</tr></tfoot></table></div>';
+    return h;
+  }
+
+  // riquadro dei dettagli scritti a mano
+  function noteHTML(s, d, key){
+    const k = detKey(s, d);
+    const v = loadDet()[k] || {};
+    return '<div class="dnote" data-k="'+esc(k)+'"><div class="nh">Dettagli della proposta</div><div class="ng">'+
+      DET_FIELDS.map(x=>
+        '<div class="nf"><label for="n-'+key+'-'+x.n+'">'+esc(x.l)+'</label>'+
+        '<input id="n-'+key+'-'+x.n+'" type="text" data-f="'+x.n+'" value="'+esc(v[x.n]||'')+
+        '" placeholder="'+esc(x.p)+'" autocomplete="off"></div>'
+      ).join('')+
+      '</div><div class="nsaved">Salvato su questo dispositivo</div></div>';
+  }
+
+  // contenuto completo del pannello di una esercitazione
+  function panelHTML(s, d, key){
+    const nAth = d.atlete ? Object.keys(d.atlete).length : 0;
+    const att = attese(d.descrizione);
+    let h = loadStripMini(d.load) + athTableHTML(d.atlete, key);
+    if(att!=null && nAth && att!==nAth){
+      const diff = nAth - att;
+      h += '<div class="warnline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+
+        '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><span>'+
+        "Il nome dice <b>"+att+"</b> calciatrici, i GPS ne contano <b>"+nAth+"</b> ("+(diff>0?'+':'')+diff+
+        "). Puo' essere entrato qualcuno dello staff, oppure c'e' un portiere o una calciatrice senza GPS."+
+        '</span></div>';
+    }
+    return h + noteHTML(s, d, key);
   }
 
   // totale per atleta della seduta: si sommano le sue esercitazioni e si
@@ -638,8 +832,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       html += '<h4>Full Training di squadra</h4>'+
         '<div class="ftline">Riferimento del carico: <b>'+esc(bits.join(' &#183; '))+'</b>'+
         (s.ft.n?' su <b>'+s.ft.n+'</b> atlete':'')+
-        '. Le esercitazioni si sommano per atleta, non a squadra.</div>'+
-        loadStripMini(s.ft.load);
+        '. Le esercitazioni si sommano per atleta, non a squadra.</div>';
     }
 
     // gruppi di lavoro
@@ -699,27 +892,35 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const slotCls = s.slot==='PM' ? 'slot pm' : 'slot';
       const drills = s.drills.map((d,i)=>{
         const nAth = d.atlete ? Object.keys(d.atlete).length : 0;
-        const gps = !!(d.load || nAth);
+        const att = attese(d.descrizione);
+        const mism = (att!=null && nAth && att!==nAth);
         const badges = (d.dup?'<span class="badge dup">doppione</span>':'') + (d.manual?'<span class="badge man">manuale</span>':'')+
-          (nAth?'<span class="badge n">'+nAth+(nAth===1?' atleta':' atlete')+'</span>':'');
+          (nAth?'<span class="badge n">'+nAth+(nAth===1?' atleta':' atlete')+'</span>':'')+
+          (mism?'<span class="badge warn" title="Dal nome ne servirebbero '+att+'">attese '+att+'</span>':'')+
+          (hasDet(s,d)?'<span class="badge det">dettagli</span>':'');
         const del = d.manual ? '<button class="del" data-id="'+esc(d.id)+'" aria-label="Rimuovi esercitazione"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>' : '';
-        const chev = gps ? '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>' : '';
+        const chev = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>';
         const key = si+'-'+i;
-        const row = '<li class="drill'+(gps?' has-gps':'')+'"'+
-          (gps?' data-k="'+key+'" role="button" tabindex="0" aria-expanded="false" aria-controls="dp-'+key+'"':'')+'>'+
+        PANEL[key] = { s:s, d:d };
+        const row = '<li class="drill has-gps" data-k="'+key+'" data-i="'+d.i+'" role="button" tabindex="0"'+
+          ' aria-expanded="false" aria-controls="dp-'+key+'">'+
           '<span class="idx tnum">'+(i+1)+'</span>'+
           '<span class="dtext">'+esc(d.descrizione)+badges+'</span>'+del+chev+'</li>';
-        if(!gps) return row;
-        return row + '<li class="dpanel" id="dp-'+key+'" hidden>'+
-          loadStripMini(d.load)+ athList(d.atlete) +'</li>';
+        return row + '<li class="dpanel" id="dp-'+key+'" hidden>'+panelHTML(s, d, key)+'</li>';
       }).join('');
       const meta = (s.kind?'<span class="kind">'+esc(s.kind)+'</span>':'')+
         '<span class="ndrills">'+s.drills.length+(s.drills.length===1?' esercitazione':' esercitazioni')+
         (s.nAtlete?' &#183; '+s.nAtlete+' atlete':'')+'</span>'+
         (s.divisa?'<span class="badge split">squadra divisa</span>':'');
-      const tail = s.load ? loadStrip(s.load)
+      // il carico della giornata e' il Full Training, non la somma delle
+      // esercitazioni: a squadra divisa i gruppi in parallelo si conterebbero due volte
+      const band = (s.ft && s.ft.load) ? s.ft.load : s.load;
+      const cap = (s.ft && s.ft.load)
+        ? '<div class="loadcap">Carico della giornata &#183; <b>Full Training</b></div>'
+        : (s.load ? '<div class="loadcap sum">Carico della giornata &#183; <b>somma delle esercitazioni</b></div>' : '');
+      const tail = band ? (cap + loadStrip(band))
         : '<div class="nolink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>Seduta pianificata · nessun GPS collegato</div>';
-      return '<section class="scard reveal" style="--i:'+Math.min(si+4,16)+'">'+
+      return '<section class="scard reveal" id="s-'+esc(s.date)+'-'+esc(s.slot||'--')+'" data-d="'+esc(s.date)+'" data-s="'+esc(s.slot||'')+'" style="--i:'+Math.min(si+4,16)+'">'+
         '<div class="scard-head">'+
           '<span class="'+slotCls+'">'+esc(s.slot||'--')+'</span>'+
           '<div class="sdate"><span class="d">'+esc(dLabel)+'</span><span class="m">'+esc(mLabel)+'</span></div>'+
@@ -738,19 +939,92 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }));
     // apri e chiudi il dettaglio GPS della singola esercitazione
     host.querySelectorAll('.drill.has-gps').forEach(li=>{
-      function toggle(){
+      function toggle(force){
         const panel = document.getElementById('dp-'+li.getAttribute('data-k'));
         if(!panel) return;
-        const open = panel.hasAttribute('hidden');
+        const open = (force===undefined) ? panel.hasAttribute('hidden') : !!force;
         if(open) panel.removeAttribute('hidden'); else panel.setAttribute('hidden','');
         li.classList.toggle('open', open);
         li.setAttribute('aria-expanded', open?'true':'false');
       }
-      li.addEventListener('click', toggle);
+      li._toggle = toggle;
+      li.addEventListener('click', e=>{ if(e.target.closest('.del')) return; toggle(); });
       li.addEventListener('keydown', e=>{
         if(e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(); }
       });
     });
+    wirePanels(host);
+    applyFocus(host);
+  }
+
+  // ordinamento delle tabelle atlete e salvataggio dei dettagli a mano
+  function wirePanels(host){
+    host.querySelectorAll('.gtbl th.sortable').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const panel = th.closest('.dpanel'); if(!panel) return;
+        const key = panel.id.slice(3);
+        const raw = th.getAttribute('data-c');
+        const c = (raw==='nm') ? 'nm' : parseInt(raw, 10);
+        const st = SORT[key] || (SORT[key] = { c:'nm', dir:1 });
+        if(String(st.c)===String(c)) st.dir = -st.dir;
+        else { st.c = c; st.dir = (c==='nm') ? 1 : -1; }
+        const p = PANEL[key]; if(!p) return;
+        panel.innerHTML = panelHTML(p.s, p.d, key);
+        wirePanels(panel);
+      });
+    });
+    host.querySelectorAll('.dnote').forEach(box=>{
+      const k = box.getAttribute('data-k');
+      const flash = box.querySelector('.nsaved');
+      let ft;
+      box.querySelectorAll('input[data-f]').forEach(inp=>{
+        inp.addEventListener('click', e=> e.stopPropagation());
+        inp.addEventListener('keydown', e=> e.stopPropagation());
+        inp.addEventListener('change', ()=>{
+          const all = loadDet();
+          const rec = all[k] || (all[k] = {});
+          const v = inp.value.trim();
+          if(v) rec[inp.getAttribute('data-f')] = v; else delete rec[inp.getAttribute('data-f')];
+          if(!Object.keys(rec).length) delete all[k];
+          saveDet(all);
+          if(flash){ flash.classList.add('on'); clearTimeout(ft); ft = setTimeout(()=> flash.classList.remove('on'), 1800); }
+        });
+      });
+    });
+  }
+
+  // seduta arrivata da calendario o da oggi: si apre e si porta a schermo
+  let focusDone = false;
+  function applyFocus(host){
+    if(!FOCUS || focusDone) return;
+    const card = host.querySelector('.scard[data-d="'+FOCUS.date+'"]'+(FOCUS.slot?'[data-s="'+FOCUS.slot+'"]':''));
+    if(!card) return;
+    focusDone = true;
+    if(FOCUS.e!=null){
+      const li = card.querySelector('.drill.has-gps[data-i="'+FOCUS.e+'"]');
+      if(li && li._toggle) li._toggle(true);
+    }
+    setTimeout(()=>{
+      const t = (FOCUS.e!=null && card.querySelector('.drill.has-gps[data-i="'+FOCUS.e+'"]')) || card;
+      t.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block:'start' });
+    }, 80);
+  }
+
+  // barra in cima quando si arriva da calendario o da oggi
+  function renderFocusBar(all){
+    const bar = document.getElementById('focusbar');
+    if(!bar) return;
+    if(!FOCUS){ bar.className = 'focusbar'; bar.innerHTML = ''; return; }
+    const s = all.find(x=> x.date===FOCUS.date && (!FOCUS.slot || x.slot===FOCUS.slot));
+    const dt = parseDate(FOCUS.date);
+    const lbl = dt ? DTFY.format(dt) : FOCUS.date;
+    const sub = s
+      ? (s.slot+' &#183; '+s.drills.length+(s.drills.length===1?' esercitazione':' esercitazioni')+
+         (s.nAtlete?' &#183; '+s.nAtlete+' atlete':''))
+      : 'nessuna esercitazione registrata per questa data';
+    bar.className = 'focusbar on';
+    bar.innerHTML = '<span class="ft">Seduta del '+esc(lbl)+'</span><span class="fs">'+sub+'</span>'+
+      '<a class="fx" href="./esercitazioni.html">Mostra tutte le sedute</a>';
   }
 
   // ---------- toast ----------
@@ -958,6 +1232,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const all = buildSessions();
     renderKPIs(all);
     renderPills(all);
+    renderFocusBar(all);
     renderSessions(filtered(all));
     buildPrintTable();
   }
