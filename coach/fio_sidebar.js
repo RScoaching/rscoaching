@@ -628,11 +628,43 @@ window.fioKey = function(base, st) {
   return st === '25-26' ? base : base + '_' + st;
 };
 
-// Rosa della stagione attiva, in forma [{name, role}].
+// Atlete scritte a mano in Atlete: "rs_fio_custom" e' una mappa {nome: ruolo}.
+// Prima la leggeva soltanto la pagina Atlete, percio' un'atleta aggiunta li'
+// non arrivava ne' alla Forza ne' alle altre sezioni. Adesso passa di qui e la
+// vedono tutti.
+window.fioCustom = function() {
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(window.fioKey('rs_fio_custom')) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  return o;
+};
+
+// Anagrafica scritta in Atlete: peso, altezza, note, infortuni e il flag "off",
+// che vuol dire fuori rosa. Chi e' fuori rosa resta nello storico ma non deve
+// comparire nelle liste operative di nessuna pagina.
+window.fioBio = function() {
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(window.fioKey('rs_fio_bio')) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  return o;
+};
+window.fioFuoriRosa = function(name) {
+  var b = window.fioBio()[String(name == null ? '' : name).trim()];
+  return !!(b && b.off);
+};
+
+// Rosa completa della stagione attiva, in forma [{name, role, tipo}], comprese
+// le atlete segnate fuori rosa. La usa Atlete, che deve poterle mostrare per
+// rimetterle dentro; tutte le altre pagine usano fioRoster, che le toglie.
 // Sulla 26/27 comanda il blocco rigenerato dai file della cartella: se
 // un'atleta quest'anno non c'e', qui non compare, e le pagine che partono da
 // questa lista non la mostrano piu'. Sulla 25/26 resta la rosa storica.
-window.fioRoster = function() {
+// In coda, sempre, le atlete aggiunte a mano in Atlete.
+window.fioRosterFull = function() {
   var out = [], seen = {};
   function add(n, r, t) {
     n = String(n == null ? '' : n).trim();
@@ -645,19 +677,35 @@ window.fioRoster = function() {
   if (window.getStagione() === '26-27') {
     var R = window.ROSTER_2627;
     if (R && R.players) R.players.forEach(function(p) { add(p.name, p.role, p.tipo); });
-    return out;
+  } else {
+    var F = window.FORZA;
+    if (F && F.roster) F.roster.forEach(function(p) { add(p.name, p.role, p.tipo); });
+    var S = window.SNAP;
+    if (S && S.players) Object.keys(S.players).forEach(function(n) {
+      add(n, (S.players[n] || {}).role, '');
+    });
+    // Il planner del calendario porta con se' la rosa 25-26 in forma breve
+    // {n,r}: serve li' dove non vengono caricati ne' i dati forza ne' quelli
+    // di carico.
+    var L = window.RS_ROSTER;
+    if (Array.isArray(L)) L.forEach(function(p) { add(p.n, p.r, ''); });
   }
-  var F = window.FORZA;
-  if (F && F.roster) F.roster.forEach(function(p) { add(p.name, p.role, p.tipo); });
-  var S = window.SNAP;
-  if (S && S.players) Object.keys(S.players).forEach(function(n) {
-    add(n, (S.players[n] || {}).role, '');
-  });
-  // Il planner del calendario porta con se' la rosa 25-26 in forma breve {n,r}:
-  // serve li' dove non vengono caricati ne' i dati forza ne' quelli di carico.
-  var L = window.RS_ROSTER;
-  if (Array.isArray(L)) L.forEach(function(p) { add(p.n, p.r, ''); });
+  var C = window.fioCustom();
+  Object.keys(C).sort(function(a, b) { return a.localeCompare(b, 'it'); })
+    .forEach(function(n) { add(n, C[n], 'manuale'); });
   return out;
+};
+
+// Rosa operativa: la rosa completa senza chi e' segnata fuori rosa. Questa e'
+// l'unica rosa dell'applicazione, chi la usa vede le stesse atlete di tutti
+// gli altri: un'atleta scritta a mano in Atlete arriva anche in Forza, e una
+// messa fuori rosa sparisce da tutte le liste in una volta sola.
+window.fioRoster = function() {
+  var bio = window.fioBio();
+  return window.fioRosterFull().filter(function(p) {
+    var b = bio[p.name];
+    return !(b && b.off);
+  });
 };
 
 // Rosa dell'anno prima, in forma [{name, role}].
@@ -765,10 +813,17 @@ window.fioRuolo = function(name, base) {
   return window.fioNormRuolo(base === undefined ? window.fioRuoloBase(name) : base);
 };
 
-// Rosa della stagione con il ruolo gia' risolto.
+// Rosa della stagione con il ruolo e il nome da mostrare gia' risolti.
+// `name` e' sempre la chiave vera del dato, quella con cui il GPS e i fogli
+// scrivono l'atleta: va usata per salvare. `nome` e' come si legge a schermo.
 window.fioRosterRuoli = function() {
   return window.fioRoster().map(function(p) {
-    return { name: p.name, role: window.fioRuolo(p.name, p.role), tipo: p.tipo };
+    return {
+      name: p.name,
+      nome: window.fioNome(p.name),
+      role: window.fioRuolo(p.name, p.role),
+      tipo: p.tipo
+    };
   });
 };
 
@@ -795,6 +850,8 @@ window.fioSetRuolo = function(name, role) {
 window.fioRuoliRicarica = function() {
   FIO_RUOLI_OV = null; FIO_RUOLI_OV_K = null;
   FIO_RUOLI_BASE = null; FIO_RUOLI_BASE_K = null;
+  // Anche i nomi mostrati partono dalla rosa: se cambia la rosa, cambiano.
+  if (typeof window.fioNomiRicarica === 'function') window.fioNomiRicarica();
 };
 
 // Ordine di lettura di una rosa divisa per ruolo: prima i ruoli canonici nel
@@ -816,6 +873,144 @@ window.addEventListener('storage', function(ev) {
   if (!ev || ev.key !== window.fioRuoliChiave()) return;
   window.fioRuoliRicarica();
   try { document.dispatchEvent(new CustomEvent('fio:ruoli', { detail: { nome: '', ruolo: '' } })); } catch (e) {}
+});
+
+// ---------------------------------------------------------------------------
+// NOME MOSTRATO: fonte unica.
+// I file GPS scrivono nome e cognome quando in rosa ci sono due atlete che si
+// chiamano uguale: e' successo l'anno scorso con le due Pieri, e da li' sono
+// rimasti "Pieri Viola" e "Faggioli Federica". Il nome scritto nel dato non si
+// tocca, altrimenti il carico non si aggancia piu' all'atleta: cambia solo
+// quello che si legge a schermo e sui fogli stampati.
+// Regola: se il cognome da solo basta a distinguerla, si legge il cognome. Le
+// particelle fanno parte del cognome, quindi "De Gregorio" resta intero, e se
+// due atlete hanno lo stesso cognome restano tutte e due col nome per esteso.
+// Chi vuole un nome diverso lo scrive in Atlete e quello vince sempre.
+// ---------------------------------------------------------------------------
+window.FIO_PARTICELLE = ['de', 'di', 'da', 'del', 'della', 'dello', 'dei', 'degli',
+  'dal', 'dalla', 'lo', 'la', 'li', 'van', 'von', 'der', 'den', 'mc', 'mac',
+  'san', 'santa', 'sant', 'saint', 'st'];
+
+// Il cognome di un nome scritto "Cognome Nome".
+window.fioCognome = function(name) {
+  var p = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
+  if (p.length < 2) return p.join(' ');
+  var n = 1;
+  while (n < p.length) {
+    var t = p[n - 1].toLowerCase().replace(/[.'’`]/g, '');
+    if (window.FIO_PARTICELLE.indexOf(t) < 0) break;
+    n++;
+  }
+  return p.slice(0, n).join(' ');
+};
+
+var FIO_NOMI_OV = null, FIO_NOMI_OV_K = null;
+var FIO_NOMI_AUTO = null, FIO_NOMI_AUTO_K = null;
+
+window.fioNomiChiave = function() { return window.fioKey('rs_fio_nomi'); };
+
+function fioNomiLeggi() {
+  var k = window.fioNomiChiave();
+  if (FIO_NOMI_OV && FIO_NOMI_OV_K === k) return FIO_NOMI_OV;
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(k) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  FIO_NOMI_OV = o; FIO_NOMI_OV_K = k;
+  return o;
+}
+
+// Copia degli override, per chi deve mostrarli o contarli senza modificarli.
+window.fioNomiOverride = function() {
+  var o = fioNomiLeggi(), out = {};
+  Object.keys(o).forEach(function(n) { out[n] = o[n]; });
+  return out;
+};
+
+// Nome accorciato in automatico, calcolato sulla rosa di quest'anno: il cognome
+// se e' l'unico in rosa, il nome per esteso se e' condiviso.
+// Si guarda la rosa completa, fuori rosa comprese: se una si legge "Pieri" non
+// deve diventare "Pieri Viola" solo perche' un'altra Pieri e' stata messa
+// fuori rosa a meta' stagione. Il nome sui fogli gia' stampati resta valido.
+function fioNomiAuto() {
+  var k = window.getStagione();
+  if (FIO_NOMI_AUTO && FIO_NOMI_AUTO_K === k) return FIO_NOMI_AUTO;
+  var conta = {}, m = {}, rosa = window.fioRosterFull();
+  rosa.forEach(function(p) {
+    var c = window.fioCognome(p.name);
+    conta[c] = (conta[c] || 0) + 1;
+  });
+  rosa.forEach(function(p) {
+    var c = window.fioCognome(p.name);
+    m[p.name] = (c && conta[c] === 1) ? c : p.name;
+  });
+  FIO_NOMI_AUTO = m; FIO_NOMI_AUTO_K = k;
+  return m;
+}
+
+// Come si legge un'atleta. Il nome scritto a mano vince; se non c'e', vale
+// l'accorciamento automatico; se l'atleta non e' in rosa resta com'e'.
+window.fioNome = function(name) {
+  name = String(name == null ? '' : name).trim();
+  if (!name) return '';
+  var o = fioNomiLeggi();
+  if (Object.prototype.hasOwnProperty.call(o, name)) {
+    var v = String(o[name] == null ? '' : o[name]).trim();
+    if (v) return v;
+  }
+  return fioNomiAuto()[name] || name;
+};
+
+// Nome automatico da solo, senza guardare quello scritto a mano: serve in
+// Atlete per mostrare che cosa comparirebbe lasciando la casella vuota.
+window.fioNomeAuto = function(name) {
+  name = String(name == null ? '' : name).trim();
+  if (!name) return '';
+  return fioNomiAuto()[name] || name;
+};
+
+// Scrittura: la usa Atlete. Se il nome torna a essere quello automatico
+// l'override sparisce, cosi' la chiave non si riempie di righe inutili.
+window.fioSetNome = function(name, alias) {
+  name = String(name == null ? '' : name).trim();
+  if (!name) return '';
+  var v = String(alias == null ? '' : alias).trim().replace(/\s+/g, ' ');
+  var o = window.fioNomiOverride();
+  if (!v || v === window.fioNomeAuto(name)) delete o[name];
+  else o[name] = v;
+  try { localStorage.setItem(window.fioNomiChiave(), JSON.stringify(o)); } catch (e) {}
+  FIO_NOMI_OV = o; FIO_NOMI_OV_K = window.fioNomiChiave();
+  try {
+    document.dispatchEvent(new CustomEvent('fio:nomi', { detail: { nome: name, mostrato: window.fioNome(name) } }));
+  } catch (e) {}
+  return window.fioNome(name);
+};
+
+// Da chiamare quando la rosa cambia sotto i piedi: atleta aggiunta o tolta,
+// cambio stagione, ripristino di un salvataggio.
+window.fioNomiRicarica = function() {
+  FIO_NOMI_OV = null; FIO_NOMI_OV_K = null;
+  FIO_NOMI_AUTO = null; FIO_NOMI_AUTO_K = null;
+};
+
+// Ordinamento della rosa per come si legge, non per come e' scritta nel dato.
+window.fioOrdinaNomi = function(lista, chiave) {
+  var k = chiave || 'name';
+  return (lista || []).slice().sort(function(a, b) {
+    var na = window.fioNome(typeof a === 'string' ? a : a[k]);
+    var nb = window.fioNome(typeof b === 'string' ? b : b[k]);
+    return na.localeCompare(nb, 'it');
+  });
+};
+
+// Il nome cambiato in un'altra scheda del browser vale anche qui.
+window.addEventListener('storage', function(ev) {
+  if (!ev) return;
+  if (ev.key !== window.fioNomiChiave() && ev.key !== window.fioKey('rs_fio_custom')
+      && ev.key !== window.fioKey('rs_fio_bio')) return;
+  window.fioNomiRicarica();
+  try { document.dispatchEvent(new CustomEvent('fio:nomi', { detail: { nome: '', mostrato: '' } })); } catch (e) {}
 });
 
 // ---------------------------------------------------------------------------

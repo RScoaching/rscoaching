@@ -895,6 +895,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+  // Come si legge un'atleta. Il nome salvato nel dato non cambia mai, cosi' il
+  // carico del GPS resta agganciato: cambia solo quello che si vede.
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
 
   // ---------- calcoli (allineati a tl_forza.py) ----------
   function est1rm(w, r){
@@ -1095,7 +1098,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
     return '<section class="acard reveal" style="--i:'+Math.min(idx+4,16)+'">'+
       '<div class="acard-head">'+
-        '<div class="aname-wrap"><span class="aname">'+esc(a.name)+'</span>'+roleHtml+'</div>'+
+        '<div class="aname-wrap"><span class="aname">'+esc(disp(a.name))+'</span>'+roleHtml+'</div>'+
         '<span class="spacer"></span>'+
         '<div class="astats">'+
           '<div class="astat"><span class="asv vi tnum">'+NF.format(a.ton/1000)+'<small>t</small></span><span class="asl">tonnellaggio</span></div>'+
@@ -1188,7 +1191,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     groups.forEach(a=>{
       const meta = ROLE[a.name] || { role:'', tipo:'' };
       const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
-      const band = esc(a.name) + (roleTxt?' &#183; '+esc(roleTxt):'') + ' &#183; ' + NF.format(a.ton/1000) + ' t &#183; ' + a.sedute + (a.sedute===1?' seduta':' sedute');
+      const band = esc(disp(a.name)) + (roleTxt?' &#183; '+esc(roleTxt):'') + ' &#183; ' + NF.format(a.ton/1000) + ' t &#183; ' + a.sedute + (a.sedute===1?' seduta':' sedute');
       rows += '<tr class="atl brk"><td class="l" colspan="'+ncols+'">'+band+'</td></tr>';
       a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
         const dt = parseDate(e.data);
@@ -1232,7 +1235,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     groups.forEach(a=>{
       const meta = ROLE[a.name] || { role:'', tipo:'' };
       const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
-      const band = a.name + (roleTxt?' · '+roleTxt:'') + ' · ' + NF.format(a.ton/1000) + ' t · ' + a.sedute + (a.sedute===1?' seduta':' sedute');
+      const band = disp(a.name) + (roleTxt?' · '+roleTxt:'') + ' · ' + NF.format(a.ton/1000) + ' t · ' + a.sedute + (a.sedute===1?' seduta':' sedute');
       body += '<tr><td colspan="'+ncols+'" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(band)+'</td></tr>';
       a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
         const cells = [
@@ -1282,8 +1285,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const sel = document.getElementById('af-atl');
     if(!sel) return;
     const opts = ROSTER.length
-      ? ROSTER.map(r=> '<option value="'+esc(r.name)+'">'+esc(r.name)+'</option>').join('')
-      : '<option value="">(nessun roster)</option>';
+      ? ROSTER.map(r=> '<option value="'+esc(r.name)+'">'+esc(disp(r.name))+'</option>').join('')
+      : '<option value="">(nessuna atleta in rosa)</option>';
     sel.innerHTML = opts;
   })();
 
@@ -1368,6 +1371,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // Come si legge un'atleta. Nelle schede salvate resta scritto il nome vero,
+  // quello del dato: qui si cambia solo la lettura, a schermo e sui fogli.
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
   var DTFL  = new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'});
   var DFMON = new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'});
@@ -1722,7 +1728,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var inp = '<input class="'+cls+'" '
       + (numerico ? 'type="number" min="10" max="300" step="0.1"' : 'type="text" inputmode="decimal"')
       + ' data-n="'+esc(name)+'" data-k="'+L.key+'" value="'+esc(txt)+'"'
-      + ' placeholder="-" aria-label="'+esc(L.label+' '+name)+'">';
+      + ' placeholder="-" aria-label="'+esc(L.label+' '+disp(name))+'">';
     var sotto = '';
     if(est && man == null){
       sotto = '<span class="'+srcCls+'">test VBT'+(est.d ? ' &#183; '+esc(est.d) : '')+'</span>';
@@ -1779,7 +1785,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function rmRender(filter){
     var host = document.getElementById('rm-wrap'); if(!host) return;
     var q = String(filter || '').trim().toLowerCase();
-    var list = ROSTER.filter(function(r){ return !q || r.name.toLowerCase().indexOf(q) !== -1; });
+    /* si cerca sia per come e' scritta nel dato sia per come si legge a schermo:
+       chi digita "faggioli" la trova anche se il dato dice "Faggioli Federica" */
+    var list = ROSTER.filter(function(r){
+      if(!q) return true;
+      return r.name.toLowerCase().indexOf(q) !== -1 || disp(r.name).toLowerCase().indexOf(q) !== -1;
+    });
     if(!list.length){ host.innerHTML = '<div class="rm-empty">Nessuna atleta trovata.</div>'; rmFoot(); return; }
     var head = '<tr><th class="l">Atleta</th>';
     RM_LIFTS.forEach(function(L){ head += '<th>'+esc(L.label)+'</th>'; });
@@ -1790,7 +1801,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       RM_LIFTS.forEach(function(L){
         tds += '<td>'+rmCell(p.name, L, 'rm-in', 'rm-cell', 'rm-src', 'rm-undo')+'</td>';
       });
-      body += '<tr><td class="l">'+esc(p.name)+(p.role?'<small>'+esc(p.role)+'</small>':'')+'</td>'+tds+'</tr>';
+      body += '<tr><td class="l">'+esc(disp(p.name))+(p.role?'<small>'+esc(p.role)+'</small>':'')+'</td>'+tds+'</tr>';
     });
     host.innerHTML = '<table class="rmtbl"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
     rmFoot();
@@ -1819,7 +1830,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(isAll(FB.players)){ host.innerHTML = ''; return; }
     var h = '';
     if(FB.groupName) h += '<span class="fb-tag all">'+esc(FB.groupName)+'</span>';
-    FB.players.forEach(function(n){ h += '<span class="fb-tag">'+esc(n)+'</span>'; });
+    FB.players.forEach(function(n){ h += '<span class="fb-tag">'+esc(disp(n))+'</span>'; });
     host.innerHTML = h;
   }
 
@@ -1839,7 +1850,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     ROSTER.forEach(function(r){
       var on = pickSel[r.name] ? ' checked' : '';
       h += '<label class="fbchk"><input type="checkbox" data-n="'+esc(r.name)+'"'+on+'>'
-        + '<span class="nm">'+esc(r.name)+'</span>'
+        + '<span class="nm">'+esc(disp(r.name))+'</span>'
         + '<span class="r">'+esc(r.role||'')+'</span></label>';
     });
     host.innerHTML = h;
@@ -1947,7 +1958,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     if(named.length>4) exHtml += '<li><span class="x" style="color:var(--muted);font-weight:500">+'+(named.length-4)+' altri esercizi</span></li>';
     if(!exHtml) exHtml = '<li><span class="x" style="color:var(--muted);font-weight:500">Nessun esercizio</span></li>';
-    var players = all ? '' : '<div class="fs-players"><b>Atlete:</b> '+esc(s.players.join(', '))+'</div>';
+    var players = all ? '' : '<div class="fs-players"><b>Atlete:</b> '+esc(s.players.map(disp).join(', '))+'</div>';
     return ''
       + '<div class="fs-card-head">'
       +   '<div class="fs-date"><span class="d">'+day+'</span><span class="my">'+esc(mon)+'</span></div>'
@@ -1978,7 +1989,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var host = document.getElementById('fsched'); if(!host) return;
     var list = sessLoad();
     var opts = '<option value="all">Tutte le atlete</option>';
-    NAMES.forEach(function(n){ opts += '<option value="'+esc(n)+'"'+(schedState.player===n?' selected':'')+'>'+esc(n)+'</option>'; });
+    NAMES.forEach(function(n){ opts += '<option value="'+esc(n)+'"'+(schedState.player===n?' selected':'')+'>'+esc(disp(n))+'</option>'; });
     var head = '<div class="fsched-top">'
       + '<div><div class="fs-h">Sedute programmate</div>'
       + '<div class="fs-hsub">Le sedute salvate dal costruttore, con data e atlete. Modificale, duplicale o stampa la scheda.</div></div>'
@@ -2193,12 +2204,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           if(edit){
             cells += '<td style="'+tds+'"><input class="fz-kgin'+(kg.ov ? ' ov' : '')+'" type="number"'
               + ' step="0.5" min="0" inputmode="decimal" value="'+kg.v+'"'
-              + ' data-k="'+esc(fzKey(r, n))+'" aria-label="'+esc(n+' '+r.ex)+'"></td>';
+              + ' data-k="'+esc(fzKey(r, n))+'" aria-label="'+esc(disp(n)+' '+r.ex)+'"></td>';
           } else {
             cells += '<td style="'+tds+'">'+kgTxt(kg.v)+'</td>';
           }
         });
-        trs += '<tr><td class="a" style="'+tds+'">'+esc(n)+'</td>'+cells+'</tr>';
+        trs += '<tr><td class="a" style="'+tds+'">'+esc(disp(n))+'</td>'+cells+'</tr>';
       });
 
       body = '<div class="fz-in" style="padding:4mm 5mm;font-size:'+fs+'px">'
@@ -2448,7 +2459,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           var tds = RM_LIFTS.map(function(L){
             return '<td class="r">'+rmCell(nm, L, 'fmx-in', 'fmx-cell', 'rm-src', 'rm-undo', true)+'</td>';
           }).join('');
-          return '<tr><td class="nm">'+esc(nm)+'</td>'+tds+'</tr>';
+          return '<tr><td class="nm">'+esc(disp(nm))+'</td>'+tds+'</tr>';
         }).join('');
         fmTbody.querySelectorAll('.fmx-in').forEach(function(inp){
           inp.addEventListener('change', function(){

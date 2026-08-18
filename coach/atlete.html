@@ -719,6 +719,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- helpers ----------
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   const normRole = window.fioNormRuolo;
+  // Come si legge un'atleta. Il nome scritto nel dato non cambia mai, cosi' il
+  // carico del GPS resta agganciato: cambia solo quello che si vede a schermo.
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
   function initials(name){
     const parts = String(name||'').trim().split(/\s+/).filter(Boolean);
     if(!parts.length) return '?';
@@ -882,9 +885,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   ];
 
   // ---------- build player model ----------
+  // La lista parte dalla rosa condivisa di `fio_sidebar.js`, la stessa che usano
+  // Forza, Sedute e il calendario: un'atleta scritta a mano qui compare anche
+  // di la', e una che quest'anno non c'e' piu' sparisce da tutte le pagine in
+  // una volta sola. Qui si usa la rosa completa, fuori rosa comprese, perche'
+  // questa e' l'unica pagina che le deve poter rimettere dentro.
+  // I minuti, i chilometri e le presenze restano quelli del carico GPS.
   function buildPlayers(){
     const src = S.players || {};
-    const result = Object.keys(src).sort((a,b)=> a.localeCompare(b,'it')).map(name=>{
+    const rosa = (typeof window.fioRosterFull==='function')
+      ? window.fioRosterFull()
+      : Object.keys(src).map(n=> ({ name:n, role:(src[n]||{}).role, tipo:'' }));
+    const result = rosa.map(rp=>{
+      const name = rp.name;
       const p = src[name] || {};
       const months = p.months || [];
       let min=0, dist=0, sedute=0, partite=0;
@@ -900,17 +913,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           }
         });
       });
-      const snapRole = normRole(p.role);
-      return { name, snapRole, min, dist, sedute, partite, custom:false };
+      const snapRole = normRole(p.role || rp.role || '');
+      const custom = rp.tipo==='manuale' || Object.prototype.hasOwnProperty.call(customPlayers, name);
+      return { name, snapRole, min, dist, sedute, partite, custom };
     });
-    Object.keys(customPlayers).sort((a,b)=> a.localeCompare(b,'it')).forEach(name=>{
-      if(!result.find(p=> p.name===name)){
-        result.push({ name, snapRole: normRole(customPlayers[name]||''), min:0, dist:0, sedute:0, partite:0, custom:true });
-      }
-    });
-    return result.sort((a,b)=> a.name.localeCompare(b.name,'it'));
+    return result.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
   }
   function rebuildPlayers(){
+    // Il nome mostrato si accorcia solo se il cognome e' unico in rosa: se la
+    // rosa cambia va ricalcolato prima di ridisegnare.
+    if(typeof window.fioNomiRicarica==='function') window.fioNomiRicarica();
     const rebuilt = buildPlayers();
     PLAYERS.length = 0;
     rebuilt.forEach(p=> PLAYERS.push(p));
@@ -986,7 +998,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function currentList(){
     const q = state.q.trim().toLowerCase();
     let list = PLAYERS.filter(pl=>{
-      if(q && pl.name.toLowerCase().indexOf(q)<0) return false;
+      // si cerca sia per come e' scritta nel dato sia per come si legge:
+      // "faggioli" trova anche l'atleta scritta "Faggioli Federica"
+      if(q && pl.name.toLowerCase().indexOf(q)<0 && disp(pl.name).toLowerCase().indexOf(q)<0) return false;
       const off = isOff(pl.name);
       if(state.filter==='__off__') return off;
       if(off) return false;
@@ -996,11 +1010,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return r===state.filter;
     });
     const s = state.sort;
+    const alfa = (a,b)=> disp(a.name).localeCompare(disp(b.name),'it');
     list = list.slice().sort((a,b)=>{
-      if(s==='minuti')  return b.min-a.min || a.name.localeCompare(b.name,'it');
-      if(s==='sedute')  return b.sedute-a.sedute || a.name.localeCompare(b.name,'it');
-      if(s==='partite') return b.partite-a.partite || a.name.localeCompare(b.name,'it');
-      return a.name.localeCompare(b.name,'it');
+      if(s==='minuti')  return b.min-a.min || alfa(a,b);
+      if(s==='sedute')  return b.sedute-a.sedute || alfa(a,b);
+      if(s==='partite') return b.partite-a.partite || alfa(a,b);
+      return alfa(a,b);
     });
     return list;
   }
@@ -1030,13 +1045,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const bpl = bio[pl.name]; const isOff = !!(bpl && bpl.off);
       const offHtml = isOff ? '<span class="flag-out" title="Fuori dalla rosa operativa">Fuori rosa</span>' : '';
       return ''+
-      '<article class="pcard reveal'+(isOff?' off':'')+'" style="--i:'+Math.min(i,16)+'" data-name="'+esc(pl.name)+'" role="button" tabindex="0" aria-label="Apri la scheda di '+esc(pl.name)+'">'+
+      '<article class="pcard reveal'+(isOff?' off':'')+'" style="--i:'+Math.min(i,16)+'" data-name="'+esc(pl.name)+'" role="button" tabindex="0" aria-label="Apri la scheda di '+esc(disp(pl.name))+'">'+
         '<div class="pcard-top">'+
           '<div class="avatar" aria-hidden="true">'+esc(initials(pl.name))+'</div>'+
           '<div class="pcard-id">'+
-            '<div class="pname" title="'+esc(pl.name)+'">'+esc(pl.name)+'</div>'+
+            /* a schermo il nome corto, nel titolo del riquadro quello per esteso
+               del dato, cosi' resta chiaro a chi si aggancia il carico GPS */
+            '<div class="pname" title="'+esc(pl.name)+'">'+esc(disp(pl.name))+'</div>'+
             '<span class="role-wrap'+(unassigned?' unassigned':'')+'">'+
-              '<select class="role-select" data-name="'+esc(pl.name)+'" aria-label="Ruolo di '+esc(pl.name)+'">'+opts+'</select>'+
+              '<select class="role-select" data-name="'+esc(pl.name)+'" aria-label="Ruolo di '+esc(disp(pl.name))+'">'+opts+'</select>'+
             '</span>'+
             injHtml+offHtml+
           '</div>'+
@@ -1088,7 +1105,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!pl) return;
     shName = name;
     document.getElementById('sh-av').textContent = initials(pl.name);
-    document.getElementById('sh-name').textContent = pl.name;
+    document.getElementById('sh-name').textContent = disp(pl.name);
+    document.getElementById('sh-name').title = pl.name;
     setSheetSub(effRole(pl));
     renderSheetBody();
     clearTimeout(shTmr);
@@ -1165,9 +1183,25 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     } else {
       hint = '<span class="fld-hint">Se il fisio lo registra nei test compare qui da solo.</span>';
     }
+    // Nome mostrato. I file GPS scrivono nome e cognome quando in rosa ci sono
+    // due atlete che si chiamano uguale: e' successo con le due Pieri, e da li'
+    // sono rimasti "Pieri Viola" e "Faggioli Federica". Il nome del dato resta
+    // com'e', altrimenti il carico non si aggancia piu': qui si cambia soltanto
+    // come si legge, a schermo e sui fogli stampati, in tutte le pagine.
+    const nomeAuto = (typeof window.fioNomeAuto==='function') ? window.fioNomeAuto(pl.name) : pl.name;
+    const nomeOv   = (typeof window.fioNomiOverride==='function') ? (window.fioNomiOverride()[pl.name] || '') : '';
+    const nomeHint = nomeOv
+      ? 'Nei dati resta '+esc(pl.name)+'. Svuota la casella per tornare a '+esc(nomeAuto)+'.'
+      : (nomeAuto !== pl.name
+          ? 'Nei dati resta '+esc(pl.name)+', il GPS si aggancia lo stesso. Scrivi qui per cambiare come si legge.'
+          : 'Vale ovunque: Forza, sedute, calendario e fogli stampati.');
     return '<section class="sh-sec">'+
       '<h3 class="sh-h">Anagrafica</h3>'+
       '<div class="sh-grid">'+
+        '<div class="fld wide"><span>Nome mostrato</span>'+
+          '<input id="sh-nome" type="text" autocomplete="off" placeholder="'+esc(nomeAuto)+'" value="'+esc(nomeOv)+'">'+
+          '<span class="fld-hint">'+nomeHint+'</span>'+
+        '</div>'+
         '<div class="fld wide"><span>Ruolo</span><select id="sh-role" aria-label="Ruolo">'+opts+'</select></div>'+
         '<div class="fld"><span>Peso (kg)</span>'+
           '<input id="sh-peso" type="number" inputmode="decimal" min="35" max="110" step="0.1" placeholder="es. 58.5" value="'+esc(pesoVal)+'">'+
@@ -1362,7 +1396,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       setRole(pl.name, val);
       setSheetSub(val);
       renderKPIs(); renderPills(); renderGrid(); updateResetBtn(); buildPrintRoster();
-      toast('Ruolo aggiornato: '+pl.name);
+      toast('Ruolo aggiornato: '+disp(pl.name));
+    });
+
+    // Il nome mostrato passa da `fio_sidebar.js`: scritto qui vale in tutte le
+    // pagine, e lasciando la casella vuota si torna a quello automatico.
+    const nomeInp = document.getElementById('sh-nome');
+    if(nomeInp && typeof window.fioSetNome==='function') nomeInp.addEventListener('change', ()=>{
+      const letto = window.fioSetNome(pl.name, nomeInp.value);
+      PLAYERS.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
+      document.getElementById('sh-name').textContent = letto;
+      renderSheetBody(); renderGrid(); renderAvail(); buildPrintRoster();
+      toast('Nome mostrato: '+letto);
     });
 
     [['sh-peso','peso'], ['sh-alt','alt'], ['sh-note','note']].forEach(pair=>{
@@ -1372,7 +1417,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         b[pair[1]] = String(el.value||'').trim();
         saveBio();
         if(pair[1]==='peso') renderSheetBody(); // la riga sotto il campo cambia insieme al valore
-        toast('Scheda salvata: '+pl.name);
+        toast('Scheda salvata: '+disp(pl.name));
       });
     });
 
@@ -1407,7 +1452,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(!it) return;
       it.st = it.st==='infortunio' ? 'recupero' : (it.st==='recupero' ? 'risolto' : 'infortunio');
       saveBio(); renderSheetBody(); renderKPIs(); renderGrid();
-      toast(pl.name+': '+stLabel(it.st).toLowerCase());
+      toast(disp(pl.name)+': '+stLabel(it.st).toLowerCase());
     }));
 
     host.querySelectorAll('[data-act="del"]').forEach(el=> el.addEventListener('click', ()=>{
@@ -1472,11 +1517,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       saveBio();
       renderSheetBody();
       renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
-      toast(b.off ? pl.name + ' fuori dalla rosa operativa' : pl.name + ' reintegrata');
+      toast(b.off ? disp(pl.name) + ' fuori dalla rosa operativa' : disp(pl.name) + ' reintegrata');
     });
     const delBtn = document.getElementById('sh-delete-player');
     if(delBtn) delBtn.addEventListener('click', ()=>{
-      if(!window.confirm('Eliminare definitivamente ' + pl.name + '?')) return;
+      if(!window.confirm('Eliminare definitivamente ' + disp(pl.name) + '?')) return;
       delete customPlayers[pl.name]; saveCustom();
       delete bio[pl.name]; saveBio();
       delete avail[pl.name]; saveAvail();
@@ -1560,7 +1605,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(!arr.length) return;
       rows += '<tr class="rep"><td class="l" colspan="5">'+esc(label)+' &#183; '+arr.length+'</td></tr>';
       arr.forEach(pl=>{
-        rows += '<tr'+(na?' class="na"':'')+'><td class="l">'+esc(pl.name)+'</td>'+
+        rows += '<tr'+(na?' class="na"':'')+'><td class="l">'+esc(disp(pl.name))+'</td>'+
           '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
           '<td>'+NF0.format(pl.sedute)+'</td>'+
           '<td>'+NF0.format(pl.partite)+'</td>'+
@@ -1587,7 +1632,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(!arr.length) return;
       body += '<tr class="rep"><td class="lbl" colspan="6">'+esc(label)+' &#183; '+arr.length+'</td></tr>';
       arr.forEach(pl=>{
-        body += '<tr'+(na?' class="na"':'')+'><td class="lbl">'+esc(pl.name)+'</td>'+
+        body += '<tr'+(na?' class="na"':'')+'><td class="lbl">'+esc(disp(pl.name))+'</td>'+
           '<td class="lbl">'+esc(effRole(pl)||UNASSIGNED)+'</td>'+
           '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
           '<td>'+NF0.format(pl.sedute)+'</td>'+
@@ -1757,7 +1802,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           '<div class="av-lh"><span class="l">'+esc(s.l)+'</span><span class="n tnum">'+byState[s.k].length+'</span></div>'+
           '<div class="av-drop">'+
             byState[s.k].map(pl=>
-              '<div class="tok st '+s.cls+'" draggable="true" data-name="'+esc(pl.name)+'" title="'+esc(pl.name)+'" tabindex="0" role="button" aria-label="'+esc(pl.name)+'">'+
+              '<div class="tok st '+s.cls+'" draggable="true" data-name="'+esc(pl.name)+'" title="'+esc(disp(pl.name))+'" tabindex="0" role="button" aria-label="'+esc(disp(pl.name))+'">'+
                 esc(initials(pl.name))+
               '</div>'
             ).join('')+
@@ -1853,7 +1898,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(addrowEl) addrowEl.hidden = true;
     renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
     renderRecon();
-    toast('Atleta aggiunta: ' + name);
+    toast('Atleta aggiunta: ' + disp(name));
   });
 
   // ---------- riconferma atlete dell'anno prima ----------
@@ -1885,8 +1930,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         + ' Un click la rimette dentro con il suo ruolo.';
     }
     reconListEl.innerHTML = pool.map(p=>
-      '<button type="button" class="recon-btn" data-recon="'+esc(p.name)+'" data-role="'+esc(p.role)+'">'
-      + PLUS_SVG + esc(p.name)
+      '<button type="button" class="recon-btn" data-recon="'+esc(p.name)+'" data-role="'+esc(p.role)+'" title="'+esc(p.name)+'">'
+      + PLUS_SVG + esc(disp(p.name))
       + (p.role ? ' <span class="rl">'+esc(p.role)+'</span>' : '')
       + '</button>'
     ).join('');
@@ -1902,7 +1947,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     rebuildPlayers();
     renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
     renderRecon();
-    toast('Riconfermata: ' + name);
+    toast('Riconfermata: ' + disp(name));
   });
 
   renderKPIs(); renderPills(); renderGrid(); updateResetBtn(); buildPrintRoster();
