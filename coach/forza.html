@@ -816,6 +816,35 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   patterns:[],pattern_keys:[],zone:[],roster:[],entries:[]};
 </script>
 
+<!-- libreria esercizi condivisa con le altre sezioni (window.EXERCISES_DB) -->
+<script src="../exercises_db.js"></script>
+<script>
+/* La tendina degli esercizi pescava da quindici nomi scritti a mano. Adesso
+   legge la stessa libreria delle altre pagine: gli esercizi di forza, gli
+   olimpici, la pliometria e gli sprint restano in cima perche' sono quelli
+   della sezione, il resto segue in ordine alfabetico. */
+(function(){
+  var db = window.EXERCISES_DB, dl = document.getElementById('ex-list');
+  if(!db || !db.length || !dl) return;
+  var PRIO = { forza:0, olimpico:1, pliometria:2, velocita_sprint:3 };
+  var seen = {}, list = [];
+  db.forEach(function(e){
+    var n = (e && e.name || '').trim();
+    if(!n) return;
+    var k = n.toLowerCase();
+    if(seen[k]) return;
+    seen[k] = 1;
+    list.push({ n:n, p:(PRIO[e.cat] == null ? 9 : PRIO[e.cat]) });
+  });
+  list.sort(function(a, b){ return (a.p - b.p) || a.n.localeCompare(b.n, 'it'); });
+  var html = '';
+  list.forEach(function(x){
+    html += '<option value="' + x.n.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') + '"></option>';
+  });
+  dl.innerHTML = html;
+})();
+</script>
+
 <!-- sidebar area Fiorentina -->
 <script src="./fio_sidebar.js"></script>
 <script>
@@ -1998,11 +2027,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      per riga e una colonna per esercizio con la percentuale prevista.
      Gli stessi due fogli si vedono in anteprima dentro la pagina, dove i kg si
      possono correggere atleta per atleta prima di stampare.
-     A4 orizzontale con margine 8 mm: restano 281 x 194 mm, ne uso 280 x 193
-     per non far scivolare il foglio su una pagina in piu'. ------------------ */
+     A4 orizzontale. Il margine non e' del @page ma della cornice .pg: con
+     @page{margin:0} il browser non stampa la sua riga di intestazione con
+     data, ora e about:blank. Il foglio resta centrato con 12 mm ai lati e
+     11 mm sopra e sotto: 297-24 = 273 mm per 209-22 = 187 mm. --------------- */
   var FZ_ABS  = new URL('.', location.href).href;
   var FZ_VIO  = '#5B2D90';
-  var FZ_W = 280, FZ_H = 193, FZ_HEAD = 20;
+  var FZ_PS = 12, FZ_PT = 11;
+  var FZ_W = 273, FZ_H = 187, FZ_HEAD = 20;
   var PX_MM = 0.2646;
 
   function fzCSS(p){
@@ -2035,14 +2067,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     +   ' font-variant-numeric:tabular-nums; }'
     + p+'.fz-tbl td.a{ text-align:left; color:'+FZ_VIO+'; white-space:nowrap; overflow:hidden;'
     +   ' text-overflow:ellipsis; }'
-    + p+'.fz-tbl tbody tr:nth-child(even) td{ background:#f5f1fa; }'
+    /* la riga alternata e' un velo, non una campitura piena: il logo in
+       filigrana si vede ancora sotto e non sembra tagliato dalle righe */
+    + p+'.fz-tbl tbody tr:nth-child(even) td{ background:rgba(91,45,144,.055); }'
     + p+'.fz-tbl td.miss{ color:#a9a3b3; font-weight:600; }'
     + p+'.fz-kgin{ display:block; width:100%; box-sizing:border-box; appearance:none; -webkit-appearance:none;'
     +   ' -moz-appearance:textfield; border:0; background:transparent; font:inherit; color:inherit;'
     +   ' text-align:center; padding:0; }'
     + p+'.fz-kgin::-webkit-outer-spin-button, '+p+'.fz-kgin::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }'
     + p+'.fz-kgin:focus{ outline:2px solid '+FZ_VIO+'; outline-offset:1px; }'
-    + p+'.fz-kgin.ov{ color:#c2410c; text-decoration:underline; text-underline-offset:2px; }';
+    /* il kg corretto a mano resta nero come gli altri: e' un dato, non un errore */
+    + p+'.fz-kgin.ov{ color:inherit; text-decoration:none; }';
   }
 
   function fzTitle(src){
@@ -2122,7 +2157,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     } else {
       /* altezza utile sotto l'intestazione, meno il bordo e il respiro laterale */
       var rowMM = Math.max(4.3, Math.min(8.2, (FZ_H - FZ_HEAD - 22) / atl.length));
-      var fs = Math.max(8.5, Math.min(14, Math.round((rowMM - 2.2) / PX_MM / 1.25 * 10) / 10));
+      var fs = Math.max(9, Math.min(16, Math.round((rowMM - 2.2) / PX_MM / 1.25 * 10) / 10));
       var pad = Math.max(0.6, Math.round((rowMM - fs * PX_MM * 1.25 - 0.4) / 2 * 10) / 10);
       var tds = 'padding:' + pad + 'mm 1.6mm';
 
@@ -2166,17 +2201,22 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
 
   function fzDoc(src){
+    var p2 = fzPage2(src, false);
     return '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>'+esc(fzTitle(src))+'</title>'
       + '<style>'
       +   '*{box-sizing:border-box;margin:0;padding:0;}'
-      +   '@page{size:A4 landscape;margin:8mm;}'
+      +   '@page{size:A4 landscape;margin:0;}'
       +   'html,body{background:#fff;}'
       +   'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;'
       +     'color:#14110f;line-height:1.3;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-      +   '.fzp{page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;}'
-      +   '.fzp:last-child{page-break-after:auto;break-after:auto;}'
+      +   '.pg{width:297mm;height:209mm;padding:'+FZ_PT+'mm '+FZ_PS+'mm;'
+      +     'page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;overflow:hidden;}'
+      +   '.pg:last-child{page-break-after:auto;break-after:auto;}'
       +   fzCSS('')
-      + '</style></head><body>' + fzPage1(src) + fzPage2(src, false) + '</body></html>';
+      + '</style></head><body>'
+      + '<div class="pg">' + fzPage1(src) + '</div>'
+      + (p2 ? '<div class="pg">' + p2 + '</div>' : '')
+      + '</body></html>';
   }
   function fzOpen(html){
     var w = window.open('', '_blank');
