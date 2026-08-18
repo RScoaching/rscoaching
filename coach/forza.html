@@ -237,6 +237,7 @@ a{ color:inherit; text-decoration:none; }
   letter-spacing:.04em; text-transform:uppercase; margin-left:8px; vertical-align:middle; }
 .badge.pat{ background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
 .badge.man{ background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.badge.ses{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 .ecalc{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .chip{ display:inline-flex; align-items:baseline; gap:4px; padding:5px 10px; border-radius:8px;
   background:var(--surface2); border:1px solid var(--border2); font-size:10.5px; color:var(--muted);
@@ -385,6 +386,11 @@ table.rmtbl td{ padding:4px 6px; border-bottom:1px solid var(--border); text-ali
 table.rmtbl td.l{ text-align:left; padding-left:8px; font-weight:600; color:var(--text); white-space:nowrap; }
 table.rmtbl td.l small{ display:block; font-weight:500; font-size:10.5px; color:var(--faint); }
 table.rmtbl tr:last-child td{ border-bottom:0; }
+/* riga di intestazione dei gruppi di rosa: squadra, aggregate, aggiunte a mano */
+table.rmtbl td.grp{ text-align:left; padding:12px 8px 5px; font-size:10.5px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border2); }
+table.rmtbl td.grp b{ color:var(--faint); font-weight:600; margin-left:6px; }
+table.rmtbl tr:first-child td.grp{ padding-top:4px; }
 .rm-in{ appearance:none; font-family:inherit; font-size:13px; color:var(--text); text-align:center;
   background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:6px 4px; min-height:34px; width:74px; }
 .rm-in:focus{ border-color:var(--border3); }
@@ -413,6 +419,12 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
   background:var(--surface2); border:1px solid var(--border2); border-radius:9px; padding:9px 12px; min-height:42px; width:100%; }
 .fbdlg-group input:focus{ border-color:var(--border3); }
 .fbdlg-body{ display:grid; grid-template-columns:1fr 1fr; gap:4px 14px; padding:12px 20px; max-height:42vh; overflow-y:auto; }
+/* titolo di gruppo dentro la griglia a due colonne: occupa tutta la riga */
+.fbdlg-h{ grid-column:1 / -1; display:flex; align-items:center; gap:8px; margin:10px 0 2px;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.fbdlg-h:first-child{ margin-top:0; }
+.fbdlg-h .ln{ flex:1 1 auto; height:1px; background:var(--border2); }
+.fbdlg-h .n{ font-size:10.5px; font-weight:600; color:var(--faint); letter-spacing:0; text-transform:none; }
 .fbchk{ display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; cursor:pointer;
   transition: background .15s var(--ease); }
 .fbchk:hover{ background:var(--surface2); }
@@ -450,6 +462,10 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fs-aud{ display:inline-flex; align-items:center; gap:5px; margin-top:5px; font-size:11.5px; font-weight:600; color:var(--orange2); }
 .fs-aud svg{ width:12px; height:12px; flex:0 0 auto; }
 .fs-aud.grp{ color:var(--violet2); }
+.fs-done{ display:inline-flex; align-items:center; gap:5px; margin-left:8px; padding:2px 8px; border-radius:999px;
+  font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+.fs-done svg{ width:11px; height:11px; flex:0 0 auto; }
 .fs-body{ padding:12px 15px 4px; }
 .fs-stats{ display:flex; gap:16px; margin-bottom:11px; }
 .fs-st{ display:flex; flex-direction:column; }
@@ -884,6 +900,16 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const ROLE = {};
   ROSTER.forEach(r=>{ ROLE[r.name] = { role:r.role||'', tipo:r.tipo||'' }; });
 
+  /* Come e' entrata in rosa. Le aggregate (nei dati `tipo:'sporadica'`) sono
+     le ragazze che si allenano con noi ogni tanto, quelle scritte a mano
+     arrivano da Atlete. Si legge accanto al ruolo e non al posto suo: prima
+     un'aggregata con il ruolo scritto sembrava del gruppo squadra. */
+  function tipoTxt(name){
+    const t = (ROLE[name] || {}).tipo || '';
+    if(t === 'manuale') return 'aggiunta a mano';
+    return t === 'sporadica' ? 'aggregata' : '';
+  }
+
   // pattern label + reparto lookup
   const PLABEL = {}, PREP = {};
   PATTERNS.forEach(p=>{ PLABEL[p.key]=p.label; PREP[p.key]=p.reparto; });
@@ -936,8 +962,119 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
   function saveManual(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch(e){} }
 
+  /* ---------- sedute salvate nel costruttore ---------- */
+  /* Una scheda salvata con la sua data vuol dire che quel giorno le atlete
+     l'hanno fatta: da qui l'archivio la legge come lavoro eseguito, senza
+     riscriverla a mano. Vale anche con una data indietro nel tempo, per
+     recuperare le sedute rimaste fuori. I kg sono quelli della scheda: dove
+     manca la percentuale o il massimale resta il conto di serie e ripetizioni,
+     che sui tre fondamentali e' proprio il dato che si segue. */
+  const SESS_KEY = K('rs_fio_forza_sessions');
+  const RM_KEY   = K('rs_fio_forza_1rm');
+  const SESS_LIFT = { squat:1, stacco:1, hip:1 };
+
+  function stagId(){
+    try{ if(window.getStagione) return window.getStagione(); }catch(e){}
+    return '25-26';
+  }
+  /* massimali scritti a mano nella tabella dei massimali */
+  function rmMano(){
+    try{ const o = JSON.parse(localStorage.getItem(RM_KEY)||'{}');
+      return (o && typeof o==='object' && !Array.isArray(o)) ? o : {}; }
+    catch(e){ return {}; }
+  }
+  /* stime 1RM del test VBT: valgono dove la casella a mano e' vuota */
+  function rmTest(){
+    const out = {}, map = { squat:'vbt_squat_1rm', hip:'vbt_ht_1rm' };
+    let reg = null;
+    try{ const raw = localStorage.getItem('fio_test_register_v2_'+stagId()); reg = raw ? JSON.parse(raw) : null; }
+    catch(e){ reg = null; }
+    if(!reg || typeof reg!=='object') return out;
+    Object.keys(map).forEach(lift=>{
+      const bag = reg[map[lift]];
+      if(!bag || typeof bag!=='object') return;
+      Object.keys(bag).forEach(name=>{
+        const v = parseFloat((bag[name]||{}).v);
+        if(!Number.isFinite(v) || v<=0) return;
+        if(!out[name]) out[name] = {};
+        out[name][lift] = Math.round(v*10)/10;
+      });
+    });
+    return out;
+  }
+  /* esercizio -> massimale di riferimento, stesse parole del costruttore */
+  function autoLift(ex){
+    const s = String(ex||'').toLowerCase();
+    if(!s) return '';
+    if(s.indexOf('thrust')!==-1 || s.indexOf('ponte')!==-1 || s.indexOf('glute bridge')!==-1) return 'hip';
+    if(s.indexOf('stacco')!==-1 || s.indexOf('deadlift')!==-1 || s.indexOf('rdl')!==-1
+       || s.indexOf('rumeno')!==-1 || s.indexOf('romeno')!==-1) return 'stacco';
+    if(s.indexOf('squat')!==-1 || s.indexOf('affond')!==-1 || s.indexOf('lunge')!==-1
+       || s.indexOf('pressa')!==-1 || s.indexOf('leg press')!==-1 || s.indexOf('clean')!==-1) return 'squat';
+    return '';
+  }
+  function liftOf(r){
+    const l = (r && r.lift) ? String(r.lift) : '';
+    if(l === 'none') return '';
+    if(l && l!=='auto' && SESS_LIFT[l]) return l;
+    return autoLift(r && r.ex);
+  }
+  /* stessa chiave del costruttore per i kg corretti a mano nell'anteprima */
+  function ovKey(r, name){
+    return String(r.ex||'').trim().toLowerCase()+'|'+String(r.pct||'').trim()+'|'+name;
+  }
+  function loadSess(){
+    try{ const a = JSON.parse(localStorage.getItem(SESS_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+    catch(e){ return []; }
+  }
+  /* una riga per atleta e per esercizio: e' il lavoro che quel giorno hanno fatto */
+  function sessEntries(){
+    const list = loadSess();
+    if(!list.length) return [];
+    const MANO = rmMano(), TEST = rmTest(), tutte = ROSTER.map(r=> r.name);
+    function rmDi(name, key){
+      const v = parseFloat((MANO[name]||{})[key]);
+      if(Number.isFinite(v) && v>0) return v;
+      const t = (TEST[name]||{})[key];
+      return (t==null) ? null : t;
+    }
+    const out = [];
+    list.forEach((s, si)=>{
+      const data = String((s && s.date) || '').slice(0,10);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) return;   // senza data non e' una seduta fatta
+      const rows = Array.isArray(s.rows) ? s.rows.filter(r=> r && r.ex && String(r.ex).trim()) : [];
+      if(!rows.length) return;
+      let team = Array.isArray(s.players) ? s.players.filter(n=> tutte.indexOf(n)!==-1) : [];
+      if(!team.length || team.length>=tutte.length) team = tutte.slice();
+      const kgov = (s.kgov && typeof s.kgov==='object' && !Array.isArray(s.kgov)) ? s.kgov : {};
+      team.forEach(name=>{
+        rows.forEach((r, ri)=>{
+          const pn = parseFloat(r.pct);
+          const pct = (Number.isFinite(pn) && pn>0) ? pn : null;
+          let kg = null;
+          const ov = parseFloat(kgov[ovKey(r, name)]);
+          if(Number.isFinite(ov) && ov>0) kg = ov;
+          else {
+            const k = liftOf(r), m = k ? rmDi(name, k) : null;
+            if(m!=null && pct!=null) kg = Math.round(m*pct/100/2.5)*2.5;
+          }
+          const rec = parseFloat(r.rec);
+          out.push(normalize({
+            data: data, atleta: name, esercizio: String(r.ex).trim(),
+            serie: r.serie, ripetizioni: r.rip,
+            carico_kg: (kg==null ? '' : kg),
+            pct1rm: (pct==null ? '' : pct),
+            recupero_s: (Number.isFinite(rec) && rec>0) ? rec : '',
+            note: r.note || ''
+          }, false, 'fs'+si+'-'+ri+'-'+name, true));
+        });
+      });
+    });
+    return out;
+  }
+
   // ---------- normalizza entry ----------
-  function normalize(e, manual, id){
+  function normalize(e, manual, id, seduta){
     const serie = Number(e.serie)||0;
     const rip   = Number(e.ripetizioni)||0;
     const kgRaw = e.carico_kg;
@@ -957,14 +1094,19 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       rpe:(e.rpe===''||e.rpe==null)?null:Number(e.rpe),
       recupero_s:(e.recupero_s===''||e.recupero_s==null)?null:Number(e.recupero_s),
       note:e.note||'', volume_load:vl, rm_stim:rm, zona:z, pattern:pat, reparto:rep,
-      manual:!!manual, id
+      manual:!!manual, seduta:!!seduta, id
     };
   }
 
   function buildEntries(){
-    const out = [];
-    (F.entries||[]).forEach((e,i)=> out.push(normalize(e, false, 's'+i)));
-    loadManual().forEach(m=> out.push(normalize(m, true, m.id)));
+    const out = [], visto = {};
+    function chiave(n){ return n.data+'|'+n.atleta+'|'+String(n.esercizio).trim().toLowerCase(); }
+    (F.entries||[]).forEach((e,i)=>{ const n=normalize(e, false, 's'+i); visto[chiave(n)]=1; out.push(n); });
+    loadManual().forEach(m=>{ const n=normalize(m, true, m.id); visto[chiave(n)]=1; out.push(n); });
+    /* una riga gia' importata o scritta a mano per quel giorno vince: la seduta
+       salvata non la raddoppia. Fra loro le righe della seduta restano tutte,
+       lo stesso esercizio puo' tornare a due percentuali diverse. */
+    sessEntries().forEach(n=>{ if(!visto[chiave(n)]) out.push(n); });
     return out;
   }
 
@@ -1051,9 +1193,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ---------- one athlete card ----------
   function athleteCard(a, idx){
     const meta = ROLE[a.name] || { role:'', tipo:'' };
-    const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
-    const roleCls = (meta.role ? 'role-chip' : 'role-chip spor');
-    const roleHtml = roleTxt ? '<span class="'+roleCls+'">'+esc(roleTxt)+'</span>' : '';
+    const tTxt = tipoTxt(a.name);
+    let roleHtml = meta.role ? '<span class="role-chip">'+esc(meta.role)+'</span>' : '';
+    if(tTxt) roleHtml += '<span class="role-chip spor">'+esc(tTxt)+'</span>';
 
     // group entries by date desc
     const byDate = new Map();
@@ -1069,6 +1211,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const short = PSHORT[e.pattern] || 'AL';
         const patBadge = '<span class="badge pat">'+esc(PLABEL[e.pattern]||e.pattern)+'</span>';
         const manBadge = e.manual ? '<span class="badge man">manuale</span>' : '';
+        const sesBadge = e.seduta ? '<span class="badge ses">da seduta</span>' : '';
         const parts = [];
         parts.push(e.serie+'×'+e.ripetizioni);
         if(e.carico_kg!=null) parts.push(NF.format(e.carico_kg)+' kg');
@@ -1086,7 +1229,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const note = e.note ? '<div class="enote">'+esc(e.note)+'</div>' : '';
         return '<li class="entry">'+
           '<span class="pdot '+repCls+'" title="'+esc(PLABEL[e.pattern]||e.pattern)+'">'+short+'</span>'+
-          '<div class="etext"><span class="ename">'+esc(e.esercizio)+'</span>'+patBadge+manBadge+
+          '<div class="etext"><span class="ename">'+esc(e.esercizio)+'</span>'+patBadge+manBadge+sesBadge+
             '<div class="emeta tnum">'+metaLine+'</div>'+note+'</div>'+
           '<div class="ecalc">'+chips.join('')+del+'</div>'+
         '</li>';
@@ -1116,7 +1259,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const anyData = all.length>0;
       const msg = anyData
         ? 'Nessun risultato per il filtro attivo. Cambia pattern o ricerca.'
-        : 'Registra il lavoro in palestra con "Aggiungi", oppure importa i dati forza dal foglio compilato: qui vedrai carico-volume, massimale stimato e bilanciamento per pattern.';
+        : 'Salva una seduta nel costruttore qui sotto: con la sua data entra qui come lavoro fatto. In alternativa scrivi una voce con "Aggiungi", oppure importa i dati forza dal foglio compilato: qui vedrai carico-volume, massimale stimato e bilanciamento per pattern.';
       host.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'+
         '<path d="M3 9v6"/><path d="M6 7v10"/><path d="M18 7v10"/><path d="M21 9v6"/><path d="M6 12h12"/></svg>'+
         '<div class="t">'+(anyData?'Nessun risultato':'Ancora nessun dato di forza')+'</div><div>'+msg+'</div></div>';
@@ -1143,14 +1286,15 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function exportCSV(){
     const all = buildEntries();
     const head = ['data','atleta','esercizio','serie','ripetizioni','carico_kg','%1RM','RPE','recupero_s',
-                  'volume_load','1RM_stim','zona','pattern','reparto','manuale','note'];
+                  'volume_load','1RM_stim','zona','pattern','reparto','origine','note'];
     const lines = [head.join(';')];
     all.slice().sort((a,b)=> (a.data===b.data ? a.atleta.localeCompare(b.atleta,'it') : (a.data<b.data?1:-1)))
       .forEach(e=>{
         lines.push([
           e.data, e.atleta, e.esercizio, numIt(e.serie), numIt(e.ripetizioni), numIt(e.carico_kg),
           numIt(e.pct1rm), numIt(e.rpe), numIt(e.recupero_s), numIt(e.volume_load), numIt(e.rm_stim),
-          e.zona||'', e.pattern||'', e.reparto||'', e.manual?'si':'no', e.note||''
+          e.zona||'', e.pattern||'', e.reparto||'',
+          e.seduta ? 'seduta' : (e.manual ? 'manuale' : 'foglio'), e.note||''
         ].map(csvVal).join(';'));
       });
     const csv = '﻿'+lines.join('\r\n');
@@ -1190,7 +1334,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     let rows = '';
     groups.forEach(a=>{
       const meta = ROLE[a.name] || { role:'', tipo:'' };
-      const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
+      const roleTxt = [meta.role, tipoTxt(a.name)].filter(Boolean).join(', ');
       const band = esc(disp(a.name)) + (roleTxt?' &#183; '+esc(roleTxt):'') + ' &#183; ' + NF.format(a.ton/1000) + ' t &#183; ' + a.sedute + (a.sedute===1?' seduta':' sedute');
       rows += '<tr class="atl brk"><td class="l" colspan="'+ncols+'">'+band+'</td></tr>';
       a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
@@ -1234,7 +1378,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     let body = '';
     groups.forEach(a=>{
       const meta = ROLE[a.name] || { role:'', tipo:'' };
-      const roleTxt = meta.role || (meta.tipo==='sporadica' ? 'sporadica' : '');
+      const roleTxt = [meta.role, tipoTxt(a.name)].filter(Boolean).join(', ');
       const band = disp(a.name) + (roleTxt?' · '+roleTxt:'') + ' · ' + NF.format(a.ton/1000) + ' t · ' + a.sedute + (a.sedute===1?' seduta':' sedute');
       body += '<tr><td colspan="'+ncols+'" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(band)+'</td></tr>';
       a.list.slice().sort((x,y)=> (x.data<y.data?1:x.data>y.data?-1:0)).forEach(e=>{
@@ -1350,6 +1494,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     buildPrintTable();
   }
   render();
+  /* il costruttore sta piu' in basso nella stessa pagina: quando salva o
+     cancella una seduta l'archivio qui sopra si rifa' subito, senza ricaricare */
+  window.fioForzaRicarica = render;
 })();
 </script>
 
@@ -1369,6 +1516,32 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   });
   var NAMES = ROSTER.map(function(r){ return r.name; });
 
+  /* Come e' divisa la rosa, con le stesse tre voci di Oggi: il gruppo squadra,
+     le aggregate (nei dati `tipo:'sporadica'`, ragazze che si allenano con noi
+     ogni tanto) e quelle scritte a mano in Atlete. Serve per non cercare
+     un'aggregata in mezzo a ventitre nomi in ordine alfabetico. */
+  var FB_GRPS = [
+    { key:'core',    lab:'Gruppo squadra' },
+    { key:'aggr',    lab:'Aggregate' },
+    { key:'manuale', lab:'Aggiunte a mano' }
+  ];
+  function grpKey(r){
+    var t = r ? String(r.tipo || '') : '';
+    if(t === 'manuale') return 'manuale';
+    return t === 'sporadica' ? 'aggr' : 'core';
+  }
+  /* Divide una lista di atlete nei tre gruppi, saltando quelli vuoti. Se resta
+     un gruppo solo si torna la lista piatta: un titolo sopra a tutta la rosa
+     non dice niente. */
+  function grpSplit(list){
+    var out = [];
+    FB_GRPS.forEach(function(g){
+      var rows = list.filter(function(r){ return grpKey(r) === g.key; });
+      if(rows.length) out.push({ key:g.key, lab:g.lab, rows:rows });
+    });
+    return out;
+  }
+
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   // Come si legge un'atleta. Nelle schede salvate resta scritto il nome vero,
@@ -1383,6 +1556,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function todayISO(){ var d=new Date(); var m=('0'+(d.getMonth()+1)).slice(-2), g=('0'+d.getDate()).slice(-2);
     return d.getFullYear()+'-'+m+'-'+g; }
   function fmtDay(iso){ var d=parseISO(iso); return d ? DTFL.format(d) : 'senza data'; }
+  /* la seduta di oggi si conta come fatta appena si salva: a fine giornata
+     il lavoro e' quello, non serve tornare qui a spuntarla */
+  function fatta(iso){ return !!iso && String(iso).slice(0,10) <= todayISO(); }
 
   var FB_TPLS = {
     forzamax: { name:'Forza massimale', rows:[
@@ -1438,6 +1614,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   var ZLAB = { 'z-max':'Forza max', 'z-forza':'Forza', 'z-iper':'Ipertrofia', 'z-res':'Resistenza' };
 
   var PEOPLESVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+  var DONESVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>';
   var EDITSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   var COPYSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var PRINTSVG  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>';
@@ -1617,7 +1794,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     try{ var raw = localStorage.getItem(SESS_KEY); if(raw){ var a = JSON.parse(raw); if(Array.isArray(a)) return a.map(normSess); } }catch(e){}
     return [];
   }
-  function sessSave(a){ try{ localStorage.setItem(SESS_KEY, JSON.stringify(a)); }catch(e){} }
+  /* salvare una seduta vuol dire che quel giorno e' stata fatta: l'archivio
+     qui sopra la deve vedere subito, non al prossimo caricamento della pagina */
+  function sessSave(a){
+    try{ localStorage.setItem(SESS_KEY, JSON.stringify(a)); }catch(e){}
+    try{ if(typeof window.fioForzaRicarica === 'function') window.fioForzaRicarica(); }catch(e){}
+  }
 
   function statsOf(rows){
     var serie = 0, vol = 0, zoneVol = {};
@@ -1795,13 +1977,18 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var head = '<tr><th class="l">Atleta</th>';
     RM_LIFTS.forEach(function(L){ head += '<th>'+esc(L.label)+'</th>'; });
     head += '</tr>';
-    var body = '';
-    list.forEach(function(p){
-      var tds = '';
-      RM_LIFTS.forEach(function(L){
-        tds += '<td>'+rmCell(p.name, L, 'rm-in', 'rm-cell', 'rm-src', 'rm-undo')+'</td>';
+    var gruppi = grpSplit(list), ncol = RM_LIFTS.length + 1, body = '';
+    gruppi.forEach(function(g){
+      if(gruppi.length > 1){
+        body += '<tr><td class="grp" colspan="'+ncol+'">'+esc(g.lab)+'<b>'+g.rows.length+'</b></td></tr>';
+      }
+      g.rows.forEach(function(p){
+        var tds = '';
+        RM_LIFTS.forEach(function(L){
+          tds += '<td>'+rmCell(p.name, L, 'rm-in', 'rm-cell', 'rm-src', 'rm-undo')+'</td>';
+        });
+        body += '<tr><td class="l">'+esc(disp(p.name))+(p.role?'<small>'+esc(p.role)+'</small>':'')+'</td>'+tds+'</tr>';
       });
-      body += '<tr><td class="l">'+esc(disp(p.name))+(p.role?'<small>'+esc(p.role)+'</small>':'')+'</td>'+tds+'</tr>';
     });
     host.innerHTML = '<table class="rmtbl"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>';
     rmFoot();
@@ -1816,6 +2003,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var d = document.getElementById('rm-dlg'); if(!d) return;
     if(d.close) d.close(); else d.removeAttribute('open');
     rmBadge(); renderRmPrev();
+    /* il massimale decide i kg delle sedute salvate: chiusa la tabella
+       l'archivio qui sopra rifa' i conti con i numeri nuovi */
+    try{ if(typeof window.fioForzaRicarica === 'function') window.fioForzaRicarica(); }catch(e){}
   }
 
   /* ---- destinatari (etichetta, tag, selettore) ---- */
@@ -1840,18 +2030,31 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var roles = [], seen = {};
     ROSTER.forEach(function(r){ if(r.role && !seen[r.role]){ seen[r.role]=1; roles.push(r.role); } });
     var h = '<button class="pill" type="button" data-q="all">Tutta la squadra</button>';
+    /* prima i gruppi di rosa, poi i ruoli: capita piu' spesso di volere tutte
+       le aggregate che tutti i terzini */
+    grpSplit(ROSTER).forEach(function(g){
+      if(g.key === 'core') return;
+      h += '<button class="pill" type="button" data-q="grp:'+g.key+'">'+esc(g.lab)
+        + ' <span class="cnt">'+g.rows.length+'</span></button>';
+    });
     roles.forEach(function(rr){ h += '<button class="pill" type="button" data-q="role:'+esc(rr)+'">'+esc(rr)+'</button>'; });
     h += '<button class="pill" type="button" data-q="none">Deseleziona</button>';
     host.innerHTML = h;
   }
   function renderDlgBody(){
     var host = document.getElementById('fb-dlg-body'); if(!host) return;
-    var h = '';
-    ROSTER.forEach(function(r){
-      var on = pickSel[r.name] ? ' checked' : '';
-      h += '<label class="fbchk"><input type="checkbox" data-n="'+esc(r.name)+'"'+on+'>'
-        + '<span class="nm">'+esc(disp(r.name))+'</span>'
-        + '<span class="r">'+esc(r.role||'')+'</span></label>';
+    var gruppi = grpSplit(ROSTER), h = '';
+    gruppi.forEach(function(g){
+      if(gruppi.length > 1){
+        h += '<div class="fbdlg-h"><span>'+esc(g.lab)+'</span><span class="ln"></span>'
+          + '<span class="n">'+g.rows.length+'</span></div>';
+      }
+      g.rows.forEach(function(r){
+        var on = pickSel[r.name] ? ' checked' : '';
+        h += '<label class="fbchk"><input type="checkbox" data-n="'+esc(r.name)+'"'+on+'>'
+          + '<span class="nm">'+esc(disp(r.name))+'</span>'
+          + '<span class="r">'+esc(r.role||'')+'</span></label>';
+      });
     });
     host.innerHTML = h;
   }
@@ -1959,12 +2162,18 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(named.length>4) exHtml += '<li><span class="x" style="color:var(--muted);font-weight:500">+'+(named.length-4)+' altri esercizi</span></li>';
     if(!exHtml) exHtml = '<li><span class="x" style="color:var(--muted);font-weight:500">Nessun esercizio</span></li>';
     var players = all ? '' : '<div class="fs-players"><b>Atlete:</b> '+esc(s.players.map(disp).join(', '))+'</div>';
+    /* Una seduta salvata con una data arrivata vuol dire che le atlete l'hanno
+       fatta: si segna eseguita e finisce nell'archivio qui sopra. Anche se la
+       data e' indietro nel tempo, cosi' si recuperano le sedute rimaste fuori. */
+    var done = fatta(s.date)
+      ? '<span class="fs-done">'+DONESVG+'Eseguita</span>'
+      : '';
     return ''
       + '<div class="fs-card-head">'
       +   '<div class="fs-date"><span class="d">'+day+'</span><span class="my">'+esc(mon)+'</span></div>'
       +   '<div class="fs-htext">'
       +     '<div class="fs-title">'+esc(s.title||'Seduta forza')+'</div>'
-      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'
+      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'+done
       +   '</div>'
       + '</div>'
       + '<div class="fs-body">'
@@ -1989,7 +2198,16 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var host = document.getElementById('fsched'); if(!host) return;
     var list = sessLoad();
     var opts = '<option value="all">Tutte le atlete</option>';
-    NAMES.forEach(function(n){ opts += '<option value="'+esc(n)+'"'+(schedState.player===n?' selected':'')+'>'+esc(disp(n))+'</option>'; });
+    /* Anche qui la tendina segue i gruppi di rosa: un'aggregata in mezzo a
+       ventitre nomi in ordine alfabetico non si trova. */
+    var gruppi = grpSplit(ROSTER);
+    gruppi.forEach(function(g){
+      if(gruppi.length > 1) opts += '<optgroup label="'+esc(g.lab)+'">';
+      g.rows.forEach(function(r){
+        opts += '<option value="'+esc(r.name)+'"'+(schedState.player===r.name?' selected':'')+'>'+esc(disp(r.name))+'</option>';
+      });
+      if(gruppi.length > 1) opts += '</optgroup>';
+    });
     var head = '<div class="fsched-top">'
       + '<div><div class="fs-h">Sedute programmate</div>'
       + '<div class="fs-hsub">Le sedute salvate dal costruttore, con data e atlete. Modificale, duplicale o stampa la scheda.</div></div>'
@@ -2501,6 +2719,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       var q = p.getAttribute('data-q');
       if(q==='all'){ NAMES.forEach(function(n){ pickSel[n]=true; }); }
       else if(q==='none'){ pickSel = {}; }
+      else if(q.indexOf('grp:')===0){ var gk = q.slice(4); ROSTER.forEach(function(r){ if(grpKey(r)===gk) pickSel[r.name]=true; }); }
       else if(q.indexOf('role:')===0){ var role = q.slice(5); ROSTER.forEach(function(r){ if(r.role===role) pickSel[r.name]=true; }); }
       renderDlgBody(); updateDlgN();
     });
