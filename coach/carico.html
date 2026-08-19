@@ -679,8 +679,11 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
   /* foglio orizzontale: nell'A4 in verticale i parametri non ci stavano e la griglia
-     ripartiva da capo pagina dopo pagina. Orizzontale ne fa entrare molti di piu'. */
-  @page{ size:A4 landscape; margin:10mm; }
+     ripartiva da capo pagina dopo pagina. Orizzontale ne fa entrare molti di piu'.
+     Il margine e' 7mm e non 10mm perche' data, ora, titolo e indirizzo del file che il
+     browser stampa in nero sopra e sotto al foglio hanno bisogno di almeno 9mm di margine:
+     sotto quella soglia il browser rinuncia a scriverli e il foglio resta pulito. */
+  @page{ size:A4 landscape; margin:7mm; }
   /* i token del tema vengono ridefiniti in chiaro: cosi tutti i blocchi (parametri chiave,
      ACWR, grafici SVG che usano var(--...)) escono leggibili sul foglio bianco */
   :root{
@@ -696,6 +699,8 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, .chart-tooltip, .toast,
   #cols-dialog, #model-dialog, #pdf-dialog, .top-right, .foot-note{ display:none !important; }
+  /* comandi che servono solo a video: sul foglio sono scritte che non dicono niente */
+  #mv-reset{ display:none !important; }
   /* i blocchi lasciati fuori dalla scelta prima di stampare */
   .print-off{ display:none !important; }
   #chart-card .chart-tools{ display:none !important; }
@@ -780,6 +785,12 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
   tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td{ color:#6a625c !important; }
   tr.wkband td{ background:#efe9f6 !important; color:#5b3f8a !important; }
+  /* i nomi dei parametri viaggiano dentro la fascia del microciclo, sulla stessa riga delle
+     date: non costano un millimetro di altezza in piu' e a meta' pagina si sa ancora quale
+     colonna si sta leggendo. Corpo piccolo e a destra come i numeri che stanno sotto. */
+  tr.wkband td.wkname{ text-align:right !important; font-size:9px !important;
+    letter-spacing:.01em !important; text-transform:none !important; font-weight:700 !important;
+    white-space:normal !important; }
   tr.wkhead td, tr.wkhead td.col-day{ background:#f0f0f0 !important; color:#14110f !important;
     border-bottom:1px solid #bbb !important; }
   tr.wkhead td.col-day{ color:#5a524c !important; }
@@ -2569,8 +2580,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Si divide in fasce solo se non basta nemmeno il corpo piu' piccolo.
   // In altezza si ragiona a microcicli: ogni pagina prende gruppi interi di settimane, cosi'
   // due settimane stanno in una pagina e un mese da quattro esce due piu' due.
-  const PRINT_W = 1040;      // 277mm di foglio utile a 96dpi, con un filo di margine
-  const PRINT_H = 690;       // 190mm di altezza utile meno intestazione della scheda
+  const PRINT_W = 1060;      // 283mm di foglio utile a 96dpi, con un filo di margine
+  const PRINT_H = 712;       // 196mm di altezza utile meno intestazione della scheda
   const PRINT_WK_PAGE = 2;   // microcicli per pagina
   const PRINT_TIERS = [
     { fs:10, pad:'5px 8px' },
@@ -2604,9 +2615,36 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       btn.parentNode.replaceChild(sp, btn);
     });
     cl.querySelectorAll('.mvbar, .wk-drop').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
-    // la riga che ripete i nomi delle colonne dentro ogni settimana serve solo a scorrere a video:
-    // in stampa l'intestazione torna in cima a ogni pagina, quindi qui e' spazio buttato
-    cl.querySelectorAll('tr.wkhead').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    // i nomi dei parametri tornano dentro la fascia del microciclo, accanto alle date: la fascia
+    // e' una riga che c'e' gia', quindi le intestazioni non costano un millimetro di foglio in piu'
+    // e a meta' pagina si sa ancora quale colonna si sta leggendo. La riga a se' stante sparisce.
+    cl.querySelectorAll('tr.wkhead').forEach(hd=>{
+      const band = hd.previousElementSibling;
+      if(band && band.classList.contains('wkband')){
+        const lbl = band.children[0];
+        const txt = lbl ? lbl.textContent : '';
+        while(band.firstChild) band.removeChild(band.firstChild);
+        const day = document.createElement('td');
+        day.className = 'col-day';
+        day.textContent = txt;
+        band.appendChild(day);
+        // dalla riga delle intestazioni si prende solo il nome corto, l'unita' di misura sta gia'
+        // nell'intestazione in cima alla pagina e qui farebbe solo confusione
+        [...hd.children].slice(1).forEach(c=>{
+          const td = document.createElement('td');
+          td.className = 'wkname';
+          const first = c.firstChild;
+          td.textContent = (first && first.nodeType === 3) ? first.nodeValue : c.textContent;
+          // corpo e spaziatura vanno messi qui e non nel CSS di stampa: e' questa copia che
+          // finisce sul banco di misura, e la fascia a lettere maiuscole spaziate sarebbe molto
+          // piu' larga del nome vero, facendo scegliere un corpo piu' piccolo del necessario
+          td.style.cssText = 'text-align:right; font-size:9px; letter-spacing:.01em;' +
+            ' text-transform:none; font-weight:700; white-space:normal;';
+          band.appendChild(td);
+        });
+      }
+      if(hd.parentNode) hd.parentNode.removeChild(hd);
+    });
     // la colonna del giorno sullo schermo impila giorno, etichetta e note su piu' righe: in stampa
     // resta tutto in linea, cosi' la riga e' alta la meta' e in una pagina ci stanno due microcicli.
     // Va fatto qui e non nel CSS di stampa perche' e' questa copia che viene anche misurata.
