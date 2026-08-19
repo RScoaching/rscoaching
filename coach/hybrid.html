@@ -434,10 +434,18 @@ table.partite td.sigla.nolink{ color:var(--muted); }
 }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
 
+/* la copia adattata per la stampa vive nascosta finche' non serve */
+.print-split{ display:none; }
+
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
-  @page{ margin:13mm; }
+  /* foglio orizzontale: una seduta ha tanti parametri quante sono le colonne della sinottica,
+     in verticale non ci starebbero mai tutti sulla stessa pagina */
+  @page{ size:A4 landscape; margin:10mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
+  /* a video la pagina e' alta almeno quanto lo schermo: in stampa quell'altezza minima vale
+     un foglio intero e basta un pixel di arrotondamento per far uscire una pagina bianca */
+  body, .app{ min-height:0 !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sb-edge, .sidebar, .controls, .keypick, .sess-rail, .sess-drawer-backdrop,
   #btn-rail, .cmp-seg, .cf-subctl, #cf-btn-sess, #cf-btn-play, .toast, .top-right, .foot-note{ display:none !important; }
@@ -506,6 +514,36 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   .mopen{ color:#14110f !important; }
   .mopen svg{ display:none !important; }
   .reveal{ opacity:1 !important; transform:none !important; animation:none !important; }
+
+  /* ---------- una seduta, un foglio ---------- */
+  /* Intestazione, riepilogo e bordi della scheda tolgono altezza alla griglia: in stampa
+     stanno stretti, cosi' quello che resta va tutto alle atlete. */
+  .topbar{ padding:0 0 6px !important; margin-bottom:8px; }
+  .title-wrap h1{ font-size:22px !important; }
+  .title-wrap .sub{ font-size:11px !important; }
+  .card{ margin-bottom:8px !important; }
+  .card-head{ padding:8px 12px 2px !important; }
+  .card-head h2{ font-size:18px !important; }
+  .card-body{ padding:8px 12px 12px !important; }
+  .sess-stats{ gap:8px !important; margin-bottom:8px !important; }
+  .sess-stat{ padding:7px 10px !important; }
+  .ss-lbl{ font-size:9.5px !important; }
+  .ss-val{ font-size:19px !important; margin-top:2px !important; }
+  .ss-val small{ font-size:10px !important; }
+  /* la scheda della vista puo' sforare la pagina: se le atlete sono davvero tante meglio
+     una seconda pagina che una griglia tagliata via */
+  #sedute-view, #partite-view, #confronto-view{ break-inside:auto !important; }
+
+  .print-hidden{ display:none !important; }
+  .print-split{ display:block !important; }
+  .print-blk{ break-after:page; page-break-after:always; }
+  .print-blk:last-child{ break-after:auto; page-break-after:auto; }
+  .print-blk-lbl{ font-size:10px; color:#5a524c !important; margin:0 0 5px; letter-spacing:.01em; }
+  /* la misura viene decisa prima di stampare misurando davvero la tabella: con pochi parametri
+     e poche atlete il foglio resta comodo, con tanti si stringe invece di spezzare la griglia */
+  .print-split table.grid{ width:100% !important; table-layout:auto; font-size:var(--pfs, 10px) !important; }
+  .print-split table.grid th, .print-split table.grid td{ padding:var(--ppad, 5px 8px) !important; }
+  .print-split table.grid thead th .u{ font-size:.82em !important; }
 }
 
 /* ---------- responsive ---------- */
@@ -565,7 +603,7 @@ table.partite td.sigla.nolink{ color:var(--muted); }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>
           <span id="kp-btn-lbl">Sinottica</span>
         </button>
-        <button class="btn" id="btn-print" title="Stampa o salva in PDF la vista corrente">
+        <button class="btn" id="btn-print" title="Stampa o salva in PDF la vista aperta: foglio orizzontale, la griglia si adatta da sola per far entrare tutti i parametri e tutte le atlete">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
         </button>
@@ -2151,7 +2189,215 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(e.key==='Enter'){ e.preventDefault(); const b=document.getElementById('kp-ren'); if(b) b.click(); }
       if(e.key==='Escape'){ e.stopPropagation(); i.value=sinAct().n; i.blur(); } }); }
   document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeRail(); closeCfRails(); toggleKeyPick(false); } });
-  { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{ toast('Preparo la stampa...'); setTimeout(()=> window.print(), 120); }); }
+  // ---------- stampa: una seduta sta in un foglio ----------
+  // Il PDF di una seduta deve far vedere tutti i parametri e tutte le atlete senza spezzare
+  // niente. Invece di indovinare una misura di testo, la tabella viene misurata davvero fuori
+  // schermo alla larghezza del foglio: si parte dal corpo piu' grande e si stringe solo finche'
+  // serve. Le fasce di colonne restano l'ultima risorsa, quando nemmeno il corpo piu' piccolo
+  // fa entrare i parametri in larghezza.
+  const PRINT_W = 1040;   // 277mm di foglio orizzontale a 96dpi, con un filo di margine
+  // 190mm di altezza meno intestazione, riepilogo e cornice della scheda. Il valore e' stato
+  // verificato stampando davvero: a 478 la griglia sfora di poco, a 438 il foglio regge.
+  const PRINT_H = 440;
+  // scaletta fitta apposta: prima si stringe la spaziatura, poi il corpo del testo, cosi' si
+  // rimpicciolisce il minimo indispensabile invece di saltare da una misura all'altra
+  const PRINT_TIERS = [
+    { fs:10, pad:'5px 8px' },
+    { fs:10, pad:'4px 6px' },
+    { fs:9,  pad:'4px 6px' },
+    { fs:9,  pad:'3px 5px' },
+    { fs:8,  pad:'3px 5px' },
+    { fs:8,  pad:'2px 4px' },
+    { fs:7,  pad:'2px 4px' },
+    { fs:7,  pad:'1px 3px' },
+    { fs:6,  pad:'1px 3px' }
+  ];
+  function printChunks(n, cap){
+    const out = [];
+    if(n<=0) return out;
+    const c = Math.max(1, cap|0);
+    const nb = Math.ceil(n / c);
+    const per = Math.ceil(n / nb);
+    for(let a=0; a<n; a+=per) out.push([a, Math.min(n, a+per)]);
+    return out;
+  }
+  // banco di misura: sta fuori schermo, serve solo a sapere quanto e' larga e alta la tabella
+  function printProbe(){
+    const p = document.createElement('div');
+    p.style.cssText = 'position:absolute; left:-20000px; top:0; width:'+PRINT_W+'px; visibility:hidden; pointer-events:none;';
+    document.body.appendChild(p);
+    return p;
+  }
+  // copia pulita: via quello che serve solo a video, e tutto quello che sta impilato torna in linea
+  function printCleanClone(tb){
+    const cl = tb.cloneNode(true);
+    // le frecce dell'ordinamento rubano larghezza a ogni colonna e in stampa non servono
+    cl.querySelectorAll('.arw').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    // la sigla della partita a video e' un pulsante che apre la seduta: in stampa e' testo
+    cl.querySelectorAll('button.mopen').forEach(btn=>{
+      const sp = document.createElement('span');
+      sp.textContent = String(btn.textContent||'').trim();
+      btn.parentNode.replaceChild(sp, btn);
+    });
+    // A video nome e ruolo, percentuale e valore, sigla e campo stanno uno sopra l'altro: in
+    // stampa vanno in linea, cosi' la riga e' alta la meta' e le atlete entrano tutte in pagina.
+    // Va fatto qui e non nel CSS di stampa perche' e' questa copia che viene anche misurata.
+    cl.querySelectorAll('td.col-day .lb').forEach(n=>{
+      n.style.display = 'inline';
+      n.style.fontSize = '1em';
+    });
+    cl.querySelectorAll('td.col-day .role-inline, td.col-day .wd, td.sigla .campo').forEach(n=>{
+      n.style.display = 'inline';
+      n.style.fontSize = '.85em';
+      n.style.margin = '0 0 0 6px';
+    });
+    cl.querySelectorAll('td.num.cmp .raw').forEach(n=>{
+      n.style.display = 'inline';
+      n.style.fontSize = '.85em';
+      n.style.margin = '0 0 0 5px';
+    });
+    // A video le intestazioni stanno su una riga sola: e' il nome del parametro, non il numero,
+    // a decidere quanto e' larga la colonna. In stampa possono andare a capo: si perde qualche
+    // millimetro in altezza una volta sola e si guadagna larghezza su ogni colonna.
+    cl.querySelectorAll('thead th').forEach(n=>{ n.style.whiteSpace = 'normal'; });
+    return cl;
+  }
+  function printApplyTier(tb, t){
+    tb.style.fontSize = t.fs+'px';
+    tb.style.width = 'auto';
+    tb.style.tableLayout = 'auto';
+    tb.querySelectorAll('th, td').forEach(c=>{ c.style.padding = t.pad; });
+  }
+  function printTrimCols(tb, lead, nMet, a, b){
+    tb.querySelectorAll('tr').forEach(tr=>{
+      const cells = tr.children;
+      if(cells.length === lead + nMet){
+        for(let i=cells.length-1; i>=lead; i--){
+          const j = i - lead;
+          if(j<a || j>=b) cells[i].remove();
+        }
+      } else {
+        for(let i=0;i<cells.length;i++){
+          const cs = +(cells[i].getAttribute('colspan') || 1);
+          if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a)));
+        }
+      }
+    });
+  }
+  // misura vera a una data misura di testo: larghezza, colonna dei nomi e altezza complessiva
+  function printMeasure(node, probe, t){
+    const m = node.cloneNode(true);
+    probe.innerHTML = '';
+    probe.appendChild(m);
+    printApplyTier(m, t);
+    const hd = m.querySelector('thead');
+    const hr = m.querySelector('tr');
+    const headH = hd ? hd.getBoundingClientRect().height : 0;
+    let bodyH = 0;
+    m.querySelectorAll('tbody > tr').forEach(tr=>{ bodyH += tr.getBoundingClientRect().height; });
+    return {
+      tier: t,
+      chunks: null,
+      w: m.getBoundingClientRect().width,
+      lead: (hr && hr.children[0]) ? hr.children[0].getBoundingClientRect().width : 120,
+      h: headH + bodyH
+    };
+  }
+  // parte dal corpo piu' grande e stringe solo finche' serve: prima per far entrare i parametri
+  // in larghezza, poi per far stare tutte le atlete nella stessa pagina
+  function printPickTier(node, probe){
+    let best = null, minima = null, last = null;
+    for(let k=0;k<PRINT_TIERS.length;k++){
+      const info = printMeasure(node, probe, PRINT_TIERS[k]);
+      last = info;
+      if(info.w > PRINT_W) continue;
+      minima = info;                                 // in larghezza ci sta: la piu' piccola vista finora
+      if(info.h <= PRINT_H){ best = info; break; }   // ci stanno anche tutte le righe: e' quella giusta
+    }
+    // se nessuna misura fa stare tutte le atlete nel foglio si prende la piu' piccola che almeno
+    // regge in larghezza: con una rosa intera e' l'unico modo di restare su un foglio solo
+    return best || minima || last;
+  }
+  function printSliceCols(clean, lead, nMet, n){
+    const c = clean.cloneNode(true);
+    printTrimCols(c, lead, nMet, 0, n);
+    return c;
+  }
+  // sceglie misura del testo e, se proprio non bastasse la larghezza, in quante fasce dividere
+  function printPlan(clean, lead, nMet, probe){
+    const use = printPickTier(clean, probe);
+    if(!use) return null;
+    if(use.w <= PRINT_W) return use;             // tutti i parametri in una pagina di larghezza
+    // nemmeno il corpo piu' piccolo li fa entrare: si divide in fasce, contando quante colonne
+    // ne entrano a corpo pieno, e poi si rimisura la fascia cosi' la griglia resta leggibile
+    const big = printMeasure(clean, probe, PRINT_TIERS[0]);
+    const per = Math.max(1, (big.w - big.lead) / nMet);
+    const cap = Math.max(1, Math.floor((PRINT_W - big.lead) / per));
+    const chunks = printChunks(nMet, cap);
+    let wide = 1;
+    chunks.forEach(c=>{ wide = Math.max(wide, c[1] - c[0]); });
+    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide), probe) || big;
+    pick.chunks = chunks;
+    return pick;
+  }
+  function printSheetFor(tb, lead, nMet, probe){
+    const clean = printCleanClone(tb);
+    const plan = printPlan(clean, lead, nMet, probe);
+    if(!plan) return null;
+    const chunks = plan.chunks && plan.chunks.length ? plan.chunks : [[0, nMet]];
+    const wrap = document.createElement('div');
+    wrap.className = 'print-split';
+    wrap.style.setProperty('--pfs', plan.tier.fs+'px');
+    wrap.style.setProperty('--ppad', plan.tier.pad);
+    chunks.forEach(ch=>{
+      const a = ch[0], b = ch[1];
+      const blk = document.createElement('div');
+      blk.className = 'print-blk';
+      if(chunks.length > 1){
+        const lbl = document.createElement('div');
+        lbl.className = 'print-blk-lbl';
+        lbl.textContent = 'Parametri ' + (a+1) + '-' + b + ' di ' + nMet;
+        blk.appendChild(lbl);
+      }
+      const t = clean.cloneNode(true);
+      printTrimCols(t, lead, nMet, a, b);
+      blk.appendChild(t);
+      wrap.appendChild(blk);
+    });
+    return { wrap:wrap, tier:plan.tier, fasce:chunks.length };
+  }
+  function clearPrintSheets(){
+    document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
+  }
+  function buildPrintSheets(){
+    clearPrintSheets();
+    const nMet = VIS().length;
+    if(nMet < 1) return;
+    const probe = printProbe();
+    try{
+      document.querySelectorAll('.tscroll').forEach(host=>{
+        if(host.offsetWidth===0 && host.offsetHeight===0) return; // vista non aperta: niente da stampare
+        const tb = host.querySelector('table');
+        if(!tb) return;
+        const hr = tb.querySelector('tr');
+        if(!hr) return;
+        const lead = hr.children.length - nMet;
+        if(lead < 1) return;
+        const sheet = printSheetFor(tb, lead, nMet, probe);
+        if(!sheet) return;
+        host.classList.add('print-hidden');
+        host.parentNode.insertBefore(sheet.wrap, host.nextSibling);
+      });
+    } finally {
+      if(probe.parentNode) probe.parentNode.removeChild(probe);
+    }
+  }
+  window.addEventListener('beforeprint', buildPrintSheets);
+  window.addEventListener('afterprint', clearPrintSheets);
+  { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{
+      toast('Preparo la stampa...');
+      setTimeout(()=>{ buildPrintSheets(); window.print(); }, 120); }); }
 
   // ---------- init ----------
   (function init(){

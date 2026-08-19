@@ -722,10 +722,25 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   /* quando i parametri sono tanti la griglia viene ricostruita in blocchi che stanno nel foglio */
   .print-hidden{ display:none !important; }
   .print-split{ display:block !important; }
-  .print-blk{ break-inside:avoid; page-break-inside:avoid; margin:0 0 14px; }
+  .print-blk{ margin:0 0 14px; }
   .print-blk:last-child{ margin-bottom:0; }
   .print-blk-lbl{ font-size:10px; color:#5a524c !important; margin:0 0 5px; letter-spacing:.01em; }
   .print-split table.grid{ width:100% !important; table-layout:auto; }
+  /* la misura viene decisa prima di stampare misurando davvero la tabella: con pochi
+     parametri il foglio resta comodo, con tanti si stringe invece di tagliare la griglia */
+  .print-split table.grid{ font-size:var(--pfs, 10px) !important; }
+  .print-split table.grid th, .print-split table.grid td{ padding:var(--ppad, 5px 8px) !important; }
+  .print-split table.grid tr.wkband td{ padding:2px 8px !important; }
+  .print-split table.grid td .u, .print-split table.grid th .u{ font-size:.82em !important; }
+  .print-split table.grid td.col-day .wd, .print-split table.grid td.col-day .mvfrom,
+  .print-split table.grid td.col-day .solo-tag, .print-split table.grid td.col-day .lb-recalc{ font-size:.86em !important; }
+  /* giorno, etichetta e note sulla stessa riga: dimezza l'altezza e fa entrare due microcicli */
+  .print-split table.grid td.col-day .wd{ display:inline !important; margin-right:6px !important; }
+  .print-split table.grid td.col-day .mvfrom,
+  .print-split table.grid td.col-day .lb-recalc{ display:inline !important; margin:0 0 0 6px !important; }
+  /* un gruppo di microcicli per pagina: le settimane non finiscono mai a meta' foglio */
+  .print-pg{ break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always; }
+  .print-split .print-blk:last-child .print-pg:last-child{ break-after:auto; page-break-after:auto; }
   #grid-card{ break-inside:auto !important; }
   table.grid thead{ display:table-header-group; }
   table.grid{ font-size:10px !important; }
@@ -862,7 +877,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4 16.5z"/><path d="M13.5 6.5l4 4"/></svg>
           Modello <span class="cols-count" id="model-count"></span>
         </button>
-        <button class="btn" id="btn-print" title="Scegli cosa mettere nel PDF: foglio orizzontale, un blocco per volta">
+        <button class="btn" id="btn-print" title="Scegli cosa mettere nel PDF: foglio orizzontale, griglia adattata alla larghezza e due microcicli per pagina">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
         </button>
@@ -1040,7 +1055,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   <div class="cols-panel">
     <div class="cols-head">
       <h2>Cosa mettere nel PDF</h2>
-      <span class="hint">Il foglio esce in orizzontale, cosi' i parametri stanno in larghezza. Spunta solo i blocchi che ti servono: meno blocchi, meno pagine. La scelta resta su questo dispositivo.</span>
+      <span class="hint">Il foglio esce in orizzontale, la griglia si adatta da sola per far stare tutti i parametri in una pagina di larghezza e taglia le pagine ogni due microcicli. Spunta solo i blocchi che ti servono: meno blocchi, meno pagine. La scelta resta su questo dispositivo.</span>
     </div>
     <div class="cols-scroll">
       <div class="col-tools">
@@ -2546,59 +2561,249 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
 
-  // ---------- stampa: griglia divisa in blocchi che stanno nel foglio ----------
-  // Con tutti i parametri accesi la tabella e' troppo larga per un A4 e il PDF esce tagliato.
-  // Prima di stampare ricostruiamo la stessa tabella in piu' blocchi, ognuno con la colonna
-  // del giorno piu' un gruppo di parametri. A schermo non cambia niente.
-  // Foglio orizzontale: 277mm di larghezza utile invece di 184mm, quindi in un blocco
-  // ci stanno dieci parametri invece di sei. I venti parametri del 26-27 stanno in due
-  // fasce invece di quattro, e i quattordici del 25-26 in due fasce da sette.
-  const PRINT_MAX_COL = 10;
-  function printChunks(n){
+  // ---------- stampa: la griglia si adatta al foglio invece di spezzarsi ----------
+  // Prima c'era un tetto fisso di parametri per fascia: chiedendo i tredici parametri di
+  // una sinottica la tabella veniva tagliata in due anche se ci sarebbe stata tutta.
+  // Adesso, prima di stampare, la tabella viene misurata davvero fuori schermo e la misura
+  // del testo viene stretta finche' i parametri entrano tutti nella larghezza del foglio.
+  // Si divide in fasce solo se non basta nemmeno il corpo piu' piccolo.
+  // In altezza si ragiona a microcicli: ogni pagina prende gruppi interi di settimane, cosi'
+  // due settimane stanno in una pagina e un mese da quattro esce due piu' due.
+  const PRINT_W = 1040;      // 277mm di foglio utile a 96dpi, con un filo di margine
+  const PRINT_H = 690;       // 190mm di altezza utile meno intestazione della scheda
+  const PRINT_WK_PAGE = 2;   // microcicli per pagina
+  const PRINT_TIERS = [
+    { fs:10, pad:'5px 8px' },
+    { fs:9,  pad:'4px 6px' },
+    { fs:8,  pad:'3px 5px' },
+    { fs:7,  pad:'2px 4px' }
+  ];
+  function printChunks(n, cap){
     const out = [];
     if(n<=0) return out;
-    const nb = Math.ceil(n / PRINT_MAX_COL);
+    const c = Math.max(1, cap|0);
+    const nb = Math.ceil(n / c);
     const per = Math.ceil(n / nb);
     for(let a=0; a<n; a+=per) out.push([a, Math.min(n, a+per)]);
     return out;
   }
-  function splitTableForPrint(tb, lead, nMet, chunks){
+  // banco di misura: sta fuori schermo, serve solo a sapere quanto e' larga e alta la tabella
+  function printProbe(){
+    const p = document.createElement('div');
+    p.style.cssText = 'position:absolute; left:-20000px; top:0; width:'+PRINT_W+'px; visibility:hidden; pointer-events:none;';
+    document.body.appendChild(p);
+    return p;
+  }
+  // copia pulita: i bottoni diventano etichette e sparisce quello che in stampa e' gia' nascosto
+  function printCleanClone(tb){
+    const cl = tb.cloneNode(true);
+    cl.querySelectorAll('button.lb-open').forEach(btn=>{
+      const sp = document.createElement('span');
+      sp.className = 'lb';
+      sp.textContent = btn.textContent;
+      btn.parentNode.replaceChild(sp, btn);
+    });
+    cl.querySelectorAll('.mvbar, .wk-drop').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    // la riga che ripete i nomi delle colonne dentro ogni settimana serve solo a scorrere a video:
+    // in stampa l'intestazione torna in cima a ogni pagina, quindi qui e' spazio buttato
+    cl.querySelectorAll('tr.wkhead').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
+    // la colonna del giorno sullo schermo impila giorno, etichetta e note su piu' righe: in stampa
+    // resta tutto in linea, cosi' la riga e' alta la meta' e in una pagina ci stanno due microcicli.
+    // Va fatto qui e non nel CSS di stampa perche' e' questa copia che viene anche misurata.
+    cl.querySelectorAll('td.col-day .wd').forEach(n=>{
+      n.style.display = 'inline';
+      n.style.marginRight = '6px';
+    });
+    cl.querySelectorAll('td.col-day .mvfrom, td.col-day .lb-recalc').forEach(n=>{
+      n.style.display = 'inline';
+      n.style.marginLeft = '6px';
+      n.style.marginTop = '0';
+    });
+    return cl;
+  }
+  function printApplyTier(tb, t){
+    tb.style.fontSize = t.fs+'px';
+    tb.style.width = 'auto';
+    tb.style.tableLayout = 'auto';
+    tb.querySelectorAll('th, td').forEach(c=>{ c.style.padding = t.pad; });
+  }
+  function printTrimCols(tb, lead, nMet, a, b){
+    tb.querySelectorAll('tr').forEach(tr=>{
+      const cells = tr.children;
+      if(cells.length === lead + nMet){
+        for(let i=cells.length-1; i>=lead; i--){
+          const j = i - lead;
+          if(j<a || j>=b) cells[i].remove();
+        }
+      } else {
+        for(let i=0;i<cells.length;i++){
+          const cs = +(cells[i].getAttribute('colspan') || 1);
+          if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a)));
+        }
+      }
+    });
+  }
+  // divide le righe in modello di riferimento, microcicli interi e totali del mese
+  function printPages(clean){
+    const rows = [...clean.querySelectorAll('tbody > tr')];
+    if(!rows.length) return null;
+    let first = -1;
+    for(let i=0;i<rows.length;i++){ if(rows[i].classList.contains('wkband')){ first = i; break; } }
+    if(first < 0) return null; // tabella senza microcicli: resta una pagina sola
+    let end = rows.length;
+    while(end > first && (rows[end-1].classList.contains('r-month') || rows[end-1].classList.contains('r-valmonth'))) end--;
+    const pre = [], tail = [], weeks = [];
+    for(let i=0;i<first;i++) pre.push(i);
+    for(let i=end;i<rows.length;i++) tail.push(i);
+    for(let i=first;i<end;i++){
+      if(rows[i].classList.contains('wkband')) weeks.push([]);
+      if(weeks.length) weeks[weeks.length-1].push(i);
+    }
+    return { rows:rows, pre:pre, tail:tail, weeks:weeks };
+  }
+  // impagina a microcicli interi: il modello di riferimento torna in cima a ogni pagina,
+  // i totali del mese restano in fondo all'ultima
+  function printPageGroups(lay, headH, rowsH){
+    const hOf = idx=> (rowsH && rowsH[idx]) ? rowsH[idx] : 26;
+    const base = headH + lay.pre.reduce((s,i)=> s + hOf(i), 0);
+    const groups = [];
+    let cur = null, curH = 0;
+    lay.weeks.forEach(w=>{
+      const h = w.reduce((s,i)=> s + hOf(i), 0);
+      if(cur && (cur.length >= PRINT_WK_PAGE || curH + h > PRINT_H)){ groups.push(cur); cur = null; }
+      if(!cur){ cur = []; curH = base; }
+      cur.push(w); curH += h;
+    });
+    if(cur) groups.push(cur);
+    if(!groups.length) groups.push([]);
+    const tailH = lay.tail.reduce((s,i)=> s + hOf(i), 0);
+    if(tailH > 0 && curH + tailH > PRINT_H){
+      // i totali del mese non ci stanno piu': invece di lasciarli soli su una pagina quasi vuota
+      // si porta con loro l'ultimo microciclo, se sull'ultima pagina ce n'era piu' di uno
+      const lastG = groups[groups.length-1];
+      if(lastG && lastG.length > 1){
+        const moved = lastG.pop();
+        groups.push([moved]);
+      } else {
+        groups.push([]);
+      }
+    }
+    return groups;
+  }
+  // una pagina e' piena quando porta il numero di microcicli previsto: solo l'ultima puo' averne meno
+  function printPageFull(groups){
+    const g = groups.filter(x=> x.length);
+    for(let i=0;i<g.length-1;i++){ if(g[i].length < PRINT_WK_PAGE) return false; }
+    return true;
+  }
+  // misura vera della tabella a una data misura di testo: larghezza, colonna del giorno,
+  // altezza dell'intestazione e altezza di ogni riga
+  function printMeasure(node, probe, t){
+    const m = node.cloneNode(true);
+    probe.innerHTML = '';
+    probe.appendChild(m);
+    printApplyTier(m, t);
+    const hd = m.querySelector('thead');
+    const hr = m.querySelector('tr');
+    return {
+      tier: t,
+      chunks: null,
+      w: m.getBoundingClientRect().width,
+      lead: (hr && hr.children[0]) ? hr.children[0].getBoundingClientRect().width : 120,
+      headH: hd ? hd.getBoundingClientRect().height : 0,
+      rowsH: [...m.querySelectorAll('tbody > tr')].map(tr=> tr.getBoundingClientRect().height)
+    };
+  }
+  // parte dal corpo piu' grande e stringe solo finche' serve: prima per far entrare i parametri
+  // in larghezza, poi per far stare in pagina il numero di microcicli previsto
+  function printPickTier(node, lay, probe){
+    const nWk = lay ? lay.weeks.length : 0;
+    let fit = null, last = null;
+    for(let k=0;k<PRINT_TIERS.length;k++){
+      const info = printMeasure(node, probe, PRINT_TIERS[k]);
+      last = info;
+      if(info.w > PRINT_W) continue;
+      if(!fit) fit = info;                       // in larghezza ci sta: peggio che vada e' questa
+      if(!nWk) break;                            // niente microcicli: non c'e' altro da guadagnare
+      if(printPageFull(printPageGroups(lay, info.headH, info.rowsH))){ fit = info; break; }
+    }
+    return fit || last;
+  }
+  function printSliceCols(clean, lead, nMet, n){
+    const c = clean.cloneNode(true);
+    printTrimCols(c, lead, nMet, 0, n);
+    return c;
+  }
+  // sceglie misura del testo e, se proprio non bastasse la larghezza, in quante fasce dividere
+  function printPlan(clean, lead, nMet, lay, probe){
+    const use = printPickTier(clean, lay, probe);
+    if(!use) return null;
+    if(use.w <= PRINT_W) return use;             // tutti i parametri in una pagina di larghezza
+    // nemmeno il corpo piu' piccolo li fa entrare: si divide in fasce, ma con quante colonne ne
+    // entrano a corpo pieno, e poi si rimisura la fascia cosi' la griglia resta leggibile
+    const big = printMeasure(clean, probe, PRINT_TIERS[0]);
+    const per = Math.max(1, (big.w - big.lead) / nMet);
+    const cap = Math.max(1, Math.floor((PRINT_W - big.lead) / per));
+    const chunks = printChunks(nMet, cap);
+    let wide = 1;
+    chunks.forEach(c=>{ wide = Math.max(wide, c[1] - c[0]); });
+    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide), lay, probe) || big;
+    pick.chunks = chunks;
+    return pick;
+  }
+  function printBuildTable(clean, lay, grp, withTail){
+    const t = document.createElement('table');
+    t.className = clean.className;
+    const hd = clean.querySelector('thead');
+    if(hd) t.appendChild(hd.cloneNode(true));
+    const tb = document.createElement('tbody');
+    lay.pre.forEach(i=> tb.appendChild(lay.rows[i].cloneNode(true)));
+    grp.forEach(w=> w.forEach(i=> tb.appendChild(lay.rows[i].cloneNode(true))));
+    if(withTail) lay.tail.forEach(i=> tb.appendChild(lay.rows[i].cloneNode(true)));
+    t.appendChild(tb);
+    return t;
+  }
+  function printSheetFor(tb, lead, nMet, probe){
+    const clean = printCleanClone(tb);
+    const lay = printPages(clean);
+    const plan = printPlan(clean, lead, nMet, lay, probe);
+    if(!plan) return null;
+    const groups = lay ? printPageGroups(lay, plan.headH, plan.rowsH) : null;
+    const chunks = plan.chunks && plan.chunks.length ? plan.chunks : [[0, nMet]];
     const wrap = document.createElement('div');
     wrap.className = 'print-split';
+    wrap.style.setProperty('--pfs', plan.tier.fs+'px');
+    wrap.style.setProperty('--ppad', plan.tier.pad);
     chunks.forEach(ch=>{
       const a = ch[0], b = ch[1];
       const blk = document.createElement('div');
       blk.className = 'print-blk';
-      const lbl = document.createElement('div');
-      lbl.className = 'print-blk-lbl';
-      lbl.textContent = 'Parametri ' + (a+1) + '-' + b + ' di ' + nMet;
-      blk.appendChild(lbl);
-      const cl = tb.cloneNode(true);
-      cl.querySelectorAll('tr').forEach(tr=>{
-        const cells = tr.children;
-        if(cells.length === lead + nMet){
-          for(let i=cells.length-1; i>=lead; i--){
-            const j = i - lead;
-            if(j<a || j>=b) cells[i].remove();
-          }
-        } else {
-          for(let i=0;i<cells.length;i++){
-            const cs = +(cells[i].getAttribute('colspan') || 1);
-            if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a)));
-          }
-        }
-      });
-      // nel foglio stampato i bottoni non servono: restano solo le etichette
-      cl.querySelectorAll('button.lb-open').forEach(btn=>{
-        const sp = document.createElement('span');
-        sp.className = 'lb';
-        sp.textContent = btn.textContent;
-        btn.parentNode.replaceChild(sp, btn);
-      });
-      blk.appendChild(cl);
+      if(chunks.length > 1){
+        const lbl = document.createElement('div');
+        lbl.className = 'print-blk-lbl';
+        lbl.textContent = 'Parametri ' + (a+1) + '-' + b + ' di ' + nMet;
+        blk.appendChild(lbl);
+      }
+      if(groups){
+        groups.forEach((grp, gi)=>{
+          const pg = document.createElement('div');
+          pg.className = 'print-pg';
+          const t = printBuildTable(clean, lay, grp, gi === groups.length-1);
+          printTrimCols(t, lead, nMet, a, b);
+          pg.appendChild(t);
+          blk.appendChild(pg);
+        });
+      } else {
+        const pg = document.createElement('div');
+        pg.className = 'print-pg';
+        const t = clean.cloneNode(true);
+        printTrimCols(t, lead, nMet, a, b);
+        pg.appendChild(t);
+        blk.appendChild(pg);
+      }
       wrap.appendChild(blk);
     });
-    return wrap;
+    return { wrap:wrap, tier:plan.tier, fasce:chunks.length, pagine:(groups ? groups.length : 1) };
   }
   function clearPrintSheets(){
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
@@ -2609,21 +2814,45 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     clearPrintSheets();
     pdfApply();
     const nMet = VIS().length;
-    if(nMet <= PRINT_MAX_COL) return;
-    const chunks = printChunks(nMet);
-    if(chunks.length < 2) return;
-    document.querySelectorAll('.tscroll').forEach(host=>{
-      if(host.offsetWidth===0 && host.offsetHeight===0) return; // vista non visibile: niente da stampare
-      const tb = host.querySelector('table');
-      if(!tb) return;
-      const hr = tb.querySelector('tr');
-      if(!hr) return;
-      const lead = hr.children.length - nMet;
-      if(lead < 1) return;
-      host.classList.add('print-hidden');
-      const wrap = splitTableForPrint(tb, lead, nMet, chunks);
-      host.parentNode.insertBefore(wrap, host.nextSibling);
-    });
+    if(nMet < 1) return;
+    const probe = printProbe();
+    try{
+      document.querySelectorAll('.tscroll').forEach(host=>{
+        if(host.offsetWidth===0 && host.offsetHeight===0) return; // vista non visibile: niente da stampare
+        const tb = host.querySelector('table');
+        if(!tb) return;
+        const hr = tb.querySelector('tr');
+        if(!hr) return;
+        const lead = hr.children.length - nMet;
+        if(lead < 1) return;
+        const sheet = printSheetFor(tb, lead, nMet, probe);
+        if(!sheet) return;
+        host.classList.add('print-hidden');
+        host.parentNode.insertBefore(sheet.wrap, host.nextSibling);
+      });
+    } finally {
+      if(probe.parentNode) probe.parentNode.removeChild(probe);
+    }
+  }
+  // conto di quante fasce e quante pagine viene la griglia, per dirlo nella finestra del PDF
+  function printGridInfo(){
+    const host = document.getElementById('grid-scroll');
+    if(!host || (host.offsetWidth===0 && host.offsetHeight===0)) return null;
+    const tb = host.querySelector('table');
+    if(!tb) return null;
+    const hr = tb.querySelector('tr');
+    if(!hr) return null;
+    const nMet = VIS().length;
+    const lead = hr.children.length - nMet;
+    if(lead < 1) return null;
+    const probe = printProbe();
+    let out = null;
+    try{
+      const sheet = printSheetFor(tb, lead, nMet, probe);
+      if(sheet) out = { fasce:sheet.fasce, pagine:sheet.pagine };
+    }catch(e){ out = null; }
+    if(probe.parentNode) probe.parentNode.removeChild(probe);
+    return out;
   }
 
   // ---------- cosa mandare nel PDF ----------
@@ -2635,7 +2864,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { id:'chart-card', lbl:'Andamento',           txt:'Il grafico grande, un parametro per volta sul periodo scelto.', def:false },
     { id:'mini-card',  lbl:'Parametri chiave',    txt:'Un istogramma per ogni parametro chiave.', def:true },
     { id:'acwr-card',  lbl:'Rischio carico ACWR', txt:'Rapporto acuto/cronico, monotonia, strain e i tre grafici.', def:true },
-    { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno. Se i parametri sono tanti viene divisa in blocchi.', def:true }
+    { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno. Il corpo si adatta da solo per far stare tutti i parametri in larghezza e mette due microcicli per pagina, senza mai tagliare una settimana a meta\'.', def:true }
   ];
   function pdfRead(){
     let o = null;
@@ -2666,10 +2895,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     list.innerHTML = h;
     if(st){
       const n = PDF_BLOCKS.filter(b=> sel[b.id]).length;
-      const nMet = VIS().length;
-      const blk = nMet > PRINT_MAX_COL ? printChunks(nMet).length : 1;
       let s = n ? (n+' blocchi su '+PDF_BLOCKS.length) : 'Nessun blocco scelto';
-      if(sel['grid-card'] && blk>1) s += ' · griglia in '+blk+' fasce da '+PRINT_MAX_COL+' parametri';
+      if(sel['grid-card']){
+        const g = printGridInfo();
+        if(g){
+          const nMet = VIS().length;
+          const np = g.pagine * g.fasce;
+          s += ' · griglia: ' + nMet + ' parametri';
+          s += g.fasce > 1 ? ' in '+g.fasce+' fasce' : ' tutti in larghezza';
+          s += ', ' + np + (np===1 ? ' pagina' : ' pagine');
+        }
+      }
       st.textContent = s;
     }
   }
