@@ -373,6 +373,13 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 #print-only table.petbl thead th{ background:#5b2d90; color:#fff; }
 #print-only tr.ses td{ background:#efe7f7; color:#5b2d90; font-weight:700; }
 #print-only tr.ld td{ background:#f7f4fb; color:#5a524c; font-size:10px; }
+/* il carico del Full Training va a colonne: ogni parametro resta leggibile */
+#print-only .ldttl{ font-weight:700; color:#5b2d90; margin-bottom:3px; }
+#print-only .lgrid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:1px 12px; }
+#print-only .lgrid .lc{ display:flex; align-items:baseline; justify-content:space-between; gap:6px;
+  border-bottom:1px solid #e6dff0; padding:1px 0; }
+#print-only .lgrid .lc i{ font-style:normal; color:#6b6472; }
+#print-only .lgrid .lc b{ color:#5b2d90; font-weight:700; white-space:nowrap; }
 #print-only .who{ color:#5a524c; font-size:9.5px; }
 #print-only tr.brk{ page-break-inside:avoid; }
 
@@ -1059,15 +1066,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     toast('CSV esportato');
   }
 
-  // ---------- carico come testo (per PDF ed Excel) ----------
-  function loadText(load){
+  // ---------- carico a colonne (per il PDF) ----------
+  function loadChips(load){
     if(!load) return '';
-    const parts = LOAD.map(c=>{
+    const cells = LOAD.map(c=>{
       const v = load[c];
       if(v===null||v===undefined||Number.isNaN(v)) return null;
-      return esc(c)+' '+fmtLoad(c, v)+(UNIT[c]?' '+esc(UNIT[c]):'');
+      return '<span class="lc"><i>'+esc(c)+'</i><b>'+esc(fmtLoad(c, v))+(UNIT[c]?' '+esc(UNIT[c]):'')+'</b></span>';
     }).filter(Boolean);
-    return parts.join(' · ');
+    if(!cells.length) return '';
+    return '<div class="lgrid">'+cells.join('')+'</div>';
   }
 
   // ---------- tabella solo-stampa (PDF pulito, raggruppato per seduta) ----------
@@ -1084,9 +1092,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const nd = s.drills.length + (s.drills.length===1?' esercitazione':' esercitazioni');
       rows += '<tr class="ses brk"><td colspan="2">'+esc(s.slot||'--')+' &#183; '+dLabel+kind+' &#183; '+nd+
         (s.planned?' &#183; pianificata':'')+'</td></tr>';
-      const lt = (s.ft && s.ft.load) ? loadText(s.ft.load)
-        : (s.load ? loadText(s.load) : 'nessun GPS collegato');
-      rows += '<tr class="ld"><td colspan="2">Full Training: '+lt+'</td></tr>';
+      const ftLoad = (s.ft && s.ft.load) ? s.ft.load : (s.load || null);
+      const lg = loadChips(ftLoad);
+      rows += '<tr class="ld"><td colspan="2"><div class="ldttl">Full Training</div>'+
+        (lg || 'nessun GPS collegato')+'</td></tr>';
       s.drills.forEach((d,i)=>{
         const badges = (d.dup?' [doppione]':'') + (d.manual?' [manuale]':'');
         const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
