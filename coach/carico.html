@@ -675,6 +675,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 
 /* ---------- blocchi di stampa (creati al volo, invisibili a schermo) ---------- */
 .print-split{ display:none; }
+#print-month{ display:none; }
 
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
@@ -711,9 +712,10 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .title-wrap h1{ color:#14110f !important; }
   .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
   .wrap{ max-width:none !important; padding:0 !important; }
-  .months{ margin:0 0 12px !important; }
-  .mpill{ display:none !important; }
-  .mpill.on{ display:inline-block !important; background:#eee !important; color:#14110f !important; border-color:#bbb !important; }
+  /* la pillola del mese e' un comando, non un dato: il mese sta gia' scritto nel titolo di
+     ogni scheda, quindi in stampa la fila di pillole sparisce del tutto */
+  .months{ display:none !important; }
+  #print-month{ display:inline !important; }
   .card{ box-shadow:none !important; border:1px solid #ccc !important; background:#fff !important;
     break-inside:avoid; margin-bottom:14px; }
   .card-head h2{ color:#14110f !important; }
@@ -748,7 +750,9 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .print-split .print-blk:last-child .print-pg:last-child{ break-after:auto; page-break-after:auto; }
   #grid-card{ break-inside:auto !important; }
   table.grid thead{ display:table-header-group; }
-  table.grid{ font-size:10px !important; }
+  /* cornice viola attorno alla griglia: sul foglio bianco la tabella si stacca dal resto della
+     scheda e si vede dove finisce un gruppo di microcicli e dove comincia il successivo */
+  table.grid{ font-size:10px !important; border:1.2px solid #7a5aa8 !important; border-radius:3px; }
   table.grid th, table.grid td{ border-bottom:1px solid #ddd !important; }
   table.grid thead th{ background:#f0f0f0 !important; color:#14110f !important; }
   table.grid th.col-day, table.grid td.col-day{ background:#fff !important; box-shadow:none !important;
@@ -2846,11 +2850,25 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function clearPrintSheets(){
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
+    const old = document.getElementById('print-month');
+    if(old && old.parentNode) old.parentNode.removeChild(old);
     pdfClear();
+  }
+  // la fila delle pillole del mese in stampa sparisce, ma il mese deve restare scritto da qualche
+  // parte: se si stampano solo i riquadri in cima, quelli non lo dicono. Va nel sottotitolo.
+  function printMonthTag(){
+    const sub = document.getElementById('subtitle');
+    const m = activeMonth();
+    if(!sub || !m) return;
+    const sp = document.createElement('span');
+    sp.id = 'print-month';
+    sp.textContent = ' · ' + m.title;
+    sub.appendChild(sp);
   }
   function buildPrintSheets(){
     clearPrintSheets();
     pdfApply();
+    printMonthTag();
     const nMet = VIS().length;
     if(nMet < 1) return;
     const probe = printProbe();
