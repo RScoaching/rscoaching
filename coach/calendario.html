@@ -444,6 +444,8 @@ a.dbtn.xgo svg{ transform:none; }
   background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 .pl-diffbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
   background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); }
+.pl-fzbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
+  background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
 .pl-cpct{ font-size:9px; font-weight:700; padding:2px 6px; border-radius:999px; background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
 .pl-cactions{ position:absolute; top:5px; right:5px; display:flex; gap:3px; opacity:0; transition:opacity .16s var(--ease); }
 .pl-chip:hover .pl-cactions, .pl-chip:focus-within .pl-cactions{ opacity:1; }
@@ -1144,7 +1146,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
         sigla: '', has_ex: false,
         svolto: !!m.svolto,
         note: m.note || '',
-        type: m.type || '', group: m.group || '', diff: m.diff || ''
+        type: m.type || '', group: m.group || '', diff: m.diff || '',
+        /* Le atlete e le fasi stavano nel blocco salvato ma non arrivavano
+           fin qui, quindi i cartellini del planner non riuscivano a dire chi
+           fa quella seduta. `fz` e' l'id della scheda di forza da cui il
+           blocco arriva, quando arriva da li'. */
+        players: Array.isArray(m.players) ? m.players.slice() : [],
+        phases: Array.isArray(m.phases) ? m.phases.slice() : [],
+        fz: m.fz || ''
       });
     });
     return out;
@@ -2002,6 +2011,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
   // Il ruolo lo risolve `fio_sidebar.js`: quello dei fogli piu' quello riscritto
   // a mano in Atlete, con la stessa regola valida in tutte le altre pagine.
   const PL_ROLE_ORDER = window.FIO_RUOLI.concat([window.FIO_RUOLO_VUOTO]);
+  // Come si legge un'atleta. Nei blocchi salvati resta scritto il nome vero,
+  // quello del dato: qui cambia solo la lettura a schermo, come in Forza.
+  function plNome(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
   function rosterList(){
     // La rosa arriva da fioRosterRuoli(): sulla 26/27 sono le atlete rigenerate
     // dai file della cartella, sulla 25/26 resta l'elenco storico qui sopra.
@@ -2110,6 +2122,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     saveStore(s); return true;
   }
   function plTitle(s){
+    /* Una seduta arrivata da Forza porta il nome della scheda, per esempio
+       "Forza massimale": dice quale lavoro e', mentre il tipo direbbe solo
+       "Forza" come tutte le altre. */
+    if(s.fz && s.title) return s.title;
     if(s.type && SES[s.type]) return SES[s.type].l;
     if(s.title) return s.title;
     if(s.is_match) return (s.kind==='amichevole'?'Amichevole':'Gara');
@@ -2139,10 +2155,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(manual && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
     if(manual && Array.isArray(s.players) && s.players.length){
       const np = s.players.length;
-      const lbl = compact ? String(np) : (np===1 ? s.players[0] : (np+' giocatrici'));
+      const lbl = compact ? String(np) : (np===1 ? plNome(s.players[0]) : (np+' giocatrici'));
       badges += '<span class="pl-plbadge">'+PL_PEOPLE_SVG+'<span>'+esc(lbl)+'</span></span>';
     }
     if(manual && s.diff)  badges += '<span class="pl-diffbadge">Diff.</span>';
+    /* Il cartellino dice da dove arriva il lavoro: la scheda sta in Forza,
+       con esercizi, serie e carichi, qui se ne vede solo il posto nel giorno. */
+    if(manual && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
     if(!compact && pct!=null && !isRiposo) badges += '<span class="pl-cpct">'+NF0.format(pct)+'%</span>';
     const phases = Array.isArray(s.phases) ? s.phases : [];
     let phHTML = '';
@@ -2264,12 +2283,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
     let opts = '<option value="">Tutte le giocatrici</option>';
     plRoleKeys(g).forEach(function(role){
       opts += '<optgroup label="'+esc(role)+'">'+
-        g[role].map(function(n){ return '<option value="'+esc(n)+'"'+(PL.player===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+
+        g[role].map(function(n){ return '<option value="'+esc(n)+'"'+(PL.player===n?' selected':'')+'>'+esc(plNome(n))+'</option>'; }).join('')+
       '</optgroup>';
     });
     host.innerHTML = '<span class="pl-glabel">Giocatrici</span>'+
       '<span class="pl-pfsel">'+PL_PEOPLE_SVG+'<select id="pl-pfselect" aria-label="Filtra per giocatrice">'+opts+'</select></span>'+
-      (PL.player ? '<button class="pl-pfclear" type="button" id="pl-pfclear">'+PL_X_SVG+'<span>'+esc(PL.player)+'</span></button>' : '')+
+      (PL.player ? '<button class="pl-pfclear" type="button" id="pl-pfclear">'+PL_X_SVG+'<span>'+esc(plNome(PL.player))+'</span></button>' : '')+
       '<span class="pl-pfhint">'+(PL.player
         ? 'Evidenzia i blocchi con questa giocatrice. I blocchi per tutta la squadra restano sempre in chiaro.'
         : 'Assegna le giocatrici a un blocco (aprilo per modificarlo), poi filtra qui.')+'</span>';
@@ -2416,16 +2435,21 @@ window.RS_ROSTER = window.RS_ROSTER || [
       return '<div class="pl-plgrp"><span class="pl-plgh">'+esc(role)+'</span><div class="pl-plchips">'+
         g[role].map(function(n){
           const on = plEditPlayers.indexOf(n)>=0;
-          return '<button type="button" class="pl-plchip'+(on?' on':'')+'" data-n="'+esc(n)+'" aria-pressed="'+(on?'true':'false')+'">'+esc(n)+'</button>';
+          return '<button type="button" class="pl-plchip'+(on?' on':'')+'" data-n="'+esc(n)+'" aria-pressed="'+(on?'true':'false')+'">'+esc(plNome(n))+'</button>';
         }).join('')+
       '</div></div>';
     }).join('');
     plUpdatePlayerTot();
   }
+  /* Scegliendo i nomi conta anche il rovescio: quante restano fuori da quel
+     lavoro. Con la rosa sotto gli occhi il numero di chi non la fa e' quello
+     che dice se la seduta e' per un gruppetto o per quasi tutte. */
   function plUpdatePlayerTot(){
     const tot = document.getElementById('pl-epltot'); if(!tot) return;
     const n = plEditPlayers.length;
-    tot.innerHTML = n ? ('<b>'+n+'</b> selezionate') : 'Tutta la squadra';
+    if(!n){ tot.innerHTML = 'Tutta la squadra'; return; }
+    const fuori = Math.max(0, rosterList().length - n);
+    tot.innerHTML = '<b>'+n+'</b> la fanno'+(fuori ? (', <b>'+fuori+'</b> no') : '');
   }
   function plBindPlayerPick(){
     const host = document.getElementById('pl-eplayers');
@@ -2472,7 +2496,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const meta = SES[t] || SES.squadra;
     const raw = document.getElementById('pl-epct').value;
     const pct = raw==='' ? null : Math.max(0, Math.min(120, Number(raw)||0));
-    m.type = t; m.kind = meta.k; m.title = '';
+    /* Il titolo di norma si azzera, lo fa il tipo di seduta. L'eccezione sono
+       i blocchi che arrivano da una scheda di forza: li' il titolo e' il nome
+       della scheda e cancellarlo vorrebbe dire perdere il riferimento. */
+    m.type = t; m.kind = meta.k; m.title = m.fz ? (m.title || '') : '';
     m.slot = document.getElementById('pl-eslot').value;
     m.pct  = (pct && pct>0) ? pct : null;
     m.load = (pct && pct>0) ? Math.round(pct/100*SCALE) : null;

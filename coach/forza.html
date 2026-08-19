@@ -479,6 +479,14 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fs-ex li .z{ font-size:10px; font-weight:700; padding:1px 7px; border-radius:6px; white-space:nowrap; }
 .fs-players{ font-size:11.5px; color:var(--muted); padding:9px 0 2px; line-height:1.45; }
 .fs-players b{ color:var(--text); font-weight:600; }
+.fs-players.out{ padding:3px 0 2px; color:var(--faint); }
+.fs-players.out b{ color:var(--muted); }
+.fs-cal{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; padding:9px 0 2px; border-top:1px solid var(--border); margin-top:9px; }
+.fs-cal-l{ font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-right:3px; }
+.fs-cal-no{ font-size:11.5px; color:var(--faint); }
+.fs-slot{ padding:4px 11px; font-size:11.5px; border-color:var(--border2); }
+.fs-slot.on, .fs-slot.on:hover{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
+.fs-slot.x{ color:var(--faint); }
 .fs-actions{ display:flex; align-items:center; gap:4px; padding:9px 12px 11px; border-top:1px solid var(--border); margin-top:9px; }
 .fs-btn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; color:var(--muted);
   background:transparent; border:1px solid transparent; border-radius:8px; padding:6px 10px; display:inline-flex; align-items:center; gap:6px;
@@ -1798,7 +1806,81 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      qui sopra la deve vedere subito, non al prossimo caricamento della pagina */
   function sessSave(a){
     try{ localStorage.setItem(SESS_KEY, JSON.stringify(a)); }catch(e){}
+    try{ calSync(a); }catch(e){}
     try{ if(typeof window.fioForzaRicarica === 'function') window.fioForzaRicarica(); }catch(e){}
+  }
+
+  /* ---- la seduta di forza dentro il calendario ----------------------------
+     Il calendario tiene le giornate scritte a mano in un archivio suo, sotto
+     una chiave senza stagione perche' quella pagina non la stagiona: quindi
+     qui si usa la chiave nuda, non quella passata da fioKey.
+     Il blocco che ci scriviamo e' una seduta di tipo forza con un campo in
+     piu', `fz`, che porta l'id della scheda. E' il filo tra la scheda salvata
+     e la giornata: dice se una scheda e' gia' in calendario e in quale parte
+     del giorno, e tiene le stesse atlete della scheda, cosi' nel calendario
+     si vede chi quel giorno fa forza e chi no. ---------------------------- */
+  var CAL_KEY = 'rs_fio_calendario';
+  function calLoad(){
+    try{
+      var o = JSON.parse(localStorage.getItem(CAL_KEY) || '{}');
+      return {
+        comp: (o && o.comp) || {},
+        manual: (o && Array.isArray(o.manual)) ? o.manual : [],
+        groups: (o && Array.isArray(o.groups)) ? o.groups : []
+      };
+    }catch(e){ return { comp:{}, manual:[], groups:[] }; }
+  }
+  function calSave(st){ try{ localStorage.setItem(CAL_KEY, JSON.stringify(st)); }catch(e){} }
+  /* Le schede gia' portate in calendario lette in un colpo solo: id della
+     scheda verso la parte del giorno. Serve alle card per accendere AM o PM. */
+  function calSlots(){
+    var out = {};
+    calLoad().manual.forEach(function(m){ if(m && m.fz) out[m.fz] = m.slot || 'AM'; });
+    return out;
+  }
+  function calFill(m, s, slot){
+    m.data = s.date;
+    m.slot = slot;
+    m.title = s.title || 'Seduta forza';
+    m.group = s.groupName || '';
+    m.players = isAll(s.players) ? [] : s.players.slice();
+    m.svolto = fatta(s.date);
+  }
+  function calPut(s, slot){
+    var st = calLoad(), m = null;
+    for(var i=0;i<st.manual.length;i++){
+      if(st.manual[i] && st.manual[i].fz === s.id){ m = st.manual[i]; break; }
+    }
+    if(!m){
+      m = { id:'fz'+s.id, fz:s.id, kind:'training', type:'forza',
+            pct:null, load:null, note:'', diff:'', phases:[] };
+      st.manual.push(m);
+    }
+    calFill(m, s, slot);
+    calSave(st);
+  }
+  function calDrop(id){
+    var st = calLoad();
+    var rest = st.manual.filter(function(m){ return !(m && m.fz === id); });
+    if(rest.length === st.manual.length) return false;
+    st.manual = rest; calSave(st); return true;
+  }
+  /* Se una scheda gia' in calendario cambia data, nome o atlete, la giornata
+     deve seguirla senza che si debba rimetterla a mano; e se la scheda viene
+     cancellata, la giornata resterebbe li' a indicare un lavoro che non
+     esiste piu', quindi si toglie. */
+  function calSync(list){
+    var st = calLoad(), byId = {}, keep = [], linked = false;
+    (list||[]).forEach(function(s){ if(s && s.id) byId[s.id] = s; });
+    st.manual.forEach(function(m){
+      if(!m || !m.fz){ keep.push(m); return; }
+      linked = true;
+      var s = byId[m.fz]; if(!s) return;
+      calFill(m, s, m.slot || 'AM');
+      keep.push(m);
+    });
+    if(!linked) return;
+    st.manual = keep; calSave(st);
   }
 
   function statsOf(rows){
@@ -2145,7 +2227,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
   }
 
-  function cardHTML(s){
+  function cardHTML(s, slots){
+    slots = slots || {};
     var d = parseISO(s.date);
     var day = d ? d.getDate() : '-';
     var mon = d ? MON3.format(d).replace('.','') : '';
@@ -2161,7 +2244,31 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     if(named.length>4) exHtml += '<li><span class="x" style="color:var(--muted);font-weight:500">+'+(named.length-4)+' altri esercizi</span></li>';
     if(!exHtml) exHtml = '<li><span class="x" style="color:var(--muted);font-weight:500">Nessun esercizio</span></li>';
-    var players = all ? '' : '<div class="fs-players"><b>Atlete:</b> '+esc(s.players.map(disp).join(', '))+'</div>';
+    /* Con una scheda a gruppo ristretto la domanda vera non e' solo chi la fa
+       ma chi resta fuori: le due righe stanno una sotto l'altra cosi' il conto
+       torna a colpo d'occhio senza aprire niente. */
+    var players = '';
+    if(!all){
+      var fuori = NAMES.filter(function(n){ return s.players.indexOf(n) === -1; });
+      players = '<div class="fs-players"><b>La fanno:</b> '+esc(s.players.map(disp).join(', '))+'</div>';
+      if(fuori.length) players += '<div class="fs-players out"><b>Non la fanno:</b> '+esc(fuori.map(disp).join(', '))+'</div>';
+    }
+    /* Portare la scheda in calendario vuol dire scegliere se il lavoro sta al
+       mattino o al pomeriggio: sono due bottoni, quello acceso dice dov'e'
+       adesso, e "Togli" la riporta fuori dalla giornata. Senza data non c'e'
+       nessun giorno dove metterla. */
+    var inSlot = slots[s.id] || '';
+    var calRow;
+    if(!s.date){
+      calRow = '<div class="fs-cal"><span class="fs-cal-l">In calendario</span>'
+        + '<span class="fs-cal-no">serve prima una data</span></div>';
+    } else {
+      calRow = '<div class="fs-cal"><span class="fs-cal-l">In calendario</span>'
+        + '<button class="fs-btn fs-slot'+(inSlot==='AM'?' on':'')+'" data-act="cal" data-slot="AM" data-id="'+esc(s.id)+'" type="button">AM</button>'
+        + '<button class="fs-btn fs-slot'+(inSlot==='PM'?' on':'')+'" data-act="cal" data-slot="PM" data-id="'+esc(s.id)+'" type="button">PM</button>'
+        + (inSlot ? '<button class="fs-btn fs-slot x" data-act="calx" data-id="'+esc(s.id)+'" type="button">Togli</button>' : '')
+        + '</div>';
+    }
     /* Una seduta salvata con una data arrivata vuol dire che le atlete l'hanno
        fatta: si segna eseguita e finisce nell'archivio qui sopra. Anche se la
        data e' indietro nel tempo, cosi' si recuperano le sedute rimaste fuori. */
@@ -2184,6 +2291,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       +   '</div>'
       +   '<ul class="fs-ex">'+exHtml+'</ul>'
       +   players
+      +   calRow
       + '</div>'
       + '<div class="fs-actions">'
       +   '<button class="fs-btn" data-act="print" data-id="'+esc(s.id)+'" type="button">'+PRINTSVG+'Stampa</button>'
@@ -2230,6 +2338,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         + (schedState.player==='all' ? 'Nessuna seduta salvata' : 'Nessuna seduta per questa atleta')
         + '</div>Costruisci una seduta qui sopra, assegna data e atlete, poi premi "Salva seduta".</div>';
     } else {
+      var slots = calSlots();
       var groups = [], map = {};
       filtered.forEach(function(s){
         var dd = parseISO(s.date);
@@ -2240,7 +2349,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       body = '';
       groups.forEach(function(g){
         var cards = '';
-        g.items.forEach(function(s){ cards += '<article class="fs-card">'+cardHTML(s)+'</article>'; });
+        g.items.forEach(function(s){ cards += '<article class="fs-card">'+cardHTML(s, slots)+'</article>'; });
         body += '<div class="fmonth"><div class="fmonth-h">'
           + '<span class="m">'+esc(g.key)+'</span><span class="line"></span>'
           + '<span class="n">'+g.items.length+' '+(g.items.length===1?'seduta':'sedute')+'</span></div>'
@@ -2740,9 +2849,20 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         var b = e.target.closest ? e.target.closest('.fs-btn') : null; if(!b) return;
         var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
         if(act==='del'){ deleteSession(id); return; }
+        if(act==='calx'){
+          if(calDrop(id)) fbToast('Seduta tolta dal calendario');
+          renderSched(); return;
+        }
         var list = sessLoad(), s = null;
         for(var i=0;i<list.length;i++){ if(list[i].id===id){ s = list[i]; break; } }
         if(!s) return;
+        if(act==='cal'){
+          if(!s.date){ fbToast('Metti una data alla seduta prima di portarla in calendario'); return; }
+          var slot = b.getAttribute('data-slot') === 'PM' ? 'PM' : 'AM';
+          calPut(s, slot);
+          fbToast('In calendario, ' + fmtDay(s.date) + ' ' + (slot==='AM'?'mattina':'pomeriggio'));
+          renderSched(); return;
+        }
         if(act==='print') printSession(s);
         else if(act==='edit') loadIntoBuilder(s, true);
         else if(act==='dup') loadIntoBuilder(s, false);
