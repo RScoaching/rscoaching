@@ -124,6 +124,16 @@ a{ color:inherit; text-decoration:none; }
 }
 .search input::placeholder{ color:var(--faint); }
 .search input:hover{ border-color:var(--border3); }
+/* sinottica: quali parametri GPS far vedere, e' la stessa scelta di Carico e Sessioni */
+.sinpick{
+  appearance:none; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--muted);
+  background:var(--surface); border:1px solid var(--border2); border-radius:999px;
+  padding:8px 30px 8px 14px; min-height:38px; cursor:pointer; max-width:230px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8178' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat:no-repeat; background-position:right 10px center; background-size:13px;
+}
+.sinpick:hover{ border-color:var(--border3); color:var(--text); }
+.sinpick:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
 .pills{ display:flex; gap:7px; flex-wrap:wrap; }
 .pill{
   appearance:none; border:1px solid var(--border2); background:var(--surface);
@@ -444,6 +454,7 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
           <input id="search" type="search" placeholder="Cerca esercitazione..." aria-label="Cerca esercitazione">
         </div>
         <div class="pills" id="pills" role="tablist" aria-label="Filtro slot"></div>
+        <select class="sinpick" id="sinpick" aria-label="Sinottica dei parametri GPS" title="Quali parametri GPS mostrare. Le sinottiche si creano in Carico"></select>
         <span class="spacer"></span>
         <button class="btn" id="btn-add" aria-expanded="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
@@ -701,11 +712,49 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }));
   }
 
+  // ---------- sinottiche ----------
+  // Elenchi di parametri con un nome, creati in Carico e condivisi con le Sessioni.
+  // Nel cassetto ci sono i NOMI dei parametri, non le posizioni, cosi' la stessa
+  // sinottica vale anche se il foglio della stagione ha piu' o meno colonne.
+  const SIN_STORE = 'rs_sinottiche_v1';
+  const SIN_PICK = 'rs_fio_eserc_sin';   // sinottica scelta qui, vuoto vuol dire tutti
+  const ALL_LOAD = LOAD.map((_,i)=> i);
+  function sinList(){
+    try{
+      const o = JSON.parse(localStorage.getItem(SIN_STORE) || 'null');
+      if(!o || !Array.isArray(o.l)) return [];
+      const out = [];
+      o.l.forEach(s=>{
+        if(!s || typeof s.n!=='string' || !Array.isArray(s.p)) return;
+        const cols = [];
+        s.p.forEach(nm=>{ const i = LOAD.indexOf(nm); if(i>=0 && cols.indexOf(i)<0) cols.push(i); });
+        if(cols.length) out.push({ n:s.n, cols:cols });
+      });
+      return out.slice(0, 8);
+    }catch(e){ return []; }
+  }
+  function sinPick(){ try{ return localStorage.getItem(SIN_PICK) || ''; }catch(e){ return ''; } }
+  function sinSetPick(v){ try{ if(v) localStorage.setItem(SIN_PICK, v); else localStorage.removeItem(SIN_PICK); }catch(e){} }
+  function VISLOAD(){
+    const n = sinPick(); if(!n) return ALL_LOAD;
+    const s = sinList().find(x=> x.n===n);
+    return (s && s.cols.length) ? s.cols : ALL_LOAD;
+  }
+  function renderSinPick(){
+    const el = document.getElementById('sinpick'); if(!el) return;
+    const list = sinList(), cur = sinPick();
+    el.hidden = !list.length;
+    let h = '<option value="">Tutti i parametri ('+LOAD.length+')</option>';
+    list.forEach(s=>{ h += '<option value="'+esc(s.n)+'">'+esc(s.n)+' ('+s.cols.length+')</option>'; });
+    el.innerHTML = h;
+    el.value = list.some(s=> s.n===cur) ? cur : '';
+  }
+
   // ---------- sessions ----------
   function loadStrip(load){
     if(!load) return '';
-    const cells = LOAD.map(c=>{
-      const v = load[c];
+    const cells = VISLOAD().map(i=>{
+      const c = LOAD[i], v = load[c];
       return '<div class="lcell"><div class="ll">'+esc(c)+'</div>'+
         '<div class="lv tnum">'+fmtLoad(c, v)+(UNIT[c]?'<small>'+esc(UNIT[c])+'</small>':'')+'</div></div>';
     }).join('');
@@ -743,7 +792,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     function aria(c){ return st.c===c ? (st.dir>0?'ascending':'descending') : 'none'; }
     let h = '<div class="gwrap"><table class="gtbl"><thead><tr>'+
       '<th class="nm sortable" data-c="nm" aria-sort="'+aria('nm')+'" scope="col">Atleta <span class="arw">'+arw('nm')+'</span></th>';
-    LOAD.forEach((c,i)=>{
+    const vis = VISLOAD();
+    vis.forEach(i=>{
+      const c = LOAD[i];
       h += '<th class="sortable" data-c="'+i+'" aria-sort="'+aria(i)+'" scope="col">'+esc(c)+
         (UNIT[c] ? '<span class="u">'+esc(UNIT[c])+'</span>' : '')+
         ' <span class="arw">'+arw(i)+'</span></th>';
@@ -751,17 +802,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     h += '</tr></thead><tbody>';
     rows.forEach(r=>{
       h += '<tr><td class="nm">'+esc(r.nm)+'</td>';
-      LOAD.forEach((c,i)=>{
+      vis.forEach(i=>{
         const v = vnum(r.v, i);
-        h += '<td'+(i===I_DIST?' class="key"':'')+'>'+(v==null?'&#8211;':fmtLoad(c, v))+'</td>';
+        h += '<td'+(i===I_DIST?' class="key"':'')+'>'+(v==null?'&#8211;':fmtLoad(LOAD[i], v))+'</td>';
       });
       h += '</tr>';
     });
     h += '</tbody><tfoot><tr><td class="nm">Media di '+rows.length+'</td>';
-    LOAD.forEach((c,i)=>{
+    vis.forEach(i=>{
       let sum = 0, k = 0;
       rows.forEach(r=>{ const v = vnum(r.v, i); if(v!=null){ sum += v; k++; } });
-      h += '<td>'+(k ? fmtLoad(c, sum/k) : '&#8211;')+'</td>';
+      h += '<td>'+(k ? fmtLoad(LOAD[i], sum/k) : '&#8211;')+'</td>';
     });
     h += '</tr></tfoot></table></div>';
     return h;
@@ -1069,8 +1120,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ---------- carico a colonne (per il PDF) ----------
   function loadChips(load){
     if(!load) return '';
-    const cells = LOAD.map(c=>{
-      const v = load[c];
+    const cells = VISLOAD().map(i=>{
+      const c = LOAD[i], v = load[c];
       if(v===null||v===undefined||Number.isNaN(v)) return null;
       return '<span class="lc"><i>'+esc(c)+'</i><b>'+esc(fmtLoad(c, v))+(UNIT[c]?' '+esc(UNIT[c]):'')+'</b></span>';
     }).filter(Boolean);
@@ -1220,6 +1271,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintTable(); window.print(); });
   window.addEventListener('beforeprint', buildPrintTable);
 
+  // ---------- sinottica ----------
+  (function(){
+    const el = document.getElementById('sinpick'); if(!el) return;
+    el.addEventListener('change', ()=>{
+      sinSetPick(el.value);
+      toast(el.value ? ('Sinottica: '+el.value) : 'Tutti i parametri');
+      render();
+    });
+  })();
+
   // ---------- search (debounced) ----------
   (function(){
     let t; const inp=document.getElementById('search');
@@ -1239,6 +1300,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ---------- render ----------
   function render(){
     const all = buildSessions();
+    renderSinPick();
     renderKPIs(all);
     renderPills(all);
     renderFocusBar(all);

@@ -629,6 +629,22 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   .cols-foot #cols-done{ flex:1 1 100%; justify-content:center; }
 }
 
+/* ---------- scelta dei blocchi da mandare nel PDF ---------- */
+.pdf-list{ border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+.pdf-row{ display:flex; align-items:flex-start; gap:11px; padding:11px; background:var(--surface);
+  border-bottom:1px solid var(--border); cursor:pointer;
+  transition: background .14s var(--ease), opacity .14s var(--ease); }
+.pdf-row:last-child{ border-bottom:0; }
+.pdf-row:hover{ background:var(--surface2); }
+.pdf-row.off{ opacity:.5; }
+.pdf-row input{ flex:0 0 auto; width:16px; height:16px; accent-color:var(--orange); cursor:pointer; margin:2px 0 0; }
+.pdf-txt{ flex:1 1 auto; min-width:0; font-size:13px; color:var(--text); line-height:1.35; }
+.pdf-txt small{ display:block; font-size:11.5px; color:var(--faint); margin-top:2px; line-height:1.45; }
+.pdf-state{ flex:1 1 auto; min-width:180px; font-size:12px; color:var(--muted); line-height:1.4; }
+@media (max-width: 560px){
+  .cols-foot #pdf-go{ flex:1 1 100%; justify-content:center; }
+}
+
 /* ---------- modello partita modificabile ---------- */
 .mod-list{ border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
 .mod-row{ display:flex; align-items:center; gap:11px; padding:9px 11px; background:var(--surface);
@@ -662,7 +678,9 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
-  @page{ margin:13mm; }
+  /* foglio orizzontale: nell'A4 in verticale i parametri non ci stavano e la griglia
+     ripartiva da capo pagina dopo pagina. Orizzontale ne fa entrare molti di piu'. */
+  @page{ size:A4 landscape; margin:10mm; }
   /* i token del tema vengono ridefiniti in chiaro: cosi tutti i blocchi (parametri chiave,
      ACWR, grafici SVG che usano var(--...)) escono leggibili sul foglio bianco */
   :root{
@@ -676,8 +694,11 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
-  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, #chart-card, .chart-tooltip, .toast,
-  #cols-dialog, #model-dialog, .top-right, .foot-note{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, .chart-tooltip, .toast,
+  #cols-dialog, #model-dialog, #pdf-dialog, .top-right, .foot-note{ display:none !important; }
+  /* i blocchi lasciati fuori dalla scelta prima di stampare */
+  .print-off{ display:none !important; }
+  #chart-card .chart-tools{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
@@ -758,18 +779,18 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   select.picker{ background:#fff !important; color:#14110f !important; border:1px solid #ccc !important;
     box-shadow:none !important; appearance:none !important; padding-right:10px !important; }
   /* parametri chiave */
-  #mini-card .mgrid{ grid-template-columns:repeat(3, 1fr) !important; }
+  #mini-card .mgrid{ grid-template-columns:repeat(4, 1fr) !important; }
   .mcell{ break-inside:avoid; page-break-inside:avoid; box-shadow:none !important; transform:none !important; }
   /* analisi carico: le tinte forti restano chiare, i testi tornano scuri */
   .acwr-stats{ grid-template-columns:1.35fr 1fr 1fr 1fr !important; }
   .acwr-hero, .acwr-tile, .acell, .acwr-block{ break-inside:avoid; page-break-inside:avoid; box-shadow:none !important; }
-  .agrid{ grid-template-columns:repeat(3, 1fr) !important; }
+  .agrid{ grid-template-columns:repeat(4, 1fr) !important; }
   .ah-pill.z-ok, .ac-pill.z-ok{ color:#2f6b34 !important; }
   .ah-pill.z-low, .ac-pill.z-low{ color:#1f5b8a !important; }
   .ah-pill.z-warn, .ac-pill.z-warn{ color:#8a5a00 !important; }
   .ah-pill.z-high, .ac-pill.z-high{ color:#9f2f2d !important; }
   .at-val.dn{ color:#1f5b8a !important; }
-  .acwr-charts{ grid-template-columns:1fr !important; }
+  .acwr-charts{ grid-template-columns:repeat(2, 1fr) !important; }
   .chart-wrap{ overflow:visible !important; }
   .reveal{ opacity:1 !important; transform:none !important; animation:none !important; }
 }
@@ -841,7 +862,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4 16.5z"/><path d="M13.5 6.5l4 4"/></svg>
           Modello <span class="cols-count" id="model-count"></span>
         </button>
-        <button class="btn" id="btn-print" title="Stampa o salva in PDF: se i parametri sono tanti la griglia viene divisa in piu' blocchi che stanno nel foglio">
+        <button class="btn" id="btn-print" title="Scegli cosa mettere nel PDF: foglio orizzontale, un blocco per volta">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
         </button>
@@ -993,7 +1014,7 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
   <div class="cols-panel">
     <div class="cols-head">
       <h2>Parametri e sinottiche</h2>
-      <span class="hint">Scegli i parametri, trascinali per ordinarli, salva le tue sinottiche. La selezione vale per griglia, partite ed export Excel/CSV.</span>
+      <span class="hint">Scegli i parametri, trascinali per ordinarli, salva le tue sinottiche. La selezione vale per griglia, partite ed export Excel/CSV. Le sinottiche salvate qui si ritrovano in Sessioni e in Esercitazioni.</span>
     </div>
     <div class="cols-scroll">
       <div id="preset-list"></div>
@@ -1006,10 +1027,32 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
     </div>
     <div class="cols-foot">
       <div class="save-row">
-        <input id="preset-name" type="text" placeholder="Nome nuova sinottica" maxlength="40" aria-label="Nome nuova sinottica">
+        <input id="preset-name" type="text" placeholder="Nome nuova sinottica" maxlength="22" aria-label="Nome nuova sinottica">
         <button class="btn" id="preset-save" type="button">Salva sinottica</button>
       </div>
       <button class="btn primary" id="cols-done" type="button">Fatto</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- cosa mandare nel PDF -->
+<dialog id="pdf-dialog" class="cols-dialog" aria-label="Cosa mettere nel PDF">
+  <div class="cols-panel">
+    <div class="cols-head">
+      <h2>Cosa mettere nel PDF</h2>
+      <span class="hint">Il foglio esce in orizzontale, cosi' i parametri stanno in larghezza. Spunta solo i blocchi che ti servono: meno blocchi, meno pagine. La scelta resta su questo dispositivo.</span>
+    </div>
+    <div class="cols-scroll">
+      <div class="col-tools">
+        <button class="mini" id="pdf-all" type="button">Tutto</button>
+        <button class="mini" id="pdf-none" type="button">Solo la griglia</button>
+      </div>
+      <div class="pdf-list" id="pdf-list"></div>
+    </div>
+    <div class="cols-foot">
+      <span class="pdf-state" id="pdf-state"></span>
+      <button class="btn" id="pdf-close" type="button">Annulla</button>
+      <button class="btn primary" id="pdf-go" type="button">Stampa</button>
     </div>
   </div>
 </dialog>
@@ -1138,7 +1181,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- parametri visibili + ordine (sinottiche) ----------
   const COLS_KEY = 'rs_fio_carico_cols';
-  const PRESETS_KEY = 'rs_fio_carico_presets';
+  // Le sinottiche stanno nello stesso cassetto delle Sessioni e delle Esercitazioni.
+  // Dentro ci vanno i NOMI dei parametri, non le posizioni: i fogli 26-27 hanno venti
+  // colonne e quelli 25-26 quattordici, quindi una posizione non vuol dire niente da
+  // una stagione all'altra mentre un nome si'.
+  const SIN_STORE = 'rs_sinottiche_v1';
+  const OLD_PRESETS_KEY = 'rs_fio_carico_presets';   // vecchie sinottiche a indici, solo per il travaso
+  const SIN_MAX = 8;
   const ALL_IDX = M.map((_,i)=> i);
   let colOrder = ALL_IDX.slice();
   let colHidden = new Set();
@@ -1159,8 +1208,51 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   })();
   function saveCols(){ try{ localStorage.setItem(COLS_KEY, JSON.stringify({ order:colOrder, hidden:[...colHidden] })); }catch(e){} }
   function VIS(){ const v = colOrder.filter(i=> !colHidden.has(i)); return v.length ? v : colOrder.slice(); }
-  function loadPresets(){ try{ const a = JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]'); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
-  function savePresets(a){ try{ localStorage.setItem(PRESETS_KEY, JSON.stringify(a)); }catch(e){} }
+  function sinRead(){
+    try{
+      const o = JSON.parse(localStorage.getItem(SIN_STORE) || 'null');
+      if(!o || !Array.isArray(o.l)) return { a:0, l:[] };
+      const l = [];
+      o.l.forEach(s=>{
+        if(!s || typeof s.n!=='string' || !Array.isArray(s.p)) return;
+        const p = [];
+        s.p.forEach(x=>{ if(typeof x==='string' && x && p.indexOf(x)<0) p.push(x); });
+        if(p.length) l.push({ n:s.n.slice(0,22) || 'Senza nome', p:p });
+      });
+      const a = Number.isInteger(o.a) && o.a>=0 && o.a<l.length ? o.a : 0;
+      return { a:a, l:l.slice(0, SIN_MAX) };
+    }catch(e){ return { a:0, l:[] }; }
+  }
+  function sinWrite(o){
+    try{ localStorage.setItem(SIN_STORE, JSON.stringify({ a:(Number.isInteger(o.a)?o.a:0), l:o.l.slice(0, SIN_MAX) })); }catch(e){}
+  }
+  // travaso una tantum delle vecchie sinottiche di questa pagina: da posizioni a nomi
+  (function sinMigrate(){
+    let old = null;
+    try{ old = JSON.parse(localStorage.getItem(OLD_PRESETS_KEY) || 'null'); }catch(e){ old = null; }
+    if(!Array.isArray(old) || !old.length) return;
+    const o = sinRead();
+    old.forEach(p=>{
+      if(!p || typeof p.name!=='string' || !Array.isArray(p.cols)) return;
+      const nm = [];
+      p.cols.forEach(i=>{ if(Number.isInteger(i) && i>=0 && i<M.length && nm.indexOf(M[i])<0) nm.push(M[i]); });
+      if(!nm.length) return;
+      const name = p.name.trim().slice(0,22) || 'Senza nome';
+      const ex = o.l.findIndex(s=> s.n.toLowerCase()===name.toLowerCase());
+      if(ex>=0) o.l[ex] = { n:name, p:nm };
+      else if(o.l.length < SIN_MAX) o.l.push({ n:name, p:nm });
+    });
+    sinWrite(o);
+    try{ localStorage.removeItem(OLD_PRESETS_KEY); }catch(e){}
+  })();
+  // le sinottiche viste da questa stagione: i nomi che qui non esistono restano fuori
+  function loadPresets(){
+    return sinRead().l.map(s=>{
+      const cols = [];
+      s.p.forEach(nm=>{ const i = M.indexOf(nm); if(i>=0 && cols.indexOf(i)<0) cols.push(i); });
+      return { name:s.n, names:s.p.slice(), cols:cols, missing:s.p.length-cols.length };
+    });
+  }
   function uniqInts(arr){ const seen=new Set(), out=[]; (arr||[]).forEach(i=>{ if(Number.isInteger(i) && i>=0 && i<M.length && !seen.has(i)){ seen.add(i); out.push(i); } }); return out; }
   function findByNames(patterns){
     const out=[];
@@ -2458,7 +2550,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Con tutti i parametri accesi la tabella e' troppo larga per un A4 e il PDF esce tagliato.
   // Prima di stampare ricostruiamo la stessa tabella in piu' blocchi, ognuno con la colonna
   // del giorno piu' un gruppo di parametri. A schermo non cambia niente.
-  const PRINT_MAX_COL = 6;
+  // Foglio orizzontale: 277mm di larghezza utile invece di 184mm, quindi in un blocco
+  // ci stanno dieci parametri invece di sei. I venti parametri del 26-27 stanno in due
+  // fasce invece di quattro, e i quattordici del 25-26 in due fasce da sette.
+  const PRINT_MAX_COL = 10;
   function printChunks(n){
     const out = [];
     if(n<=0) return out;
@@ -2508,9 +2603,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function clearPrintSheets(){
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
+    pdfClear();
   }
   function buildPrintSheets(){
     clearPrintSheets();
+    pdfApply();
     const nMet = VIS().length;
     if(nMet <= PRINT_MAX_COL) return;
     const chunks = printChunks(nMet);
@@ -2528,6 +2625,83 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       host.parentNode.insertBefore(wrap, host.nextSibling);
     });
   }
+
+  // ---------- cosa mandare nel PDF ----------
+  // Prima usciva tutta la pagina e venivano fuori troppe pagine. Adesso si sceglie
+  // blocco per blocco: la scelta resta salvata e vale anche per Ctrl+P.
+  const PDF_KEY = 'rs_fio_carico_pdf';
+  const PDF_BLOCKS = [
+    { id:'kpis',       lbl:'Riepilogo del mese',  txt:'Minuti, distanza, sedute e partite del mese scelto.', def:true },
+    { id:'chart-card', lbl:'Andamento',           txt:'Il grafico grande, un parametro per volta sul periodo scelto.', def:false },
+    { id:'mini-card',  lbl:'Parametri chiave',    txt:'Un istogramma per ogni parametro chiave.', def:true },
+    { id:'acwr-card',  lbl:'Rischio carico ACWR', txt:'Rapporto acuto/cronico, monotonia, strain e i tre grafici.', def:true },
+    { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno. Se i parametri sono tanti viene divisa in blocchi.', def:true }
+  ];
+  function pdfRead(){
+    let o = null;
+    try{ o = JSON.parse(localStorage.getItem(PDF_KEY) || 'null'); }catch(e){ o = null; }
+    const out = {};
+    PDF_BLOCKS.forEach(b=>{ out[b.id] = (o && typeof o[b.id]==='boolean') ? o[b.id] : b.def; });
+    return out;
+  }
+  function pdfWrite(o){ try{ localStorage.setItem(PDF_KEY, JSON.stringify(o)); }catch(e){} }
+  function pdfApply(){
+    const sel = pdfRead();
+    PDF_BLOCKS.forEach(b=>{
+      const el = document.getElementById(b.id); if(!el) return;
+      el.classList.toggle('print-off', !sel[b.id]);
+    });
+  }
+  function pdfClear(){ document.querySelectorAll('.print-off').forEach(n=> n.classList.remove('print-off')); }
+  function renderPdfPanel(){
+    const list = document.getElementById('pdf-list'), st = document.getElementById('pdf-state');
+    if(!list) return;
+    const sel = pdfRead();
+    let h = '';
+    PDF_BLOCKS.forEach(b=>{
+      const on = !!sel[b.id];
+      h += '<label class="pdf-row'+(on?'':' off')+'"><input type="checkbox" data-pdf="'+b.id+'"'+(on?' checked':'')+'>'+
+           '<span class="pdf-txt">'+esc(b.lbl)+'<small>'+esc(b.txt)+'</small></span></label>';
+    });
+    list.innerHTML = h;
+    if(st){
+      const n = PDF_BLOCKS.filter(b=> sel[b.id]).length;
+      const nMet = VIS().length;
+      const blk = nMet > PRINT_MAX_COL ? printChunks(nMet).length : 1;
+      let s = n ? (n+' blocchi su '+PDF_BLOCKS.length) : 'Nessun blocco scelto';
+      if(sel['grid-card'] && blk>1) s += ' · griglia in '+blk+' fasce da '+PRINT_MAX_COL+' parametri';
+      st.textContent = s;
+    }
+  }
+  function openPdfDialog(){
+    renderPdfPanel();
+    const d = document.getElementById('pdf-dialog'); if(!d) return;
+    if(typeof d.showModal==='function'){ if(!d.open) d.showModal(); } else d.setAttribute('open','');
+  }
+  function closePdfDialog(){
+    const d = document.getElementById('pdf-dialog'); if(!d) return;
+    if(typeof d.close==='function' && d.open) d.close(); else d.removeAttribute('open');
+  }
+  (function(){
+    const dlg = document.getElementById('pdf-dialog'); if(!dlg) return;
+    const list = document.getElementById('pdf-list');
+    if(list) list.addEventListener('change', e=>{
+      const cb = e.target.closest('input[data-pdf]'); if(!cb) return;
+      const o = pdfRead(); o[cb.getAttribute('data-pdf')] = cb.checked; pdfWrite(o); renderPdfPanel();
+    });
+    const setAll = v=>{ const o = {}; PDF_BLOCKS.forEach(b=> o[b.id] = v ? true : (b.id==='grid-card')); pdfWrite(o); renderPdfPanel(); };
+    const a = document.getElementById('pdf-all'); if(a) a.addEventListener('click', ()=> setAll(true));
+    const n = document.getElementById('pdf-none'); if(n) n.addEventListener('click', ()=> setAll(false));
+    const c = document.getElementById('pdf-close'); if(c) c.addEventListener('click', closePdfDialog);
+    const g = document.getElementById('pdf-go'); if(g) g.addEventListener('click', ()=>{
+      const sel = pdfRead();
+      if(!PDF_BLOCKS.some(b=> sel[b.id])){ toast('Scegli almeno un blocco'); return; }
+      closePdfDialog();
+      setTimeout(()=>{ buildPrintSheets(); window.print(); }, 60);
+    });
+    dlg.addEventListener('click', e=>{ if(e.target===dlg) closePdfDialog(); });
+    dlg.addEventListener('cancel', e=>{ e.preventDefault(); closePdfDialog(); });
+  })();
 
   // ---------- partite ----------
   const msort = { col:'data', dir:-1 }; // 'sigla' | 'data' | metric index; default data desc
@@ -2978,7 +3152,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('seg-player').addEventListener('click', ()=> setLevel('player'));
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
-  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintSheets(); window.print(); });
+  document.getElementById('btn-print').addEventListener('click', openPdfDialog);
   window.addEventListener('beforeprint', buildPrintSheets);
   window.addEventListener('afterprint', clearPrintSheets);
   document.getElementById('player-select').addEventListener('change', e=>{
@@ -3093,10 +3267,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const pres = defaultPresets(), cust = loadPresets();
       let p = '<div class="preset-group"><div class="preset-lbl">Sinottiche preimpostate</div><div class="preset-chips">';
       pres.forEach(x=>{ p += '<button type="button" class="chip" data-preset="'+esc(x.id)+'">'+esc(x.name)+' <em>'+x.cols.length+'</em></button>'; });
-      p += '</div></div><div class="preset-group"><div class="preset-lbl">Le mie sinottiche</div><div class="preset-chips">';
+      p += '</div></div><div class="preset-group"><div class="preset-lbl">Le mie sinottiche, valgono anche in Sessioni ed Esercitazioni</div><div class="preset-chips">';
       if(cust.length){
         cust.forEach((x,idx)=>{
-          p += '<span class="chip chip-cust"><button type="button" class="chip-apply" data-cust="'+idx+'">'+esc(x.name)+' <em>'+uniqInts(x.cols).length+'</em></button>'+
+          const ttl = x.missing ? ' title="'+x.missing+' parametri non presenti in questa stagione"' : '';
+          p += '<span class="chip chip-cust"><button type="button" class="chip-apply" data-cust="'+idx+'"'+ttl+'>'+esc(x.name)+' <em>'+x.cols.length+(x.missing?'+'+x.missing:'')+'</em></button>'+
                '<button type="button" class="chip-del" data-del="'+idx+'" title="Elimina" aria-label="Elimina sinottica">&#215;</button></span>';
         });
       } else { p += '<span class="preset-empty">Nessuna. Scegli i parametri e salvala qui sotto.</span>'; }
@@ -3139,18 +3314,29 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return best.el;
   }
   function applyPreset(id){ const p = defaultPresets().find(x=> x.id===id); if(!p) return; applyCols(p.cols); renderColPanel(); toast('Sinottica: '+p.name); }
-  function applyCustom(idx){ const p = loadPresets()[idx]; if(!p) return; applyCols(p.cols); renderColPanel(); toast('Sinottica: '+p.name); }
-  function delCustom(idx){ const c = loadPresets(); if(idx<0||idx>=c.length) return; c.splice(idx,1); savePresets(c); renderColPanel(); }
+  function applyCustom(idx){
+    const p = loadPresets()[idx]; if(!p) return;
+    if(!p.cols.length){ toast('Sinottica non disponibile in questa stagione'); return; }
+    const o = sinRead(); if(idx>=0 && idx<o.l.length){ o.a = idx; sinWrite(o); }
+    applyCols(p.cols); renderColPanel(); toast('Sinottica: '+p.name);
+  }
+  function delCustom(idx){
+    const o = sinRead(); if(idx<0 || idx>=o.l.length) return;
+    o.l.splice(idx,1); if(o.a>=o.l.length) o.a = 0;
+    sinWrite(o); renderColPanel();
+  }
   function saveCustomPreset(){
     const inp = document.getElementById('preset-name'); if(!inp) return;
-    const name = (inp.value||'').trim();
+    const name = (inp.value||'').trim().slice(0,22);
     if(!name){ inp.focus(); toast('Dai un nome alla sinottica'); return; }
     const cols = VIS(); if(!cols.length){ toast('Nessun parametro selezionato'); return; }
-    const c = loadPresets();
-    const ex = c.findIndex(p=> (p.name||'').toLowerCase()===name.toLowerCase());
-    const rec = { name, cols:cols.slice() };
-    if(ex>=0) c[ex]=rec; else c.push(rec);
-    savePresets(c); inp.value=''; renderColPanel(); toast('Sinottica salvata: '+name);
+    const o = sinRead();
+    const rec = { n:name, p:cols.map(i=> M[i]) };
+    const ex = o.l.findIndex(s=> s.n.toLowerCase()===name.toLowerCase());
+    if(ex>=0){ o.l[ex] = rec; o.a = ex; }
+    else if(o.l.length >= SIN_MAX){ toast('Massimo '+SIN_MAX+' sinottiche'); return; }
+    else { o.l.push(rec); o.a = o.l.length-1; }
+    sinWrite(o); inp.value=''; renderColPanel(); toast('Sinottica salvata: '+name);
   }
   function openColDialog(){ renderColPanel(); const d=document.getElementById('cols-dialog'); if(!d) return; if(typeof d.showModal==='function'){ if(!d.open) d.showModal(); } else d.setAttribute('open',''); }
   function closeColDialog(){ const d=document.getElementById('cols-dialog'); if(!d) return; if(typeof d.close==='function' && d.open) d.close(); else d.removeAttribute('open'); }
