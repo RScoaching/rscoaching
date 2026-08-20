@@ -1334,6 +1334,29 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const state = { level:'team', player:null, monthKey:null, session:null, cmp:'val', chartScope:'micro', chartWeek:null, chartFrom:null, chartTo:null, chartIdx:(S.key_idx && S.key_idx.length? S.key_idx[0]:1), acwrIdx:1 };
   const ssort = { col:'name', dir:1 }; // ordinamento vista seduta: 'name' | 'role' | indice metrica
 
+  // ---------- vista ricordata (livello, atleta, mese) ----------
+  // Prima ogni ricarica riportava alla squadra: gli RPE scritti su un'atleta sembravano
+  // spariti, ma erano solo in un altro livello. Adesso la pagina riapre dove l'hai lasciata.
+  // La stagione fa parte del salvataggio: cambiando annata i nomi non sono gli stessi.
+  const VIEW_KEY = 'rs_fio_carico_view';
+  function viewSave(){
+    try{
+      localStorage.setItem(VIEW_KEY, JSON.stringify({
+        st: S.stagione || '',
+        level: state.level,
+        player: state.player || '',
+        monthKey: state.monthKey || ''
+      }));
+    }catch(e){}
+  }
+  function viewLoad(){
+    try{
+      const o = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
+      if(!o || o.st !== (S.stagione || '')) return null;
+      return o;
+    }catch(e){ return null; }
+  }
+
   // ---------- parametri visibili + ordine (sinottiche) ----------
   const COLS_KEY = 'rs_fio_carico_cols';
   // Le sinottiche stanno nello stesso cassetto delle Sessioni e delle Esercitazioni.
@@ -1524,6 +1547,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     ).join('');
     host.querySelectorAll('.mpill').forEach(b=> b.addEventListener('click', ()=>{
       state.monthKey = b.getAttribute('data-k'); state.chartWeek = null;
+      viewSave();
       renderMonths(); renderKPIs(); renderGrid();
       if(state.chartScope==='micro' || state.chartScope==='month') renderChart();
       const on = host.querySelector('.mpill.on'); if(on) on.scrollIntoView({block:'nearest', inline:'center', behavior: REDUCE?'auto':'smooth'});
@@ -3243,6 +3267,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return out;
   }
   function pdfWrite(o){ try{ localStorage.setItem(PDF_KEY, JSON.stringify(o)); }catch(e){} }
+  // quanti RPE scritti restano fuori dal foglio col periodo scelto. Il taglio nazionale
+  // parte dagli ultimi due microcicli: se gli RPE stanno piu' indietro, sul foglio non
+  // ci sono e sembra che la stampa se li sia mangiati. Meglio dirlo prima di stampare.
+  function rpeCutCount(sel){
+    const keep = PDF_PERS[sel.per] || 0;
+    if(keep < 1) return 0;
+    const host = document.getElementById('grid-scroll');
+    const tb = host && host.querySelector('table');
+    if(!tb) return 0;
+    const rows = [...tb.querySelectorAll('tbody > tr')];
+    const bands = [];
+    rows.forEach((tr,i)=>{ if(tr.classList.contains('wkband')) bands.push(i); });
+    if(bands.length <= keep) return 0;
+    const from = bands[bands.length - keep];
+    let n = 0;
+    for(let i=bands[0]; i<from; i++){
+      rows[i].querySelectorAll('input.rpe-in').forEach(inp=>{ if(rpeNum(inp.value)!=null) n++; });
+    }
+    return n;
+  }
   function pdfApply(){
     const sel = pdfRead();
     PDF_BLOCKS.forEach(b=>{
@@ -3285,6 +3329,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const kp = PDF_PERS[sel.per] || 0;
       if(kp) s += ' · ultimi ' + kp + (kp===1 ? ' microciclo' : ' microcicli');
       if(sel['grid-card']){
+        const cut = rpeCutCount(sel);
+        if(cut) s += ' · ' + cut + (cut===1 ? ' RPE resta fuori' : ' RPE restano fuori') + ' dal periodo scelto';
         const g = printGridInfo();
         if(g){
           const nMet = VIS().length;
@@ -3778,6 +3824,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.getElementById('subtitle').innerHTML = lv==='team'
       ? '<b>Fiorentina Primavera U19W</b> · Stagione '+esc(S.stagione||'')
       : '<b>'+esc(state.player||'')+'</b> · Fiorentina Primavera U19W';
+    viewSave();
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   }
   function updateRole(){
@@ -3797,6 +3844,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('player-select').addEventListener('change', e=>{
     state.player = e.target.value; state.monthKey=null; updateRole();
     document.getElementById('subtitle').innerHTML = '<b>'+esc(state.player)+'</b> · Fiorentina Primavera U19W';
+    viewSave();
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   });
 
@@ -4177,6 +4225,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         setLevel('player'); return;
       }
     }catch(e){}
+    // niente deep-link: si riparte da dove si era rimasti l'ultima volta, atleta e mese compresi
+    const v = viewLoad();
+    if(v){
+      if(v.monthKey) state.monthKey = v.monthKey;
+      if(v.player && S.players && S.players[v.player]){
+        state.player = v.player;
+        const sel = document.getElementById('player-select'); if(sel) sel.value = v.player;
+      }
+      if(v.level === 'player' && state.player){ setLevel('player'); return; }
+    }
     // La stagione nel sottotitolo arriva dai dati, non dal testo scritto a mano:
     // cosi' passando alla 26/27 l'intestazione segue subito.
     const sub = document.getElementById('subtitle');
