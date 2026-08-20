@@ -264,6 +264,37 @@ a{ color:inherit; text-decoration:none; }
 .gp-empty{ padding:36px 20px; text-align:center; color:var(--faint); font-size:13px; line-height:1.7; }
 .gp-empty a{ color:var(--orange2); }
 
+/* ---------- quadro test: FMS e fisioterapista ---------- */
+.qt{ display:grid; grid-template-columns:repeat(2, 1fr); gap:16px; margin-bottom:16px; }
+.qt-col,
+.qt-need{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:14px 18px 16px; }
+.qt-need{ margin-bottom:16px; }
+.qt-h{ display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.qt-h b{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:19px; letter-spacing:.5px; color:var(--ink); }
+.qt-h span{ margin-left:auto; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
+.qt-row{ display:flex; align-items:center; gap:12px; padding:7px 0; border-top:1px solid var(--border2); }
+.qt-name{ flex:1; min-width:0; font-size:12.5px; color:var(--text); }
+.qt-name i{ font-style:normal; margin-left:8px; font-size:9.5px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--yellow); }
+.qt-vals{ display:flex; gap:6px; flex:0 0 auto; }
+.qt-v{ min-width:52px; text-align:center; font-size:11.5px; font-weight:700; padding:4px 8px; border-radius:7px;
+  border:1px solid var(--border2); background:var(--surface3); color:var(--faint); }
+.qt-v em{ font-style:normal; font-size:9px; font-weight:700; letter-spacing:.05em; opacity:.65; margin-right:5px; }
+.qt-v.v{ background:oklch(70% 0.18 152 / .10); border-color:oklch(70% 0.18 152 / .26); color:var(--green); }
+.qt-v.g{ background:oklch(80% 0.15 75 / .10); border-color:oklch(80% 0.15 75 / .26); color:var(--yellow); }
+.qt-v.r{ background:oklch(62% 0.22 25 / .12); border-color:oklch(62% 0.22 25 / .30); color:var(--red); }
+.qt-foot{ margin-top:10px; font-size:11.5px; color:var(--faint); }
+.qt-foot.note{ color:var(--yellow); }
+.qt-empty{ padding:8px 0 2px; font-size:12px; color:var(--faint); }
+.qt-nrow{ display:grid; grid-template-columns:180px 1fr 30px; align-items:center; gap:12px; padding:6px 0;
+  border-top:1px solid var(--border2); }
+.qt-nlbl{ font-size:12.5px; color:var(--text); }
+.qt-bar{ height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; }
+.qt-bar i{ display:block; height:100%; border-radius:999px; background:var(--green); }
+.qt-nrow.mid .qt-bar i{ background:var(--yellow); }
+.qt-nrow.hi .qt-bar i{ background:var(--red); }
+.qt-npt{ text-align:right; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:.4px; color:var(--ink); }
+
 /* reveal */
 .reveal{ opacity:0; transform:translateY(10px); animation:rv .5s var(--ease) forwards; animation-delay:calc(var(--i,0) * 55ms); }
 @keyframes rv{ to{ opacity:1; transform:none; } }
@@ -287,6 +318,8 @@ a{ color:inherit; text-decoration:none; }
 @media (max-width:900px){
   .kpis{ grid-template-columns:repeat(2, 1fr); }
   .gp-blocks{ grid-template-columns:1fr; }
+  .qt{ grid-template-columns:1fr; }
+  .qt-nrow{ grid-template-columns:130px 1fr 30px; }
 }
 @media (max-width:560px){
   .kpis{ grid-template-columns:1fr; }
@@ -526,13 +559,144 @@ a{ color:inherit; text-decoration:none; }
   }
   function fullRoster(reg){
     var seen = {}, out = [];
-    Object.keys(window.SNAP.players || {}).forEach(function(n){
-      if(seen[n]) return; seen[n] = true; out.push(n);
-    });
-    rosterFrom(reg).forEach(function(n){
-      if(seen[n]) return; seen[n] = true; out.push(n);
-    });
+    function add(n){ if(!n || seen[n]) return; seen[n] = true; out.push(n); }
+    if(window.fioRoster){
+      try{ window.fioRoster().forEach(function(p){ add(p.name); }); }catch(e){}
+    }
+    if(!out.length) Object.keys(window.SNAP.players || {}).forEach(add);
+    // Chi ha fatto i test ma non compare ancora nella rosa operativa (per
+    // esempio le nuove arrivate senza GPS) deve avere lo stesso la sua scheda.
+    Object.keys(testNames()).forEach(add);
+    rosterFrom(reg).forEach(add);
     return out.sort(function(a, b){ return a.localeCompare(b, 'it'); });
+  }
+
+  /* ---------- quadro test: screening FMS e test del fisioterapista ---------- */
+  // I valori arrivano gia' pronti da prevenzione_data.js. Qui si traducono in
+  // tre cose sole: un colore per lato, l'eventuale asimmetria, e i punti di
+  // carenza che finiscono nelle aree di lavoro della scheda. Il colore conta
+  // quanto l'asimmetria: un test rosso uguale a destra e a sinistra resta un
+  // problema anche se i due lati sono identici.
+  var TEST_GROUPS = [
+    { k:'fms',   lbl:'Screening FMS' },
+    { k:'fisio', lbl:'Test fisioterapista' }
+  ];
+  var DEF_PT = { v:0, g:1, r:2 };
+
+  function testSet(){
+    var T = window.PREV_TEST;
+    return (T && T[seasonId()]) ? T[seasonId()] : null;
+  }
+  function testNames(){
+    var T = testSet(), out = {};
+    if(!T) return out;
+    TEST_GROUPS.forEach(function(g){
+      var v = T[g.k] && T[g.k].v;
+      if(v) Object.keys(v).forEach(function(n){ out[n] = true; });
+    });
+    return out;
+  }
+  function lvlOf(t, raw){
+    if(raw == null || raw === '') return null;
+    var s = String(raw).toLowerCase(), n;
+    if(t.sc === 'fms'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= 3 ? 'v' : (n === 2 ? 'g' : 'r');
+    }
+    if(t.sc === 'vgr'){
+      if(s === 'v') return 'v';
+      if(s === 'g') return 'g';
+      if(s === 'r') return 'r';
+      return null;
+    }
+    if(t.sc === 'okd'){
+      if(s.indexOf('d+') >= 0) return 'r';
+      if(s.charAt(0) === 'd') return 'g';
+      if(s.indexOf('ok') >= 0) return 'v';
+      return null;
+    }
+    if(t.sc === 'faber'){
+      if(s.indexOf('ok') >= 0) return 'v';
+      n = +raw; if(isNaN(n)) return null;
+      return n < 10 ? 'v' : (n <= 15 ? 'g' : 'r');
+    }
+    if(t.sc === 'rif'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= t.v ? 'v' : (n >= t.g ? 'g' : 'r');
+    }
+    return null;
+  }
+  function numOf(raw){
+    if(raw == null || raw === '') return null;
+    var n = +raw;
+    return isNaN(n) ? null : n;
+  }
+  function valTxt(t, raw){
+    if(raw == null || raw === '') return 'n/d';
+    if(t.sc === 'vgr') return String(raw).toUpperCase();
+    return String(raw);
+  }
+  function evalTest(t, raw){
+    var dx, sx;
+    if(t.bil){
+      var a = Array.isArray(raw) ? raw : [null, null];
+      dx = a[0]; sx = a[1];
+    }else{ dx = raw; sx = null; }
+    var ld = lvlOf(t, dx), ls = t.bil ? lvlOf(t, sx) : null;
+    if(ld == null && ls == null) return null;
+    var def = Math.max(ld ? DEF_PT[ld] : 0, ls ? DEF_PT[ls] : 0);
+    var asym = false;
+    if(t.bil && ld && ls){
+      if(ld !== ls) asym = true;
+      else{
+        var nd = numOf(dx), ns = numOf(sx);
+        if(t.as && nd != null && ns != null && Math.abs(nd - ns) >= t.as) asym = true;
+      }
+    }
+    if(asym) def += 1;
+    var worst = (ld && ls) ? (DEF_PT[ld] >= DEF_PT[ls] ? ld : ls) : (ld || ls);
+    return {
+      t:t, asym:asym, def:def, worst:worst,
+      dx:{ txt:valTxt(t, dx), lvl:ld },
+      sx:{ txt:valTxt(t, sx), lvl:ls }
+    };
+  }
+  function analyzeTests(name){
+    var T = testSet();
+    if(!T) return null;
+    var need = {}, groups = [], asym = [], reds = [];
+    var nRed = 0, nYel = 0, nOk = 0, defSum = 0, any = false;
+    NEED_ORDER.forEach(function(k){ need[k] = 0; });
+    TEST_GROUPS.forEach(function(gd){
+      var g = T[gd.k];
+      if(!g) return;
+      var raw = (g.v || {})[name] || null;
+      var rows = [];
+      (g.t || []).forEach(function(t){
+        var ev = raw ? evalTest(t, raw[t.k]) : null;
+        if(!ev) return;
+        rows.push(ev);
+        any = true;
+        if(ev.worst === 'r'){ nRed++; reds.push(t.n); }
+        else if(ev.worst === 'g') nYel++;
+        else nOk++;
+        if(ev.asym) asym.push(t.n);
+        if(!ev.def) return;
+        defSum += ev.def;
+        Object.keys(t.w).forEach(function(k){ need[k] += t.w[k] * ev.def; });
+      });
+      if(raw && (rows.length || raw.kg != null)) any = any || raw.kg != null;
+      groups.push({
+        k:gd.k, lbl:gd.lbl, data:g.data || '', rows:rows,
+        kg: raw && raw.kg != null ? raw.kg : null,
+        ckcuest: raw && raw.ckcuest != null ? raw.ckcuest : null,
+        note: raw && raw.note ? raw.note : ''
+      });
+    });
+    if(!any) return null;
+    var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
+    return { name:name, need:need, sum:sum, defSum:defSum, groups:groups,
+             asym:asym, reds:reds, nRed:nRed, nYel:nYel, nOk:nOk };
   }
 
   // Stessa chiave per stagione usata da Atlete: le note scritte quest'anno non
@@ -598,10 +762,14 @@ a{ color:inherit; text-decoration:none; }
   }
 
   function buildSheetFor(name, reg, bio){
-    var a = analyze(reg, name);
+    // Prima i test di quest'anno. Il registro scritto a mano resta come
+    // riserva per chi i test nuovi non li ha ancora fatti.
+    var tv = analyzeTests(name);
+    var a  = tv ? null : analyze(reg, name);
+    var src = tv || a;
     var inj = activeInj(bio, name);
     var need = {};
-    NEED_ORDER.forEach(function(k){ need[k] = a ? a.need[k] : 0; });
+    NEED_ORDER.forEach(function(k){ need[k] = src ? src.need[k] : 0; });
     var injKey = inj ? injuryNeed(inj.txt) : null;
     if(injKey) need[injKey] += 3;
     var top = NEED_ORDER.filter(function(k){ return need[k] > 0; })
@@ -609,15 +777,26 @@ a{ color:inherit; text-decoration:none; }
       .slice(0, 2).map(function(k){ return NEED[k].lbl.toLowerCase(); });
     var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
     return {
-      name:name, has:!!a, need:need, top:top, inj:inj, sum:sum,
+      name:name, has:!!src, need:need, top:top, inj:inj, sum:sum,
+      tv:tv,
+      nRed: tv ? tv.nRed : 0, nYel: tv ? tv.nYel : 0,
+      defSum: tv ? tv.defSum : 0,
+      reds: tv ? tv.reds : [],
       tot: a ? a.tot : null, nPat: a ? a.nPat : 0,
-      zeros: a ? a.zeros : [], asym: a ? a.asym : [], ybGap: a ? a.ybGap : null
+      zeros: a ? a.zeros : [],
+      asym: tv ? tv.asym : (a ? a.asym : []),
+      ybGap: a ? a.ybGap : null
     };
   }
 
+  // Colore della pastiglia in rassegna. Non basta guardare le asimmetrie:
+  // pesano insieme quanti test sono rossi e quanti punti di carenza somma
+  // l'atleta fra colore e differenze fra i due lati.
   function scLevel(r){
     if(r.zeros.length) return 'bad';
     if(r.nPat === FMS_MAP.length && r.tot <= 14) return 'bad';
+    if(r.nRed >= 3 || r.defSum >= 10) return 'bad';
+    if(r.nRed || r.asym.length >= 2 || r.defSum >= 3) return 'warn';
     return (r.asym.length || r.sum > 0) ? 'warn' : '';
   }
   function sheetOf(name){
@@ -848,10 +1027,16 @@ a{ color:inherit; text-decoration:none; }
   function summaryFlags(){
     var n = SHEETS.length;
     var zeroN = SHEETS.filter(function(s){ return s.zeros.length; }).length;
+    var redN  = SHEETS.filter(function(s){ return s.nRed > 0; }).length;
+    var asyN  = SHEETS.filter(function(s){ return s.asym.length > 0; }).length;
+    var noneN = SHEETS.filter(function(s){ return !s.has; }).length;
     var cnt = {}; NEED_ORDER.forEach(function(k){ cnt[k] = 0; });
     SHEETS.forEach(function(s){ NEED_ORDER.forEach(function(k){ if(s.need[k] > 0) cnt[k]++; }); });
     var flags = '<span class="gp-flag"><b>'+n+'</b> atlete nel roster</span>';
     if(zeroN) flags += '<span class="gp-flag hi"><b>'+zeroN+'</b> con schema a 0, da valutare</span>';
+    if(redN)  flags += '<span class="gp-flag hi"><b>'+redN+'</b> con almeno un test rosso</span>';
+    if(asyN)  flags += '<span class="gp-flag mid"><b>'+asyN+'</b> con asimmetrie</span>';
+    if(noneN) flags += '<span class="gp-flag"><b>'+noneN+'</b> senza test</span>';
     NEED_ORDER.slice().sort(function(a, b){ return cnt[b] - cnt[a]; }).forEach(function(k){
       if(!cnt[k]) return;
       var pct = cnt[k] / n;
@@ -876,6 +1061,48 @@ a{ color:inherit; text-decoration:none; }
     }).join('');
   }
 
+  function qtSide(side, tag){
+    return '<span class="qt-v'+(side.lvl ? ' '+side.lvl : '')+'">'
+      + (tag ? '<em>'+tag+'</em>' : '') + esc(side.txt) + '</span>';
+  }
+  function qtGroup(g){
+    var body = g.rows.length
+      ? g.rows.map(function(ev){
+          var vals = ev.t.bil ? (qtSide(ev.dx, 'DX') + qtSide(ev.sx, 'SX')) : qtSide(ev.dx, '');
+          return '<div class="qt-row"><div class="qt-name">'+esc(ev.t.n)
+            + (ev.asym ? '<i>asimmetria</i>' : '') + '</div>'
+            + '<div class="qt-vals">'+vals+'</div></div>';
+        }).join('')
+      : '<div class="qt-empty">Nessun test registrato.</div>';
+    var foot = '';
+    if(g.kg != null){
+      foot += '<div class="qt-foot">Peso '+esc(g.kg)+' kg'
+        + (g.ckcuest != null ? ', CKCUEST '+esc(g.ckcuest) : '')+'</div>';
+    }
+    if(g.note) foot += '<div class="qt-foot note">'+esc(g.note)+'</div>';
+    return '<div class="qt-col"><div class="qt-h"><b>'+esc(g.lbl)+'</b>'
+      + '<span>'+esc(g.data)+'</span></div>' + body + foot + '</div>';
+  }
+  function qtNeedHtml(s){
+    var ks = NEED_ORDER.filter(function(k){ return s.need[k] > 0; })
+      .sort(function(a, b){ return s.need[b] - s.need[a] || NEED_ORDER.indexOf(a) - NEED_ORDER.indexOf(b); });
+    if(!ks.length){
+      return '<div class="qt-need"><div class="qt-h"><b>Aree piu carenti</b>'
+        + '<span>nessuna carenza rilevata</span></div>'
+        + '<div class="qt-empty">Test tutti nei valori di riferimento, scheda di mantenimento.</div></div>';
+    }
+    var max = s.need[ks[0]];
+    var rows = ks.map(function(k){
+      var pct = Math.max(6, Math.round(s.need[k] / max * 100));
+      var cls = s.need[k] >= max * 0.66 ? ' hi' : (s.need[k] >= max * 0.33 ? ' mid' : '');
+      return '<div class="qt-nrow'+cls+'"><div class="qt-nlbl">'+esc(NEED[k].lbl)+'</div>'
+        + '<div class="qt-bar"><i style="width:'+pct+'%"></i></div>'
+        + '<div class="qt-npt">'+s.need[k]+'</div></div>';
+    }).join('');
+    return '<div class="qt-need"><div class="qt-h"><b>Aree piu carenti</b>'
+      + '<span>punti di carenza</span></div>' + rows + '</div>';
+  }
+
   function renderDetail(){
     var s = sheetOf(SELECTED);
     if(!s){ genEl.innerHTML = ''; return; }
@@ -883,12 +1110,17 @@ a{ color:inherit; text-decoration:none; }
     var note = '';
     if(s.inj) note += '<div class="gp-inj">Infortunio attivo: '+esc(s.inj.txt || 'nessuna descrizione')
       + '. Esercizi adattati, evitare sovraccarico sulla zona.</div>';
-    if(!s.has) note += '<div class="gp-note">Nessun test FMS/Y-balance registrato per questa stagione. '
+    if(!s.has) note += '<div class="gp-note">Nessun test registrato per questa stagione. '
       + 'Scheda di mantenimento generica'+(s.inj ? ', con priorita sull\'infortunio segnalato.' : '.')+'</div>';
     else if(s.zeros.length) note += '<div class="gp-note">Schema a 0 in: '+esc(s.zeros.join(', '))
       + '. Valutare prima di procedere con carichi elevati.</div>';
+    else if(s.reds.length) note += '<div class="gp-note">Test rossi: '+esc(s.reds.join(', '))
+      + (s.asym.length ? '. Asimmetria in: '+esc(s.asym.join(', ')) : '')+'.</div>';
+    else if(s.asym.length) note += '<div class="gp-note">Asimmetria in: '+esc(s.asym.join(', '))+'.</div>';
     else if(s.top.length) note += '<div class="gp-note">Priorita rilevate: '+esc(s.top.join(', '))+'.</div>';
-    genEl.innerHTML = note + '<div class="gp-blocks">'+blockHtml('A', pl.A)+blockHtml('B', pl.B)+'</div>';
+    var quadro = s.tv ? '<div class="qt">'+s.tv.groups.map(qtGroup).join('')+'</div>' : '';
+    genEl.innerHTML = note + quadro + qtNeedHtml(s)
+      + '<div class="gp-blocks">'+blockHtml('A', pl.A)+blockHtml('B', pl.B)+'</div>';
   }
 
   function renderGen(){

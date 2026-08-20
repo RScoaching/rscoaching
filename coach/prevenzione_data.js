@@ -539,4 +539,97 @@
     for (var i = 0; i < DB.length; i++) if (DB[i].k === k) return DB[i];
     return null;
   };
+
+  // -------------------------------------------------------------------------
+  // TEST DI PREVENZIONE - dai fogli del fisio e dallo screening FMS.
+  // Fonti (sola lettura): "TEST FMS U19 AGOSTO 26.xlsx" e
+  // "Test Fisio AGOSTO U19.xlsx" in ~/Desktop/primavera u19/26-27/TEST.
+  // I nomi sono gia' riportati a quelli della rosa: sul foglio FMS stanno in
+  // maiuscolo e senza nome proprio, qui diventano "Pieri Viola",
+  // "Faggioli Federica", "Oberparlaiter".
+  //
+  // Ogni test porta con se' come si legge (sc) e quanto pesa (w) sulle aree
+  // di lavoro della scheda:
+  //   fms   punteggio 1-3      3 verde, 2 giallo, 1 o 0 rosso
+  //   vgr   lettera V/G/R      verde, giallo, rosso
+  //   okd   ok / D / D+        ok verde, D giallo (anche "D prona"), D+ rosso
+  //   faber centimetri         sotto 10 verde, 10-15 giallo, sopra 15 rosso
+  //   rif   ripetizioni        soglie verde/giallo scritte nel test (v, g)
+  // "as" e' il divario fra destra e sinistra oltre il quale si segna
+  // asimmetria; quando i due lati cadono in due colori diversi l'asimmetria
+  // scatta comunque.
+  // -------------------------------------------------------------------------
+  var TEST_FMS = [
+    { k:'squat',    n:'Overhead squat',        bil:false, sc:'fms', as:1, w:{ cav:2, anca:1, spal:1 } },
+    { k:'hurdle',   n:'Hurdle step',           bil:true,  sc:'fms', as:1, w:{ stab:2, anca:1 } },
+    { k:'lunge',    n:'Affondo in linea',      bil:true,  sc:'fms', as:1, w:{ stab:1, anca:1, cav:1 } },
+    { k:'ankle',    n:'Mobilita caviglia',     bil:true,  sc:'vgr', as:0, w:{ cav:3 } },
+    { k:'shoulder', n:'Mobilita spalle',       bil:true,  sc:'fms', as:1, w:{ spal:2 } },
+    { k:'aslr',     n:'Straight leg raise',    bil:true,  sc:'fms', as:1, w:{ stre:2, anca:1 } }
+  ];
+  var TEST_FISIO = [
+    { k:'ankle',  n:'Ankle clearing test',      bil:true, sc:'okd',   as:0, w:{ cav:3 } },
+    { k:'slb',    n:'Single leg bridge',        bil:true, sc:'rif',   as:3, v:15, g:12, w:{ rinf:2, core:1 } },
+    { k:'faber',  n:'Faber',                    bil:true, sc:'faber', as:5, w:{ anca:3 } },
+    { k:'thomas', n:'Thomas test',              bil:true, sc:'okd',   as:0, w:{ anca:2, stre:2 } },
+    { k:'calf',   n:'Single leg calf raises',   bil:true, sc:'rif',   as:3, v:15, g:12, w:{ rinf:2, cav:1 } },
+    { k:'skater', n:'Skater squat 30s',         bil:true, sc:'rif',   as:4, v:19, g:14, w:{ stab:3, rinf:1 } }
+  ];
+  // Valori per atleta. I bilaterali sono [destra, sinistra], null vuol dire
+  // test non eseguito.
+  var V_FMS = {
+    'Eccher':            { squat:2, hurdle:[3,2], lunge:[2,2], ankle:['V','V'], shoulder:[3,3],       aslr:[2,2] },
+    'Boldrini':          { squat:2, hurdle:[3,2], lunge:[3,3], ankle:['G','G'], shoulder:[2,3],       aslr:[3,3] },
+    'Giovannini':        { squat:2, hurdle:[2,2], lunge:[3,3], ankle:['G','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Poggi':             { squat:3, hurdle:[2,3], lunge:[3,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Fontana':           { squat:2, hurdle:[2,2], lunge:[3,3], ankle:['G','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Pieri Viola':       { squat:2, hurdle:[2,2], lunge:[2,2], ankle:['G','G'], shoulder:[null,null], aslr:[3,3] },
+    'Marra':             { squat:3, hurdle:[3,3], lunge:[3,3], ankle:['G','G'], shoulder:[null,null], aslr:[3,3] },
+    'Tabarrani':         { squat:2, hurdle:[3,3], lunge:[3,3], ankle:['V','V'], shoulder:[null,null], aslr:[3,3] },
+    'Faggioli Federica': { squat:3, hurdle:[2,2], lunge:[3,3], ankle:['V','V'], shoulder:[null,null], aslr:[3,2] },
+    'Oberparlaiter':     { squat:2, hurdle:[3,3], lunge:[3,3], ankle:['V','V'], shoulder:[null,null], aslr:[3,3] },
+    'Wenin':             { squat:2, hurdle:[2,3], lunge:[3,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Agostini':          { squat:3, hurdle:[3,3], lunge:[3,2], ankle:['V','V'], shoulder:[2,2],       aslr:[2,2] },
+    'Benedettini':       { squat:1, hurdle:[2,2], lunge:[2,2], ankle:['R','R'], shoulder:[3,3],       aslr:[3,3] },
+    'De Gregorio':       { squat:3, hurdle:[3,3], lunge:[3,3], ankle:['V','G'], shoulder:[3,3],       aslr:[3,3] },
+    'Baccaro':           { squat:2, hurdle:[3,3], lunge:[3,2], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Magazzini':         { squat:2, hurdle:[3,2], lunge:[3,2], ankle:['V','V'], shoulder:[3,3],       aslr:[3,2] },
+    'Sarti':             { squat:3, hurdle:[3,2], lunge:[3,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Bellani':           { squat:3, hurdle:[2,2], lunge:[3,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Bianchi':           { squat:2, hurdle:[3,3], lunge:[2,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] },
+    'Andreoni':          { squat:2, hurdle:[3,3], lunge:[3,3], ankle:['V','V'], shoulder:[3,3],       aslr:[3,3] }
+  };
+  var V_FISIO = {
+    'Andreoni':          { kg:64.9 },
+    'Baccaro':           { kg:71.7 },
+    'Bellani':           { ankle:['D','D'],   slb:[15,15], faber:[18,20],   thomas:['D','D'],   calf:[15,15], skater:[16,15], kg:54.8 },
+    'Benedettini':       { kg:66.8 },
+    'Bianchi':           { ankle:['ok','ok'], slb:[15,15], faber:[18,16],   thomas:['D','ok'],  calf:[15,15], skater:[26,29], kg:44.7 },
+    'Boldrini':          { ankle:['D','D'],   slb:[15,15], faber:[15,22],   thomas:['ok','ok'], calf:[15,15], skater:[19,12], kg:51.7 },
+    'De Gregorio':       { kg:57.7 },
+    'Eccher':            { ankle:['ok','ok'], slb:[10,9],  faber:[28,33],   thomas:['ok','ok'], calf:[12,8],  skater:[4,4],   kg:60.2 },
+    'Faggioli Federica': { ankle:['ok','ok'], slb:[12,15], faber:[23,21],   thomas:['D','ok'],  calf:[15,15], skater:[9,10],  kg:55.5 },
+    'Fontana':           { ankle:['D+','D+'], slb:[15,15], faber:[26,27],   thomas:['D','D'],   calf:[5,5],   skater:[18,16], kg:65.1 },
+    'Giovannini':        { ankle:['ok','ok'], slb:[15,15], faber:['ok','ok'], thomas:['D','ok'], calf:[15,15], skater:[8,10], kg:54.3,
+                           note:'Dolore caviglia destra nello skater squat' },
+    'Iiriti':            { ankle:['ok','D'],  slb:[15,15], faber:[20,22],   thomas:['ok','ok'], calf:[12,14], skater:[9,8],   kg:57.5 },
+    'Magazzini':         { ankle:['ok','ok'], slb:[13,13], faber:['ok',13], thomas:['ok','D'],  calf:[13,12], skater:[12,12], kg:60.0 },
+    'Marra':             { ankle:['D prona','D prona'], slb:[15,15], faber:[22,18], thomas:['D','D'], calf:[15,15], skater:[14,15], kg:57.2,
+                           note:'Porta i plantari. Infortuni pregressi flessori anca bilaterali' },
+    'Miraldi':           { ankle:['D','D'],   slb:[15,15], faber:['ok',19], thomas:['D','ok'],  calf:[15,15], skater:[15,17], kg:65.2 },
+    'Muka':              { ankle:['ok','ok'], slb:[15,15], faber:['ok',18], thomas:['ok','D'],  calf:[12,13], skater:[17,16], kg:58.0 },
+    'Oberparlaiter':     { ankle:['ok','ok'], slb:[15,15], faber:[19,18],   thomas:['ok','ok'], calf:[12,14], skater:[15,11], kg:64.4 },
+    'Pieri Viola':       { ankle:['ok','ok'], slb:[12,11], faber:[25,31],   thomas:['ok','ok'], calf:[10,9],  skater:[9,14],  kg:72.8 },
+    'Poggi':             { ankle:['ok','ok'], slb:[15,15], faber:[20,21],   thomas:['D','D'],   calf:[15,15], skater:[24,25], kg:65.2 },
+    'Sarti':             { ankle:['ok','ok'], slb:[15,15], faber:['ok','ok'], thomas:['ok','ok'], calf:[15,15], skater:[21,23], kg:75.0 },
+    'Tabarrani':         { ankle:['ok','D'],  slb:[15,15], faber:['ok','ok'], thomas:['ok','ok'], calf:[15,15], skater:[18,11], kg:61.0 },
+    'Wenin':             { ankle:['ok','ok'], slb:[15,15], faber:[22,16],   thomas:['ok','ok'], calf:[15,15], skater:[22,14], kg:67.3, ckcuest:24 }
+  };
+
+  window.PREV_TEST = {
+    '26-27': {
+      fms:   { data:'Agosto 2026', t:TEST_FMS,   v:V_FMS },
+      fisio: { data:'Agosto 2026', t:TEST_FISIO, v:V_FISIO }
+    }
+  };
 })();
