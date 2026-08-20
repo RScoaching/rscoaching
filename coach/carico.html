@@ -611,7 +611,18 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 .col-chk{ flex:0 0 auto; width:16px; height:16px; accent-color:var(--orange); cursor:pointer; margin:0; }
 .col-name{ flex:1 1 auto; min-width:0; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .col-name small{ color:var(--faint); font-size:11px; margin-left:3px; }
-.kdot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--orange); margin-left:5px; vertical-align:middle; }
+/* il pallino non e' piu' solo un segno: si preme e decide chi e' parametro chiave */
+.kdot{ appearance:none; cursor:pointer; flex:0 0 auto; width:26px; height:26px; padding:0; border:0;
+  border-radius:50%; background:transparent; color:var(--faint); display:inline-grid; place-items:center;
+  transition: color .14s var(--ease), background .14s var(--ease); }
+.kdot::before{ content:''; width:9px; height:9px; border-radius:50%; border:1.5px solid currentColor; }
+.kdot:hover{ color:var(--orange2); background:var(--surface2); }
+.kdot.on{ color:var(--orange); }
+.kdot.on::before{ background:var(--orange); }
+.kdot.off{ opacity:.42; cursor:not-allowed; }
+.key-note{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11.5px; color:var(--muted);
+  line-height:1.5; margin:2px 0 10px; }
+.key-note b{ color:var(--orange2); font-weight:700; font-variant-numeric:tabular-nums; }
 .col-move{ display:inline-flex; gap:2px; flex:0 0 auto; }
 .col-move button{ appearance:none; cursor:pointer; border:0; background:transparent; color:var(--faint);
   width:24px; height:24px; border-radius:6px; display:grid; place-items:center;
@@ -1072,7 +1083,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   <div class="cols-panel">
     <div class="cols-head">
       <h2>Parametri e sinottiche</h2>
-      <span class="hint">Scegli i parametri, trascinali per ordinarli, salva le tue sinottiche. La selezione vale per griglia, partite ed export Excel/CSV. Le sinottiche salvate qui si ritrovano in Sessioni e in Esercitazioni.</span>
+      <span class="hint">Scegli i parametri, trascinali per ordinarli, salva le tue sinottiche. La selezione vale per griglia, partite ed export Excel/CSV. Il pallino a destra di ogni nome decide invece i parametri chiave, ed e' l'unico posto dove si scelgono. Sinottiche e parametri chiave si ritrovano in Sessioni e in Esercitazioni.</span>
     </div>
     <div class="cols-scroll">
       <div id="preset-list"></div>
@@ -1081,6 +1092,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
         <button class="mini" id="cols-hideall" type="button">Nascondi tutti</button>
         <button class="mini" id="cols-reset" type="button">Ripristina ordine</button>
       </div>
+      <div class="key-note" id="key-note"></div>
       <div class="col-list" id="col-list"></div>
     </div>
     <div class="cols-foot">
@@ -1182,7 +1194,75 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const M = S.metrics_full || [];
   const SHORT = S.metrics_short || M;
   const UNIT = S.metrics_unit || M.map(()=> '');
-  const KEY = new Set(S.key_idx || []);
+  // ---------- parametri chiave: si scelgono in un posto solo ----------
+  // Il generatore ne propone una lista (`S.key_idx`), ma quali siano davvero i
+  // parametri che il mister guarda lo decide lui, dal pannello dei parametri, e
+  // quella scelta vale dappertutto: colora la griglia, riempie la scheda dei
+  // parametri chiave e vale anche per le altre pagine che leggono lo stesso
+  // cassetto. Dentro ci vanno i NOMI e non le posizioni, perche' i fogli 26-27
+  // hanno venti colonne e quelli 25-26 quattordici: una posizione non vuol dire
+  // niente da una stagione all'altra, un nome si'. I nomi che qui non esistono
+  // restano scritti e tornano buoni appena si riapre l'altra stagione.
+  const CHIAVE_STORE = 'rs_fio_chiave_v1';
+  const CHIAVE_MAX = 8;    // oltre questo numero non e' piu' una scelta, e' l'elenco
+  function chiaveNames(){
+    try{
+      const o = JSON.parse(localStorage.getItem(CHIAVE_STORE) || 'null');
+      if(!o || !Array.isArray(o.p)) return null;
+      const p = [];
+      o.p.forEach(x=>{ if(typeof x==='string' && x && p.indexOf(x)<0) p.push(x); });
+      return p.length ? p : null;
+    }catch(e){ return null; }
+  }
+  function chiaveSave(names){
+    try{
+      const p = (names||[]).slice(0, CHIAVE_MAX);
+      if(p.length) localStorage.setItem(CHIAVE_STORE, JSON.stringify({ p:p }));
+      else localStorage.removeItem(CHIAVE_STORE);
+    }catch(e){}
+  }
+  function chiaveDefaultIdx(){
+    const out = [];
+    (S.key_idx||[]).forEach(i=>{ if(Number.isInteger(i) && i>=0 && i<M.length && out.indexOf(i)<0) out.push(i); });
+    return out;
+  }
+  // gli indici della scelta, nell'ordine in cui e' stata fatta, saltando i nomi
+  // che in questa stagione non ci sono. Senza scelta valgono quelli del foglio.
+  function chiaveIdx(){
+    const nm = chiaveNames();
+    if(!nm) return chiaveDefaultIdx();
+    const out = [];
+    nm.forEach(n=>{ const i = M.indexOf(n); if(i>=0 && out.indexOf(i)<0) out.push(i); });
+    return out.length ? out : chiaveDefaultIdx();
+  }
+  const KEY = new Set();
+  let keyOrder = [];
+  function keyRefresh(){
+    keyOrder = chiaveIdx();
+    KEY.clear(); keyOrder.forEach(i=> KEY.add(i));
+  }
+  keyRefresh();
+  // accende o spegne un parametro. Torna il perche' quando non si puo' fare,
+  // cosi' chi chiama lo dice all'utente invece di non fare niente in silenzio.
+  function keyToggle(i){
+    if(!Number.isInteger(i) || i<0 || i>=M.length) return '';
+    const cur = chiaveIdx().slice();
+    const pos = cur.indexOf(i);
+    if(pos>=0){
+      if(cur.length<=1) return 'Serve almeno un parametro chiave';
+      cur.splice(pos,1);
+    }else{
+      if(cur.length>=CHIAVE_MAX) return 'Al massimo '+CHIAVE_MAX+' parametri chiave';
+      cur.push(i);
+    }
+    chiaveSave(cur.map(x=> M[x]));
+    keyRefresh();
+    return '';
+  }
+  function keyIsDefault(){
+    const a = chiaveIdx(), b = chiaveDefaultIdx();
+    return a.length===b.length && a.every((v,k)=> v===b[k]);
+  }
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- un canale in piu': tutta la distanza sopra i 20 km/h ----------
@@ -2090,7 +2170,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Il menu a tendina resta per chi cerca una colonna precisa, ma i parametri che
   // il mister guarda sempre stanno tutti sotto gli occhi, ciascuno col suo istogramma
   // sullo stesso periodo del grafico grande. Un tocco e quel parametro va nel grande.
-  const MINI_IDX = (function(){
+  // Senza una scelta fatta a mano valgono questi, che sono quelli che il mister
+  // guarda sempre; appena la scelta c'e', comanda quella.
+  const MINI_AUTO = (function(){
     const out = [], add = i => { if(i!=null && i>=0 && i<NMET && out.indexOf(i)<0) out.push(i); };
     add(metFind(['dist tot','distanza tot']));
     add(IOVER20);
@@ -2103,6 +2185,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     (S.key_idx||[]).forEach(add);
     return out.slice(0,8);
   })();
+  function miniIdx(){
+    if(!chiaveNames()) return MINI_AUTO;
+    const out = keyOrder.filter(i=> i>=0 && i<NMET);
+    return out.length ? out.slice(0, CHIAVE_MAX) : MINI_AUTO;
+  }
   function miniSpark(pts){
     const n = pts.length, H = 41;
     if(!n) return '<svg class="mc-spark" viewBox="0 0 100 '+H+'" preserveAspectRatio="none" aria-hidden="true"></svg>';
@@ -2138,7 +2225,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const hint = document.getElementById('mini-hint');
     if(hint) hint.textContent = 'stesso periodo del grafico sopra, tocca un parametro per aprirlo grande';
     let html = '';
-    MINI_IDX.forEach(i=>{ html += miniCell(i); });
+    miniIdx().forEach(i=>{ html += miniCell(i); });
     grid.innerHTML = html || emptyBlock('Nessun parametro disponibile');
     grid.querySelectorAll('.mcell').forEach(b=>{
       b.addEventListener('click', ()=>{
@@ -3830,21 +3917,37 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       p += '</div></div>';
       ph.innerHTML = p;
     }
+    const kn = document.getElementById('key-note');
+    if(kn){
+      kn.innerHTML = '<span>Il pallino arancione segna i parametri chiave: colorano la griglia, riempiono la '+
+        'scheda Parametri chiave e sono gli stessi che il radar di Sessioni mette sui suoi raggi. '+
+        'Ne stanno fino a '+CHIAVE_MAX+', adesso sono <b>'+KEY.size+'</b>.</span>'+
+        (keyIsDefault() ? '' : '<button class="mini" id="key-reset" type="button">Rimetti quelli del foglio</button>');
+    }
     const lh = document.getElementById('col-list');
     if(lh){
       let l='';
       colOrder.forEach(i=>{
-        const off = colHidden.has(i);
+        const off = colHidden.has(i), on = KEY.has(i);
+        const pieno = !on && KEY.size >= CHIAVE_MAX;
+        const ttl = pieno ? ('Gia\' '+CHIAVE_MAX+' parametri chiave: toglierne uno per mettere questo')
+          : (on ? 'Parametro chiave, premi per toglierlo' : 'Premi per farne un parametro chiave');
         l += '<div class="col-row'+(off?' off':'')+'" draggable="true" data-idx="'+i+'">'+
           '<span class="drag-h" aria-hidden="true">'+DRAG_SVG+'</span>'+
           '<label class="col-chk"><input type="checkbox"'+(off?'':' checked')+' data-chk="'+i+'"><span></span></label>'+
-          '<span class="col-name">'+esc(M[i])+(KEY.has(i)?'<span class="kdot" title="Parametro chiave"></span>':'')+(UNIT[i]?' <small>'+esc(UNIT[i])+'</small>':'')+'</span>'+
+          '<span class="col-name">'+esc(M[i])+(UNIT[i]?' <small>'+esc(UNIT[i])+'</small>':'')+'</span>'+
+          '<button type="button" class="kdot'+(on?' on':'')+(pieno?' off':'')+'" data-key="'+i+'" '+
+            'aria-pressed="'+(on?'true':'false')+'" title="'+ttl+'" aria-label="'+ttl+'"></button>'+
           '<span class="col-move"><button type="button" class="mv-up" data-up="'+i+'" title="Su" aria-label="Sposta su">'+UP_SVG+'</button>'+
           '<button type="button" class="mv-dn" data-dn="'+i+'" title="Giu" aria-label="Sposta giu">'+DN_SVG+'</button></span>'+
           '</div>';
       });
       lh.innerHTML = l;
     }
+  }
+  // la scelta e' cambiata: si ridisegna quello che la usa, niente di piu'
+  function keyApplied(){
+    renderColPanel(); renderGrid(); renderMini();
   }
   function moveCol(idx, dir){
     const pos = colOrder.indexOf(idx); if(pos<0) return;
@@ -3916,8 +4019,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       saveCols(); refreshCols();
     });
     list.addEventListener('click', e=>{
+      const kd = e.target.closest && e.target.closest('.kdot');
+      if(kd){
+        const err = keyToggle(+kd.getAttribute('data-key'));
+        if(err) toast(err); else keyApplied();
+        return;
+      }
       const up = e.target.closest && e.target.closest('.mv-up'), dn = e.target.closest && e.target.closest('.mv-dn');
       if(up) moveCol(+up.getAttribute('data-up'), -1); else if(dn) moveCol(+dn.getAttribute('data-dn'), 1);
+    });
+    const kn = document.getElementById('key-note');
+    if(kn) kn.addEventListener('click', e=>{
+      if(!(e.target.closest && e.target.closest('#key-reset'))) return;
+      chiaveSave([]); keyRefresh(); keyApplied(); toast('Parametri chiave: quelli del foglio');
     });
     if(ph) ph.addEventListener('click', e=>{
       const del = e.target.closest && e.target.closest('[data-del]');

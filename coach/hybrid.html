@@ -603,11 +603,11 @@ table.partite td.sigla.nolink{ color:var(--muted); }
         <span class="grow"></span>
         <span class="cm-lbl">Parametri</span>
         <div class="seg" id="colmode-seg" role="group" aria-label="Parametri visibili">
-          <button class="on" data-cm="key" type="button" title="Mostra solo i parametri chiave">Chiave</button>
-          <button data-cm="all" type="button" title="Mostra tutti i parametri">Tutti</button>
+          <button class="on" data-cm="key" type="button" title="Mostra solo i parametri della sinottica aperta">Sinottica</button>
+          <button data-cm="all" type="button" title="Mostra tutti i parametri della stagione, con i parametri chiave in arancione">Tutti</button>
         </div>
         <button class="btn" id="btn-keypick" type="button" aria-expanded="false" aria-controls="keypick"
-          title="Sinottiche: quali parametri sono quelli chiave e in che ordine">
+          title="Sinottiche: quali parametri stanno in tabella e in che ordine">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg>
           <span id="kp-btn-lbl">Sinottica</span>
         </button>
@@ -853,6 +853,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return k.length ? k.slice() : allIdx();
   }
   function keyDefaultNames(){ return keyDefaultIdx().map(i=> M[i]); }
+
+  // ---------- parametri chiave: si scelgono in un posto solo ----------
+  // Sinottica e parametri chiave sono due cose diverse e adesso si vedono diverse.
+  // La sinottica dice QUALI colonne stanno in tabella e in che ordine, e si monta
+  // qui sotto. I parametri chiave sono invece quei pochi che il mister guarda per
+  // primi: si scelgono solo dal pannello Parametri di Carico, col pallino arancione,
+  // e da li' arrivano dappertutto. Qui li si legge e basta, scritti per nome cosi'
+  // valgono anche cambiando stagione. Se nessuno ha ancora scelto niente, valgono
+  // quelli indicati dai fogli.
+  const CHIAVE_STORE = 'rs_fio_chiave_v1';
+  function chiaveNames(){
+    try{
+      const o = JSON.parse(window.localStorage.getItem(CHIAVE_STORE) || 'null');
+      if(!o || !Array.isArray(o.p)) return null;
+      const p = [];
+      o.p.forEach(x=>{ if(typeof x==='string' && x && p.indexOf(x)<0) p.push(x); });
+      return p.length ? p : null;
+    }catch(e){ return null; }
+  }
+  let chiaveIdxCache = null, chiaveSetCache = null;
+  function chiaveRefresh(){
+    const nm = chiaveNames(), out = [];
+    if(nm) nm.forEach(n=>{ const i = M.indexOf(n); if(i>=0 && out.indexOf(i)<0) out.push(i); });
+    chiaveIdxCache = out.length ? out : keyDefaultIdx();
+    chiaveSetCache = new Set(chiaveIdxCache);
+  }
+  function chiaveList(){ if(!chiaveIdxCache) chiaveRefresh(); return chiaveIdxCache; }
+  function chiaveHas(i){ if(!chiaveSetCache) chiaveRefresh(); return chiaveSetCache.has(i); }
+  function chiaveScelta(){ return !!chiaveNames(); }
   // travaso della vecchia scelta a indici: si legge una volta sola, poi vive come nomi
   function sinFromOld(){
     try{
@@ -918,7 +947,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // parametri visibili: quelli della sinottica (nel suo ordine) o tutti quelli del foglio
   function VIS(){ return state.colMode==='all' ? allIdx() : keyList().slice(); }
-  function keyCls(i){ return (state.colMode==='all' && keyHas(i)) ? ' key' : ''; }
+  // l'arancione segna i parametri chiave, gli stessi che colora Carico
+  function keyCls(i){ return (state.colMode==='all' && chiaveHas(i)) ? ' key' : ''; }
 
   // helpers
   function fmt(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
@@ -1658,7 +1688,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // scelte e la media squadra, cosi' si legge subito chi corre di piu', chi va sopra i 23
   // km/h e chi accelera. Fino a quattro atlete: oltre, le tracce si sovrappongono e non
   // si capisce piu' niente, percio' resta solo la tabella.
-  function cfRadarAxes(){ return keyList().slice(0, KP_RADAR); }
+  // i raggi sono i parametri chiave, quelli scelti col pallino nel pannello di Carico
+  function cfRadarAxes(){ return chiaveList().slice(0, KP_RADAR); }
   function cfPoly(vals, R, cx, cy){
     const n=vals.length;
     return vals.map((f,i)=>{
@@ -1675,7 +1706,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // con due soli raggi non si disegna una forma: meglio dirlo che mostrare una riga storta
       host.classList.add('solo-nota');
       host.innerHTML='<p class="cfr-note">Il radar ha bisogno di almeno tre parametri chiave (adesso sono '
-        +ax.length+'): aggiungine alla sinottica dal pulsante in alto.</p>';
+        +ax.length+'): aggiungine da Carico, nel pannello Parametri, col pallino arancione.</p>';
       return;
     }
     if(pdata.length>CF_RADAR_MAX){
@@ -1962,7 +1993,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function renderKeyPick(){
     const act = sinAct(), k = keyList(), n = k.length;
-    const inRadar = new Set(k.slice(0, KP_RADAR));
+    // il punto arancione segna i parametri chiave che finiscono sui raggi del radar
+    const ax = chiaveList().slice(0, KP_RADAR);
+    const inRadar = new Set(ax);
     const lbl = document.getElementById('kp-btn-lbl');
     if(lbl) lbl.textContent = act.n+' ('+n+')';
 
@@ -2042,10 +2075,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const note = document.getElementById('kp-note');
     if(note){
-      const radar = n>=3
-        ? ('Nel radar del Confronto entrano i primi '+Math.min(n, KP_RADAR)+', segnati col punto: '
-           +k.slice(0, KP_RADAR).map(i=> SHORT[i]||M[i]).join(', ')+'.')
-        : 'Il radar del Confronto ha bisogno di almeno tre parametri.';
+      const radar = ax.length>=3
+        ? ('Sui raggi del radar del Confronto vanno i parametri chiave, segnati col punto: '
+           +ax.map(i=> SHORT[i]||M[i]).join(', ')
+           +'. Si scelgono da Carico, nel pannello Parametri, col pallino arancione.')
+        : 'Il radar del Confronto ha bisogno di almeno tre parametri chiave: si scelgono da Carico, nel pannello Parametri.';
       const persi = act.p.length - n;
       const nota = persi>0
         ? (' '+persi+(persi===1?' parametro resta scritto ma in questa stagione non c\'e\'.'
