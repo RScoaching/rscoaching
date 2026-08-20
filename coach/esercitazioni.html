@@ -454,7 +454,7 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
           <input id="search" type="search" placeholder="Cerca esercitazione..." aria-label="Cerca esercitazione">
         </div>
         <div class="pills" id="pills" role="tablist" aria-label="Filtro slot"></div>
-        <select class="sinpick" id="sinpick" aria-label="Sinottica dei parametri GPS" title="Quali parametri GPS mostrare. Le sinottiche si creano in Carico"></select>
+        <select class="sinpick" id="sinpick" aria-label="Sinottica dei parametri GPS" title="Quali parametri GPS mostrare: i chiave, tutti e venti oppure una sinottica fatta in Carico"></select>
         <span class="spacer"></span>
         <button class="btn" id="btn-add" aria-expanded="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
@@ -717,8 +717,28 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // Nel cassetto ci sono i NOMI dei parametri, non le posizioni, cosi' la stessa
   // sinottica vale anche se il foglio della stagione ha piu' o meno colonne.
   const SIN_STORE = 'rs_sinottiche_v1';
-  const SIN_PICK = 'rs_fio_eserc_sin';   // sinottica scelta qui, vuoto vuol dire tutti
+  const SIN_PICK = 'rs_fio_eserc_sin';   // '_chiave', '_all' oppure il nome di una sinottica
+  const CHIAVE_STORE = 'rs_fio_chiave_v1';  // parametri chiave, gli stessi di Carico e Sessioni
   const ALL_LOAD = LOAD.map((_,i)=> i);
+  // I fogli portano venti parametri, ACC e DEC compresi. Metterli tutti a schermo di
+  // default renderebbe illeggibile la scheda, quindi si parte dai parametri chiave e
+  // gli altri si tirano fuori dal menu: tutti, oppure una sinottica fatta in Carico.
+  const BASE_LOAD = ['Minuti', 'Dist tot', 'Dist (m/min)', 'DIST > 23km/h',
+                     'Dist 20-23 Km/h', 'N az. int. /min', 'SMax (kmh)'];
+  function idxOfNames(names){
+    const out = [];
+    (names||[]).forEach(nm=>{ const i = LOAD.indexOf(nm); if(i>=0 && out.indexOf(i)<0) out.push(i); });
+    return out;
+  }
+  function chiaveCols(){
+    let p = null;
+    try{
+      const o = JSON.parse(localStorage.getItem(CHIAVE_STORE) || 'null');
+      if(o && Array.isArray(o.p)) p = o.p;
+    }catch(e){}
+    const a = idxOfNames(p);
+    return a.length ? a : idxOfNames(BASE_LOAD);
+  }
   function sinList(){
     try{
       const o = JSON.parse(localStorage.getItem(SIN_STORE) || 'null');
@@ -736,18 +756,27 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function sinPick(){ try{ return localStorage.getItem(SIN_PICK) || ''; }catch(e){ return ''; } }
   function sinSetPick(v){ try{ if(v) localStorage.setItem(SIN_PICK, v); else localStorage.removeItem(SIN_PICK); }catch(e){} }
   function VISLOAD(){
-    const n = sinPick(); if(!n) return ALL_LOAD;
+    const n = sinPick();
+    if(n === '_all') return ALL_LOAD;
+    if(!n || n === '_chiave') return chiaveCols();
     const s = sinList().find(x=> x.n===n);
-    return (s && s.cols.length) ? s.cols : ALL_LOAD;
+    return (s && s.cols.length) ? s.cols : chiaveCols();
+  }
+  function sinLabel(){
+    const n = sinPick();
+    if(n === '_all') return 'Tutti i parametri';
+    if(!n || n === '_chiave') return 'Parametri chiave';
+    return 'Sinottica: ' + n;
   }
   function renderSinPick(){
     const el = document.getElementById('sinpick'); if(!el) return;
     const list = sinList(), cur = sinPick();
-    el.hidden = !list.length;
-    let h = '<option value="">Tutti i parametri ('+LOAD.length+')</option>';
+    el.hidden = false;
+    let h = '<option value="_chiave">Parametri chiave ('+chiaveCols().length+')</option>'+
+            '<option value="_all">Tutti i parametri ('+LOAD.length+')</option>';
     list.forEach(s=>{ h += '<option value="'+esc(s.n)+'">'+esc(s.n)+' ('+s.cols.length+')</option>'; });
     el.innerHTML = h;
-    el.value = list.some(s=> s.n===cur) ? cur : '';
+    el.value = (cur === '_all' || list.some(s=> s.n===cur)) ? cur : '_chiave';
   }
 
   // ---------- sessions ----------
@@ -1276,7 +1305,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const el = document.getElementById('sinpick'); if(!el) return;
     el.addEventListener('change', ()=>{
       sinSetPick(el.value);
-      toast(el.value ? ('Sinottica: '+el.value) : 'Tutti i parametri');
+      toast(sinLabel());
       render();
     });
   })();
