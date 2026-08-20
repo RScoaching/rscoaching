@@ -400,6 +400,8 @@ table.rmtbl tr:first-child td.grp{ padding-top:4px; }
 /* da dove arriva il massimale: stima del test VBT oppure scritto a mano */
 .rm-cell{ display:flex; flex-direction:column; align-items:center; gap:3px; }
 .rm-src{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--violet2); white-space:nowrap; }
+/* la prova c'e' ma la velocita' e' fuori dalla banda buona: si dice perche' */
+.rm-src.fuori{ color:var(--muted); white-space:normal; max-width:96px; text-align:center; line-height:1.3; cursor:help; }
 .rm-undo{ appearance:none; border:0; background:none; padding:0; margin:0; font-family:inherit;
   font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
   cursor:pointer; border-bottom:1px solid currentColor; white-space:nowrap; }
@@ -818,6 +820,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
   <div class="fbdlg-head">
     <h3>Massimali 1RM</h3>
     <p>Squat e hip thrust partono dalla stima del test VBT, con il bordo tratteggiato; lo stacco non ha una prova VBT e si scrive a mano. Scrivendo un numero quello vince sul test, e il pulsantino sotto la casella riporta alla stima. I carichi della seduta escono da qui, arrotondati a 2,5 kg.</p>
+    <p>La stima nasce dal profilo carico-velocita': dalla velocita' media propulsiva si ricava a che percentuale del massimale e' andata la ripetizione, poi 1RM = carico / (percentuale / 100). Squat: % = -5,961 v&#178; - 50,71 v + 117. Hip thrust: v = 1,1003 - 0,0078 p - 0,000009 p&#178;, letta al contrario. Sotto il 50% e sopra il 97% la curva e' troppo piatta e il numero non regge: li' la stima non esce e sotto la casella si legge perche'.</p>
   </div>
   <div class="rm-top">
     <input id="rm-find" type="search" placeholder="Cerca atleta..." aria-label="Cerca atleta">
@@ -1646,14 +1649,52 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   var VBT_KEY = { squat:'vbt_squat_1rm', hip:'vbt_ht_1rm' };
   var VBT = {};
+  /* le velocita' grezze della stessa prova: servono a spiegare le stime che mancano */
+  var VBT_V_KEY = { squat:'vbt_squat_v', hip:'vbt_ht_v' };
+  var VBTV = {};
+  /* La stima del massimale nasce dal profilo carico-velocita' del test.
+     Squat, con la velocita' media propulsiva in m/s:
+       % del massimale = -5,961 v^2 - 50,71 v + 117
+     Hip thrust, la stessa curva letta al contrario:
+       v = 1,1003 - 0,0078 p - 0,000009 p^2, da cui si ricava p
+     Poi 1RM = carico spostato / (% / 100). Lontano dal massimale la curva e'
+     quasi piatta e la divisione esplode, per questo si tiene solo la fascia
+     fra il 50% e il 97%: sotto, il numero direbbe massimali che non esistono. */
+  var VBT_PCT_MIN = 50, VBT_PCT_MAX = 97;
+  function vbtPct(lift, v){
+    if(!isFinite(v) || v <= 0) return null;
+    var p = null;
+    if(lift === 'squat'){
+      p = -5.961 * v * v - 50.71 * v + 117;
+    }else if(lift === 'hip'){
+      var disc = 0.0078 * 0.0078 + 0.000036 * (1.1003 - v);
+      if(disc < 0) return null;
+      p = (Math.sqrt(disc) - 0.0078) / 0.000018;
+    }
+    return (p != null && isFinite(p) && p > 0) ? p : null;
+  }
+  /* la velocita' che corrisponde a una data percentuale: serve a dire al mister
+     dentro che finestra deve stare la ripetizione perche' la stima regga */
+  function vbtVelPct(lift, p){
+    if(lift === 'hip') return 1.1003 - 0.0078 * p - 0.000009 * p * p;
+    if(lift === 'squat'){
+      var disc = 50.71 * 50.71 - 4 * 5.961 * (p - 117);
+      if(disc < 0) return null;
+      return (-50.71 + Math.sqrt(disc)) / (2 * 5.961);
+    }
+    return null;
+  }
 
   function seasonId(){
     try{ if(window.getStagione) return window.getStagione(); }catch(e){}
     return '25-26';
   }
-  /* legge il registro test e tiene solo le due stime 1RM: { nome: { squat:{v,d}, hip:{v,d} } } */
+  /* legge il registro test e tiene le due stime 1RM: { nome: { squat:{v,d}, hip:{v,d} } }.
+     Nello stesso giro riempie VBTV con le velocita' della prova, cosi' quando la
+     stima manca si sa che il test c'e' stato lo stesso e si puo' spiegare. */
   function vbtLoad(){
     var out = {}, reg = null;
+    VBTV = {};
     try{
       var raw = localStorage.getItem('fio_test_register_v2_' + seasonId());
       reg = raw ? JSON.parse(raw) : null;
@@ -1671,11 +1712,52 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         out[name][lift] = { v: Math.round(v * 10) / 10, d: e.d || '' };
       });
     });
+    Object.keys(VBT_V_KEY).forEach(function(lift){
+      var bag = reg[VBT_V_KEY[lift]];
+      if(!bag || typeof bag !== 'object') return;
+      Object.keys(bag).forEach(function(name){
+        var e = bag[name];
+        if(!e || e.v == null || e.v === '') return;
+        var v = parseFloat(e.v);
+        if(!isFinite(v) || v <= 0) return;
+        /* il carico della prova sta scritto nella nota, del tipo "80 kg" */
+        var kg = null, m = /(\d+(?:[.,]\d+)?)\s*kg/i.exec(String(e.t || ''));
+        if(m) kg = parseFloat(m[1].replace(',', '.'));
+        if(!VBTV[name]) VBTV[name] = {};
+        VBTV[name][lift] = { v: v, d: e.d || '', kg: (isFinite(kg) && kg > 0) ? kg : null };
+      });
+    });
     return out;
   }
   function vbtGet(name, key){
     var o = VBT[name];
     return (o && o[key]) ? o[key] : null;
+  }
+  function vbtVel(name, key){
+    var o = VBTV[name];
+    return (o && o[key]) ? o[key] : null;
+  }
+  /* Prova fatta ma stima saltata: si dice a che percentuale e' caduta la
+     ripetizione e dentro che velocita' deve stare perche' il numero valga. */
+  function vbtFuori(name, key){
+    if(vbtGet(name, key)) return null;
+    var t = vbtVel(name, key);
+    if(!t) return null;
+    var p = vbtPct(key, t.v);
+    if(p == null) return null;
+    var pr = Math.round(p);
+    var lo = vbtVelPct(key, VBT_PCT_MAX), hi = vbtVelPct(key, VBT_PCT_MIN);
+    var dove = (p < VBT_PCT_MIN) ? 'carico troppo leggero' : 'carico troppo vicino al massimale';
+    var det = kgTxt(Math.round(t.v * 100) / 100) + ' m/s'
+      + (t.kg ? ' a ' + kgTxt(t.kg) + ' kg' : '')
+      + ' vale il ' + pr + '% del massimale: ' + dove + '. '
+      + 'La stima tiene fra il ' + VBT_PCT_MIN + '% e il ' + VBT_PCT_MAX + '%';
+    if(lo != null && hi != null && lo > 0 && hi > 0){
+      det += ', cioe\' con una ripetizione fra ' + kgTxt(Math.round(lo * 100) / 100)
+        + ' e ' + kgTxt(Math.round(hi * 100) / 100) + ' m/s';
+    }
+    det += '. Rifai la prova con un altro carico.';
+    return { breve: 'test ' + pr + '% &#183; niente stima', det: det };
   }
 
   function rmLoad(){
@@ -1999,6 +2081,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }else if(est){
       sotto = '<button class="'+undoCls+'" type="button" data-undo="'+esc(name)+'" data-k="'+L.key+'"'
         + ' title="Torna alla stima del test VBT">test '+esc(kgTxt(est.v))+'</button>';
+    }else{
+      var fu = vbtFuori(name, L.key);
+      if(fu) sotto = '<span class="'+srcCls+' fuori" title="'+esc(fu.det)+'">'+fu.breve+'</span>';
     }
     return '<div class="'+boxCls+'">'+inp+sotto+'</div>';
   }
@@ -2014,7 +2099,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(!box.classList.contains('rm-cell') && !box.classList.contains('fmx-cell')) return;
     var vecchio = box.querySelector('.rm-src, .rm-undo');
     if(vecchio) box.removeChild(vecchio);
-    if(!est) return;
+    if(!est){
+      var fu = (man == null) ? vbtFuori(name, key) : null;
+      if(fu){
+        var f = document.createElement('span');
+        f.className = 'rm-src fuori';
+        f.title = fu.det;
+        f.innerHTML = fu.breve;
+        box.appendChild(f);
+      }
+      return;
+    }
     if(man == null){
       var s = document.createElement('span');
       s.className = 'rm-src';

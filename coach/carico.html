@@ -662,8 +662,8 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 .rpe-in:hover{ border-color:var(--violet-border); }
 .rpe-in:focus{ outline:none; border-color:var(--violet); box-shadow:0 0 0 3px var(--violet-bg); }
 .rpe-in.borrowed{ color:var(--muted); border-style:dashed; }
-table.grid.rpe td.col-day{ min-width:150px; }
-table.grid.rpe td.rpe-cell{ padding-top:4px; padding-bottom:4px; }
+table.grid th.rpe-h, table.grid td.rpe-c{ border-left:1px solid var(--border2); }
+table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 .rpe-note{ font-size:12px; color:var(--faint); line-height:1.55; margin:10px 2px 0; max-width:78ch; }
 .rpe-note b{ color:var(--violet2); font-weight:700; }
 
@@ -723,24 +723,11 @@ table.grid.rpe td.rpe-cell{ padding-top:4px; padding-bottom:4px; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, .chart-tooltip, .toast,
   #cols-dialog, #model-dialog, #pdf-dialog, .top-right, .foot-note{ display:none !important; }
   /* comandi che servono solo a video: sul foglio sono scritte che non dicono niente */
-  #mv-reset, #rpe-clear{ display:none !important; }
+  #mv-reset, #rpe-clear, .rpe-note{ display:none !important; }
   /* gli RPE a video sono caselle da riempire, sul foglio devono essere soltanto numeri */
   .rpe-in{ border:none !important; background:none !important; box-shadow:none !important;
     padding:0 !important; width:auto !important; min-width:26px; font-size:10px !important;
     color:#14110f !important; -webkit-appearance:none !important; appearance:none !important; }
-  .rpe-note{ color:#5a524c !important; font-size:9px !important; margin-top:6px !important; }
-  /* la scheda RPE non viene spezzata in fasce come la griglia, quindi la si stringe qui:
-     con il passo comodo di quello che si vede a video due microcicli non entravano in un
-     foglio e il browser lasciava la prima pagina bianca per non tagliare la scheda */
-  table.grid.rpe th, table.grid.rpe td{ padding:3px 8px !important; line-height:1.35 !important; }
-  table.grid.rpe td.rpe-cell{ padding-top:3px !important; padding-bottom:3px !important; }
-  table.grid.rpe tr.wkband td{ padding:2px 8px !important; }
-  table.grid.rpe td.col-day{ min-width:0 !important; }
-  /* giorno ed etichetta sulla stessa riga, come nella griglia: dimezza l'altezza della riga */
-  table.grid.rpe td.col-day .wd{ display:inline !important; margin:0 6px 0 0 !important;
-    font-size:.86em !important; }
-  /* se il mese e' lungo la scheda va avanti sulla pagina dopo invece di lasciarne una bianca */
-  #rpe-card{ break-inside:auto !important; }
   /* i blocchi lasciati fuori dalla scelta prima di stampare */
   .print-off{ display:none !important; }
   #chart-card .chart-tools{ display:none !important; }
@@ -954,8 +941,7 @@ table.grid.rpe td.rpe-cell{ padding-top:4px; padding-bottom:4px; }
         <button class="snav" type="button" data-sec="chart-card" title="Il grafico grande, un parametro per volta sul periodo scelto">Andamento</button>
         <button class="snav" type="button" data-sec="mini-card" title="Otto parametri sotto gli occhi, ognuno col suo istogramma">Parametri chiave</button>
         <button class="snav" type="button" data-sec="acwr-card" title="Quanto e' salito il carico rispetto alle ultime quattro settimane">Rischio carico</button>
-        <button class="snav" type="button" data-sec="grid-card" title="La griglia del mese, giorno per giorno">Griglia del mese</button>
-        <button class="snav" type="button" data-sec="rpe-card" title="RPE seduta per seduta e carico interno TL">RPE e carico interno</button>
+        <button class="snav" type="button" data-sec="grid-card" title="La griglia del mese, giorno per giorno, con RPE e TL">Griglia del mese</button>
       </nav>
 
       <!-- KPIs -->
@@ -1061,22 +1047,10 @@ table.grid.rpe td.rpe-cell{ padding-top:4px; padding-bottom:4px; }
           <h2 id="grid-title">Monitoraggio</h2>
           <span class="hint" id="grid-hint">griglia mensile · giorno per giorno</span>
           <button class="mini" id="mv-reset" type="button" hidden>Rimetti le sedute come nel foglio</button>
-        </div>
-        <div class="card-body" style="padding-top:6px">
-          <div class="tscroll" id="grid-scroll"></div>
-        </div>
-      </section>
-
-      <!-- RPE seduta per seduta e carico interno: e' la parte che chiede la nazionale -->
-      <section class="card reveal" id="rpe-card" style="--i:5">
-        <div class="card-head">
-          <h2 id="rpe-title">RPE e carico interno</h2>
-          <span class="hint" id="rpe-hint"></span>
-          <span class="spacer"></span>
           <button class="mini" id="rpe-clear" type="button" hidden>Cancella gli RPE del mese</button>
         </div>
         <div class="card-body" style="padding-top:6px">
-          <div class="tscroll no-split" id="rpe-scroll"></div>
+          <div class="tscroll" id="grid-scroll"></div>
           <p class="rpe-note" id="rpe-note"></p>
         </div>
       </section>
@@ -2508,12 +2482,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- grid (uguale identico) ----------
   const ROWCLS = { day:'r-day', match:'r-match', tot_train:'r-train', valmatch_train:'r-valtrain',
     tot_week:'r-week', valmatch_week:'r-valweek', tot_month:'r-month', valmatch_month:'r-valmonth' };
+  // le due colonne in coda alla griglia: l'RPE della seduta e il carico interno TL.
+  // stanno subito dopo l'ultimo parametro perche' il foglio della nazionale le vuole
+  // dentro la stessa tabella, non in una scheda a parte
+  function rpeOn(){ return RPE_MIN_IDX >= 0; }
   function headHTML(){
     let h = '<thead><tr><th class="col-day">Giorno</th>';
     VIS().forEach(i=>{
       const k = KEY.has(i)?' key':'';
       h += '<th class="'+((''+k).trim())+'" title="'+esc(M[i])+(UNIT[i]?' ('+esc(UNIT[i])+')':'')+'">'+esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span></th>';
     });
+    if(rpeOn()){
+      h += '<th class="rpe-h" title="Sforzo percepito della seduta, scala di Borg CR10 da 0 a 10">RPE<span class="u">0-10</span></th>';
+      h += '<th class="rpe-h key" title="Carico interno della seduta: minuti per RPE">TL<span class="u">u.a.</span></th>';
+    }
     return h+'</tr></thead>';
   }
   // stessa fila dell intestazione, ma dentro il corpo: torna sotto la fascia di
@@ -2526,6 +2508,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h += '<td class="'+(KEY.has(i)?'key':'')+'" title="'+esc(M[i])+(UNIT[i]?' ('+esc(UNIT[i])+')':'')+'">'+
              esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span></td>';
     });
+    if(rpeOn()){
+      h += '<td class="rpe-h" title="Sforzo percepito della seduta, scala di Borg CR10 da 0 a 10">RPE<span class="u">0-10</span></td>';
+      h += '<td class="rpe-h key" title="Carico interno della seduta: minuti per RPE">TL<span class="u">u.a.</span></td>';
+    }
     return h+'</tr>';
   }
   function renderGrid(){
@@ -2533,25 +2519,41 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const mon = activeMonth();
     document.getElementById('grid-title').textContent = mon ? mon.title : 'Monitoraggio';
     const who = state.level==='team' ? 'squadra' : state.player;
-    document.getElementById('grid-hint').textContent = (mon? (who+' · giorno per giorno') : '');
-    // anche quando non c'e' niente da disegnare la scheda RPE va rifatta, altrimenti resta
-    // in pagina la tabella dell'atleta di prima
-    if(!mon){ host.innerHTML = emptyBlock('Nessun dato per la selezione'); renderRpe(); return; }
+    document.getElementById('grid-hint').textContent = (mon? (who+' · giorno per giorno · RPE e TL in fondo') : '');
+    const note = document.getElementById('rpe-note');
+    const clr  = document.getElementById('rpe-clear');
+    if(note) note.textContent = '';
+    if(clr) clr.hidden = true;
+    if(!mon){ host.innerHTML = emptyBlock('Nessun dato per la selezione'); return; }
     const V = VIS();
-    const ncol = V.length + 1;
+    const on = rpeOn();
+    const ncol = V.length + 1 + (on ? 2 : 0);
+    // le celle vuote in coda alle righe che non hanno ne' RPE ne' TL
+    const pad = on ? '<td class="num tnum rpe-c"></td><td class="num tnum rpe-c"></td>' : '';
+    // sui totali l'RPE non si somma: e' la media pesata sui minuti, cioe' TL diviso minuti,
+    // esattamente come nel foglio che va alla nazionale
+    function totRpe(a){
+      if(!on) return '';
+      const rp = (a.min>0 && a.tl>0) ? (a.tl/a.min) : null;
+      return '<td class="num tnum rpe-c">'+(rp==null ? '-' : NF.format(round1(rp)))+'</td>'+
+             '<td class="num tnum rpe-c key">'+(a.tl>0 ? fmtLoad(a.tl) : '-')+'</td>';
+    }
+    let aT = { min:0, tl:0 }, aW = { min:0, tl:0 }, aM = { min:0, tl:0 };
+    let nSed = 0, nRpe = 0;
     let body = '<tbody>';
     // modello AVG partita in testa (riferimento sempre visibile)
     const MOD = MODEL();
     if(MOD){
       body += '<tr class="r-model"><td class="col-day"><span class="wd">rif.</span><span class="lb">Modello AVG partita'+esc(modelTag())+'</span></td>';
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
-      body += '</tr>';
+      body += pad+'</tr>';
     }
     const wks = weekLabels(mon);
     let wkNow = '';
     (mon.rows||[]).forEach(r=>{
       if(r.type==='wk_header'){
         wkNow = r.label||'';
+        aT = { min:0, tl:0 }; aW = { min:0, tl:0 };
         body += '<tr class="wkband" data-wk="'+esc(wkNow)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
                 '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span></td></tr>';
         body += wkHeadHTML(V, wkNow);
@@ -2586,6 +2588,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
+      // coda RPE e TL: casella da riempire sulle sedute, conto fatto sui totali, vuoto sul resto
+      if(on){
+        if(r.type==='day' || r.type==='match'){
+          nSed++;
+          const mv = rv[RPE_MIN_IDX];
+          const mn = (typeof mv==='number' && isFinite(mv)) ? mv : null;
+          const got = rpeOf(mon.key, r.label);
+          const tl = (mn!=null && got.v!=null) ? mn*got.v : null;
+          if(got.v!=null) nRpe++;
+          if(tl!=null){
+            aW.min += mn; aW.tl += tl; aM.min += mn; aM.tl += tl;
+            if(r.type==='day'){ aT.min += mn; aT.tl += tl; }
+          }
+          body += '<td class="num rpe-c"><input class="rpe-in'+(got.v!=null && !got.own ? ' borrowed' : '')+
+                  '" type="number" min="0" max="10" step="0.5" inputmode="decimal" data-l="'+esc(r.label)+
+                  '" value="'+(got.v==null ? '' : got.v)+'" aria-label="RPE della seduta '+esc(txt)+'"'+
+                  (got.v!=null && !got.own ? ' title="Preso dall\'RPE scritto sulla squadra"' : '')+'></td>'+
+                  '<td class="num tnum rpe-c key">'+(tl==null ? '-' : fmtLoad(tl))+'</td>';
+        }
+        else if(r.type==='tot_train') body += totRpe(aT);
+        else if(r.type==='tot_week')  body += totRpe(aW);
+        else if(r.type==='tot_month') body += totRpe(aM);
+        else body += pad;
+      }
       body += '</tr>';
     });
     body += '</tbody>';
@@ -2594,7 +2620,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> { location.href='hybrid.html?m='+encodeURIComponent(mk)+'&l='+encodeURIComponent(b.getAttribute('data-l')); }));
     bindMoveUI(host, mk);
     const rb = document.getElementById('mv-reset'); if(rb) rb.hidden = !moveN();
-    renderRpe();
+    if(!on){
+      if(note) note.textContent = 'Nei dati non c\'e\' la colonna dei minuti: senza minuti il TL non si calcola, quindi le colonne RPE e TL restano fuori.';
+      return;
+    }
+    host.querySelectorAll('.rpe-in').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value)); });
+      inp.addEventListener('change', ()=>{
+        rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value));
+        renderGrid();
+      });
+    });
+    if(clr) clr.hidden = !rpeOwnCount(mk);
+    if(note){
+      note.innerHTML = 'Scrivi l\'RPE della seduta da 0 a 10 nell\'ultima colonna: il <b>TL</b> (minuti per RPE) si fa da solo, riga per riga e sui totali. '+
+        'Sui totali l\'RPE non e\' una somma ma la media pesata sui minuti. '+
+        (state.level==='team'
+          ? 'Sei sulla squadra: quello che scrivi qui vale anche per ogni atleta che non ha un numero suo.'
+          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(state.player||'')+'.')+
+        ' Sedute nel mese: '+nSed+', con RPE: '+nRpe+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
+    }
   }
 
   // ---------- RPE e carico interno ----------
@@ -2645,144 +2690,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const v = parseFloat(t);
     if(!isFinite(v)) return null;
     return Math.min(10, Math.max(0, Math.round(v*10)/10));
-  }
-  function rpeTL(r){ return (r.min!=null && r.rpe!=null) ? r.min*r.rpe : null; }
-  // monotonia e strain alla Foster. I giorni si contano dal primo all'ultimo con seduta del
-  // microciclo: i giorni di scarico in mezzo valgono zero e devono pesare, altrimenti la
-  // monotonia viene fuori piu' bassa del vero. Sotto le tre sedute con RPE non si calcola.
-  // Serve anche una settimana quasi intera: su due o tre giorni la monotonia esce enorme e
-  // non vuol dire niente, meglio lasciare il trattino finche' il microciclo non e' finito.
-  const RPE_MONO_DAYS = 5;
-  function rpeWeekStats(w){
-    let min = 0, tl = 0, n = 0;
-    const byDay = {};
-    (w.rows||[]).forEach(r=>{
-      if(r.min != null) min += r.min;
-      const t = rpeTL(r);
-      if(t != null){ tl += t; n++; }
-      if(r.ts != null) byDay[r.ts] = (byDay[r.ts] || 0) + (t || 0);
-    });
-    const out = { min:min, tl:tl, n:n, rpe:(min>0 && tl>0) ? (tl/min) : null, mono:null, strain:null };
-    const ts = Object.keys(byDay).map(Number).sort((a,b)=> a-b);
-    if(n >= 3 && ts.length > 1){
-      const days = [];
-      const last = ts[ts.length-1];
-      for(let d = new Date(ts[0]); d.getTime() <= last && days.length < 21; d.setDate(d.getDate()+1)){
-        days.push(byDay[d.getTime()] || 0);
-      }
-      const m = days.reduce((a,b)=> a+b, 0) / days.length;
-      let s = 0; days.forEach(x=> s += (x-m)*(x-m));
-      const sd = Math.sqrt(s / days.length);
-      if(sd > 0 && m > 0 && days.length >= RPE_MONO_DAYS){ out.mono = m/sd; out.strain = tl*out.mono; }
-    }
-    return out;
-  }
-  function rpeMonthOf(mon){
-    const weeks = [];
-    let cur = null, wkNow = '';
-    (mon.rows||[]).forEach(r=>{
-      if(r.type === 'wk_header'){ wkNow = r.label||''; cur = { wk:wkNow, rows:[] }; weeks.push(cur); return; }
-      if(r.type !== 'day' && r.type !== 'match') return;
-      if(!cur){ cur = { wk:'', rows:[] }; weeks.push(cur); }
-      const d = rowDate(r, wkNow, mon.key);
-      let ts = null;
-      if(d){ const c = new Date(d); c.setHours(0,0,0,0); ts = c.getTime(); }
-      const mv = (r.v||[])[RPE_MIN_IDX];
-      const got = rpeOf(mon.key, r.label);
-      cur.rows.push({
-        label:r.label, wd:r.wd||'', txt:dayLabel(r, d), match:(r.type==='match'),
-        solo:soloOf(r.label), ts:ts,
-        min:(typeof mv==='number' && isFinite(mv)) ? mv : null,
-        rpe:got.v, own:got.own
-      });
-    });
-    return weeks.filter(w=> w.rows.length);
-  }
-  function rpeCell(v){ return '<td class="num tnum">'+(v==null ? '-' : fmtLoad(v))+'</td>'; }
-  function renderRpe(){
-    const host = document.getElementById('rpe-scroll');
-    if(!host) return;
-    const note = document.getElementById('rpe-note');
-    const hint = document.getElementById('rpe-hint');
-    const clr  = document.getElementById('rpe-clear');
-    const mon = activeMonth();
-    const who = state.level==='team' ? 'squadra' : (state.player || '');
-    if(hint) hint.textContent = mon ? (who+' · '+mon.title+' · TL = minuti x RPE') : '';
-    if(clr) clr.hidden = true;
-    if(note) note.textContent = '';
-    if(!mon){ host.innerHTML = emptyBlock('Nessun dato per la selezione'); return; }
-    if(RPE_MIN_IDX < 0){ host.innerHTML = emptyBlock('Nei dati non c\'e\' la colonna dei minuti: senza minuti il TL non si calcola'); return; }
-    const weeks = rpeMonthOf(mon);
-    if(!weeks.length){ host.innerHTML = emptyBlock('Nessuna seduta nel mese selezionato'); return; }
-    let body = '<tbody>';
-    let tMin = 0, tTL = 0, tN = 0, nSed = 0;
-    weeks.forEach(w=>{
-      const st = rpeWeekStats(w);
-      tMin += st.min; tTL += st.tl; tN += st.n; nSed += w.rows.length;
-      if(w.wk) body += '<tr class="wkband"><td class="col-day" colspan="6">'+esc(w.wk)+'</td></tr>';
-      w.rows.forEach(r=>{
-        const lb = '<span class="lb">'+esc(soloBase(r.txt))+soloTag(r.solo)+'</span>';
-        body += '<tr class="'+(r.match?'r-match':'r-day')+'"><td class="col-day">'+
-                (r.wd ? '<span class="wd">'+esc(r.wd)+'</span>' : '')+lb+'</td>'+
-                rpeCell(r.min)+
-                '<td class="num rpe-cell"><input class="rpe-in'+(r.rpe!=null && !r.own ? ' borrowed' : '')+
-                  '" type="number" min="0" max="10" step="0.5" inputmode="decimal" data-l="'+esc(r.label)+
-                  '" value="'+(r.rpe==null ? '' : r.rpe)+'" aria-label="RPE della seduta '+esc(r.txt)+'"'+
-                  (r.rpe!=null && !r.own ? ' title="Preso dall\'RPE scritto sulla squadra"' : '')+'></td>'+
-                rpeCell(rpeTL(r))+
-                '<td class="num tnum"></td><td class="num tnum"></td></tr>';
-      });
-      body += '<tr class="r-week"><td class="col-day"><span class="lb">TOT '+esc(w.wk||'microciclo')+'</span></td>'+
-              rpeCell(st.min)+
-              '<td class="num tnum">'+(st.rpe==null ? '-' : NF.format(round1(st.rpe)))+'</td>'+
-              rpeCell(st.tl)+
-              '<td class="num tnum">'+(st.mono==null ? '-' : NF.format(round2(st.mono)))+'</td>'+
-              rpeCell(st.strain)+'</tr>';
-    });
-    const tRpe = (tMin>0 && tTL>0) ? (tTL/tMin) : null;
-    body += '<tr class="r-month"><td class="col-day"><span class="lb">TOT '+esc(mon.title)+'</span></td>'+
-            rpeCell(tMin)+
-            '<td class="num tnum">'+(tRpe==null ? '-' : NF.format(round1(tRpe)))+'</td>'+
-            rpeCell(tTL)+
-            '<td class="num tnum"></td><td class="num tnum"></td></tr></tbody>';
-    host.innerHTML = '<table class="grid rpe"><thead><tr>'+
-      '<th class="col-day">Giorno</th><th title="Minuti della seduta">Min<span class="u">min</span></th>'+
-      '<th title="Sforzo percepito, scala di Borg CR10 da 0 a 10">RPE<span class="u">0-10</span></th>'+
-      '<th class="key" title="Carico interno: minuti per RPE">TL<span class="u">u.a.</span></th>'+
-      '<th title="Monotonia del microciclo: media dei carichi giornalieri diviso il loro scarto">Monotonia</th>'+
-      '<th title="Strain del microciclo: TL della settimana per la monotonia">Strain</th>'+
-      '</tr></thead>'+body+'</table>';
-    if(note){
-      note.innerHTML = 'Scrivi l\'RPE della seduta da 0 a 10: il <b>TL</b> e lo <b>strain</b> si calcolano da soli. '+
-        (state.level==='team'
-          ? 'Sei sulla squadra: quello che scrivi qui vale anche per ogni atleta che non ha un numero suo.'
-          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(state.player||'')+'.')+
-        ' Sedute nel mese: '+nSed+', con RPE: '+tN+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
-    }
-    if(clr) clr.hidden = !rpeOwnCount(mon.key);
-    const mk = mon.key;
-    host.querySelectorAll('.rpe-in').forEach(inp=>{
-      inp.addEventListener('input', ()=>{ rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value)); });
-      inp.addEventListener('change', ()=>{
-        rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value));
-        renderRpe();
-      });
-    });
-  }
-  // in stampa la scheda RPE segue lo stesso periodo scelto per la griglia
-  function printTrimRpe(){
-    const keep = PDF_PERS[pdfRead().per] || 0;
-    if(keep < 1) return;
-    const host = document.getElementById('rpe-scroll');
-    if(!host) return;
-    const rows = [...host.querySelectorAll('tbody > tr')];
-    const bands = [];
-    rows.forEach((tr,i)=>{ if(tr.classList.contains('wkband')) bands.push(i); });
-    if(bands.length <= keep) return;
-    const from = bands[bands.length - keep];
-    for(let i=bands[0]; i<from; i++) rows[i].classList.add('print-hidden');
-    // il totale del mese parlerebbe di settimane che sul foglio non ci sono piu'
-    host.querySelectorAll('tr.r-month').forEach(n=> n.classList.add('print-hidden'));
   }
 
   // frecce e trascinamento della riga seduta sulla fascia di un altro microciclo
@@ -2899,8 +2806,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   // copia pulita: i bottoni diventano etichette e sparisce quello che in stampa e' gia' nascosto
   function printCleanClone(tb){
+    // cloneNode copia l'attributo value, non quello che c'e' scritto davvero nella casella:
+    // senza questo giro gli RPE appena battuti uscirebbero vuoti sul foglio
+    tb.querySelectorAll('input.rpe-in').forEach(i=> i.setAttribute('value', i.value));
     const cl = tb.cloneNode(true);
     printTrimRows(cl);
+    // sul foglio l'RPE e' un numero, non una casella da riempire
+    cl.querySelectorAll('input.rpe-in').forEach(inp=>{
+      const sp = document.createElement('span');
+      sp.className = 'tnum';
+      const v = rpeNum(inp.getAttribute('value'));
+      sp.textContent = (v==null) ? '-' : NF.format(v);
+      inp.parentNode.replaceChild(sp, inp);
+    });
     cl.querySelectorAll('button.lb-open').forEach(btn=>{
       const sp = document.createElement('span');
       sp.className = 'lb';
@@ -2958,18 +2876,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     tb.style.tableLayout = 'auto';
     tb.querySelectorAll('th, td').forEach(c=>{ c.style.padding = t.pad; });
   }
-  function printTrimCols(tb, lead, nMet, a, b){
+  // tiene le prime lead colonne, taglia i parametri fuori dalla fascia a-b e lascia sempre
+  // in coda le tail colonne di RPE e TL: quelle devono tornare su ogni fascia, altrimenti
+  // il carico interno finirebbe su un foglio e i parametri su un altro
+  function printTrimCols(tb, lead, nMet, a, b, tail){
+    const tl = tail || 0;
     tb.querySelectorAll('tr').forEach(tr=>{
       const cells = tr.children;
-      if(cells.length === lead + nMet){
-        for(let i=cells.length-1; i>=lead; i--){
+      if(cells.length === lead + nMet + tl){
+        for(let i=lead+nMet-1; i>=lead; i--){
           const j = i - lead;
           if(j<a || j>=b) cells[i].remove();
         }
       } else {
         for(let i=0;i<cells.length;i++){
           const cs = +(cells[i].getAttribute('colspan') || 1);
-          if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a)));
+          if(cs>1) cells[i].setAttribute('colspan', String(lead + (b-a) + tl));
         }
       }
     });
@@ -3036,11 +2958,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     printApplyTier(m, t);
     const hd = m.querySelector('thead');
     const hr = m.querySelector('tr');
+    // le colonne RPE e TL tornano su ogni fascia: la loro larghezza non va contata
+    // quando si decide quanti parametri entrano in un foglio
+    let tailW = 0;
+    if(hr) [...hr.children].forEach(c=>{ if(c.classList.contains('rpe-h')) tailW += c.getBoundingClientRect().width; });
     return {
       tier: t,
       chunks: null,
       w: m.getBoundingClientRect().width,
       lead: (hr && hr.children[0]) ? hr.children[0].getBoundingClientRect().width : 120,
+      tailW: tailW,
       headH: hd ? hd.getBoundingClientRect().height : 0,
       rowsH: [...m.querySelectorAll('tbody > tr')].map(tr=> tr.getBoundingClientRect().height)
     };
@@ -3060,25 +2987,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     return fit || last;
   }
-  function printSliceCols(clean, lead, nMet, n){
+  function printSliceCols(clean, lead, nMet, n, tail){
     const c = clean.cloneNode(true);
-    printTrimCols(c, lead, nMet, 0, n);
+    printTrimCols(c, lead, nMet, 0, n, tail);
     return c;
   }
   // sceglie misura del testo e, se proprio non bastasse la larghezza, in quante fasce dividere
-  function printPlan(clean, lead, nMet, lay, probe){
+  function printPlan(clean, lead, nMet, lay, probe, tail){
     const use = printPickTier(clean, lay, probe);
     if(!use) return null;
     if(use.w <= PRINT_W) return use;             // tutti i parametri in una pagina di larghezza
     // nemmeno il corpo piu' piccolo li fa entrare: si divide in fasce, ma con quante colonne ne
     // entrano a corpo pieno, e poi si rimisura la fascia cosi' la griglia resta leggibile
     const big = printMeasure(clean, probe, PRINT_TIERS[0]);
-    const per = Math.max(1, (big.w - big.lead) / nMet);
-    const cap = Math.max(1, Math.floor((PRINT_W - big.lead) / per));
+    const fix = big.lead + (big.tailW || 0);
+    const per = Math.max(1, (big.w - fix) / nMet);
+    const cap = Math.max(1, Math.floor((PRINT_W - fix) / per));
     const chunks = printChunks(nMet, cap);
     let wide = 1;
     chunks.forEach(c=>{ wide = Math.max(wide, c[1] - c[0]); });
-    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide), lay, probe) || big;
+    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide, tail), lay, probe) || big;
     pick.chunks = chunks;
     return pick;
   }
@@ -3094,10 +3022,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     t.appendChild(tb);
     return t;
   }
-  function printSheetFor(tb, lead, nMet, probe){
+  function printSheetFor(tb, lead, nMet, probe, tail){
     const clean = printCleanClone(tb);
     const lay = printPages(clean);
-    const plan = printPlan(clean, lead, nMet, lay, probe);
+    const plan = printPlan(clean, lead, nMet, lay, probe, tail);
     if(!plan) return null;
     const groups = lay ? printPageGroups(lay, plan.headH, plan.rowsH) : null;
     const chunks = plan.chunks && plan.chunks.length ? plan.chunks : [[0, nMet]];
@@ -3120,7 +3048,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const pg = document.createElement('div');
           pg.className = 'print-pg';
           const t = printBuildTable(clean, lay, grp, gi === groups.length-1);
-          printTrimCols(t, lead, nMet, a, b);
+          printTrimCols(t, lead, nMet, a, b, tail);
           pg.appendChild(t);
           blk.appendChild(pg);
         });
@@ -3128,7 +3056,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const pg = document.createElement('div');
         pg.className = 'print-pg';
         const t = clean.cloneNode(true);
-        printTrimCols(t, lead, nMet, a, b);
+        printTrimCols(t, lead, nMet, a, b, tail);
         pg.appendChild(t);
         blk.appendChild(pg);
       }
@@ -3162,16 +3090,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(nMet < 1) return;
     const probe = printProbe();
     try{
-      // la scheda RPE ha colonne sue e non va spezzata a fasce: si stampa com'e'
-      document.querySelectorAll('.tscroll:not(.no-split)').forEach(host=>{
+      document.querySelectorAll('.tscroll').forEach(host=>{
         if(host.offsetWidth===0 && host.offsetHeight===0) return; // vista non visibile: niente da stampare
         const tb = host.querySelector('table');
         if(!tb) return;
         const hr = tb.querySelector('tr');
         if(!hr) return;
-        const lead = hr.children.length - nMet;
+        const tail = hr.querySelectorAll('.rpe-h').length;
+        const lead = hr.children.length - nMet - tail;
         if(lead < 1) return;
-        const sheet = printSheetFor(tb, lead, nMet, probe);
+        const sheet = printSheetFor(tb, lead, nMet, probe, tail);
         if(!sheet) return;
         host.classList.add('print-hidden');
         host.parentNode.insertBefore(sheet.wrap, host.nextSibling);
@@ -3179,7 +3107,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     } finally {
       if(probe.parentNode) probe.parentNode.removeChild(probe);
     }
-    printTrimRpe();
   }
   // conto di quante fasce e quante pagine viene la griglia, per dirlo nella finestra del PDF
   function printGridInfo(){
@@ -3190,12 +3117,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const hr = tb.querySelector('tr');
     if(!hr) return null;
     const nMet = VIS().length;
-    const lead = hr.children.length - nMet;
+    const tail = hr.querySelectorAll('.rpe-h').length;
+    const lead = hr.children.length - nMet - tail;
     if(lead < 1) return null;
     const probe = printProbe();
     let out = null;
     try{
-      const sheet = printSheetFor(tb, lead, nMet, probe);
+      const sheet = printSheetFor(tb, lead, nMet, probe, tail);
       if(sheet) out = { fasce:sheet.fasce, pagine:sheet.pagine };
     }catch(e){ out = null; }
     if(probe.parentNode) probe.parentNode.removeChild(probe);
@@ -3211,8 +3139,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { id:'chart-card', lbl:'Andamento',           txt:'Il grafico grande, un parametro per volta sul periodo scelto.', def:false },
     { id:'mini-card',  lbl:'Parametri chiave',    txt:'Un istogramma per ogni parametro chiave.', def:true },
     { id:'acwr-card',  lbl:'Rischio carico ACWR', txt:'Rapporto acuto/cronico, monotonia, strain e i tre grafici.', def:true },
-    { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno. Il corpo si adatta da solo per far stare tutti i parametri in larghezza e mette due microcicli per pagina, senza mai tagliare una settimana a meta\'.', def:true },
-    { id:'rpe-card',   lbl:'RPE e carico interno', txt:'Minuti, RPE e TL seduta per seduta, con monotonia e strain di ogni microciclo. E\' la parte che chiede la nazionale.', def:true }
+    { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno, con RPE e TL nelle ultime due colonne. Il corpo si adatta da solo per far stare tutti i parametri in larghezza e mette due microcicli per pagina, senza mai tagliare una settimana a meta\'.', def:true }
   ];
   // taglio del foglio: "completo" e' quello di sempre, "nazionale" e' il foglio che esce di qui
   // e va fuori dalla societa', quindi senza confronti interni
@@ -3817,7 +3744,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // La pagina e' fatta di cinque blocchi uno sotto l'altro e per arrivare in fondo
   // servono parecchi giri di rotella. L'indice resta agganciato sotto l'intestazione,
   // porta al blocco con un tocco e mentre si scorre accende la voce di dove si e'.
-  const SECN = ['kpis','chart-card','mini-card','acwr-card','grid-card','rpe-card'];
+  const SECN = ['kpis','chart-card','mini-card','acwr-card','grid-card'];
   function navTop(){
     const tb = document.querySelector('.topbar');
     // sopra i 900 pixel l'intestazione resta agganciata, sotto no e al suo posto
@@ -4122,7 +4049,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const rpc = document.getElementById('rpe-clear');
     if(rpc) rpc.addEventListener('click', ()=>{
       const mon = activeMonth(); if(!mon) return;
-      rpeClearMonth(mon.key); renderRpe();
+      rpeClearMonth(mon.key); renderGrid();
       toast('RPE del mese cancellati');
     });
     const bc = document.getElementById('btn-cols'); if(bc) bc.addEventListener('click', openColDialog);
