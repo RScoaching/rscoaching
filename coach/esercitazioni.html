@@ -612,6 +612,24 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const v = loadDet()[detKey(s,d)];
     return !!(v && DET_FIELDS.some(f=> String(v[f.n]||'').trim()));
   }
+  // i campi scritti a mano, gia' ripuliti, per gli export. Il dizionario si legge
+  // una volta sola e si passa in giro: dentro i cicli loadDet() rifarebbe un
+  // JSON.parse per ogni esercitazione.
+  function detOf(map, s, d){
+    const v = map[detKey(s,d)] || {};
+    const out = {};
+    DET_FIELDS.forEach(f=>{ out[f.n] = String(v[f.n]||'').trim(); });
+    return out;
+  }
+  // riga unica coi dettagli, per la stampa: "4 x 3 &#183; 40 x 30 m &#183; rec 90 sec"
+  function detLine(t){
+    const p = [];
+    if(t.step) p.push(t.step);
+    if(t.serie) p.push(t.serie);
+    if(t.metri) p.push(t.metri);
+    if(t.rec) p.push('rec ' + t.rec);
+    return p.map(esc).join(' &#183; ');
+  }
 
   // ---------- numero di atlete atteso ricavato dal nome ----------
   // 4c4+2j = 10, 10c10 = 20, possesso 5c3+2 = 10, 7c6 = 13, 3c2 = 5,
@@ -1124,12 +1142,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ---------- export CSV ----------
   function exportCSV(){
     const all = buildSessions();
-    const head = ['data','slot','kind','esercitazione','doppione','manuale','n_atlete','atlete','assenti'].concat(LOAD);
+    const dets = loadDet();
+    // doppione e manuale erano roba interna dell'import: al loro posto vanno i
+    // dettagli scritti a mano, che sono quelli che servono per rifare la seduta.
+    const head = ['data','slot','kind','esercitazione','step','serie_x_ripetizioni','metraggi',
+      'recupero','note','n_atlete','atlete','assenti'].concat(LOAD);
     const lines = [head.join(';')];
     all.forEach(s=>{
       s.drills.forEach(d=>{
         const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
-        const row = [s.date, s.slot, s.kind||'', d.descrizione, d.dup?'si':'no', d.manual?'si':'no',
+        const t = detOf(dets, s, d);
+        const row = [s.date, s.slot, s.kind||'', d.descrizione, t.step, t.serie, t.metri, t.rec, t.note,
           names.length||'', names.join(', '), (s.assenti||[]).join(', ')]
           .concat(LOAD.map(c=>{ const v=d.load?d.load[c]:null; return (v==null||Number.isNaN(v))?'':String(v).replace('.',','); }));
         lines.push(row.map(x=> '"'+String(x).replace(/"/g,'""')+'"').join(';'));
@@ -1162,6 +1185,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function buildPrintTable(){
     const host = document.getElementById('print-only'); if(!host) return;
     const all = buildSessions();
+    const dets = loadDet();
     const nSess = all.length;
     const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
     let rows = '';
@@ -1177,10 +1201,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       rows += '<tr class="ld"><td colspan="2"><div class="ldttl">Full Training</div>'+
         (lg || 'nessun GPS collegato')+'</td></tr>';
       s.drills.forEach((d,i)=>{
-        const badges = (d.dup?' [doppione]':'') + (d.manual?' [manuale]':'');
         const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
         const who = names.length ? '<br><span class="who">'+names.length+' atlete: '+esc(names.join(', '))+'</span>' : '';
-        rows += '<tr><td class="n">'+(i+1)+'</td><td>'+esc(d.descrizione)+esc(badges)+who+'</td></tr>';
+        const t = detOf(dets, s, d);
+        const dl = detLine(t);
+        const det = dl ? '<br><span class="who">'+dl+'</span>' : '';
+        const note = t.note ? '<br><span class="who">'+esc(t.note)+'</span>' : '';
+        rows += '<tr><td class="n">'+(i+1)+'</td><td>'+esc(d.descrizione)+det+note+who+'</td></tr>';
       });
       if(s.divisa && s.gruppi && s.gruppi.length){
         const gtxt = s.gruppi.map(g=>{
@@ -1205,7 +1232,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const nSess = all.length;
     const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
     const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472';
-    const ncols = 5 + LOAD.length;
+    const dets = loadDet();
+    // # + esercitazione + i cinque dettagli a mano + atlete, poi i parametri GPS
+    const ncols = 8 + LOAD.length;
     let body = '';
     all.forEach(s=>{
       const dt = parseDate(s.date);
@@ -1222,9 +1251,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const txt = (v==null||Number.isNaN(v)) ? '' : fmtLoad(c, v);
         return '<td style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+';text-align:right">'+esc(txt)+'</td>';
       }).join('');
-      body += '<tr><td colspan="5" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(bandLabel)+'</td>'+loadCells+'</tr>';
+      body += '<tr><td colspan="8" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(bandLabel)+'</td>'+loadCells+'</tr>';
       s.drills.forEach((d,i)=>{
         const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
+        const t = detOf(dets, s, d);
         const cells = LOAD.map(c=>{
           const v = d.load ? d.load[c] : null;
           const txt = (v==null||Number.isNaN(v)) ? '' : fmtLoad(c, v);
@@ -1233,9 +1263,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         body += '<tr>'+
           '<td style="border:1px solid '+BRD+';text-align:right;color:'+MUT+'">'+(i+1)+'</td>'+
           '<td style="border:1px solid '+BRD+'">'+esc(d.descrizione)+'</td>'+
-          '<td style="border:1px solid '+BRD+';text-align:center">'+(d.dup?'si':'')+'</td>'+
-          '<td style="border:1px solid '+BRD+';text-align:center">'+(d.manual?'si':'')+'</td>'+
-          '<td style="border:1px solid '+BRD+';color:'+MUT+'">'+esc(names.join(', '))+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(t.step)+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(t.serie)+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(t.metri)+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(t.rec)+'</td>'+
+          '<td style="border:1px solid '+BRD+'">'+esc(t.note)+'</td>'+
+          '<td style="border:1px solid '+BRD+';color:'+MUT+'">'+
+            (names.length ? esc(names.length+' atlete: '+names.join(', ')) : '')+'</td>'+
           cells+'</tr>';
       });
       if(s.assenti && s.assenti.length){
@@ -1257,8 +1291,11 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         esc(nSess+' sedute · '+nDrills+' esercitazioni · Stagione '+(E.stagione||'2025-26')+' · '+gen)+'</td></tr>'+
       '<tr><th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">#</th>'+
         '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Esercitazione</th>'+
-        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">Doppione</th>'+
-        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+'">Manuale</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Step</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Serie x ripetizioni</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Metraggi</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Recupero</th>'+
+        '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Note</th>'+
         '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:left">Atlete</th>'+loadHead+'</tr>'+
       body+'</table></body></html>';
     const blob = new Blob(['﻿'+html], {type:'application/vnd.ms-excel;charset=utf-8;'});
