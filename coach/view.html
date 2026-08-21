@@ -664,9 +664,12 @@ a{ color:inherit; text-decoration:none; }
   function analyzeTests(name){
     var T = testSet();
     if(!T) return null;
-    var need = {}, groups = [], asym = [], reds = [];
+    var need = {}, why = {}, groups = [], asym = [], reds = [];
     var nRed = 0, nYel = 0, nOk = 0, defSum = 0, any = false;
-    NEED_ORDER.forEach(function(k){ need[k] = 0; });
+    // `why` tiene da parte quali test hanno fatto salire un'area: senza questo
+    // la scheda dice solo "mobilita caviglia" e tocca tornare al quadro test
+    // per capire da dove arriva.
+    NEED_ORDER.forEach(function(k){ need[k] = 0; why[k] = []; });
     TEST_GROUPS.forEach(function(gd){
       var g = T[gd.k];
       if(!g) return;
@@ -683,7 +686,10 @@ a{ color:inherit; text-decoration:none; }
         if(ev.asym) asym.push(t.n);
         if(!ev.def) return;
         defSum += ev.def;
-        Object.keys(t.w).forEach(function(k){ need[k] += t.w[k] * ev.def; });
+        Object.keys(t.w).forEach(function(k){
+          need[k] += t.w[k] * ev.def;
+          why[k].push({ n:t.n, lvl:ev.worst, asym:ev.asym, p:t.w[k] * ev.def });
+        });
       });
       if(raw && (rows.length || raw.kg != null)) any = any || raw.kg != null;
       groups.push({
@@ -695,7 +701,7 @@ a{ color:inherit; text-decoration:none; }
     });
     if(!any) return null;
     var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
-    return { name:name, need:need, sum:sum, defSum:defSum, groups:groups,
+    return { name:name, need:need, why:why, sum:sum, defSum:defSum, groups:groups,
              asym:asym, reds:reds, nRed:nRed, nYel:nYel, nOk:nOk };
   }
 
@@ -730,8 +736,8 @@ a{ color:inherit; text-decoration:none; }
   }
 
   function analyze(reg, name){
-    var need = {}, tot = 0, nPat = 0, zeros = [], asym = [];
-    NEED_ORDER.forEach(function(k){ need[k] = 0; });
+    var need = {}, why = {}, tot = 0, nPat = 0, zeros = [], asym = [];
+    NEED_ORDER.forEach(function(k){ need[k] = 0; why[k] = []; });
     FMS_MAP.forEach(function(p){
       var vs = [];
       p.keys.forEach(function(k){ var v = regVal(reg, k, name); if(v != null) vs.push(v); });
@@ -739,10 +745,14 @@ a{ color:inherit; text-decoration:none; }
       var sc = Math.min.apply(null, vs);
       nPat++; tot += sc;
       var def = Math.max(0, 3 - sc);
-      if(p.keys.length === 2 && vs.length === 2 && vs[0] !== vs[1]){ def += 1; asym.push(p.lbl); }
+      var dif = (p.keys.length === 2 && vs.length === 2 && vs[0] !== vs[1]);
+      if(dif){ def += 1; asym.push(p.lbl); }
       if(sc === 0) zeros.push(p.lbl);
       if(!def) return;
-      Object.keys(p.w).forEach(function(k){ need[k] += p.w[k] * def; });
+      Object.keys(p.w).forEach(function(k){
+        need[k] += p.w[k] * def;
+        why[k].push({ n:p.lbl, lvl:(sc <= 1 ? 'r' : 'g'), asym:dif, p:p.w[k] * def });
+      });
     });
     if(!nPat) return null;
     var ybGap = null;
@@ -752,12 +762,16 @@ a{ color:inherit; text-decoration:none; }
       var g = Math.abs(d - s);
       if(ybGap == null || g > ybGap) ybGap = g;
     });
-    if(ybGap != null && ybGap >= 4) need.stab += (ybGap >= 6 ? 3 : 2);
+    if(ybGap != null && ybGap >= 4){
+      var yp = (ybGap >= 6 ? 3 : 2);
+      need.stab += yp;
+      why.stab.push({ n:'Y-Balance, ' + ybGap + ' cm fra i due lati', lvl:'g', asym:true, p:yp });
+    }
     var top = NEED_ORDER.filter(function(k){ return need[k] > 0; })
       .sort(function(a, b){ return need[b] - need[a] || NEED_ORDER.indexOf(a) - NEED_ORDER.indexOf(b); })
       .slice(0, 2).map(function(k){ return NEED[k].lbl.toLowerCase(); });
     var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
-    return { name:name, need:need, sum:sum, tot:tot, nPat:nPat,
+    return { name:name, need:need, why:why, sum:sum, tot:tot, nPat:nPat,
              zeros:zeros, asym:asym, ybGap:ybGap, top:top };
   }
 
@@ -768,16 +782,24 @@ a{ color:inherit; text-decoration:none; }
     var a  = tv ? null : analyze(reg, name);
     var src = tv || a;
     var inj = activeInj(bio, name);
-    var need = {};
-    NEED_ORDER.forEach(function(k){ need[k] = src ? src.need[k] : 0; });
+    var need = {}, why = {};
+    NEED_ORDER.forEach(function(k){
+      need[k] = src ? src.need[k] : 0;
+      why[k] = (src && src.why && src.why[k]) ? src.why[k].slice() : [];
+    });
     var injKey = inj ? injuryNeed(inj.txt) : null;
-    if(injKey) need[injKey] += 3;
+    // L'infortunio aperto pesa piu' di un test giallo e va scritto sulla riga:
+    // e' il primo motivo per cui quell'area sta nella scheda.
+    if(injKey){
+      need[injKey] += 3;
+      why[injKey].unshift({ n:'infortunio: ' + inj.txt, lvl:'r', asym:false, p:99 });
+    }
     var top = NEED_ORDER.filter(function(k){ return need[k] > 0; })
       .sort(function(x, y){ return need[y] - need[x] || NEED_ORDER.indexOf(x) - NEED_ORDER.indexOf(y); })
       .slice(0, 2).map(function(k){ return NEED[k].lbl.toLowerCase(); });
     var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
     return {
-      name:name, has:!!src, need:need, top:top, inj:inj, sum:sum,
+      name:name, has:!!src, need:need, why:why, top:top, inj:inj, sum:sum,
       tv:tv,
       nRed: tv ? tv.nRed : 0, nYel: tv ? tv.nYel : 0,
       defSum: tv ? tv.defSum : 0,
@@ -840,35 +862,146 @@ a{ color:inherit; text-decoration:none; }
     if(pl){ ['A','B'].forEach(function(f){ (pl[f] || []).forEach(function(r){ m[r.k] = 1; }); }); }
     return m;
   }
-  function pickFor(nk, used){
-    var m = ZMAP[nk]; if(!m) return null;
-    var list = candidates(m.z, m.t);
-    if(!list.length) list = candidates(m.z, []);
-    for(var i = 0; i < list.length; i++) if(!used[list[i].k]) return list[i];
-    return null;
+
+  /* ---------- generatore ----------
+     Prima ogni scheda prendeva sei esercizi girando le aree una a testa e
+     pescando sempre il primo della lista: risultato, schede quasi identiche
+     anche con test molto diversi. Adesso decidono tre cose.
+     1. Quanti posti prende un'area: proporzionali ai punti di carenza, non
+        uno a testa. Chi ha la caviglia a pezzi si porta a casa tre esercizi
+        di caviglia, non uno.
+     2. Quale esercizio esce dal gruppo: la lista si legge partendo da un
+        punto che dipende dal nome dell'atleta, cosi' due atlete con la
+        stessa carenza non ricevono lo stesso esercizio. Il punto di partenza
+        non cambia da solo, quindi la scheda resta quella finche' non la
+        rigeneri a mano.
+     3. La dose: dove la carenza pesa si aggiunge una serie.
+     Dentro l'area gli stimoli si alternano fra i tipi disponibili, cosi' una
+     caviglia non prende due volte lo stesso mobilizzante. */
+  var BLOCK_N = 6;     // esercizi per foglio, due colonne da tre
+  var AREA_MAX = 3;    // oltre i tre esercizi un'area sola mangia tutto il foglio
+  var DOSE_HARD = 6;   // punti di carenza da cui si alza una serie
+
+  // hash stabile: stesso nome, stessa scheda. Non serve un caso vero, serve
+  // che due atlete diverse partano da due punti diversi della lista.
+  function hash32(s){
+    var h = 2166136261;
+    for(var i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    return h >>> 0;
   }
-  function mkRow(e, nk){
-    return { k:e.k, d:DOSE[e.t] || '3x10', why:NEED[nk].lbl,
-             qz:ZMAP[nk].z.slice(), qt:ZMAP[nk].t.slice() };
-  }
-  function buildBlock(need, fam, used){
-    var areas = NEED_ORDER.filter(function(k){ return NEED[k].fam === fam; });
-    areas.sort(function(a, b){ return (need[b] - need[a]) || NEED_ORDER.indexOf(a) - NEED_ORDER.indexOf(b); });
-    var out = [], guard = 0;
-    while(out.length < 6 && guard < 40){
-      var added = 0;
-      for(var i = 0; i < areas.length && out.length < 6; i++){
-        var e = pickFor(areas[i], used);
-        if(e){ used[e.k] = 1; out.push(mkRow(e, areas[i])); added++; }
-      }
-      if(!added) break;
-      guard++;
+
+  // Ripartizione dei sei posti fra le aree di un blocco, col metodo delle medie
+  // piu' alte: ogni area carente parte da un posto, poi ogni posto libero va a
+  // chi ha il rapporto punti su esercizi piu' alto.
+  function slotShare(need, areas){
+    var out = {}, hot = [];
+    areas.forEach(function(k){ out[k] = 0; if(need[k] > 0) hot.push(k); });
+    if(!hot.length){
+      // nessun test o nessuna carenza: giro classico, scheda di mantenimento
+      for(var i = 0; i < BLOCK_N; i++) out[areas[i % areas.length]]++;
+      return out;
+    }
+    hot.sort(function(a, b){ return (need[b] - need[a]) || areas.indexOf(a) - areas.indexOf(b); });
+    var left = BLOCK_N;
+    hot.forEach(function(k){ if(left > 0){ out[k] = 1; left--; } });
+    while(left > 0){
+      var best = null, bv = -1;
+      hot.forEach(function(k){
+        if(out[k] >= AREA_MAX) return;
+        var v = need[k] / (out[k] + 1);
+        if(v > bv){ bv = v; best = k; }
+      });
+      if(best == null) break;
+      out[best]++; left--;
+    }
+    // se i tetti hanno lasciato posti liberi li riempiono le aree senza carenza
+    for(var j = 0; left > 0 && j < areas.length * AREA_MAX; j++){
+      var k2 = areas[j % areas.length];
+      if(out[k2] >= AREA_MAX) continue;
+      out[k2]++; left--;
     }
     return out;
   }
+
+  function pickOne(zs, ts, used, seed){
+    var list = candidates(zs, ts);
+    if(!list.length) return null;
+    var off = hash32(seed) % list.length;
+    for(var i = 0; i < list.length; i++){
+      var e = list[(off + i) % list.length];
+      if(!used[e.k]) return e;
+    }
+    return null;
+  }
+
+  // Sulla riga non basta il nome dell'area: serve il motivo, cioe' i test che
+  // l'hanno fatta salire. Cosi' la scheda si legge senza tornare al quadro.
+  function whyText(nk, list){
+    var lbl = NEED[nk].lbl;
+    if(!list || !list.length) return lbl;
+    var top = list.slice().sort(function(a, b){ return b.p - a.p; }).slice(0, 2)
+      .map(function(x){
+        return x.n + (x.lvl === 'r' ? ' rosso' : (x.asym ? ' asimmetrico' : ''));
+      });
+    return lbl + ': ' + top.join(', ');
+  }
+  function doseFor(t, weight){
+    var d = DOSE[t] || '3x10';
+    if(weight < DOSE_HARD) return d;
+    var m = /^(\d+)x(.+)$/.exec(d);
+    if(!m) return d;
+    return Math.min(4, (+m[1]) + 1) + 'x' + m[2];
+  }
+  function mkRow(e, nk, need, why){
+    return { k:e.k, d:doseFor(e.t, need[nk] || 0), why:whyText(nk, why && why[nk]),
+             qz:ZMAP[nk].z.slice(), qt:ZMAP[nk].t.slice() };
+  }
+
+  function pickN(nk, n, used, seed, need, why){
+    var m = ZMAP[nk], out = [];
+    if(!m || n <= 0) return out;
+    for(var i = 0; i < n; i++){
+      var sd = seed + '|' + nk + '|' + i;
+      // un tipo per volta, a giro: mobilita, poi stretching, poi da capo
+      var one = m.t.length ? [m.t[i % m.t.length]] : [];
+      var e = pickOne(m.z, one, used, sd) || pickOne(m.z, m.t, used, sd) || pickOne(m.z, [], used, sd);
+      if(!e) break;
+      used[e.k] = 1;
+      out.push(mkRow(e, nk, need, why));
+    }
+    return out;
+  }
+
+  function buildBlock(need, why, fam, used, seed){
+    var areas = NEED_ORDER.filter(function(k){ return NEED[k].fam === fam; });
+    var share = slotShare(need, areas);
+    var order = areas.slice().sort(function(a, b){
+      return (need[b] - need[a]) || areas.indexOf(a) - areas.indexOf(b);
+    });
+    var out = [];
+    order.forEach(function(k){
+      pickN(k, share[k], used, seed, need, why).forEach(function(r){ out.push(r); });
+    });
+    // se un'area non aveva abbastanza esercizi liberi si completa col resto
+    for(var i = 0; out.length < BLOCK_N && i < order.length * AREA_MAX; i++){
+      var add = pickN(order[i % order.length], 1, used, seed + '|fill' + i, need, why);
+      if(!add.length) continue;
+      out.push(add[0]);
+    }
+    return out.slice(0, BLOCK_N);
+  }
+
+  // variante: la rigenerazione a mano sposta il punto di partenza, cosi' il
+  // pulsante propone davvero una scheda diversa invece della stessa.
+  var VARIANT = {};
   function genPlan(s){
     var used = {};
-    return { A: buildBlock(s.need, 'A', used), B: buildBlock(s.need, 'B', used) };
+    var v = VARIANT[s.name] || 0;
+    var seed = s.name + '|' + seasonId() + '|' + v;
+    var why = s.why || {};
+    return { v:v,
+             A: buildBlock(s.need, why, 'A', used, seed),
+             B: buildBlock(s.need, why, 'B', used, seed) };
   }
   function ensurePlan(s){
     var p = PLANS[s.name];
@@ -1350,7 +1483,14 @@ a{ color:inherit; text-decoration:none; }
 
   /* ---------- eventi ---------- */
   document.getElementById('gp-reload').addEventListener('click', function(){
-    if(SELECTED) delete PLANS[SELECTED];
+    if(SELECTED){
+      // il seme e' fisso sul nome dell'atleta, quindi senza spostare la variante
+      // il pulsante rifarebbe la stessa identica scheda. La variante di partenza
+      // si legge dalla scheda salvata, cosi' si continua a girare la lista.
+      var old = PLANS[SELECTED];
+      VARIANT[SELECTED] = (((old && old.v) || 0) + 1) % 97;
+      delete PLANS[SELECTED];
+    }
     savePlans();
     renderGen();
     toast('Scheda rigenerata dai test');
