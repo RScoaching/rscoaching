@@ -437,6 +437,10 @@ tr.r-teamref td.num{ color:var(--ink); }
 .grid tr.r-moved td.col-day{ box-shadow: inset 2px 0 0 var(--orange), 1px 0 0 var(--border); }
 .grid td.col-day .lb-recalc{ font-size:9.5px; font-weight:600; color:var(--orange2);
   letter-spacing:.02em; margin-left:6px; text-transform:none; }
+/* seduta della squadra che questa atleta non ha fatto: si vede il giorno, non il dato */
+.grid tr.r-miss td{ color:var(--faint); }
+.grid td.col-day .lb-miss{ font-size:9.5px; font-weight:600; color:var(--faint);
+  letter-spacing:.02em; margin-left:6px; text-transform:none; }
 /* sigla della seduta fuori squadra: FT prima squadra, diff lavoro differenziato */
 .grid td.col-day .solo-tag{ display:inline-block; margin-left:6px; padding:1px 5px;
   font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:none; line-height:1.5;
@@ -2625,6 +2629,55 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     return h+'</tr>';
   }
+  // Righe da disegnare nella griglia. Sulla squadra sono quelle del foglio.
+  // Sulla singola atleta invece manca chi non era nel GPS di quel giorno, e la
+  // riga sparisce del tutto: il mese sembra fermo a una data qualsiasi e non si
+  // capisce se il dato non e' arrivato o se l'atleta non c'era. Qui le sedute
+  // della squadra che l'atleta non ha fatto tornano al loro posto, vuote e
+  // marcate, senza entrare in nessun conto: i TOT restano quelli del foglio.
+  function gridRows(mon){
+    const base = (mon && mon.rows) || [];
+    if(state.level !== 'player') return base;
+    const tm = ((S.team && S.team.months) || []).find(m=> m.key === mon.key);
+    if(!tm) return base;
+    const have = {};
+    base.forEach(r=>{
+      if(r.type==='day' || r.type==='match') have[soloBase(String(r.label||'')).trim()] = 1;
+    });
+    const miss = {};
+    let w0 = '';
+    let n = 0;
+    (tm.rows||[]).forEach(r=>{
+      if(r.type==='wk_header'){ w0 = r.label||''; return; }
+      if(r.type!=='day' && r.type!=='match') return;
+      const lb = soloBase(String(r.label||'')).trim();
+      if(have[lb]) return;
+      const w = r.wk0 || w0;
+      (miss[w] = miss[w] || []).push({ label:lb, type:'miss', wd:r.wd||'', v:[], wk0:w });
+      n++;
+    });
+    if(!n) return base;
+    const out = [];
+    let wk = '', buf = [];
+    function flush(){
+      const add = (wk && miss[wk]) ? miss[wk] : [];
+      const all = buf.concat(add);
+      // la partita ha la sigla al posto del giorno: senza la settimana la sua data
+      // non si ricava e finirebbe in cima. Si scrive quella in cui il foglio l'ha messa.
+      if(add.length){ all.forEach(r=>{ if(!r.wk0) r.wk0 = wk; }); sortDays(mon.key, all); }
+      all.forEach(r=> out.push(r));
+      buf = [];
+      if(wk) delete miss[wk];
+    }
+    base.forEach(r=>{
+      if(r.type==='day' || r.type==='match'){ buf.push(r); return; }
+      flush();
+      if(r.type==='wk_header') wk = r.label||'';
+      out.push(r);
+    });
+    flush();
+    return out;
+  }
   function renderGrid(){
     const host = document.getElementById('grid-scroll');
     const mon = activeMonth();
@@ -2661,13 +2714,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     const wks = weekLabels(mon);
     let wkNow = '';
-    (mon.rows||[]).forEach(r=>{
+    gridRows(mon).forEach(r=>{
       if(r.type==='wk_header'){
         wkNow = r.label||'';
         aT = { min:0, tl:0 }; aW = { min:0, tl:0 };
         body += '<tr class="wkband" data-wk="'+esc(wkNow)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
                 '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span></td></tr>';
         body += wkHeadHTML(V, wkNow);
+        return;
+      }
+      // seduta della squadra che questa atleta non ha fatto: resta al suo posto,
+      // in grigio, cosi' il buco si legge come un'assenza e non come un dato mancante
+      if(r.type==='miss'){
+        const dt = dayLabel(r, rowDate(r, wkNow, mon.key));
+        body += '<tr class="r-day r-miss" data-wk="'+esc(wkNow)+'"><td class="col-day">'+
+                (r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+
+                '<span class="lb">'+esc(dt)+'<span class="lb-miss">non rilevata</span></span></td>';
+        V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">-</td>');
+        body += pad+'</tr>';
         return;
       }
       const cls = ROWCLS[r.type] || 'r-day';
