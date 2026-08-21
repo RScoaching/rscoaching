@@ -1566,10 +1566,38 @@ window.fioApplyRefresh = function(files) {
   return Promise.all(jobs).then(function() { location.reload(); });
 };
 
+// Quando online risulta ancora il dato di ieri il tasto ha fatto il suo lavoro:
+// e' la pubblicazione che deve ancora girare per la rete, GitHub ci mette anche
+// un minuto buono a far vedere in giro il file appena caricato. Prima qui ci si
+// fermava e toccava ripigiare a mano senza sapere quando. Adesso il controllo si
+// ripete da solo ogni venti secondi per un paio di minuti e appena il dato nuovo
+// compare la pagina si aggiorna da sola, senza che tu stia li' a premere.
+window.FIO_RIPROVE = 0;
+window.fioRiprovaPiuTardi = function() {
+  if (window.FIO_RIPROVE >= 6) return;
+  window.FIO_RIPROVE++;
+  setTimeout(function() {
+    window.fioProbeData().then(function(p) {
+      if (!p.cambiati.length) { window.fioRiprovaPiuTardi(); return; }
+      var lab = document.getElementById('fio-sync-when');
+      if (lab) lab.textContent = 'dato nuovo, ricarico';
+      try {
+        sessionStorage.setItem('fio_sync_try', p.sign);
+        sessionStorage.setItem('fio_sync_n', '1');
+      } catch (e) {}
+      window.fioApplyRefresh(p.cambiati);
+    })['catch'](function() {});
+  }, 20000);
+};
+
 window.fioRefreshData = function() {
   var btn = document.getElementById('fio-sync-btn');
   var lab = document.getElementById('fio-sync-when');
   if (!btn || btn.classList.contains('busy')) return;
+  // Premendo il tasto a mano si riparte da zero con le riprove: e' il segnale
+  // che stai aspettando un dato adesso, non un controllo di sottofondo.
+  window.FIO_RIPROVE = 0;
+  btn.classList.remove('vecchio');
   btn.classList.add('busy');
   btn.disabled = true;
   if (lab) lab.textContent = 'rilettura in corso';
@@ -1589,13 +1617,17 @@ window.fioRefreshData = function() {
       // indietro. Dirlo chiaro evita di ripigiare aspettando la seduta di oggi.
       if (window.fioAgeDays(p.stamp) >= 1) {
         btn.classList.add('vecchio');
-        fine('online fermo a ' + window.fioAgeTxt(p.stamp));
+        fine('online fermo a ' + window.fioAgeTxt(p.stamp) + ', ricontrollo');
+        window.fioRiprovaPiuTardi();
       } else {
         fine('gia' + "'" + ' aggiornato, ' + window.fioAgeTxt(p.stamp));
       }
       return;
     }
-    try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
+    try {
+      sessionStorage.setItem('fio_sync_try', p.sign);
+      sessionStorage.setItem('fio_sync_n', '1');
+    } catch (e) {}
     return window.fioApplyRefresh(p.cambiati);
   })['catch'](function(e) {
     fine(e && e.message === 'file' ? 'apri il sito online' : 'rilettura fallita, riprova');
@@ -1614,10 +1646,28 @@ window.fioAutoCheck = function() {
     var tried = '';
     try { tried = sessionStorage.getItem('fio_sync_try') || ''; } catch (e) {}
     if (tried === p.sign) {
-      if (lab) lab.textContent = 'dato nuovo, ricarica';
+      // Un ricaricamento e' gia' stato fatto e il dato vecchio e' ancora qui:
+      // vuol dire che il browser sta tenendo stretta la copia sua. Arrendersi
+      // al primo colpo, come si faceva prima, lasciava la pagina ferma al
+      // giorno vecchio proprio quando il dato nuovo c'era gia'. Un secondo giro
+      // riscrive la copia in cache e quasi sempre basta. Il conto sta in
+      // sessionStorage, quindi sopravvive al ricaricamento e si ferma da solo:
+      // niente pagina che si ricarica all'infinito.
+      var n = 0;
+      try { n = parseInt(sessionStorage.getItem('fio_sync_n') || '0', 10) || 0; } catch (e) {}
+      if (n >= 3) {
+        if (lab) lab.textContent = 'dato nuovo, ricarica a mano';
+        return;
+      }
+      try { sessionStorage.setItem('fio_sync_n', String(n + 1)); } catch (e) {}
+      if (lab) lab.textContent = 'dato nuovo, ricarico';
+      window.fioApplyRefresh(p.cambiati);
       return;
     }
-    try { sessionStorage.setItem('fio_sync_try', p.sign); } catch (e) {}
+    try {
+      sessionStorage.setItem('fio_sync_try', p.sign);
+      sessionStorage.setItem('fio_sync_n', '1');
+    } catch (e) {}
     window.fioApplyRefresh(p.cambiati);
   })['catch'](function() {});
 };
