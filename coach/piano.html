@@ -603,12 +603,30 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   background:var(--surface2); border:1px solid var(--border); font-size:11.5px; color:var(--muted); }
 .rs-chip b{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:19px; letter-spacing:.4px;
   color:var(--c, var(--ink)); line-height:1; }
-/* cinque stati di disponibilita', stessi colori della pagina Atlete */
+/* sei stati di disponibilita', stessi colori della pagina Atlete */
 .s-disp{ --c:var(--green);       --cbg:oklch(70% 0.18 152 / 0.13); --cbd:oklch(70% 0.18 152 / 0.30); }
 .s-parz{ --c:oklch(80% 0.14 85); --cbg:oklch(78% 0.15 85 / 0.13);  --cbd:oklch(78% 0.15 85 / 0.30); }
 .s-diff{ --c:var(--violet2);     --cbg:var(--violet-bg);           --cbd:var(--violet-border); }
+.s-ft{   --c:var(--blue);        --cbg:oklch(72% 0.13 230 / 0.13); --cbd:oklch(72% 0.13 230 / 0.32); }
 .s-fis{  --c:var(--orange2);     --cbg:var(--ember-bg);            --cbd:var(--ember-border); }
 .s-ass{  --c:oklch(72% 0.18 25); --cbg:oklch(62% 0.22 25 / 0.13);  --cbd:oklch(62% 0.22 25 / 0.30); }
+
+/* riga di precompilazione: da quale seduta la rosa e' stata ricalcata */
+.rosa-pre{ display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:11px 14px; margin-bottom:14px; border-radius:var(--r);
+  background:var(--surface2); border:1px solid var(--border); }
+.rosa-pre:empty{ display:none; }
+.rp-txt{ flex:1 1 240px; min-width:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
+.rp-txt b{ color:var(--ink); font-weight:600; }
+.rp-acts{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.rp-btn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600;
+  display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:var(--r-sm);
+  background:var(--surface3); border:1px solid var(--border2); color:var(--muted);
+  transition: color .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease); }
+.rp-btn:hover{ color:var(--ink); border-color:var(--border3); }
+.rp-btn:active{ transform:scale(.97); }
+.rp-btn svg{ width:13px; height:13px; }
+.rp-btn.undo:hover{ color:var(--orange2); border-color:var(--ember-border); }
 .rosa-grp{ margin-bottom:16px; }
 .rosa-grp:last-child{ margin-bottom:0; }
 .rosa-gh{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin-bottom:9px; }
@@ -987,6 +1005,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           </div>
         </div>
         <div class="card-body">
+          <div class="rosa-pre" id="rosa-pre"></div>
           <div class="rosa-sum" id="rosa-sum"></div>
           <div id="rosa-groups"></div>
           <div class="rosa-notes" id="rosa-notes"></div>
@@ -1154,6 +1173,13 @@ window.CAL = window.CAL || {generato:'',stagione:'2025-26',squadra:'Fiorentina P
 <script>
 window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',load_cols:[],load_unit:{},
   n_sessions:0,n_drills:0,sessions:[]};
+</script>
+
+<!-- carico dai GPS: dice chi si e' allenata, chi in differenziato, chi con la prima squadra (window.SNAP) -->
+<script src="./carico_data.js"></script>
+<script>
+window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
+  metrics_full:[],metrics_short:[],metrics_unit:[],team:{months:[],matches:[]},players:{}};
 </script>
 
 <!-- rosa condivisa con la pagina forza (window.FORZA.roster) -->
@@ -3258,7 +3284,7 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // ================= ROSA DI OGGI =================
   // Gli stati NON si ricalcolano qui: sono quelli scritti dalla pagina Atlete in
-  // 'rs_fio_avail' (chiave condivisa, cinque stati). Qui restano soltanto le note del
+  // 'rs_fio_avail' (chiave condivisa, sei stati). Qui restano soltanto le note del
   // giorno, salvate per data in 'fio_oggi_rosa_<data>'.
   // L'elenco nomi arriva da fioRoster(), che per la stagione attiva restituisce solo
   // le atlete di quell'anno, unito alle atlete aggiunte a mano in Atlete e meno
@@ -3270,10 +3296,15 @@ window.FORZA = window.FORZA || { roster:[] };
   const LS_BIO    = K('rs_fio_bio');
   const LS_CUSTOM = K('rs_fio_custom');
 
+  /* Sei stati, gli stessi della pagina Atlete e con le stesse chiavi.
+     'ft' e' l'atleta che oggi si allena su, in prima squadra: non e' assente e non
+     e' in gruppo, e nel resoconto va contata come allenata. La sigla FT arriva dai
+     GPS, dove la riga della seduta si chiama "12AM FT". */
   const AV_STATES = [
     { k:'disponibile',   l:'Disponibile',   s:'in gruppo',   cls:'s-disp', ph:'' },
     { k:'parziale',      l:'Parziale',      s:'parziale',    cls:'s-parz', ph:'quanto puo\' fare oggi' },
     { k:'differenziato', l:'Differenziato', s:'differenz.',  cls:'s-diff', ph:'lavoro individuale previsto' },
+    { k:'ft',            l:'Prima squadra', s:'in prima sq.',cls:'s-ft',   ph:'orario e rientro previsto' },
     { k:'fisico',        l:'Fisioterapista',s:'dal fisio',   cls:'s-fis',  ph:'programma concordato con il fisioterapista' },
     { k:'assente',       l:'Assente',       s:'assenti',     cls:'s-ass',  ph:'motivo e rientro previsto' }
   ];
@@ -3361,6 +3392,153 @@ window.FORZA = window.FORZA || { roster:[] };
     note = String(note || '');
     if(note) NOTES[name] = note; else delete NOTES[name];
     notesSave();
+  }
+
+  // ============ LA ROSA DI OGGI PARTE DALL'ULTIMA SEDUTA ============
+  /* Prima ogni mattina la rosa ripartiva da come era rimasta il giorno prima e
+     rimetterla in ordine a mano era mezz'ora buttata. Adesso si legge l'ultima
+     seduta con i GPS, la stessa che si vede nella pagina Carico, e si parte da li':
+     chi c'era va in gruppo, chi ha lavorato a parte va in differenziato, chi era su
+     in prima squadra prende lo stato Prima squadra, le altre restano assenti.
+     Resta una proposta, non un verbale: un tocco sul nome cambia lo stato. */
+  const WDI = { 'Lun':0, 'Mar':1, 'Mer':2, 'Gio':3, 'Ven':4, 'Sab':5, 'Dom':6 };
+  // Sedute fuori squadra: nel foglio la riga si chiama "12AM FT" per la prima
+  // squadra e "12AM diff" per il lavoro individuale.
+  const SOLO_RE = /\s+(FT|diff)$/;
+
+  /* Il lunedi' della settimana sta nell'intestazione ("24-30/08"): il mese di
+     chiusura e' scritto, quello di apertura si ricava quando il primo giorno e' piu'
+     alto dell'ultimo. E' la stessa regola della pagina Carico, cosi' le due pagine
+     datano le sedute allo stesso modo e non si contraddicono mai. */
+  function gpsWeekStart(week, monthKey){
+    const m = /^(\d{1,2})\s*-\s*(\d{1,2})\/(\d{1,2})$/.exec(String(week||'').trim());
+    if(!m) return null;
+    const y0 = +String(monthKey||'').slice(0,4), m0 = +String(monthKey||'').slice(5,7);
+    if(!y0 || !m0) return null;
+    const d1 = +m[1], d2 = +m[2];
+    let em = +m[3], ey = y0;
+    const gap = em - m0;
+    if(gap < -6) ey = y0 + 1; else if(gap > 6) ey = y0 - 1;
+    let sm = em, sy = ey;
+    if(d1 > d2){ sm = em - 1; if(sm < 1){ sm = 12; sy = ey - 1; } }
+    const d = new Date(sy, sm-1, d1); d.setHours(0,0,0,0);
+    return (d.getMonth() === sm-1 && d.getDate() === d1) ? d : null;
+  }
+  // data vera della riga: col numero del giorno la si cerca dentro i sette giorni
+  // della settimana, senza numero decide il giorno gia' scritto nel foglio
+  function gpsRowDate(row, week, monthKey){
+    if(row && row.wk0) week = row.wk0;
+    const mon0 = gpsWeekStart(week, monthKey);
+    const dm = /^(\d{1,2})/.exec(String(row && row.label || ''));
+    if(mon0){
+      if(dm){
+        const n = +dm[1];
+        for(let i = 0; i < 7; i++){
+          const d = new Date(mon0); d.setDate(d.getDate()+i);
+          if(d.getDate() === n) return d;
+        }
+      }
+      const w = WDI[row && row.wd];
+      if(w != null){ const d = new Date(mon0); d.setDate(d.getDate()+w); return d; }
+    }
+    if(!dm) return null;
+    const y = +String(monthKey||'').slice(0,4), mo = +String(monthKey||'').slice(5,7);
+    if(!y || !mo) return null;
+    const d = new Date(y, mo-1, +dm[1]); d.setHours(0,0,0,0);
+    return (d.getMonth() === mo-1) ? d : null;
+  }
+
+  /* Ultima seduta in archivio, oggi compreso: se i GPS di stamattina sono gia'
+     stati scaricati e' giusto partire da quelli, sono la fotografia migliore.
+     Nell'archivio ogni atleta ha soltanto le righe delle sedute che ha fatto,
+     quindi la presenza si legge direttamente, senza doverla dedurre. */
+  const GPS_LAST = (function(){
+    const P = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+    if(!P) return null;
+    const byDay = {};
+    Object.keys(P).forEach(function(nome){
+      const mesi = (P[nome] && P[nome].months) || [];
+      mesi.forEach(function(mo){
+        let wk = '';
+        (mo.rows||[]).forEach(function(r){
+          if(r.type === 'wk_header'){ wk = r.label || ''; return; }
+          if(r.type !== 'day') return;
+          const d = gpsRowDate(r, wk, mo.key);
+          if(!d) return;
+          const k = dstr(d);
+          if(k > TSTR) return;
+          const m = SOLO_RE.exec(String(r.label||'').trim());
+          const tag = m ? m[1] : '';
+          const day = byDay[k] || (byDay[k] = { data:k, gruppo:[], diff:[], ft:[] });
+          const dove = tag === 'FT' ? day.ft : (tag === 'diff' ? day.diff : day.gruppo);
+          if(dove.indexOf(nome) < 0) dove.push(nome);
+        });
+      });
+    });
+    const keys = Object.keys(byDay).sort();
+    return keys.length ? byDay[keys[keys.length-1]] : null;
+  })();
+
+  const PRE_KEY = 'fio_oggi_pre_' + TSTR;
+  let PRE_UNDO = null;
+
+  /* Chi non compare nella seduta torna assente, con una sola eccezione: chi e' dal
+     fisioterapista resta dal fisioterapista. Quello e' un percorso che dura
+     settimane e non va cancellato da una seduta a cui, appunto, non poteva esserci. */
+  function preApply(){
+    if(!GPS_LAST) return 0;
+    const mappa = {};
+    GPS_LAST.gruppo.forEach(function(n){ mappa[n] = 'disponibile'; });
+    GPS_LAST.diff.forEach(function(n){ mappa[n] = 'differenziato'; });
+    GPS_LAST.ft.forEach(function(n){ mappa[n] = 'ft'; });
+    const prima = {};
+    Object.keys(AVAIL).forEach(function(n){ prima[n] = AVAIL[n]; });
+    let cambi = 0;
+    ROSTER.forEach(function(p){
+      const ora = avSt(p.name);
+      const st  = mappa[p.name] || (ora === 'fisico' ? 'fisico' : 'assente');
+      if(st !== ora) cambi++;
+      if(st === 'disponibile') delete AVAIL[p.name]; else AVAIL[p.name] = st;
+    });
+    availSave();
+    PRE_UNDO = prima;
+    return cambi;
+  }
+  function preUndo(){
+    if(!PRE_UNDO) return;
+    AVAIL = PRE_UNDO;
+    PRE_UNDO = null;
+    availSave();
+  }
+  function preGiorno(){
+    if(!GPS_LAST) return '';
+    if(GPS_LAST.data === TSTR) return 'di oggi';
+    const d = parse(GPS_LAST.data);
+    return 'di ' + WD[d.getDay()] + ' ' + d.getDate() + ' ' + MO[d.getMonth()];
+  }
+
+  const ICO_PRE  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
+  const ICO_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>';
+
+  function rosaPre(){
+    const el = document.getElementById('rosa-pre');
+    if(!el) return;
+    if(!ROSTER.length){ el.innerHTML = ''; return; }
+    if(!GPS_LAST){
+      el.innerHTML = '<div class="rp-txt">Nessuna seduta con i GPS in archivio: la rosa parte da ' +
+        'come l\'hai lasciata. Appena arrivano i dati del carico, qui compare la proposta del giorno.</div>';
+      return;
+    }
+    const pezzi = [GPS_LAST.gruppo.length + ' in gruppo'];
+    if(GPS_LAST.diff.length) pezzi.push(GPS_LAST.diff.length + ' in differenziato');
+    if(GPS_LAST.ft.length)   pezzi.push(GPS_LAST.ft.length + ' in prima squadra');
+    el.innerHTML =
+      '<div class="rp-txt">Ricalcata dai GPS della seduta <b>'+esc(preGiorno())+'</b>: ' +
+        esc(pezzi.join(', '))+'. Le altre partono da assenti, tocca il nome per correggere.</div>' +
+      '<div class="rp-acts">' +
+        (PRE_UNDO ? '<button class="rp-btn undo" id="rosa-pre-undo" type="button">'+ICO_UNDO+'Annulla</button>' : '') +
+        '<button class="rp-btn" id="rosa-pre-go" type="button">'+ICO_PRE+'Ricalca la seduta</button>' +
+      '</div>';
   }
 
   function rosaCount(){
@@ -3456,7 +3634,34 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   function buildRosa(){
-    renderRosa(); rosaSum(); rosaNotes();
+    /* Una sola volta al giorno, e solo la prima volta che si apre Oggi: la rosa si
+       presenta gia' ricalcata sull'ultima seduta. Dopo, quello che il mister tocca
+       resta come l'ha messo lui, anche se ricarica la pagina dieci volte. */
+    let primaVolta = false;
+    try{ primaVolta = !localStorage.getItem(PRE_KEY); }catch(e){ primaVolta = false; }
+    if(primaVolta && GPS_LAST){
+      preApply();
+      PRE_UNDO = null;                      // all'apertura non c'e' niente da annullare
+      try{ localStorage.setItem(PRE_KEY, GPS_LAST.data); }catch(e){}
+    }
+
+    renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+
+    const pre = document.getElementById('rosa-pre');
+    if(pre) pre.addEventListener('click', function(ev){
+      const b = ev.target.closest ? ev.target.closest('.rp-btn') : null;
+      if(!b) return;
+      if(b.id === 'rosa-pre-undo'){
+        preUndo();
+        renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+        toast('Rosa rimessa com\'era prima');
+        return;
+      }
+      const cambi = preApply();
+      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+      toast(cambi ? ('Ricalcata sulla seduta '+preGiorno()+', '+cambi+' cambiate')
+                  : ('Era gia\' uguale alla seduta '+preGiorno()));
+    });
 
     const groups = document.getElementById('rosa-groups');
     if(groups) groups.addEventListener('click', function(ev){
@@ -3484,7 +3689,8 @@ window.FORZA = window.FORZA || { roster:[] };
     if(all) all.addEventListener('click', function(){
       ROSTER.forEach(function(p){ delete AVAIL[p.name]; });
       availSave();
-      renderRosa(); rosaSum(); rosaNotes();
+      PRE_UNDO = null;                      // l'annulla si riferiva a un'altra cosa
+      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
       toast('Tutte disponibili, anche nella pagina Atlete');
     });
 
@@ -3495,7 +3701,8 @@ window.FORZA = window.FORZA || { roster:[] };
     window.addEventListener('storage', function(ev){
       if(ev && ev.key && ev.key !== LS_AVAIL) return;
       AVAIL = lsObj(LS_AVAIL);
-      renderRosa(); rosaSum(); rosaNotes();
+      PRE_UNDO = null;                      // gli stati arrivano da fuori, non da qui
+      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
     });
 
     /* Nome cambiato in Atlete, anche da un'altra scheda: la rosa si rimette in
@@ -3503,7 +3710,7 @@ window.FORZA = window.FORZA || { roster:[] };
        la chiave con cui la disponibilita' si salva non e' cambiata. */
     document.addEventListener('fio:nomi', function(){
       ROSTER.sort(function(a, b){ return plNomeSort(a.name, b.name); });
-      renderRosa(); rosaSum(); rosaNotes();
+      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
       if(typeof renderAlert === 'function') renderAlert();
     });
   }
@@ -3546,7 +3753,7 @@ window.FORZA = window.FORZA || { roster:[] };
         }).join('')
       : '<tr><td class="pp-no" colspan="6">Nessun blocco inserito.</td></tr>';
 
-    // le sedute salvate prima dei cinque stati usavano part/out: le rileggo qui
+    // le sedute salvate prima di questi stati usavano part/out: le rileggo qui
     function stKey(v){ return v === 'part' ? 'parziale' : (v === 'out' ? 'assente' : String(v||'')); }
     function nomi(list){
       return list.map(function(p){ return esc(plNome(p.name)) + (p.note ? ' ('+esc(p.note)+')' : ''); }).join(', ');
