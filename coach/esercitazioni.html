@@ -159,6 +159,8 @@ a{ color:inherit; text-decoration:none; }
 .btn:active{ transform:scale(.97); }
 .btn.primary{ background:var(--orange); color:#1a0d05; border-color:transparent; box-shadow: var(--shadow-btn); }
 .btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
+.btn.sm{ font-size:12px; padding:6px 11px; min-height:34px; gap:6px; }
+.btn.sm svg{ width:14px; height:14px; }
 
 /* ---------- add form ---------- */
 .addform{ display:none; gap:12px; flex-wrap:wrap; align-items:flex-end;
@@ -213,6 +215,31 @@ a{ color:inherit; text-decoration:none; }
   border-radius:6px; display:inline-flex; transition: color .15s var(--ease), background .15s var(--ease); }
 .drill .del:hover{ color:var(--red); background:oklch(62% 0.22 25 / 0.10); }
 .drill .del svg{ width:15px; height:15px; }
+
+/* ordine scelto a mano: il PDF elenca le esercitazioni come le ha trovate nel
+   file, non nell'ordine in cui la seduta e' stata svolta davvero. Le frecce
+   compaiono solo con "Ordina" acceso, cosi' la riga normale resta pulita. */
+.drill .mv{ display:none; flex:0 0 auto; gap:4px; }
+.scard.ordering .drill .mv{ display:inline-flex; }
+.mvb{ appearance:none; width:30px; height:30px; padding:0; display:grid; place-items:center; cursor:pointer;
+  background:var(--surface2); border:1px solid var(--border2); border-radius:8px; color:var(--muted);
+  transition: color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), transform .1s var(--ease); }
+.mvb:hover:not(:disabled){ color:var(--violet2); background:var(--violet-bg); border-color:var(--violet-border); }
+.mvb:active:not(:disabled){ transform:scale(.92); }
+.mvb:disabled{ opacity:.32; cursor:default; }
+.mvb svg{ width:14px; height:14px; }
+.btn.ord[aria-pressed="true"]{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
+.ordbar{ display:none; align-items:center; gap:10px; flex-wrap:wrap; margin:12px 0 2px; padding:9px 12px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); border-radius:var(--r); }
+.scard.ordering .ordbar{ display:flex; }
+.ordbar .t{ flex:1 1 220px; min-width:0; font-size:12px; color:var(--violet2); }
+.ordtag{ display:inline-flex; align-items:center; padding:5px 11px; border-radius:999px;
+  font-size:11.5px; font-weight:600; background:var(--violet-bg);
+  border:1px solid var(--violet-border); color:var(--violet2); }
+/* .ordtag vince sul display:none di [hidden] del browser: va detto qui */
+.ordtag[hidden]{ display:none; }
+.drill.moved{ animation: mvd .45s var(--ease); }
+@keyframes mvd{ from{ background:var(--violet-bg); } to{ background:transparent; } }
 
 /* load strip */
 .load{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:1px;
@@ -371,51 +398,57 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 }
 @media (prefers-reduced-motion: reduce){
   .reveal{ animation:none; opacity:1; transform:none; }
+  .drill.moved{ animation:none; }
   *{ transition:none !important; }
 }
 
-/* ---------- tabella solo-stampa (PDF esercitazioni per seduta) ---------- */
+/* ---------- foglio solo-stampa: una seduta sola, come l'Excel ---------- */
 #print-only{ display:none; }
-#print-only .pe-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 10px; }
+#print-only .ps-head{ display:flex; align-items:center; gap:12px; background:#5b2d90; color:#fff; padding:10px 12px; }
+#print-only .ps-head img{ height:32px; width:auto; display:block; }
+#print-only .ps-day{ font-size:17px; font-weight:700; line-height:1.15; }
+#print-only .ps-sub{ font-size:10.5px; color:#e4d6f4; margin-top:2px; }
+#print-only .ps-slot{ margin-left:auto; border:1.5px solid #fff; border-radius:999px;
+  padding:3px 12px; font-size:11.5px; font-weight:700; letter-spacing:.06em; }
+#print-only .ps-sec{ font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  color:#5b2d90; margin:12px 0 5px; }
+#print-only .ftbox{ border:1px solid #d9d2e6; border-top:0; background:#f7f4fb; padding:7px 10px 9px; }
+#print-only .ftbox .ps-sec{ margin:0 0 4px; }
 #print-only table.petbl{ width:100%; border-collapse:collapse; font-size:11px; }
 #print-only table.petbl th, #print-only table.petbl td{ border:1px solid #d9d2e6; padding:5px 8px; text-align:left; vertical-align:top; }
-#print-only table.petbl td.n{ text-align:right; width:34px; color:#5a524c; }
-#print-only table.petbl thead th{ background:#5b2d90; color:#fff; }
-#print-only tr.ses td{ background:#efe7f7; color:#5b2d90; font-weight:700; }
-#print-only tr.ld td{ background:#f7f4fb; color:#5a524c; font-size:10px; }
-/* il carico del Full Training va a colonne: ogni parametro resta leggibile */
-#print-only .ldttl{ font-weight:700; color:#5b2d90; margin-bottom:3px; }
-#print-only .lgrid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:1px 12px; }
+#print-only table.petbl thead th{ background:#5b2d90; color:#fff; font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+#print-only table.petbl td.n, #print-only table.petbl th.n{ text-align:right; width:26px; color:#6b6472; }
+#print-only table.petbl td.r, #print-only table.petbl th.r{ text-align:right; }
+#print-only .dsc{ font-weight:700; color:#14110f; }
+#print-only .det{ color:#3a332e; margin-top:2px; }
+#print-only .who{ color:#5a524c; font-size:9.5px; margin-top:2px; }
+/* i parametri GPS vanno a colonne: ogni valore resta leggibile */
+#print-only .lgrid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:1px 12px; margin-top:4px; }
 #print-only .lgrid .lc{ display:flex; align-items:baseline; justify-content:space-between; gap:6px;
-  border-bottom:1px solid #e6dff0; padding:1px 0; }
+  border-bottom:1px solid #e6dff0; padding:1px 0; font-size:9.5px; }
 #print-only .lgrid .lc i{ font-style:normal; color:#6b6472; }
 #print-only .lgrid .lc b{ color:#5b2d90; font-weight:700; white-space:nowrap; }
-#print-only .who{ color:#5a524c; font-size:9.5px; }
-#print-only tr.brk{ page-break-inside:avoid; }
+#print-only .box{ border:1px solid #d9d2e6; padding:7px 10px; font-size:10.5px; }
+#print-only .box b{ color:#14110f; }
+#print-only .box .grp{ margin-bottom:5px; }
+#print-only .box .grp:last-child{ margin-bottom:0; }
+#print-only tr{ page-break-inside:avoid; }
 
-/* ---------- print (PDF pulito, tema chiaro) ---------- */
+/* ---------- print (foglio della seduta, niente righe di servizio) ---------- */
+/* in stampa resta solo il foglio: intestazione della pagina, KPI e barra dei
+   filtri sono roba da schermo e sul campo non servono */
 @media print{
-  @page{ margin:13mm; }
+  @page{ margin:12mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
-  .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .addform, .sessions, .toast,
-  .top-right, .foot-note{ display:none !important; }
+  .sb-mob-bar, .sb-mob-overlay, .sidebar, .topbar, .focusbar, .kpis, .controls,
+  .addform, .sessions, .toast, .foot-note{ display:none !important; }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
-  .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
-    backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
-  .title-wrap h1{ color:#14110f !important; }
-  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
   .wrap{ max-width:none !important; padding:0 !important; }
-  .kpis{ margin:0 0 14px !important; }
-  .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
-  .kpi::before{ background:#5b2d90 !important; }
-  .kpi.v::before, .kpi.g::before{ background:#5b2d90 !important; }
-  .kpi .k-label{ color:#5a524c !important; }
-  .kpi .k-val{ color:#14110f !important; }
-  .kpi .k-val small{ color:#5a524c !important; }
   #print-only{ display:block !important; }
-  #print-only tr.ses td, #print-only tr.ld td, #print-only table.petbl thead th{
+  #print-only .ps-head, #print-only .ps-slot, #print-only .ftbox,
+  #print-only table.petbl thead th{
     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
 </style>
@@ -460,7 +493,7 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           Aggiungi
         </button>
-        <button class="btn" id="btn-print" title="Stampa o salva le esercitazioni in PDF, raggruppate per seduta">
+        <button class="btn" id="btn-print" title="Stampa in PDF il foglio della seduta in cima alla lista. Per un altro giorno usa il tasto PDF della sua scheda">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           PDF
         </button>
@@ -496,7 +529,7 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
       <!-- sessions -->
       <div class="sessions reveal" id="sessions" style="--i:3"></div>
 
-      <!-- tabella solo-stampa (PDF pulito, raggruppato per seduta) -->
+      <!-- foglio solo-stampa: la seduta scelta, con dettagli, atlete, dati e assenti -->
       <div id="print-only" aria-hidden="true"></div>
     </div>
 
@@ -562,6 +595,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const DTF = new Intl.DateTimeFormat('it-IT', { weekday:'short', day:'numeric', month:'short' });
   const DTFY = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'long', year:'numeric' });
+  const DTFL = new Intl.DateTimeFormat('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const state = { slot:'all', q:'' };
@@ -607,7 +641,11 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     catch(e){ return {}; }
   }
   function saveDet(o){ try{ localStorage.setItem(LS_DET, JSON.stringify(o)); }catch(e){} }
-  function detKey(s, d){ return s.date+'|'+s.slot+'|'+(d.manual ? ('m'+d.id) : ('i'+d.i)); }
+  // nome stabile della singola esercitazione dentro la sua seduta: "i3" per
+  // quelle lette dal PDF, "m1712..." per quelle scritte a mano. Serve sia ai
+  // dettagli sia all'ordine, cosi' i due archivi parlano la stessa lingua.
+  function drillKey(d){ return d.manual ? ('m'+d.id) : ('i'+d.i); }
+  function detKey(s, d){ return s.date+'|'+s.slot+'|'+drillKey(d); }
   function hasDet(s, d){
     const v = loadDet()[detKey(s,d)];
     return !!(v && DET_FIELDS.some(f=> String(v[f.n]||'').trim()));
@@ -629,6 +667,31 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(t.metri) p.push(t.metri);
     if(t.rec) p.push('rec ' + t.rec);
     return p.map(esc).join(' &#183; ');
+  }
+
+  // ---------- ordine delle esercitazioni scelto a mano ----------
+  // Il PDF dei GPS elenca le esercitazioni come le ha trovate nel file, che non
+  // e' l'ordine in cui la seduta si e' svolta. Qui si salva l'ordine vero, uno
+  // per seduta: chiave data|slot, valore la lista dei nomi di drillKey().
+  // Vale su questo dispositivo e comanda schermo, PDF, CSV ed Excel.
+  const LS_ORD = 'rs_fio_eserc_ord';
+  function loadOrd(){
+    try{ const o=JSON.parse(localStorage.getItem(LS_ORD)||'{}'); return (o && typeof o==='object' && !Array.isArray(o))?o:{}; }
+    catch(e){ return {}; }
+  }
+  function saveOrd(o){ try{ localStorage.setItem(LS_ORD, JSON.stringify(o)); }catch(e){} }
+  function ordKey(s){ return s.date+'|'+s.slot; }
+  // le esercitazioni con un posto assegnato vanno per prime nell'ordine scelto,
+  // quelle arrivate dopo (PDF nuovo, riga aggiunta a mano) restano in coda nel
+  // loro ordine naturale. Cosi' un import nuovo non cancella il lavoro fatto.
+  function ordina(list, keys){
+    if(!keys || !keys.length) return list;
+    const pos = {};
+    keys.forEach((k,i)=>{ if(pos[k]===undefined) pos[k] = i; });
+    const noti = [], nuovi = [];
+    list.forEach(d=>{ (pos[drillKey(d)]===undefined ? nuovi : noti).push(d); });
+    noti.sort((a,b)=> pos[drillKey(a)] - pos[drillKey(b)]);
+    return noti.concat(nuovi);
   }
 
   // ---------- numero di atlete atteso ricavato dal nome ----------
@@ -668,9 +731,20 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         load:null, n:0, atlete:null, i:s.drills.length });
     });
     const arr = Array.from(map.values());
-    // allDrills resta intero anche quando la ricerca filtra le righe: il
-    // riepilogo per atleta deve sempre vedere tutta la seduta
-    arr.forEach(s=>{ s.planned = !s.load; s.allDrills = s.drills; });
+    const ord = loadOrd();
+    arr.forEach(s=>{
+      s.planned = !s.load;
+      // byIdx tiene le esercitazioni al loro posto d'origine: i gruppi di lavoro
+      // del file GPS puntano alle esercitazioni per numero, e quel numero non
+      // deve muoversi quando l'ordine a schermo cambia
+      s.byIdx = {};
+      s.drills.forEach(d=>{ s.byIdx[d.i] = d; });
+      s.ordSaved = !!(ord[ordKey(s)] && ord[ordKey(s)].length);
+      s.drills = ordina(s.drills, ord[ordKey(s)]);
+      // allDrills resta intero anche quando la ricerca filtra le righe: il
+      // riepilogo per atleta deve sempre vedere tutta la seduta
+      s.allDrills = s.drills;
+    });
     arr.sort((a,b)=> (a.date===b.date ? (a.slot<b.slot?-1:1) : (a.date<b.date?1:-1)));
     return arr;
   }
@@ -822,6 +896,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ogni parametro come la griglia della sezione Sessioni
   const SORT = {};   // chiave pannello -> { c:'nm' oppure indice metrica, dir:1|-1 }
   const PANEL = {};  // chiave pannello -> { s, d } per ricostruire il contenuto
+  const ORD_OPEN = {}; // data|slot delle sedute con "Ordina" acceso, per non spegnerlo a ogni render
   function athTableHTML(atlete, key){
     const names = Object.keys(atlete||{});
     if(!names.length) return '';
@@ -943,11 +1018,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     // gruppi di lavoro
     if(s.gruppi && s.gruppi.length){
       html += '<h4>'+(s.divisa ? 'Gruppi di lavoro (squadra divisa)' : 'Gruppo di lavoro')+'</h4>';
+      const byIdx = s.byIdx || {};
       html += s.gruppi.map(g=>{
-        const names = (g.drills||[]).map(i=> (drills[i]||{}).descrizione||'').filter(Boolean);
+        const names = (g.drills||[]).map(i=> (byIdx[i]||{}).descrizione||'').filter(Boolean);
         return '<div class="grp"><span class="gn">'+(g.atlete||[]).length+
           ((g.atlete||[]).length===1?' atleta':' atlete')+'</span> <span class="gd">'+
-          esc(names.join(' &#183; '))+'</span>'+
+          names.map(esc).join(' &#183; ')+'</span>'+
           '<span class="ga">'+esc((g.atlete||[]).join(', '))+'</span></div>';
       }).join('');
     }
@@ -967,7 +1043,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           '<td class="r">'+NF.format(Math.round(t.min*10)/10)+'</td>'+
           '<td class="r">'+NF0.format(Math.round(t.dist))+'</td>'+
           '<td class="r">'+pc+'</td>'+
-          '<td class="ex">'+esc(t.ex.join(' &#183; '))+'</td></tr>';
+          '<td class="ex">'+t.ex.map(esc).join(' &#183; ')+'</td></tr>';
       });
       html += '</tbody></table>';
     }
@@ -980,6 +1056,23 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       '</div>';
 
     return html + '</div>';
+  }
+
+  // le sole righe delle esercitazioni, senza i pannelli dei dati che stanno
+  // nella stessa lista
+  function ordRows(ul){
+    return Array.prototype.filter.call(ul.children, el=> el.classList.contains('drill'));
+  }
+  // dopo uno spostamento tornano a posto i numeri di sinistra e le frecce di
+  // testa e di coda, che non hanno piu' dove andare
+  function ordRenumber(ul){
+    const rows = ordRows(ul);
+    rows.forEach((r,i)=>{
+      const n = r.querySelector('.idx'); if(n) n.textContent = String(i+1);
+      const up = r.querySelector('.mvb.up'), dn = r.querySelector('.mvb.dn');
+      if(up) up.disabled = (i===0);
+      if(dn) dn.disabled = (i===rows.length-1);
+    });
   }
 
   function renderSessions(list){
@@ -995,6 +1088,11 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const dLabel = dt ? DTF.format(dt).replace('.','') : s.date;
       const mLabel = dt ? DTFY.format(dt) : '';
       const slotCls = s.slot==='PM' ? 'slot pm' : 'slot';
+      // l'ordine si tocca solo quando a schermo c'e' tutta la seduta: con la
+      // ricerca accesa le righe sono un pezzo della lista e spostarle
+      // scriverebbe un ordine sbagliato per quelle nascoste
+      const nTot = (s.allDrills || s.drills).length;
+      const canOrd = s.drills.length>1 && s.drills.length===nTot;
       const drills = s.drills.map((d,i)=>{
         const nAth = d.atlete ? Object.keys(d.atlete).length : 0;
         const att = attese(d.descrizione);
@@ -1007,10 +1105,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const chev = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>';
         const key = si+'-'+i;
         PANEL[key] = { s:s, d:d };
-        const row = '<li class="drill has-gps" data-k="'+key+'" data-i="'+d.i+'" role="button" tabindex="0"'+
-          ' aria-expanded="false" aria-controls="dp-'+key+'">'+
+        const mv = canOrd
+          ? '<span class="mv">'+
+            '<button class="mvb up" data-dir="-1"'+(i===0?' disabled':'')+' aria-label="Sposta questa esercitazione piu&#39; in alto">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 6-6 6 6"/></svg></button>'+
+            '<button class="mvb dn" data-dir="1"'+(i===nTot-1?' disabled':'')+' aria-label="Sposta questa esercitazione piu&#39; in basso">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 10 6 6 6-6"/></svg></button></span>'
+          : '';
+        const row = '<li class="drill has-gps" data-k="'+key+'" data-i="'+d.i+'" data-key="'+esc(drillKey(d))+'"'+
+          ' role="button" tabindex="0" aria-expanded="false" aria-controls="dp-'+key+'">'+
           '<span class="idx tnum">'+(i+1)+'</span>'+
-          '<span class="dtext">'+esc(d.descrizione)+badges+'</span>'+del+chev+'</li>';
+          '<span class="dtext">'+esc(d.descrizione)+badges+'</span>'+mv+del+chev+'</li>';
         return row + '<li class="dpanel" id="dp-'+key+'" hidden>'+panelHTML(s, d, key)+'</li>';
       }).join('');
       const meta = (s.kind?'<span class="kind">'+esc(s.kind)+'</span>':'')+
@@ -1025,16 +1130,94 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         : (s.load ? '<div class="loadcap sum">Carico della giornata &#183; <b>somma delle esercitazioni</b></div>' : '');
       const tail = band ? (cap + loadStrip(band))
         : '<div class="nolink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>Seduta pianificata · nessun GPS collegato</div>';
+      // il PDF si stampa per seduta: e' il foglio che si porta al campo
+      const pdfBtn = '<button class="btn sm pdf" data-d="'+esc(s.date)+'" data-s="'+esc(s.slot||'')+'"'+
+        ' title="Stampa il foglio di questa seduta: esercitazioni, dettagli, dati, atlete e assenti">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+
+        '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>'+
+        '<rect x="6" y="14" width="12" height="8"/></svg>PDF</button>';
+      // ordine a mano: acceso il tasto compaiono le frecce sulle righe
+      const ordBtn = canOrd
+        ? '<button class="btn sm ord" aria-pressed="false"'+
+          ' title="Metti le esercitazioni nell&#39;ordine in cui le hai svolte: vale a schermo, nel PDF e negli export">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+
+          '<path d="M7 4v16M7 4 4 7.5M7 4l3 3.5"/><path d="M17 20V4M17 20l3-3.5M17 20l-3-3.5"/></svg>Ordina</button>'
+        : '';
+      const ordTag = '<span class="ordtag"'+(s.ordSaved?'':' hidden')+'>ordine a mano</span>';
+      const ordBar = canOrd
+        ? '<div class="ordbar"><span class="t">Sposta le esercitazioni con le frecce: l&#39;ordine vale per il foglio da campo e per gli export.</span>'+
+          '<button class="btn sm ordreset">Rimetti l&#39;ordine del file</button></div>'
+        : '';
       return '<section class="scard reveal" id="s-'+esc(s.date)+'-'+esc(s.slot||'--')+'" data-d="'+esc(s.date)+'" data-s="'+esc(s.slot||'')+'" style="--i:'+Math.min(si+4,16)+'">'+
         '<div class="scard-head">'+
           '<span class="'+slotCls+'">'+esc(s.slot||'--')+'</span>'+
           '<div class="sdate"><span class="d">'+esc(dLabel)+'</span><span class="m">'+esc(mLabel)+'</span></div>'+
           meta +
-          (s.planned?'<span class="spacer"></span><span class="planned-tag">pianificata</span>':'')+
+          (s.planned?'<span class="planned-tag">pianificata</span>':'')+
+          ordTag +
+          '<span class="spacer"></span>'+ ordBtn + pdfBtn +
         '</div>'+
-        '<div class="scard-body"><ul class="drills">'+drills+'</ul>'+tail+recapHTML(s)+'</div>'+
+        '<div class="scard-body">'+ordBar+'<ul class="drills">'+drills+'</ul>'+tail+recapHTML(s)+'</div>'+
       '</section>';
     }).join('');
+    // tasto PDF della singola seduta
+    host.querySelectorAll('.btn.pdf').forEach(b=> b.addEventListener('click', e=>{
+      e.stopPropagation();
+      printDay(b.getAttribute('data-d'), b.getAttribute('data-s'));
+    }));
+    // ordine a mano: si sposta la riga nel DOM invece di ridisegnare la pagina,
+    // cosi' la scheda non riparte da capo con l'animazione e i pannelli GPS
+    // gia' aperti restano aperti
+    host.querySelectorAll('.scard').forEach(card=>{
+      const ul = card.querySelector('ul.drills');
+      const kOrd = card.getAttribute('data-d')+'|'+card.getAttribute('data-s');
+      const btn = card.querySelector('.btn.ord');
+      if(!ul || !btn) return;
+      if(ORD_OPEN[kOrd]){ card.classList.add('ordering'); btn.setAttribute('aria-pressed','true'); }
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const on = !card.classList.contains('ordering');
+        card.classList.toggle('ordering', on);
+        btn.setAttribute('aria-pressed', on?'true':'false');
+        if(on) ORD_OPEN[kOrd] = 1; else delete ORD_OPEN[kOrd];
+      });
+      const rst = card.querySelector('.btn.ordreset');
+      if(rst) rst.addEventListener('click', e=>{
+        e.stopPropagation();
+        const ord = loadOrd();
+        delete ord[kOrd]; saveOrd(ord);
+        toast("Ordine del file ripristinato"); render();
+      });
+      card.querySelectorAll('.mvb').forEach(b=>{
+        b.addEventListener('keydown', e=> e.stopPropagation());
+        b.addEventListener('click', e=>{
+          e.stopPropagation();
+          if(b.disabled) return;
+          const li = b.closest('.drill'); if(!li) return;
+          const rows = ordRows(ul);
+          const dir = +b.getAttribute('data-dir');
+          const other = rows[rows.indexOf(li) + dir];
+          if(!other) return;
+          // la riga viaggia col suo pannello dei dati attaccato
+          const mine = (li.nextElementSibling && li.nextElementSibling.classList.contains('dpanel')) ? li.nextElementSibling : null;
+          const sua  = (other.nextElementSibling && other.nextElementSibling.classList.contains('dpanel')) ? other.nextElementSibling : null;
+          if(dir>0) (sua||other).after(li); else other.before(li);
+          if(mine) li.after(mine);
+          ordRenumber(ul);
+          const o = loadOrd();
+          o[kOrd] = ordRows(ul).map(r=> r.getAttribute('data-key'));
+          saveOrd(o);
+          const tag = card.querySelector('.ordtag');
+          if(tag) tag.removeAttribute('hidden');
+          buildPrintSheet();
+          li.classList.remove('moved'); void li.offsetWidth; li.classList.add('moved');
+          // spostare il nodo toglie il fuoco: si rimette sulla freccia usata, o
+          // sull'altra quando quella usata e' arrivata a fine corsa
+          const anc = b.disabled ? li.querySelector('.mvb:not(:disabled)') : b;
+          if(anc) anc.focus();
+        });
+      });
+    });
     // wire delete buttons
     host.querySelectorAll('.del').forEach(b=> b.addEventListener('click', e=>{
       e.stopPropagation();
@@ -1181,49 +1364,119 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return '<div class="lgrid">'+cells.join('')+'</div>';
   }
 
-  // ---------- tabella solo-stampa (PDF pulito, raggruppato per seduta) ----------
-  function buildPrintTable(){
+  // ---------- foglio solo-stampa: una seduta sola ----------
+  // Il foglio che serve al campo e' quello del giorno, non l'elenco di tutta la
+  // stagione. Si stampa la seduta scelta col suo tasto PDF; se non e' stato
+  // scelto niente vale la prima seduta a schermo, cioe' la piu' recente.
+  let PRINT_KEY = '';
+  function printTarget(all){
+    const keys = [];
+    if(PRINT_KEY) keys.push(PRINT_KEY);
+    const vis = filtered(all);
+    if(vis.length) keys.push(vis[0].date+'|'+vis[0].slot);
+    if(all.length) keys.push(all[0].date+'|'+all[0].slot);
+    for(let i=0; i<keys.length; i++){
+      const s = all.find(x=> (x.date+'|'+x.slot)===keys[i]);
+      if(s) return s;
+    }
+    return null;
+  }
+
+  function buildPrintSheet(){
     const host = document.getElementById('print-only'); if(!host) return;
     const all = buildSessions();
+    const s = printTarget(all);
+    if(!s){ host.innerHTML = ''; return; }
     const dets = loadDet();
-    const nSess = all.length;
-    const nDrills = all.reduce((a,s)=> a + s.drills.length, 0);
+    const dt = parseDate(s.date);
+    let dLabel = dt ? DTFL.format(dt) : s.date;
+    dLabel = dLabel.charAt(0).toUpperCase() + dLabel.slice(1);
+
+    // intestazione: giorno, slot e i due numeri che contano. Niente stagione,
+    // niente "ultimo aggiornamento": sul foglio non servono.
+    const bits = ['Fiorentina Primavera U19W'];
+    if(s.kind) bits.push(s.kind);
+    bits.push(s.drills.length + (s.drills.length===1?' esercitazione':' esercitazioni'));
+    if(s.nAtlete) bits.push(s.nAtlete+' atlete');
+    if(s.divisa) bits.push('squadra divisa');
+    if(s.planned) bits.push('seduta pianificata');
+    const cr = document.getElementById('crest');
+    const src = cr ? (cr.getAttribute('src')||'') : '';
+    let h = '<div class="ps-head">'+
+      (src ? '<img src="'+esc(src)+'" alt="">' : '')+
+      '<div><div class="ps-day">'+esc(dLabel)+'</div>'+
+      '<div class="ps-sub">'+bits.map(esc).join(' &#183; ')+'</div></div>'+
+      '<span class="ps-slot">'+esc(s.slot||'--')+'</span></div>';
+
+    // carico della giornata: il Full Training, non la somma delle esercitazioni
+    const band = (s.ft && s.ft.load) ? s.ft.load : s.load;
+    const ftTtl = (s.ft && s.ft.load) ? 'Carico della giornata &#183; Full Training'
+      : (s.load ? 'Carico della giornata &#183; somma delle esercitazioni' : 'Carico della giornata');
+    h += '<div class="ftbox"><div class="ps-sec">'+ftTtl+'</div>'+
+      (loadChips(band) || '<div class="who">nessun GPS collegato</div>')+'</div>';
+
+    // una riga per esercitazione: descrizione, dettagli scritti a mano, dati e atlete
     let rows = '';
-    all.forEach(s=>{
-      const dt = parseDate(s.date);
-      const dLabel = dt ? DTFY.format(dt) : esc(s.date);
-      const kind = s.kind ? ' &#183; '+esc(s.kind) : '';
-      const nd = s.drills.length + (s.drills.length===1?' esercitazione':' esercitazioni');
-      rows += '<tr class="ses brk"><td colspan="2">'+esc(s.slot||'--')+' &#183; '+dLabel+kind+' &#183; '+nd+
-        (s.planned?' &#183; pianificata':'')+'</td></tr>';
-      const ftLoad = (s.ft && s.ft.load) ? s.ft.load : (s.load || null);
-      const lg = loadChips(ftLoad);
-      rows += '<tr class="ld"><td colspan="2"><div class="ldttl">Full Training</div>'+
-        (lg || 'nessun GPS collegato')+'</td></tr>';
-      s.drills.forEach((d,i)=>{
-        const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
-        const who = names.length ? '<br><span class="who">'+names.length+' atlete: '+esc(names.join(', '))+'</span>' : '';
-        const t = detOf(dets, s, d);
-        const dl = detLine(t);
-        const det = dl ? '<br><span class="who">'+dl+'</span>' : '';
-        const note = t.note ? '<br><span class="who">'+esc(t.note)+'</span>' : '';
-        rows += '<tr><td class="n">'+(i+1)+'</td><td>'+esc(d.descrizione)+det+note+who+'</td></tr>';
-      });
-      if(s.divisa && s.gruppi && s.gruppi.length){
-        const gtxt = s.gruppi.map(g=>{
-          const nm = (g.drills||[]).map(k=> ((s.allDrills||[])[k]||{}).descrizione||'').filter(Boolean).join(' + ');
-          return (g.atlete||[]).length+' atlete: '+nm;
-        }).join(' | ');
-        rows += '<tr class="ld"><td colspan="2">Squadra divisa &#183; '+esc(gtxt)+'</td></tr>';
-      }
-      if(s.assenti && s.assenti.length){
-        rows += '<tr class="ld"><td colspan="2">Assenti: '+esc(s.assenti.join(', '))+'</td></tr>';
-      }
+    s.drills.forEach((d,i)=>{
+      const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
+      const t = detOf(dets, s, d);
+      const dl = detLine(t);
+      let c = '<div class="dsc">'+esc(d.descrizione)+'</div>';
+      if(dl) c += '<div class="det">'+dl+'</div>';
+      if(t.note) c += '<div class="det">Note: '+esc(t.note)+'</div>';
+      c += loadChips(d.load);
+      if(names.length) c += '<div class="who">'+names.length+' atlete: '+esc(names.join(', '))+'</div>';
+      rows += '<tr><td class="n">'+(i+1)+'</td><td>'+c+'</td></tr>';
     });
-    const gen = E.generato ? ('agg. '+esc(E.generato.slice(0,10))) : 'anteprima';
-    host.innerHTML =
-      '<div class="pe-h">Esercitazioni Fiorentina Primavera U19W &#183; '+nSess+' sedute &#183; '+nDrills+' esercitazioni &#183; Stagione '+esc(E.stagione||'2025-26')+' &#183; '+gen+'</div>'+
-      '<table class="petbl"><thead><tr><th class="n">#</th><th>Esercitazione (raggruppata per seduta)</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    h += '<div class="ps-sec">Esercitazioni</div>'+
+      '<table class="petbl"><thead><tr><th class="n">#</th>'+
+      '<th>Esercitazione, dettagli, dati e atlete</th></tr></thead><tbody>'+rows+'</tbody></table>';
+
+    // gruppi di lavoro, quando la squadra e' divisa
+    if(s.gruppi && s.gruppi.length){
+      const byIdx = s.byIdx || {};
+      h += '<div class="ps-sec">'+(s.divisa?'Gruppi di lavoro (squadra divisa)':'Gruppo di lavoro')+
+        '</div><div class="box">'+
+        s.gruppi.map(g=>{
+          const nm = (g.drills||[]).map(k=> (byIdx[k]||{}).descrizione||'')
+            .filter(Boolean).map(esc).join(' + ');
+          return '<div class="grp"><b>'+(g.atlete||[]).length+' atlete</b> &#183; '+nm+
+            '<div class="who">'+esc((g.atlete||[]).join(', '))+'</div></div>';
+        }).join('')+'</div>';
+    }
+
+    // chi ha fatto cosa: minuti, metri e quanto pesa sul proprio Full Training
+    const tot = perAtleta(s);
+    const names = Object.keys(tot).sort((a,b)=> a.localeCompare(b,'it'));
+    if(names.length){
+      h += '<div class="ps-sec">Chi ha fatto cosa</div>'+
+        '<table class="petbl"><thead><tr><th>Atleta</th><th class="r">Min</th>'+
+        '<th class="r">Dist</th><th class="r">% su FT</th><th>Esercitazioni</th></tr></thead><tbody>';
+      names.forEach(nm=>{
+        const t = tot[nm];
+        h += '<tr><td>'+esc(nm)+'</td>'+
+          '<td class="r">'+NF.format(Math.round(t.min*10)/10)+'</td>'+
+          '<td class="r">'+NF0.format(Math.round(t.dist))+'</td>'+
+          '<td class="r">'+(t.pct==null?'-':NF0.format(Math.round(t.pct))+'%')+'</td>'+
+          '<td>'+t.ex.map(esc).join(' &#183; ')+'</td></tr>';
+      });
+      h += '</tbody></table>';
+    }
+
+    // assenti in fondo al foglio
+    h += '<div class="ps-sec">Assenti</div><div class="box">'+
+      ((s.assenti && s.assenti.length)
+        ? s.assenti.map(n=> '<b>'+esc(n)+'</b>').join(', ')
+        : 'Nessuna assente, rosa GPS al completo.')+'</div>';
+
+    host.innerHTML = h;
+  }
+
+  // stampa della singola seduta, dal tasto PDF della sua scheda
+  function printDay(date, slot){
+    PRINT_KEY = date+'|'+slot;
+    buildPrintSheet();
+    window.print();
   }
 
   // ---------- export Excel (.xls, colori viola, raggruppato per seduta) ----------
@@ -1334,8 +1587,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   document.getElementById('btn-export').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
-  document.getElementById('btn-print').addEventListener('click', ()=>{ buildPrintTable(); window.print(); });
-  window.addEventListener('beforeprint', buildPrintTable);
+  // il tasto in alto stampa la seduta in cima alla lista, quella aperta dal
+  // calendario quando si arriva da li'. Per un altro giorno c'e' il PDF della scheda.
+  document.getElementById('btn-print').addEventListener('click', ()=>{
+    PRINT_KEY = ''; buildPrintSheet(); window.print();
+  });
+  window.addEventListener('beforeprint', buildPrintSheet);
 
   // ---------- sinottica ----------
   (function(){
@@ -1371,7 +1628,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderPills(all);
     renderFocusBar(all);
     renderSessions(filtered(all));
-    buildPrintTable();
+    buildPrintSheet();
   }
   render();
 })();
