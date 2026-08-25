@@ -867,9 +867,10 @@ a{ color:inherit; text-decoration:none; }
      Prima ogni scheda prendeva sei esercizi girando le aree una a testa e
      pescando sempre il primo della lista: risultato, schede quasi identiche
      anche con test molto diversi. Adesso decidono tre cose.
-     1. Quanti posti prende un'area: proporzionali ai punti di carenza, non
-        uno a testa. Chi ha la caviglia a pezzi si porta a casa tre esercizi
-        di caviglia, non uno.
+     1. Quanti posti prende un'area: un posto garantito a ogni area del
+        blocco, gli altri proporzionali ai punti di carenza e con un tetto.
+        Chi ha la caviglia messa male si porta a casa piu' caviglia, ma il
+        foglio continua a passare da tutte le aree.
      2. Quale esercizio esce dal gruppo: la lista si legge partendo da un
         punto che dipende dal nome dell'atleta, cosi' due atlete con la
         stessa carenza non ricevono lo stesso esercizio. Il punto di partenza
@@ -879,7 +880,7 @@ a{ color:inherit; text-decoration:none; }
      Dentro l'area gli stimoli si alternano fra i tipi disponibili, cosi' una
      caviglia non prende due volte lo stesso mobilizzante. */
   var BLOCK_N = 6;     // esercizi per foglio, due colonne da tre
-  var AREA_MAX = 3;    // oltre i tre esercizi un'area sola mangia tutto il foglio
+  var AREA_MAX = 3;    // tetto assoluto per area, il tetto vero lo da areaCap
   var DOSE_HARD = 6;   // punti di carenza da cui si alza una serie
 
   // hash stabile: stesso nome, stessa scheda. Non serve un caso vero, serve
@@ -890,35 +891,35 @@ a{ color:inherit; text-decoration:none; }
     return h >>> 0;
   }
 
-  // Ripartizione dei sei posti fra le aree di un blocco, col metodo delle medie
-  // piu' alte: ogni area carente parte da un posto, poi ogni posto libero va a
-  // chi ha il rapporto punti su esercizi piu' alto.
+  // Tetto per area dentro un blocco. Il blocco A ha quattro aree e il blocco B
+  // ne ha tre: se il tetto restasse tre in tutti e due, in A una carenza sola
+  // si prendeva mezzo foglio e in B due aree ne mangiavano sei su sei.
+  function areaCap(n){ return n >= 4 ? 2 : 3; }
+
+  // Ripartizione dei sei posti fra le aree di un blocco. Due regole insieme.
+  // 1. Ogni area del blocco prende sempre almeno un esercizio: la scheda tocca
+  //    tutto il blocco anche dove i test sono a posto, che e' come sono fatte a
+  //    mano le schede delle atlete pulite tipo Bianchi e Bellani.
+  // 2. I posti che restano vanno col metodo delle medie piu' alte, a chi ha il
+  //    rapporto punti su esercizi piu' alto, fino al tetto dell'area. A parita'
+  //    passa avanti chi di esercizi ne ha meno, cosi' senza carenze i posti si
+  //    dividono in parti uguali invece di ammucchiarsi sulla prima area.
   function slotShare(need, areas){
-    var out = {}, hot = [];
-    areas.forEach(function(k){ out[k] = 0; if(need[k] > 0) hot.push(k); });
-    if(!hot.length){
-      // nessun test o nessuna carenza: giro classico, scheda di mantenimento
-      for(var i = 0; i < BLOCK_N; i++) out[areas[i % areas.length]]++;
-      return out;
-    }
-    hot.sort(function(a, b){ return (need[b] - need[a]) || areas.indexOf(a) - areas.indexOf(b); });
-    var left = BLOCK_N;
-    hot.forEach(function(k){ if(left > 0){ out[k] = 1; left--; } });
+    var out = {}, cap = areaCap(areas.length), left = BLOCK_N;
+    areas.forEach(function(k){ out[k] = 0; });
+    var order = areas.slice().sort(function(a, b){
+      return ((need[b] || 0) - (need[a] || 0)) || areas.indexOf(a) - areas.indexOf(b);
+    });
+    order.forEach(function(k){ if(left > 0){ out[k] = 1; left--; } });
     while(left > 0){
       var best = null, bv = -1;
-      hot.forEach(function(k){
-        if(out[k] >= AREA_MAX) return;
-        var v = need[k] / (out[k] + 1);
-        if(v > bv){ bv = v; best = k; }
+      order.forEach(function(k){
+        if(out[k] >= cap) return;
+        var v = (need[k] || 0) / (out[k] + 1);
+        if(v > bv || (best != null && v === bv && out[k] < out[best])){ bv = v; best = k; }
       });
       if(best == null) break;
       out[best]++; left--;
-    }
-    // se i tetti hanno lasciato posti liberi li riempiono le aree senza carenza
-    for(var j = 0; left > 0 && j < areas.length * AREA_MAX; j++){
-      var k2 = areas[j % areas.length];
-      if(out[k2] >= AREA_MAX) continue;
-      out[k2]++; left--;
     }
     return out;
   }
@@ -978,14 +979,21 @@ a{ color:inherit; text-decoration:none; }
     var order = areas.slice().sort(function(a, b){
       return (need[b] - need[a]) || areas.indexOf(a) - areas.indexOf(b);
     });
-    var out = [];
+    var out = [], got = {};
     order.forEach(function(k){
-      pickN(k, share[k], used, seed, need, why).forEach(function(r){ out.push(r); });
+      var rows = pickN(k, share[k], used, seed, need, why);
+      got[k] = rows.length;
+      rows.forEach(function(r){ out.push(r); });
     });
-    // se un'area non aveva abbastanza esercizi liberi si completa col resto
+    // se un'area non aveva abbastanza esercizi liberi il posto passa a un'altra
+    // area del blocco, sempre senza sfondare il tetto
+    var cap = areaCap(areas.length);
     for(var i = 0; out.length < BLOCK_N && i < order.length * AREA_MAX; i++){
-      var add = pickN(order[i % order.length], 1, used, seed + '|fill' + i, need, why);
+      var k2 = order[i % order.length];
+      if((got[k2] || 0) >= cap) continue;
+      var add = pickN(k2, 1, used, seed + '|fill' + i, need, why);
       if(!add.length) continue;
+      got[k2] = (got[k2] || 0) + 1;
       out.push(add[0]);
     }
     return out.slice(0, BLOCK_N);
@@ -1378,12 +1386,13 @@ a{ color:inherit; text-decoration:none; }
   +   'page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;}'
   + '.pg:last-child{page-break-after:auto;break-after:auto;}'
   + '.sheet{width:100%;height:'+SH_H+'mm;border:4px solid '+VIOLA+';overflow:hidden;}'
-  + '.sh-head{height:'+SH_HEAD+'mm;background:'+VIOLA+';color:#fff;display:flex;align-items:center;'
-  +   'justify-content:space-between;gap:6mm;padding:0 5mm;}'
-  + '.sh-box{flex:0 1 auto;border:2px solid #fff;border-radius:3px;padding:2.2mm 3.6mm;'
+  + '.sh-head{position:relative;height:'+SH_HEAD+'mm;background:'+VIOLA+';color:#fff;display:flex;'
+  +   'align-items:center;justify-content:space-between;gap:6mm;padding:0 5mm;}'
+  + '.sh-box{flex:0 1 calc(50% - 13mm);border:2px solid #fff;border-radius:3px;padding:2.2mm 3.6mm;'
   +   'font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;'
   +   'line-height:1.15;text-align:center;}'
-  + '.sh-logo{flex:0 0 auto;height:16mm;width:auto;display:block;}'
+  + '.sh-logo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'
+  +   'height:16mm;width:auto;display:block;}'
   + '.sh-grid{height:'+SH_GRID+'mm;display:grid;grid-template-columns:1fr 1fr;}'
   + '.sh-cell{border-top:3px solid '+VIOLA+';border-right:3px solid '+VIOLA+';overflow:hidden;'
   +   'padding:3mm 3mm 2mm;text-align:center;}'
