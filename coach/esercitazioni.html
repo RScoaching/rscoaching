@@ -147,6 +147,14 @@ a{ color:inherit; text-decoration:none; }
 .pill.on{ background:var(--ember-bg); color:var(--orange2); border-color:var(--ember-border); }
 .pill .cnt{ font-size:11px; color:var(--faint); font-weight:600; }
 .pill.on .cnt{ color:var(--orange2); }
+/* seconda riga di filtri: la famiglia dell'esercitazione, letta dal nome.
+   Colore diverso dalle pillole dello slot cosi' si capisce che sono due
+   filtri distinti che lavorano insieme */
+.tbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:-8px 0 20px; }
+.tbar .tl{ font-size:10px; font-weight:700; color:var(--faint); letter-spacing:.06em; text-transform:uppercase; }
+.pill.sm{ font-size:12px; padding:6px 12px; }
+.pill.sm.on{ background:var(--violet-bg); color:var(--violet2); border-color:var(--violet-border); }
+.pill.sm.on .cnt{ color:var(--violet2); }
 .spacer{ flex:1 1 auto; }
 .btn{
   appearance:none; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600;
@@ -349,6 +357,9 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 .dnote .nsaved{ margin-top:7px; font-size:11px; color:var(--green); opacity:0; transition:opacity .2s var(--ease); }
 .dnote .nsaved.on{ opacity:1; }
 .badge.det{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
+/* tipologia sulla riga: solo contorno, deve leggersi senza rubare la scena
+   agli avvisi (attese, doppione) che invece devono saltare all'occhio */
+.badge.tip{ background:transparent; border:1px solid var(--border2); color:var(--muted); margin-left:8px; }
 
 /* barra della seduta aperta dal calendario */
 .focusbar{ display:none; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px;
@@ -422,6 +433,8 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
   background:var(--surface); border:1px dashed var(--border2); border-radius:var(--r-lg); }
 .empty svg{ width:34px; height:34px; color:var(--faint); margin-bottom:10px; }
 .empty .t{ font-size:15px; color:var(--text); font-weight:600; margin-bottom:4px; }
+.empty .btn{ margin-top:16px; }
+.empty .btn svg{ width:14px; height:14px; margin-bottom:0; color:currentColor; }
 
 /* footnote */
 .foot-note{ max-width:1180px; margin:20px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
@@ -571,6 +584,12 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
         </button>
       </div>
 
+      <!-- filtro per tipologia: le pillole escono dalle esercitazioni presenti -->
+      <div class="tbar reveal" style="--i:1">
+        <span class="tl">Tipologia</span>
+        <div class="pills" id="tpills" role="tablist" aria-label="Filtro tipologia"></div>
+      </div>
+
       <!-- add form -->
       <form class="addform reveal" id="addform" style="--i:2" autocomplete="off">
         <div class="fg">
@@ -668,7 +687,34 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ath e per sono il filtro per calciatrice: quale e su quanti giorni indietro
-  const state = { slot:'all', q:'', ath:'', per:7 };
+  // tipo e' la famiglia dell'esercitazione (possesso, rondos, partita...)
+  const state = { slot:'all', tipo:'all', q:'', ath:'', per:7 };
+
+  // ---------- tipologia ricavata dal nome dell'esercitazione ----------
+  // Le famiglie non sono inventate: escono dalle parole che il mister usa
+  // davvero nei fogli (attivazione, rondos, possesso, contrapposizione,
+  // partita, ssg, test, lavoro aerobico, reparto, palle inattive).
+  // Vince la prima regola che corrisponde, ed e' voluto: "possesso tattico"
+  // resta possesso, "attivazione tecnica" resta attivazione, "Test Aerobico
+  // Gacon" resta test. L'ordine dell'elenco e' l'ordine di priorita'.
+  const TIPI = [
+    { k:'test',        lbl:'Test',        re:/\btest\b/ },
+    { k:'attivazione', lbl:'Attivazione', re:/attivaz/ },
+    { k:'rondo',       lbl:'Rondos',      re:/\brond/ },
+    { k:'possesso',    lbl:'Possesso',    re:/possess/ },
+    { k:'partita',     lbl:'Partita',     re:/partita|contrapposiz|amichevole|\bssg\b/ },
+    { k:'tattica',     lbl:'Tattica',     re:/tattic|reparto|inattiv/ },
+    { k:'tecnica',     lbl:'Tecnica',     re:/tecnic|passing|finishing|combinazion|drill|cross|conclusion|tiri/ },
+    { k:'fisico',      lbl:'Fisico',      re:/aerobic|ripetute|sprint|navetta|resistenz|\bcod\b|\bforza\b/ },
+  ];
+  const TIPO_LBL = { altro:'Altro' };
+  TIPI.forEach(function(t){ TIPO_LBL[t.k] = t.lbl; });
+
+  function tipoOf(desc){
+    const t = String(desc||'').toLowerCase();
+    for(let i=0;i<TIPI.length;i++){ if(TIPI[i].re.test(t)) return TIPI[i].k; }
+    return 'altro';
+  }
 
   // seduta aperta da calendario o da oggi: esercitazioni.html?d=2026-08-10&s=AM&e=3
   const FOCUS = (function(){
@@ -837,6 +883,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         drills = drills.filter(d=> d.atlete && d.atlete[nm]);
         if(!drills.length) return null;
       }
+      // la tipologia filtra le righe, non le sedute: di una seduta restano
+      // solo le esercitazioni di quella famiglia, il carico della giornata
+      // resta quello vero della seduta intera
+      if(state.tipo!=='all'){
+        drills = drills.filter(d=> tipoOf(d.descrizione)===state.tipo);
+        if(!drills.length) return null;
+      }
       if(q){ drills = drills.filter(d=> d.descrizione.toLowerCase().includes(q)); if(!drills.length) return null; }
       return Object.assign({}, s, { drills });
     }).filter(Boolean);
@@ -880,6 +933,40 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     ).join('');
     host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
       state.slot = b.getAttribute('data-k'); render();
+    }));
+  }
+
+  // ---------- pillole tipologia ----------
+  function renderTipi(all){
+    const host = document.getElementById('tpills');
+    if(!host) return;
+    // i numeri contano le esercitazioni che restano con gli altri filtri
+    // accesi, la tipologia esclusa: cosi' il conteggio non si sposta da solo
+    // ogni volta che si sceglie una pillola
+    const save = state.tipo;
+    state.tipo = 'all';
+    const base = filtered(all);
+    state.tipo = save;
+    const cnt = { all:0 };
+    base.forEach(s=> s.drills.forEach(d=>{
+      const k = tipoOf(d.descrizione);
+      cnt[k] = (cnt[k]||0) + 1;
+      cnt.all++;
+    }));
+    const defs = [{ k:'all', lbl:'Tutte' }]
+      .concat(TIPI.map(t=>({ k:t.k, lbl:t.lbl })))
+      .concat([{ k:'altro', lbl:'Altro' }]);
+    // le famiglie che nel periodo non ci sono non compaiono, ma quella scelta
+    // resta sempre a schermo: senno' non ci sarebbe piu' modo di spegnerla
+    host.innerHTML = defs.filter(d=> d.k==='all' || cnt[d.k] || state.tipo===d.k).map(d=>
+      '<button class="pill sm'+(state.tipo===d.k?' on':'')+'" data-t="'+d.k+'" role="tab"'+
+      ' aria-selected="'+(state.tipo===d.k)+'">'+esc(d.lbl)+
+      ' <span class="cnt">'+(cnt[d.k]||0)+'</span></button>'
+    ).join('');
+    host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
+      const k = b.getAttribute('data-t');
+      state.tipo = (state.tipo===k ? 'all' : k);
+      render();
     }));
   }
 
@@ -1332,9 +1419,30 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function renderSessions(list){
     const host = document.getElementById('sessions');
     if(!list.length){
-      host.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'+
-        '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 10h6M9 14h6M9 18h4"/></svg>'+
-        '<div class="t">Nessuna esercitazione</div><div>Aggiungine una con il pulsante in alto, oppure metti un nuovo PDF nella cartella.</div></div>';
+      // vuoto con un filtro acceso non vuol dire "non c'e' niente", vuol dire
+      // "niente che risponda a questo": va scritto quale filtro sta togliendo
+      // di mezzo le righe, e va dato il modo di spegnerli tutti in un colpo
+      const attivi = [];
+      if(state.tipo!=='all') attivi.push('tipologia ' + (TIPO_LBL[state.tipo]||state.tipo).toLowerCase());
+      if(state.slot!=='all') attivi.push('slot ' + state.slot);
+      if(state.q.trim()) attivi.push('ricerca ' + state.q.trim());
+      if(!FOCUS && state.ath) attivi.push('calciatrice ' + state.ath);
+      const ico = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'+
+        '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 10h6M9 14h6M9 18h4"/></svg>';
+      host.innerHTML = '<div class="empty">' + ico + (attivi.length
+        ? '<div class="t">Nessuna esercitazione con questi filtri</div>'+
+          '<div>Filtri accesi: '+esc(attivi.join(', '))+'.</div>'+
+          '<button class="btn" id="clrflt" type="button">Togli i filtri</button>'
+        : '<div class="t">Nessuna esercitazione</div>'+
+          '<div>Aggiungine una con il pulsante in alto, oppure metti un nuovo PDF nella cartella.</div>')+
+        '</div>';
+      const cb = document.getElementById('clrflt');
+      if(cb) cb.addEventListener('click', ()=>{
+        state.tipo = 'all'; state.slot = 'all'; state.q = '';
+        if(!FOCUS) state.ath = '';
+        const si = document.getElementById('search'); if(si) si.value = '';
+        render();
+      });
       return;
     }
     host.innerHTML = list.map((s,si)=>{
@@ -1351,7 +1459,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const nAth = d.atlete ? Object.keys(d.atlete).length : 0;
         const att = attese(d.descrizione);
         const mism = (att!=null && nAth && att!==nAth);
-        const badges = (d.dup?'<span class="badge dup">doppione</span>':'') + (d.manual?'<span class="badge man">manuale</span>':'')+
+        const tk = tipoOf(d.descrizione);
+        const badges = (tk!=='altro'?'<span class="badge tip">'+esc(TIPO_LBL[tk])+'</span>':'')+
+          (d.dup?'<span class="badge dup">doppione</span>':'') + (d.manual?'<span class="badge man">manuale</span>':'')+
           (nAth?'<span class="badge n">'+nAth+(nAth===1?' atleta':' atlete')+'</span>':'')+
           (mism?'<span class="badge warn" title="Dal nome ne servirebbero '+att+'">attese '+att+'</span>':'')+
           (hasDet(s,d)?'<span class="badge det">dettagli</span>':'');
@@ -1883,7 +1993,14 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // ---------- search (debounced) ----------
   (function(){
     let t; const inp=document.getElementById('search');
-    inp.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>{ state.q=inp.value; renderSessions(filtered(buildSessions())); }, 120); });
+    // anche i numeri delle pillole tipologia si aggiornano mentre si scrive,
+    // senno' direbbero cose che a schermo non ci sono piu'
+    inp.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>{
+      state.q = inp.value;
+      const all = buildSessions();
+      renderTipi(all);
+      renderSessions(filtered(all));
+    }, 120); });
   })();
 
   // ---------- crest + gen ----------
@@ -1903,6 +2020,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderAthPick(all);
     renderKPIs(all);
     renderPills(all);
+    renderTipi(all);
     renderFocusBar(all);
     renderAthCard(all);
     renderSessions(filtered(all));
