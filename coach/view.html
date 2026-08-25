@@ -309,6 +309,59 @@ a{ color:inherit; text-decoration:none; }
 }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
 
+/* ---------- foto ingrandita e nome correggibile ----------
+   Nella scheda la foto e' alta 40px: alcuni esercizi li' non si leggono.
+   La miniatura sta dentro un bottone, cosi' prende il focus da tastiera e
+   ha il cursore a lente; il click apre la foto grande. */
+.rph, .detph{ appearance:none; padding:0; border:0; background:transparent; display:block;
+  cursor:zoom-in; border-radius:6px; }
+.rph{ width:54px; flex:0 0 54px; }
+.detph{ width:100%; border-radius:var(--r-sm); }
+.rph .rthumb, .detph .det-img{ transition: opacity .18s var(--ease), border-color .18s var(--ease); }
+.rph:hover .rthumb, .detph:hover .det-img{ opacity:.86; border-color:var(--border3); }
+.rph:active, .detph:active{ transform:scale(.97); }
+
+/* Il nome si corregge sul posto: alcune foto hanno la didascalia sbagliata
+   e quello che conta e' il nome che finisce sul foglio stampato. */
+.rname{ appearance:none; font-family:inherit; text-align:left; background:transparent;
+  border:0; border-bottom:1px dashed transparent; padding:0 0 1px; cursor:text; display:block;
+  max-width:100%; transition: border-color .16s var(--ease); }
+.rname:hover{ border-bottom-color:var(--border3); }
+.rn-in{ appearance:none; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--orange); border-radius:7px;
+  padding:4px 8px; width:100%; max-width:300px; }
+.rn-in:focus{ outline:none; }
+.det-nrow{ display:flex; align-items:flex-start; gap:8px; }
+.det-nrow .det-n{ flex:1 1 auto; min-width:0; }
+.det-nrow .ico{ flex:0 0 26px; margin-top:12px; }
+.det-nrow .rn-in{ margin-top:12px; font-size:14px; max-width:none; }
+
+.lb{ border:0; padding:0; margin:auto; background:transparent; overflow:visible;
+  max-width:min(94vw, 1080px); max-height:92vh;
+  opacity:0; transform:scale(.96);
+  transition: opacity .22s var(--ease), transform .22s var(--ease); }
+.lb.in{ opacity:1; transform:scale(1); }
+.lb::backdrop{ background:oklch(6% 0.012 38 / 0.86); backdrop-filter:blur(5px); }
+.lb-wrap{ position:relative; display:block; }
+.lb-fig{ margin:0; display:flex; flex-direction:column; align-items:center; gap:14px; }
+.lb-img{ display:block; width:auto; height:auto; max-width:min(94vw, 1080px); max-height:74vh;
+  border-radius:var(--r); background:#fff; border:1px solid var(--border3); box-shadow: var(--shadow-md); }
+.lb-cap{ font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:.5px;
+  color:var(--ink); line-height:1.1; text-align:center; }
+.lb-sub{ display:block; margin-top:5px; font-family:'Inter', system-ui, sans-serif;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+.lb-x{ appearance:none; cursor:pointer; position:absolute; top:10px; right:10px;
+  width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  background:oklch(12% 0.016 38 / 0.86); border:1px solid var(--border3); color:var(--ink);
+  transition: transform .12s var(--ease), border-color .16s var(--ease); }
+.lb-x:hover{ border-color:var(--orange); }
+.lb-x:active{ transform:scale(.92); }
+.lb-x svg{ width:15px; height:15px; }
+@media (prefers-reduced-motion: reduce){
+  .lb, .lb.in{ transition:none; transform:none; }
+  .rph:active, .detph:active{ transform:none; }
+}
+
 .foot-note{ max-width:1360px; margin:8px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
 
 @media (max-width:1080px){
@@ -422,12 +475,27 @@ a{ color:inherit; text-decoration:none; }
 
     <p class="foot-note">
       Sezione coach &#183; gli esercizi arrivano dalle foto delle schede di prevenzione.
+      Tocca una foto per vederla grande, tocca il nome per correggerlo: quello corretto
+      e' il nome che finisce sul foglio stampato, e vale per tutte le atlete.
       Le schede modificate restano salvate solo su questo dispositivo.
     </p>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- foto dell'esercizio a schermo pieno: Esc o click fuori per chiudere -->
+<dialog class="lb" id="lb" aria-label="Foto dell'esercizio">
+  <div class="lb-wrap">
+    <button class="lb-x" id="lb-x" type="button" title="Chiudi" aria-label="Chiudi la foto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <figure class="lb-fig">
+      <img class="lb-img" id="lb-img" src="" alt="">
+      <figcaption class="lb-cap" id="lb-cap"></figcaption>
+    </figure>
+  </div>
+</dialog>
 
 <!-- rosa (stesso snapshot della pagina Atlete) e database esercizi -->
 <script src="./carico_data.js"></script>
@@ -487,6 +555,101 @@ a{ color:inherit; text-decoration:none; }
   function norm(s){
     return String(s||'').toLowerCase().normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  /* ---------- nomi corretti a mano ----------
+     Alcune foto hanno la didascalia sbagliata: un esercizio che si chiama
+     scorpione sulla foto si legge sopione. Il nome scritto qui copre quello
+     del database ovunque, lista, scheda e foglio stampato, ma la chiave k
+     resta quella di partenza: la foto sul foglio si cerca con la chiave
+     (prev/<k>.jpg), quindi rinominare non deve mai toccarla.
+     La correzione non e' legata alla stagione: un nome sbagliato lo e'
+     sempre, quindi la chiave di memoria non porta l'anno. */
+  var NKEY = 'fio_prevenzione_nomi';
+  var NAMES = {};
+  try{
+    var nraw = JSON.parse(localStorage.getItem(NKEY) || '{}');
+    if(nraw && typeof nraw === 'object') NAMES = nraw;
+  }catch(e){ NAMES = {}; }
+  function saveNames(){
+    try{ localStorage.setItem(NKEY, JSON.stringify(NAMES)); }catch(e){}
+  }
+  function nameOf(e){
+    if(!e) return '';
+    var v = NAMES[e.k];
+    return (v && String(v).trim()) ? String(v).trim() : e.n;
+  }
+  function nameOfKey(k){ return nameOf(byId(k)); }
+  // Torna il nome nuovo se e' cambiato davvero, altrimenti stringa vuota.
+  // Svuotare il campo non cancella il nome: rimette quello del database,
+  // cosi' una correzione sbagliata si annulla senza dover ricordare l'originale.
+  function setName(k, v){
+    var e = byId(k); if(!e) return '';
+    var was = nameOf(e);
+    var t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    if(!t || t === e.n){ if(NAMES[k] != null){ delete NAMES[k]; saveNames(); } }
+    else if(t !== NAMES[k]){ NAMES[k] = t; saveNames(); }
+    var now = nameOf(e);
+    return now === was ? '' : now;
+  }
+  // Campo al posto dell'etichetta: Invio salva, Esc annulla, uscire salva.
+  function editName(el, k, after){
+    var e = byId(k); if(!e || !el || !el.parentNode) return;
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'rn-in';
+    inp.value = nameOf(e);
+    inp.maxLength = 60;
+    inp.setAttribute('aria-label', 'Nome dell\'esercizio');
+    el.parentNode.replaceChild(inp, el);
+    inp.focus();
+    inp.select();
+    var closed = false;
+    function fin(save){
+      if(closed) return;
+      closed = true;
+      var nn = save ? setName(k, inp.value) : '';
+      if(after) after();
+      if(nn) toast('Nome corretto: '+nn);
+    }
+    inp.addEventListener('keydown', function(ev){
+      if(ev.key === 'Enter'){ ev.preventDefault(); fin(true); }
+      else if(ev.key === 'Escape'){ ev.preventDefault(); ev.stopPropagation(); fin(false); }
+    });
+    inp.addEventListener('blur', function(){ fin(true); });
+  }
+
+  /* ---------- foto grande ----------
+     In costruzione della seduta la miniatura e' alta 40 mm scarsi e certi
+     esercizi non si distinguono. Il dialog nativo porta gia' Esc, il fondo
+     scuro e il ritorno del focus al bottone che l'ha aperto. */
+  var lbEl  = document.getElementById('lb');
+  var lbImg = document.getElementById('lb-img');
+  var lbCap = document.getElementById('lb-cap');
+  function openLightbox(k){
+    var e = byId(k); if(!e || !lbEl) return;
+    var nm = nameOf(e);
+    var zs = (e.z || []).map(function(z){ return zLabel(z); }).join(' &#183; ');
+    lbImg.src = e.img;
+    lbImg.alt = nm;
+    lbCap.innerHTML = esc(nm) + '<span class="lb-sub">'+esc(tLabel(e.t))+(zs ? ' &#183; ' : '')+zs+'</span>';
+    if(!lbEl.open){
+      if(lbEl.showModal) lbEl.showModal(); else lbEl.setAttribute('open', '');
+    }
+    lbEl.classList.remove('in');
+    requestAnimationFrame(function(){ lbEl.classList.add('in'); });
+  }
+  function closeLightbox(){
+    if(!lbEl) return;
+    if(lbEl.open && lbEl.close) lbEl.close(); else lbEl.removeAttribute('open');
+  }
+  if(lbEl){
+    lbEl.addEventListener('close', function(){ lbEl.classList.remove('in'); lbImg.src = ''; });
+    // Il click sul dialog che non sia sulla figura e' il click sul fondo scuro.
+    lbEl.addEventListener('click', function(ev){
+      if(ev.target.closest('#lb-x')){ closeLightbox(); return; }
+      if(!ev.target.closest('.lb-fig')) closeLightbox();
+    });
   }
 
   /* ---------- schede individuali dai test FMS ---------- */
@@ -1066,13 +1229,18 @@ a{ color:inherit; text-decoration:none; }
   function rowHtml(fam, r, i){
     var e = byId(r.k);
     if(!e) return '';
+    var nm = nameOf(e);
     return '<div class="row" data-fam="'+fam+'" data-i="'+i+'">'
-      + '<img class="rthumb" src="'+esc(e.img)+'" alt="'+esc(e.n)+'" loading="lazy">'
-      + '<div><div class="rname">'+esc(e.n)+'</div>'
+      + '<button class="rph" type="button" data-zoom="'+esc(e.k)+'" '
+      +   'title="Ingrandisci la foto" aria-label="Ingrandisci la foto di '+esc(nm)+'">'
+      +   '<img class="rthumb" src="'+esc(e.img)+'" alt="'+esc(nm)+'" loading="lazy">'
+      + '</button>'
+      + '<div><button class="rname" type="button" data-ren="'+fam+'" data-i="'+i+'" '
+      +     'title="Correggi il nome">'+esc(nm)+'</button>'
       +   '<div class="rwhy">'+esc(r.why || tLabel(e.t))+'</div></div>'
       + '<div class="rtools">'
       +   '<input class="dose" type="text" data-fam="'+fam+'" data-i="'+i+'" value="'+esc(r.d)+'" '
-      +     'aria-label="Dose di '+esc(e.n)+'">'
+      +     'aria-label="Dose di '+esc(nm)+'">'
       +   icoBtn('up',   fam, i, 'Sposta su',        'm18 15-6-6-6 6')
       +   icoBtn('down', fam, i, 'Sposta giu',       'm6 9 6 6 6-6')
       +   icoBtn('swap', fam, i, 'Cambia esercizio', 'M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.7 3L21 8|M21 3v5h-5')
@@ -1103,7 +1271,7 @@ a{ color:inherit; text-decoration:none; }
                    qz: zs && zs.length ? zs.slice() : e.z.slice(),
                    qt: ts && ts.length ? ts.slice() : [e.t] });
     savePlans(); renderDetail(); renderKPIs();
-    toast(e.n+' aggiunto al blocco '+fam);
+    toast(nameOf(e)+' aggiunto al blocco '+fam);
   }
   function addByText(fam, txt){
     var t = String(txt || '').trim();
@@ -1119,8 +1287,12 @@ a{ color:inherit; text-decoration:none; }
       q.zs.forEach(function(x){ lbl.push(zLabel(x)); });
       why = lbl.join(' ');
     } else {
+      // La ricerca guarda sia il nome del database sia quello corretto a mano:
+      // dopo aver rinominato scorpione, cercare scorpione deve trovarlo lo stesso.
       var nq = norm(t);
-      var hit = DB.filter(function(x){ return norm(x.n).indexOf(nq) >= 0; });
+      var hit = DB.filter(function(x){
+        return norm(x.n).indexOf(nq) >= 0 || norm(nameOf(x)).indexOf(nq) >= 0;
+      });
       for(var j = 0; j < hit.length; j++) if(!used[hit[j].k]){ e = hit[j]; break; }
       if(!e && hit.length) e = hit[0];
     }
@@ -1140,7 +1312,7 @@ a{ color:inherit; text-decoration:none; }
     var e = byId(r.k);
     pl[fam].splice(i, 1);
     savePlans(); renderDetail(); renderKPIs();
-    toast((e ? e.n : 'Esercizio')+' rimosso');
+    toast((e ? nameOf(e) : 'Esercizio')+' rimosso');
   }
   function swapRow(fam, i){
     var pl = PLANS[SELECTED]; if(!pl) return;
@@ -1158,7 +1330,7 @@ a{ color:inherit; text-decoration:none; }
       r.k = e.k;
       r.d = DOSE[e.t] || r.d;
       savePlans(); renderDetail();
-      toast('Sostituito con '+e.n);
+      toast('Sostituito con '+nameOf(e));
       return;
     }
     toast('Nessuna alternativa libera');
@@ -1317,7 +1489,8 @@ a{ color:inherit; text-decoration:none; }
     return DB.filter(function(e){
       if(LZ !== 'all' && e.z.indexOf(LZ) < 0) return false;
       if(LT !== 'all' && e.t !== LT) return false;
-      if(q && norm(e.n).indexOf(q) < 0) return false;
+      // Vale il nome del database e anche quello corretto a mano.
+      if(q && norm(e.n).indexOf(q) < 0 && norm(nameOf(e)).indexOf(q) < 0) return false;
       return true;
     });
   }
@@ -1336,7 +1509,7 @@ a{ color:inherit; text-decoration:none; }
       var zs = e.z.map(function(z){ return esc(zLabel(z)); }).join(' &#183; ');
       return '<button class="li'+(e.k === LSEL ? ' active' : '')+'" data-k="'+esc(e.k)+'" type="button">'
         + '<img class="li-th" src="'+esc(e.img)+'" alt="" loading="lazy">'
-        + '<span><span class="li-n">'+esc(e.n)+'</span><span class="li-z">'+zs+'</span></span>'
+        + '<span><span class="li-n">'+esc(nameOf(e))+'</span><span class="li-z">'+zs+'</span></span>'
         + '<span class="li-t">'+esc(tLabel(e.t))+'</span></button>';
     }).join('');
     renderExDetail();
@@ -1344,9 +1517,22 @@ a{ color:inherit; text-decoration:none; }
   function renderExDetail(){
     var e = LSEL ? byId(LSEL) : null;
     if(!e){ detEl.innerHTML = '<div class="lib-empty">Seleziona un esercizio dalla lista.</div>'; return; }
+    // L'archivio dei video e' indicizzato sul nome del database, non su quello
+    // corretto a mano: qui serve e.n, altrimenti dopo una rinomina il link sparisce.
     var vid = window.getExUrl ? window.getExUrl(e.n) : null;
-    detEl.innerHTML = '<img class="det-img" src="'+esc(e.img)+'" alt="'+esc(e.n)+'" loading="lazy">'
-      + '<div class="det-n">'+esc(e.n)+'</div>'
+    var nm = nameOf(e);
+    detEl.innerHTML = '<button class="detph" type="button" data-zoom="'+esc(e.k)+'" '
+      +   'title="Ingrandisci la foto" aria-label="Ingrandisci la foto di '+esc(nm)+'">'
+      +   '<img class="det-img" src="'+esc(e.img)+'" alt="'+esc(nm)+'" loading="lazy">'
+      + '</button>'
+      + '<div class="det-nrow"><div class="det-n">'+esc(nm)+'</div>'
+      +   '<button class="ico" data-renlib="'+esc(e.k)+'" type="button" '
+      +     'title="Correggi il nome" aria-label="Correggi il nome dell\'esercizio">'
+      +     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      +       'stroke-linecap="round" stroke-linejoin="round">'
+      +       '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+      +   '</button>'
+      + '</div>'
       + '<div class="det-tags">'
       +   e.z.map(function(z){ return '<span class="tag">'+esc(zLabel(z))+'</span>'; }).join('')
       +   '<span class="tag t">'+esc(tLabel(e.t))+'</span>'
@@ -1423,7 +1609,7 @@ a{ color:inherit; text-decoration:none; }
     // colonna. 0.2646 e' un pixel in millimetri.
     var maxLen = 0;
     list.forEach(function(r){
-      var e = byId(r.k), L = String((e && e.n) || '').length;
+      var L = nameOfKey(r.k).length;
       if(L > maxLen) maxLen = L;
     });
     var imgH  = Math.max(20, Math.round(cellH * 0.62 * 10) / 10);
@@ -1441,11 +1627,11 @@ a{ color:inherit; text-decoration:none; }
       cells = '<div class="sh-cell wide"><div class="sh-void">Nessun esercizio nel blocco '+esc(fam)+'</div></div>';
     } else {
       list.forEach(function(r, i){
-        var e = byId(r.k);
         var wide = (n % 2 === 1 && i === n - 1) ? ' wide' : '';
+        // La foto si cerca sempre con la chiave, il nome invece e' quello corretto.
         cells += '<div class="sh-cell'+wide+'">'
           + '<img class="sh-ph" style="height:'+imgH+'mm" src="'+ABS+'prev/'+esc(r.k)+'.jpg" alt="">'
-          + '<div class="sh-cap" style="font-size:'+capFs+'px">'+esc(e.n)
+          + '<div class="sh-cap" style="font-size:'+capFs+'px">'+esc(nameOfKey(r.k))
           +   '<span class="d" style="font-size:'+dosFs+'px">'+esc(r.d || '')+'</span></div>'
           + '</div>';
       });
@@ -1524,6 +1710,15 @@ a{ color:inherit; text-decoration:none; }
   });
 
   genEl.addEventListener('click', function(ev){
+    var zoom = ev.target.closest('[data-zoom]');
+    if(zoom){ openLightbox(zoom.dataset.zoom); return; }
+    var ren = ev.target.closest('[data-ren]');
+    if(ren){
+      var pl0 = PLANS[SELECTED];
+      var r0 = pl0 ? pl0[ren.dataset.ren][parseInt(ren.dataset.i, 10)] : null;
+      if(r0) editName(ren, r0.k, function(){ renderDetail(); renderList(); });
+      return;
+    }
     var ico = ev.target.closest('.ico');
     if(ico){
       var fam = ico.dataset.fam, i = parseInt(ico.dataset.i, 10), act = ico.dataset.act;
@@ -1580,6 +1775,14 @@ a{ color:inherit; text-decoration:none; }
     renderExDetail();
   });
   detEl.addEventListener('click', function(ev){
+    var zoom = ev.target.closest('[data-zoom]');
+    if(zoom){ openLightbox(zoom.dataset.zoom); return; }
+    var ren = ev.target.closest('[data-renlib]');
+    if(ren){
+      var nEl = detEl.querySelector('.det-n');
+      if(nEl) editName(nEl, ren.dataset.renlib, function(){ renderList(); renderDetail(); });
+      return;
+    }
     var b = ev.target.closest('[data-addto]'); if(!b) return;
     var e = LSEL ? byId(LSEL) : null;
     if(e) addEx(b.dataset.addto, e, null, null, null);
