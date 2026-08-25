@@ -957,6 +957,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // helpers
   function fmt(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  /* Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
+     se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
+     La chiave del dato resta quella del GPS: `disp()` cambia solo cio' che si
+     vede e l'ordine, mai il valore con cui si cerca, si seleziona o si salva. */
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function emptyBlock(msg){
     return '<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19h16M6 16V9M11 16V5M16 16v-6"/></svg><div>'+esc(msg)+'</div></div>';
   }
@@ -1253,7 +1259,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
 
     const rows = ath.slice().sort((a,b)=>{
-      if(ssort.col==='name') return ssort.dir*a.name.localeCompare(b.name,'it');
+      if(ssort.col==='name') return ssort.dir*dispSort(a.name, b.name);
       if(ssort.col==='role') return ssort.dir*String(a.role).localeCompare(String(b.role),'it');
       let va=(a.v||[])[ssort.col], vb=(b.v||[])[ssort.col];
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
@@ -1301,7 +1307,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h += '<tr class="r-day"><td class="col-day" colspan="'+(V.length+1)+'">Nessuna atleta con dati per questa seduta</td></tr>';
     }
     rows.forEach((r, ri)=>{
-      h += '<tr class="r-day'+(ri%2?' r-alt':'')+'"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
+      h += '<tr class="r-day'+(ri%2?' r-alt':'')+'"><td class="col-day"><span class="lb">'+esc(disp(r.name))+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       const rv = r.v||[];
       V.forEach(i=> h += cell(rv[i], i, eff));
       h += '</tr>';
@@ -1519,7 +1525,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const mon = (p.months||[]).find(m=> m.key===monthKey);
     return findDayRow(mon, label);
   }
-  function cfAllPlayers(){ return Object.keys(S.players||{}).sort((a,b)=> a.localeCompare(b,'it')); }
+  function cfAllPlayers(){ return Object.keys(S.players||{}).sort(dispSort); }
   function cfScopeSessions(){
     return allSessions().filter(s=>
       cfState.scope==='all' ? true : cfState.scope==='match' ? s.type==='match' : s.type==='day');
@@ -1769,7 +1775,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const col=CF_COLS[pi%CF_COLS.length];
       const b=best[pi].length ? ('meglio in: '+best[pi].join(', ')) : 'nessun parametro in testa';
       side+='<div class="cfr-who"><span class="cfr-sw" style="background:'+col+'"></span><span>'
-        +'<span class="cfr-nm">'+esc(p.name)+'</span>'+(p.role?' <span class="cfr-best">'+esc(p.role)+'</span>':'')
+        +'<span class="cfr-nm">'+esc(disp(p.name))+'</span>'+(p.role?' <span class="cfr-best">'+esc(p.role)+'</span>':'')
         +'<span class="cfr-best">'+esc(b)+'</span></span></div>';
     });
     if(hasTeam) side+='<div class="cfr-who"><span class="cfr-sw" style="background:var(--faint)"></span><span>'
@@ -1819,7 +1825,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return { name, role:roleOf(name), v:a.v, n:a.n };
     });
     pdata.sort((a,b)=>{
-      if(csort.col==='name') return csort.dir*a.name.localeCompare(b.name,'it');
+      if(csort.col==='name') return csort.dir*dispSort(a.name, b.name);
       if(csort.col==='role') return csort.dir*String(a.role).localeCompare(String(b.role),'it');
       if(csort.col==='n') return csort.dir*(a.n-b.n);
       // in "partita contro allenamento" la colonna si ordina per rapporto, non per valore
@@ -1850,7 +1856,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
       } else if(duello){
         lg.hidden=false;
-        lg.innerHTML='Riga <b>Scarto</b>: quanto fa <b>'+esc(duello.a.name)+'</b> rispetto a <b>'+esc(duello.b.name)
+        lg.innerHTML='Riga <b>Scarto</b>: quanto fa <b>'+esc(disp(duello.a.name))+'</b> rispetto a <b>'+esc(disp(duello.b.name))
           +'</b>, sopra in percentuale e sotto in differenza'
           +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
           +'<span class="lg"><span class="dot near"></span>95-105%</span>'
@@ -1892,7 +1898,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     if(!pdata.length){ h+='<tr class="r-day"><td class="col-day" colspan="'+(V.length+2)+'">Nessuna atleta selezionata</td></tr>'; }
     pdata.forEach(r=>{
-      h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'
+      h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(disp(r.name))+'</span>'
         +(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       h+='<td class="cf-n">'+(isTvm?(r.nm+'/'+r.nd):(r.n||0))+'</td>';
       if(isTvm){ const vm=r.v||[], vd=r.v2||[], vr=r.vr||[]; V.forEach(i=> h+=cfPctCell(vr[i], fmt(vm[i])+' / '+fmt(vd[i]), keyCls(i))); }
@@ -1902,7 +1908,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(duello){
       const A=duello.a.v||[], B=duello.b.v||[], rr=cfRatio(A, B);
       h+='<tr class="r-diff"><td class="col-day"><span class="lb">Scarto</span>'
-        +'<span class="role-inline">'+esc(duello.a.name)+' su '+esc(duello.b.name)+'</span></td><td class="cf-n">-</td>';
+        +'<span class="role-inline">'+esc(disp(duello.a.name))+' su '+esc(disp(duello.b.name))+'</span></td><td class="cf-n">-</td>';
       V.forEach(i=>{
         const d=(A[i]!=null && isFinite(A[i]) && B[i]!=null && isFinite(B[i])) ? (A[i]-B[i]) : null;
         h+=cfPctCell(rr[i], (d==null?'-':((d>0?'+':'')+fmt(d))), keyCls(i));
@@ -1949,13 +1955,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!cfPlaySel) cfPlaySel=new Set(cfAllPlayers());
     const q=(filter||'').trim().toLowerCase(); let html='',n=0;
     cfRolePlayers().forEach(name=>{
-      const r=roleOf(name); const hay=(name+' '+r).toLowerCase();
+      // si cerca sia col nome del GPS sia con quello scritto in Atlete: se una
+      // e' salvata Faggioli Federica ma a schermo si legge Faggioli, tutte e due
+      // le parole devono trovarla
+      const r=roleOf(name); const hay=(name+' '+disp(name)+' '+r).toLowerCase();
       if(q && hay.indexOf(q)<0) return;
       n++; const on=cfPlaySel.has(name);
       // il ruolo resta a destra del nome: e' corto e non manda a capo l'atleta
       html+='<button class="sess-item cf-opt'+(on?' is-on':'')+'" type="button" data-name="'+esc(name)+'">'
         +'<span class="cf-chk">'+CF_CHK+'</span>'
-        +'<span class="sess-when"><span class="sess-lb">'+esc(name)+'</span></span>'
+        +'<span class="sess-when"><span class="sess-lb">'+esc(disp(name))+'</span></span>'
         +'<span class="sess-role">'+esc(r)+'</span></button>';
     });
     if(!n) html='<div class="sess-empty">'+(cfState.role?'Nessuna atleta con questo ruolo':'Nessuna atleta')+'</div>'; host.innerHTML=html;
@@ -2446,6 +2455,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   { const b=document.getElementById('btn-print'); if(b) b.addEventListener('click', ()=>{
       toast('Preparo la stampa...');
       setTimeout(()=>{ buildPrintSheets(); window.print(); }, 120); }); }
+
+  /* Nome cambiato in Atlete, anche da un'altra scheda del browser: tabella della
+     seduta, elenco delle calciatrici e confronto vanno riletti col nome nuovo.
+     Le scelte fatte restano: cfPlaySel tiene le chiavi, e le chiavi non cambiano. */
+  document.addEventListener('fio:nomi', function(){
+    renderSession();
+    cfRenderPlayRail(document.getElementById('cf-play-search') ? document.getElementById('cf-play-search').value : '');
+    renderConfronto();
+  });
 
   // ---------- init ----------
   (function init(){

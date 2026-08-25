@@ -1191,6 +1191,13 @@ window.FORZA = window.FORZA || { roster:[] };
   const MO = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  /* Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
+     se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
+     Si chiama `plNome` e non `disp` perche' piu' avanti `disp` e' gia' la lista
+     delle disponibili. La chiave del dato resta quella del foglio: cambia solo
+     cio' che si vede, mai il valore salvato nella disponibilita' o nella seduta. */
+  function plNome(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function plNomeSort(a, b){ return plNome(a).localeCompare(plNome(b), 'it'); }
   function pad(n){ return (n<10?'0':'')+n; }
   function dstr(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
   function parse(s){ const p=String(s).split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
@@ -3299,6 +3306,8 @@ window.FORZA = window.FORZA || { roster:[] };
     FZ.forEach(function(r){ add(r.name, r.role, r.tipo); });
     Object.keys(CUSTOM).forEach(function(n){ add(n, CUSTOM[n], 'custom'); });
     Object.keys(AVAIL).forEach(function(n){ add(n, '', ''); });
+    // l'ordine e' quello che si legge a schermo, non quello del foglio
+    list.sort(function(a, b){ return plNomeSort(a.name, b.name); });
     return list;
   })();
 
@@ -3402,9 +3411,10 @@ window.FORZA = window.FORZA || { roster:[] };
         '<div class="rosa-list">' + g.list.map(function(p){
           const st  = avSt(p.name);
           const lbl = avDef(st).l.toLowerCase();
+          // data-n resta la chiave con cui si salva la disponibilita'
           return '<button type="button" class="'+atlClass(st)+'" data-n="'+esc(p.name)+'" ' +
-            'title="'+esc(p.name+' - '+lbl)+'" aria-label="'+esc(p.name+', '+lbl)+'">' +
-            '<span class="dot"></span>'+esc(p.name) +
+            'title="'+esc(plNome(p.name)+' - '+lbl)+'" aria-label="'+esc(plNome(p.name)+', '+lbl)+'">' +
+            '<span class="dot"></span>'+esc(plNome(p.name)) +
             (p.role ? '<span class="rl">'+esc(p.role)+'</span>' : '') +
             '</button>';
         }).join('') + '</div></div>';
@@ -3421,10 +3431,10 @@ window.FORZA = window.FORZA || { roster:[] };
       list.map(function(p){
         const d = avDef(avSt(p.name));
         return '<div class="rn-row">' +
-          '<span class="rn-nm">'+esc(p.name)+'</span>' +
+          '<span class="rn-nm">'+esc(plNome(p.name))+'</span>' +
           '<span class="rn-st '+d.cls+'">'+esc(d.l)+'</span>' +
           '<input class="rn-in" type="text" data-n="'+esc(p.name)+'" value="'+esc(rosaNote(p.name))+'" ' +
-          'placeholder="'+esc(d.ph)+'" aria-label="Nota per '+esc(p.name)+'">' +
+          'placeholder="'+esc(d.ph)+'" aria-label="Nota per '+esc(plNome(p.name))+'">' +
           '</div>';
       }).join('');
   }
@@ -3435,7 +3445,9 @@ window.FORZA = window.FORZA || { roster:[] };
     document.querySelectorAll('#rosa-groups .rosa-grp').forEach(function(g){
       let vis = 0;
       g.querySelectorAll('.atl').forEach(function(b){
-        const hit = !q || (b.getAttribute('data-n')||'').toLowerCase().indexOf(q) >= 0;
+        // si cerca sia col nome del foglio sia con quello scritto in Atlete
+        const hay = ((b.getAttribute('data-n')||'') + ' ' + (b.textContent||'')).toLowerCase();
+        const hit = !q || hay.indexOf(q) >= 0;
         b.classList.toggle('hide', !hit);
         if(hit) vis++;
       });
@@ -3456,8 +3468,8 @@ window.FORZA = window.FORZA || { roster:[] };
       avSet(n, next);
       const hid = b.classList.contains('hide');
       b.className = atlClass(next) + (hid ? ' hide' : '');
-      b.setAttribute('title', n+' - '+lbl);
-      b.setAttribute('aria-label', n+', '+lbl);
+      b.setAttribute('title', plNome(n)+' - '+lbl);
+      b.setAttribute('aria-label', plNome(n)+', '+lbl);
       rosaSum(); rosaNotes();
     });
 
@@ -3484,6 +3496,15 @@ window.FORZA = window.FORZA || { roster:[] };
       if(ev && ev.key && ev.key !== LS_AVAIL) return;
       AVAIL = lsObj(LS_AVAIL);
       renderRosa(); rosaSum(); rosaNotes();
+    });
+
+    /* Nome cambiato in Atlete, anche da un'altra scheda: la rosa si rimette in
+       ordine e si rilegge col nome nuovo. Gli stati restano dove sono, perche'
+       la chiave con cui la disponibilita' si salva non e' cambiata. */
+    document.addEventListener('fio:nomi', function(){
+      ROSTER.sort(function(a, b){ return plNomeSort(a.name, b.name); });
+      renderRosa(); rosaSum(); rosaNotes();
+      if(typeof renderAlert === 'function') renderAlert();
     });
   }
 
@@ -3528,7 +3549,7 @@ window.FORZA = window.FORZA || { roster:[] };
     // le sedute salvate prima dei cinque stati usavano part/out: le rileggo qui
     function stKey(v){ return v === 'part' ? 'parziale' : (v === 'out' ? 'assente' : String(v||'')); }
     function nomi(list){
-      return list.map(function(p){ return esc(p.name) + (p.note ? ' ('+esc(p.note)+')' : ''); }).join(', ');
+      return list.map(function(p){ return esc(plNome(p.name)) + (p.note ? ' ('+esc(p.note)+')' : ''); }).join(', ');
     }
     const nDisp = (s.disp && s.disp.length) || 0;
     let rosaHtml = '';
@@ -3540,7 +3561,8 @@ window.FORZA = window.FORZA || { roster:[] };
       rosaHtml =
         '<div class="pp-sec"><div class="t">Rosa del giorno</div></div>' +
         '<div class="pp-rosa">' +
-          '<div class="r"><b>In gruppo ('+nDisp+')</b>: '+(nDisp ? esc(s.disp.join(', ')) : 'nessuna')+'</div>' +
+          '<div class="r"><b>In gruppo ('+nDisp+')</b>: '+
+            (nDisp ? esc(s.disp.map(plNome).join(', ')) : 'nessuna')+'</div>' +
           righe +
         '</div>';
     }
@@ -4303,8 +4325,10 @@ window.FORZA = window.FORZA || { roster:[] };
 
   function tgNames(arr){
     if(!arr.length) return '';
-    if(arr.length <= 5) return arr.map(esc).join(', ');
-    return arr.slice(0, 5).map(esc).join(', ') + ' e altre ' + (arr.length - 5);
+    // in elenco vanno i nomi come si leggono in Atlete
+    const n = arr.map(function(x){ return esc(plNome(x)); });
+    if(n.length <= 5) return n.join(', ');
+    return n.slice(0, 5).join(', ') + ' e altre ' + (n.length - 5);
   }
 
   function renderAlert(){
@@ -4327,7 +4351,7 @@ window.FORZA = window.FORZA || { roster:[] };
         const few  = r.n < 5 ? ' &#183; solo '+r.n+(r.n === 1 ? ' gara intera' : ' gare intere') : '';
         return '<div class="tg-arow">'+
           '<div>'+
-            '<div class="nm">'+esc(r.name)+'</div>'+
+            '<div class="nm">'+esc(plNome(r.name))+'</div>'+
             '<div class="de tnum">gara '+NF.format(r.gara)+' m &#183; le servono da '+NF.format(r.lo)+
               ' a '+NF.format(r.up)+' m &#183; il piano '+esc(r.role.toLowerCase())+' ne da '+
               NF.format(r.plan)+few+'</div>'+

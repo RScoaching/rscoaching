@@ -557,6 +557,15 @@ a{ color:inherit; text-decoration:none; }
       .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
+  /* ---------- come si legge un'atleta ----------
+     Il nome scritto in Atlete vale in tutto il sito: se il mister l'ha messa
+     Faggioli, qui deve leggersi Faggioli e non Faggioli Federica. La chiave
+     del dato pero' resta quella dei fogli e del GPS: `disp()` cambia solo
+     quello che si vede, mai quello con cui si salva o si cerca un valore. */
+  function disp(n){
+    return (typeof window.fioNome === 'function') ? window.fioNome(n) : String(n==null?'':n);
+  }
+
   /* ---------- nomi corretti a mano ----------
      Alcune foto hanno la didascalia sbagliata: un esercizio che si chiama
      scorpione sulla foto si legge sopione. Il nome scritto qui copre quello
@@ -731,7 +740,9 @@ a{ color:inherit; text-decoration:none; }
     // esempio le nuove arrivate senza GPS) deve avere lo stesso la sua scheda.
     Object.keys(testNames()).forEach(add);
     rosterFrom(reg).forEach(add);
-    return out.sort(function(a, b){ return a.localeCompare(b, 'it'); });
+    // Ordinate per come si leggono, non per come sono scritte nel dato:
+    // se una si legge Faggioli deve stare fra le F, non fra le altre F...
+    return out.sort(function(a, b){ return disp(a).localeCompare(disp(b), 'it'); });
   }
 
   /* ---------- quadro test: screening FMS e test del fisioterapista ---------- */
@@ -1361,7 +1372,11 @@ a{ color:inherit; text-decoration:none; }
 
   function renderRail(){
     var q = QUERY.trim().toLowerCase();
-    var list = q ? SHEETS.filter(function(s){ return s.name.toLowerCase().indexOf(q) >= 0; }) : SHEETS;
+    // La ricerca guarda tutti e due i nomi: chi cerca "federica" trova lo
+    // stesso l'atleta che a schermo si legge solo "Faggioli".
+    var list = q ? SHEETS.filter(function(s){
+      return s.name.toLowerCase().indexOf(q) >= 0 || disp(s.name).toLowerCase().indexOf(q) >= 0;
+    }) : SHEETS;
     if(!list.length){
       railEl.innerHTML = '<div class="ath-empty">Nessuna atleta trovata per "'+esc(QUERY)+'"</div>';
       return;
@@ -1370,7 +1385,7 @@ a{ color:inherit; text-decoration:none; }
       var lev = scLevel(s);
       var cls = 'ath-chip'+(s.name === SELECTED ? ' active' : '')+(lev ? ' '+lev : '');
       var dot = lev ? '<span class="ath-dot"></span>' : '';
-      return '<button type="button" class="'+cls+'" data-name="'+esc(s.name)+'">'+esc(s.name)+dot+'</button>';
+      return '<button type="button" class="'+cls+'" data-name="'+esc(s.name)+'">'+esc(disp(s.name))+dot+'</button>';
     }).join('');
   }
 
@@ -1466,7 +1481,7 @@ a{ color:inherit; text-decoration:none; }
         kpiCard('',  'Esercizi',       DB.length,   '', 'nel database con foto')
       + kpiCard('v', 'Zone',           ZONE.length, '', 'aree del corpo coperte')
       + kpiCard('g', 'Schede salvate', nPlans,      '', 'su questo dispositivo')
-      + kpiCard('b', 'Scheda attiva',  cur,         '', SELECTED ? SELECTED : 'nessuna atleta');
+      + kpiCard('b', 'Scheda attiva',  cur,         '', SELECTED ? disp(SELECTED) : 'nessuna atleta');
   }
 
   /* ---------- libreria esercizi ---------- */
@@ -1542,7 +1557,7 @@ a{ color:inherit; text-decoration:none; }
       +   '<button class="btn" data-addto="B" type="button">Aggiungi a B</button>'
       + '</div>'
       + (vid ? '<div class="det-hint"><a class="gp-vid" href="'+esc(vid)+'" target="_blank" rel="noopener">video</a></div>' : '')
-      + '<div class="det-hint">'+(SELECTED ? 'Scheda attiva: '+esc(SELECTED) : 'Nessuna atleta selezionata')+'</div>';
+      + '<div class="det-hint">'+(SELECTED ? 'Scheda attiva: '+esc(disp(SELECTED)) : 'Nessuna atleta selezionata')+'</div>';
   }
 
   /* ---------- stampa: una scheda per foglio, come i fogli 25-26 ----------
@@ -1670,13 +1685,14 @@ a{ color:inherit; text-decoration:none; }
   // la A davanti e la B dietro senza dover riordinare niente.
   function athleteSheets(s){
     var pl = ensurePlan(s);
-    return sheetHTML(s.name, 'A', pl.A) + sheetHTML(s.name, 'B', pl.B);
+    // Sul foglio va il nome che l'atleta si aspetta di leggere, non la chiave.
+    return sheetHTML(disp(s.name), 'A', pl.A) + sheetHTML(disp(s.name), 'B', pl.B);
   }
 
   function printAthlete(name){
     var s = sheetOf(name);
     if(!s){ toast('Seleziona un\'atleta'); return; }
-    openPrint(printDocSheets('Scheda prevenzione '+s.name, athleteSheets(s)));
+    openPrint(printDocSheets('Scheda prevenzione '+disp(s.name), athleteSheets(s)));
   }
   function printAllGen(){
     if(!SHEETS.length){ toast('Nessuna atleta da stampare'); return; }
@@ -1789,6 +1805,9 @@ a{ color:inherit; text-decoration:none; }
   });
 
   document.addEventListener('fio:stagione', function(){ renderGen(); renderList(); });
+  // Nome cambiato in Atlete, anche da un'altra scheda del browser: qui le
+  // pillole e la scheda aperta devono rileggersi subito col nome nuovo.
+  document.addEventListener('fio:nomi', function(){ renderGen(); });
 
   /* ---------- primo render ---------- */
   renderFilters();

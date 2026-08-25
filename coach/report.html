@@ -658,6 +658,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // riscritto a mano in Atlete. Prima qui l'override non si leggeva, e chi aveva
   // il ruolo assegnato a mano restava fuori dal filtro e dai reparti.
   function roleOf(name){ return window.fioRuolo(name, PLAYERS[name] && PLAYERS[name].role); }
+  // Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito: se
+  // il mister l'ha messa Faggioli, sul report non deve uscire Faggioli Federica.
+  // La chiave del dato resta quella dei fogli, `disp()` cambia solo cio' che si
+  // vede: PLAYERS, selAthletes e il valore delle tendine restano sulla chiave.
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function decForUnit(u){ if(u==='m'||u==='n'||u==='min') return 0; return 1; }
   function fmtVal(v,u){ if(v==null||Number.isNaN(v)) return null; const d=decForUnit(u); return (d?NF1:NF0).format(v); }
   function fmtKm(m){ m=Number(m)||0; return NF1.format(m/1000); }
@@ -667,11 +673,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const sc = document.getElementById('sel-scope');
     const mo = document.getElementById('sel-month');
     // ambito: squadra + atlete (ordine alfabetico)
-    const names = Object.keys(PLAYERS).sort((a,b)=> a.localeCompare(b,'it'));
+    const names = Object.keys(PLAYERS).sort(dispSort);
     let scHtml = '<option value="'+TEAM+'">Squadra (intera rosa)</option>';
     scHtml += '<optgroup label="Atlete">' + names.map(n=>{
       const role = roleOf(n);
-      return '<option value="'+esc(n)+'">'+esc(n)+(role?' · '+esc(role):'')+'</option>';
+      return '<option value="'+esc(n)+'">'+esc(disp(n))+(role?' · '+esc(role):'')+'</option>';
     }).join('') + '</optgroup>';
     sc.innerHTML = scHtml;
     // periodo: stagione intera + mesi
@@ -708,7 +714,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function scopeLabel(scope){
     if(scope===TEAM) return { name:'Squadra', role:'', sub:'Fiorentina Primavera U19W · intera rosa' };
     const role = roleOf(scope);
-    return { name:scope, role:role, sub:'Fiorentina Primavera U19W' };
+    return { name:disp(scope), role:role, sub:'Fiorentina Primavera U19W' };
   }
   function periodLabel(monthKey){
     if(!monthKey) return 'Stagione '+SEASON;
@@ -987,7 +993,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const slug = (scope===TEAM?'squadra':scope).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    const slug = (scope===TEAM?'squadra':disp(scope)).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
     const per2 = monthKey || 'stagione';
     const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
     a.href = url; a.download = 'report_'+slug+'_'+per2+'_'+stamp+'.csv';
@@ -1093,7 +1099,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const blob = new Blob(['﻿'+h], {type:'application/vnd.ms-excel;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const slug = (scope===TEAM?'squadra':scope).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    const slug = (scope===TEAM?'squadra':disp(scope)).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
     const per2 = monthKey || 'stagione';
     const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
     a.href = url; a.download = 'report_'+slug+'_'+per2+'_'+stamp+'.xls';
@@ -1174,7 +1180,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!mk || !label) return null;
     let rows = dayData(mk, label);
     if(!rows.length) return null;
-    rows.sort(function(a,b){ return a.name.localeCompare(b.name,'it'); });
+    rows.sort(function(a,b){ return dispSort(a.name, b.name); });
     const cols = KEYI.slice();
     const allV = rows.map(function(r){ return r.v; });
     const media = cols.map(function(idx){ return agg(allV, idx).mean; });
@@ -1202,7 +1208,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       cols.map(function(i){ return '<th>'+esc(MS[i]||'')+'</th>'; }).join('')+'</tr></thead>';
     const body = rows.map(function(r){
       const tds = cols.map(function(idx, ci){ return dvCell(r.v[idx], media[ci], MU[idx]||''); }).join('');
-      return '<tr><td style="text-align:left">'+esc(r.name)+(r.role?' <span class="mu">'+esc(r.role)+'</span>':'')+'</td>'+tds+'</tr>';
+      return '<tr><td style="text-align:left">'+esc(disp(r.name))+(r.role?' <span class="mu">'+esc(r.role)+'</span>':'')+'</td>'+tds+'</tr>';
     }).join('');
     const mediaCells = cols.map(function(idx, ci){
       const s = fmtVal(media[ci], MU[idx]||'');
@@ -1326,12 +1332,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function updateMetricBadge(){ document.getElementById('cnt-metrics').textContent = String(selMetrics.size); }
   function buildAthleteList(){
     const host = document.getElementById('list-athletes');
-    const names = Object.keys(PLAYERS).sort(function(a,b){ return a.localeCompare(b,'it'); });
+    const names = Object.keys(PLAYERS).sort(dispSort);
     host.innerHTML = names.map(function(name){
       const on = selAthletes.has(name) ? ' checked' : '';
       const role = roleOf(name);
       return '<label class="mrow"><input type="checkbox" data-n="'+esc(name)+'"'+on+'>'+
-        '<span class="mr-name">'+esc(name)+'</span>'+
+        '<span class="mr-name">'+esc(disp(name))+'</span>'+
         '<span class="mr-unit">'+esc(role)+'</span></label>';
     }).join('');
   }
@@ -1485,7 +1491,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     m.rows.forEach(function(r, ri){
       if(ri % 2 === 1){ ctx.fillStyle = PC.card; ctx.fillRect(P, ty, W-2*P, rowH); }
       ctx.fillStyle = PC.text; ctx.font = '500 14px Inter, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-      ctx.fillText(shorten(ctx, r.name, nameW-24), P + 16, ty + rowH/2);
+      ctx.fillText(shorten(ctx, disp(r.name), nameW-24), P + 16, ty + rowH/2);
       cols.forEach(function(idx, ci){
         const cright = P + nameW + ci*colW + colW - 12;
         drawValue(ctx, cright, ty + rowH/2, r.v[idx], m.media[ci], MU[idx]||'');
@@ -1576,6 +1582,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     di.addEventListener('click', function(e){ if(e.target===di) di.close(); });
     di.querySelectorAll('[data-close-img]').forEach(function(b){ b.addEventListener('click', function(){ di.close(); }); });
   })();
+
+  // Nome cambiato in Atlete, anche da un'altra scheda del browser: tendina
+  // dell'ambito, elenco delle atlete e report aperto si rileggono col nome
+  // nuovo. L'ambito scelto resta quello: la chiave del dato non e' cambiata.
+  document.addEventListener('fio:nomi', function(){
+    const sc = document.getElementById('sel-scope');
+    const mo = document.getElementById('sel-month');
+    const curS = sc ? sc.value : '';
+    const curM = mo ? mo.value : '';
+    fillControls();
+    if(sc && curS) sc.value = curS;
+    if(mo) mo.value = curM;
+    buildAthleteList();
+    render();
+  });
 
   // ---------- init ----------
   fillControls();

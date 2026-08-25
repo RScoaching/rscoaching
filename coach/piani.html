@@ -1045,6 +1045,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                 'luglio','agosto','settembre','ottobre','novembre','dicembre'];
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  /* Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
+     se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
+     La chiave del dato resta quella dei fogli e del registro test: `disp()`
+     cambia solo cio' che si vede e l'ordine, mai il valore con cui si salva. */
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function pad(n){ return (n<10?'0':'')+n; }
   function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), 2600); }
   function todayShort(){ const d=new Date(); return d.getDate()+' '+MO[d.getMonth()]; }
@@ -1065,7 +1071,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---- roster dai players (oggetto) ----
   const PLAYERS = SNAP.players || {};
-  const roster = Object.keys(PLAYERS).sort((a,b)=> a.localeCompare(b,'it'));
+  const roster = Object.keys(PLAYERS).sort(dispSort);
   // Il ruolo lo risolve `fio_sidebar.js`: quello dei fogli del mister piu' quello
   // riscritto a mano in Atlete, uguale in tutte le pagine.
   function roleOf(name){ return window.fioRuolo(name, PLAYERS[name] && PLAYERS[name].role); }
@@ -1683,7 +1689,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!ranked.length) return '';
     const rows = ranked.map((p,i)=>
       '<tr><td class="rk">'+(i+1)+'</td>'+
-      '<td class="l big">'+esc(p.name)+(p.susp?' <span class="fl">da verificare</span>':'')+'</td>'+
+      '<td class="l big">'+esc(disp(p.name))+(p.susp?' <span class="fl">da verificare</span>':'')+'</td>'+
       '<td class="l">'+esc(p.role||'')+'</td>'+
       '<td class="big">'+NF1.format(p.smax)+'</td></tr>').join('');
     return '<div class="pr-grp"><p class="pr-gt">Velocita massima &#183; km/h</p>'+
@@ -1784,7 +1790,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     h1 += '<th colspan="4">Indici</th></tr>';
     h2 += '<th class="g">EUR</th><th class="g">FMS</th><th class="g">LSI</th><th class="g">Y-bal</th></tr>';
     const body = roster.map(name=>{
-      let tds = '<td class="l">'+esc(name)+'</td>';
+      let tds = '<td class="l">'+esc(disp(name))+'</td>';
       cols.forEach(g=>{
         g.tests.forEach(t=>{
           const v = valOf(REG[t.key]||{}, name);
@@ -2058,7 +2064,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return;
     }
 
-    rows.sort((a,b)=> (b.bad-a.bad) || (b.warn-a.warn) || (b.n-a.n) || a.name.localeCompare(b.name,'it'));
+    rows.sort((a,b)=> (b.bad-a.bad) || (b.warn-a.warn) || (b.n-a.n) || dispSort(a.name, b.name));
 
     list.innerHTML = rows.map(r=>{
       const cls = r.bad ? ' alert' : (r.warn ? ' watch' : '');
@@ -2079,7 +2085,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                 : ixBadge('na', 'Y-bal', '-', 'servono le tre direzioni dx e sx')
       ].join('');
       return '<div class="ix-row'+cls+'">'+
-        '<div class="ix-nm"><div class="ix-name">'+esc(r.name)+'</div>'+
+        '<div class="ix-nm"><div class="ix-name">'+esc(disp(r.name))+'</div>'+
           '<div class="ix-prio">'+r.prio.map(esc).join(' &#183; ')+'</div></div>'+
         '<div class="ix-badges">'+bs+'</div>'+
       '</div>';
@@ -2229,13 +2235,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     sel.disabled = false;
     prev.disabled = names.length < 2;
     next.disabled = names.length < 2;
+    // il valore resta la chiave del dato, l'etichetta e' come si legge in Atlete
     sel.innerHTML = names.map(n=>
-      '<option value="'+esc(n)+'"'+(n===curAtl?' selected':'')+'>'+esc(n)+'</option>').join('');
+      '<option value="'+esc(n)+'"'+(n===curAtl?' selected':'')+'>'+esc(disp(n))+'</option>').join('');
 
     const dates = atlSess(curAtl);
     const rows  = trendRows(curAtl, dates);
 
-    note.innerHTML = 'Test compilati di <b>'+esc(curAtl)+'</b>: '+rows.length+
+    note.innerHTML = 'Test compilati di <b>'+esc(disp(curAtl))+'</b>: '+rows.length+
       (rows.length===1?' prova su ':' prove su ')+dates.length+
       (dates.length===1?' rilevazione.':' rilevazioni.')+
       ' La linea piena e&#39; la sua misura, quella tratteggiata la media della squadra nella stessa rilevazione. '+
@@ -2334,7 +2341,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     // in cima chi sta meglio: sul Faber e sulle prove a tempo vuol dire il numero piu basso
     const rows = entriesFor(def.key).filter(e=> e.v!=null)
-                   .sort((a,b)=> (def.dir==='low' ? (a.v - b.v) : (b.v - a.v)) || a.name.localeCompare(b.name,'it'));
+                   .sort((a,b)=> (def.dir==='low' ? (a.v - b.v) : (b.v - a.v)) || dispSort(a.name, b.name));
     const st = cmpStats(rows.map(e=> e.v));
     const th = st.sd * 0.5;
 
@@ -2359,7 +2366,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<span class="cm-mean" style="left:'+nx(pm)+'%"></span>';
     rows.forEach(e=>{
       ph += '<span class="cm-dot'+(e.name===curAtl?' me':'')+'" style="left:'+nx(cmpPos(e.v, st))+'%" '+
-            'title="'+esc(e.name+': '+trNum(e.v, def.unit)+unitAfter(def.unit))+'"></span>';
+            'title="'+esc(disp(e.name)+': '+trNum(e.v, def.unit)+unitAfter(def.unit))+'"></span>';
     });
     ph += '</div><div class="cm-scale">'+
       '<span class="s0">'+esc(trNum(st.min, def.unit)+unitAfter(def.unit))+'</span>'+
@@ -2375,7 +2382,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const sg  = d > 0 ? '+' : (d < 0 ? '-' : '');
       return '<div class="cm-row'+(e.name===curAtl?' me':'')+'">'+
         '<span class="cm-rk">'+(i+1)+'</span>'+
-        '<div class="cm-nm"><div class="cm-name">'+esc(e.name)+'</div>'+
+        '<div class="cm-nm"><div class="cm-name">'+esc(disp(e.name))+'</div>'+
           '<div class="cm-sub">'+esc(e.role||'-')+(e.d ? (' &#183; '+esc(e.d)) : '')+'</div></div>'+
         '<span class="cm-v">'+esc(trNum(e.v, def.unit))+(cu?'<em>'+esc(cu)+'</em>':'')+'</span>'+
         '<span class="cm-d '+lev+'">'+esc(sg + trNum(Math.abs(d)) + (cu?' '+cu:''))+'</span>'+
@@ -2449,7 +2456,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       'Gacon e beep test danno la VAM, il 30-15 la VIFT che e&#39; gia&#39; piu&#39; alta: la percentuale '+
       'e&#39; sempre riferita al valore scritto nella riga dell&#39; atleta, non a una VAM stimata.';
 
-    rows.sort((a,b)=> (b.v - a.v) || a.name.localeCompare(b.name,'it'));
+    rows.sort((a,b)=> (b.v - a.v) || dispSort(a.name, b.name));
 
     list.innerHTML = rows.map(r=>{
       const cells = IM_PCT.map(p=>{
@@ -2463,7 +2470,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                '</span>';
       }).join('');
       return '<div class="im-row">'+
-        '<div class="im-nm"><div class="im-name">'+esc(r.name)+'</div>'+
+        '<div class="im-nm"><div class="im-name">'+esc(disp(r.name))+'</div>'+
           '<div class="im-sub">'+esc(r.kind+' da '+r.tag)+'</div></div>'+
         '<span class="im-base'+(r.kind==='VIFT'?' vift':'')+'">'+esc(trNum(r.v)+' km/h')+'</span>'+
         '<div class="im-cells">'+cells+'</div>'+
@@ -2479,11 +2486,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       { cls:'', label:'Velocita top squadra',
         val:'<span class="k-val up">'+(topSmax?NF1.format(topSmax.smax):'-')+'<small>km/h</small></span>',
         sub:(topSmax
-              ? esc(topSmax.name)+(nSusp?' &#183; '+nSusp+(nSusp===1?' dato':' dati')+' da verificare':'')
+              ? esc(disp(topSmax.name))+(nSusp?' &#183; '+nSusp+(nSusp===1?' dato':' dati')+' da verificare':'')
               : 'dati non disponibili') },
       { cls:'v', label:'Alta velocita top',
         val:'<span class="k-val vi">'+(topHs?NF.format(topHs.hs):'-')+'<small>m</small></span>',
-        sub:(topHs?esc(topHs.name):'oltre 23 km/h') },
+        sub:(topHs?esc(disp(topHs.name)):'oltre 23 km/h') },
       { cls:'g', label:'Test registrati',
         val:'<span class="k-val ok">'+NF.format(registeredCount())+'</span>',
         sub:'prove salvate in stagione' }
@@ -2653,7 +2660,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         : '<div class="lb-row'+cls+'">';
       return open+
         '<div class="lb-rank">'+rk+'</div>'+
-        '<div class="lb-main"><div class="lb-name">'+esc(p.name)+
+        '<div class="lb-main"><div class="lb-name">'+esc(disp(p.name))+
             (p.susp?' <span class="lb-flag">da verificare</span>':'')+'</div>'+
           '<div class="lb-role">'+(p.role?esc(p.role):'')+
             (sl?(p.role?' &#183; ':'')+'<span class="lb-sess">'+esc(sl)+'</span>':'')+'</div></div>'+
@@ -2808,12 +2815,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const sm  = semOf(cur);
       const opts = '<option value=""'+(cur==null?' selected':'')+'>-</option>' +
         SEM.map(s=> '<option value="'+s.v+'"'+(cur===s.v?' selected':'')+'>'+s.code+'  '+esc(s.label)+'</option>').join('');
+      // data-name resta la chiave del dato, l'aria-label si legge come in Atlete
       return '<select class="tb-in sem'+(cls?' '+cls:'')+(sm?' '+sm.lev:'')+'" '+
-        'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+name)+'">'+opts+'</select>';
+        'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+disp(name))+'">'+opts+'</select>';
     }
     return '<input class="tb-in'+(cls?' '+cls:'')+'" type="number" inputmode="decimal" step="'+def.step+'" min="0"'+
       (def.max?' max="'+def.max+'"':'')+' value="'+(val!=null?val:'')+'" placeholder="'+esc(def.ph)+'" '+
-      'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+name)+'">';
+      'data-k="'+esc(def.key)+'" data-name="'+esc(name)+'" aria-label="'+esc(def.label+' '+disp(name))+'">';
   }
   function bindInputs(list, defsByKey){
     list.querySelectorAll('.tb-in').forEach(inp=>{
@@ -2936,11 +2944,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let ordered;
     if(neu){
       // il peso non ha un migliore: si legge in ordine alfabetico come un elenco
-      ordered = entries.slice().sort((a,b)=> a.name.localeCompare(b.name,'it'));
+      ordered = entries.slice().sort((a,b)=> dispSort(a.name, b.name));
     } else if(sem){
       // prima le rosse, poi le gialle: chi ha bisogno di lavoro sta in cima
-      const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> (a.v-b.v) || a.name.localeCompare(b.name,'it'));
-      ordered = withVal.concat(entries.filter(e=> e.v==null).sort((a,b)=> a.name.localeCompare(b.name,'it')));
+      const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> (a.v-b.v) || dispSort(a.name, b.name));
+      ordered = withVal.concat(entries.filter(e=> e.v==null).sort((a,b)=> dispSort(a.name, b.name)));
     } else {
       const withVal = entries.filter(e=> e.v!=null).sort((a,b)=> def.dir==='high' ? (b.v-a.v) : (a.v-b.v));
       ordered = withVal.concat(entries.filter(e=> e.v==null));
@@ -2972,7 +2980,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const nota = (def.cat==='fisio') ? physioNote(e.name) : '';
       return '<div class="tb-row'+(isBest?' best':'')+'">'+
         '<div class="tb-nm col">'+
-          '<span class="tb-nmline"><span class="tb-name">'+esc(e.name)+'</span>'+
+          '<span class="tb-nmline"><span class="tb-name">'+esc(disp(e.name))+'</span>'+
             (isBest?'<span class="tb-best-tag">top</span>':'')+tag+'</span>'+
           ctx+
           (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
@@ -3059,7 +3067,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         if(b.amt!==a.amt) return b.amt-a.amt;
         if(sem) return Math.min(a.d,a.s) - Math.min(b.d,b.s);
       }
-      return a.name.localeCompare(b.name,'it');
+      return dispSort(a.name, b.name);
     });
 
     const html = rows.map(r=>{
@@ -3069,7 +3077,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const nota = (v.cat==='fisio') ? physioNote(r.name) : '';
       return '<div class="tb-row'+cls+'">'+
         '<div class="tb-nm col">'+
-          '<span class="tb-nmline"><span class="tb-name">'+esc(r.name)+'</span>'+tag+'</span>'+
+          '<span class="tb-nmline"><span class="tb-name">'+esc(disp(r.name))+'</span>'+tag+'</span>'+
           (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
         '</div>'+
         '<div class="tb-right">'+
@@ -3091,6 +3099,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const map = {}; map[v.dx.key] = v.dx; map[v.sx.key] = v.sx;
     bindInputs(list, map);
   }
+
+  /* Nome cambiato in Atlete, anche da un'altra scheda del browser: si rimette in
+     ordine il roster e si rileggono tutte le card. I dati gia' scritti restano
+     dove sono, perche' la chiave con cui il registro li salva non e' cambiata. */
+  document.addEventListener('fio:nomi', function(){
+    roster.sort(dispSort);
+    renderSessBar(); renderBattery(); renderKpis(); renderRecords(); renderGps();
+    buildCats(); renderIndici(); renderTrend(); renderConfronto();
+    renderIntermittente(); renderPrint(); renderPaneNav();
+  });
 
 })();
 </script>

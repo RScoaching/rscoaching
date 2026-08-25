@@ -1462,6 +1462,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- helpers ----------
   function fmt(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  /* Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
+     se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
+     La chiave del dato resta quella del GPS e degli RPE salvati: `disp()`
+     cambia solo cio' che si vede, mai cio' con cui si cerca o si salva. */
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function currentMonths(){
     if(state.level==='team') return (S.team && S.team.months) || [];
     const p = S.players && S.players[state.player];
@@ -1486,8 +1492,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- players dropdown ----------
   (function(){
     const sel = document.getElementById('player-select');
-    const names = Object.keys(S.players||{}).sort((a,b)=> a.localeCompare(b,'it'));
-    sel.innerHTML = names.map(n=> '<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+    // Il valore resta la chiave dei dati, l'etichetta e' come si legge in Atlete.
+    const names = Object.keys(S.players||{}).sort(dispSort);
+    sel.innerHTML = names.map(n=> '<option value="'+esc(n)+'">'+esc(disp(n))+'</option>').join('');
     if(names.length) state.player = names[0];
   })();
 
@@ -2629,7 +2636,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const host = document.getElementById('grid-scroll');
     const mon = activeMonth();
     document.getElementById('grid-title').textContent = mon ? mon.title : 'Monitoraggio';
-    const who = state.level==='team' ? 'squadra' : state.player;
+    const who = state.level==='team' ? 'squadra' : disp(state.player);
     document.getElementById('grid-hint').textContent = (mon? (who+' · giorno per giorno · RPE e TL in fondo') : '');
     const note = document.getElementById('rpe-note');
     const clr  = document.getElementById('rpe-clear');
@@ -2748,7 +2755,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         'Sui totali l\'RPE non e\' una somma ma la media pesata sui minuti. '+
         (state.level==='team'
           ? 'Sei sulla squadra: quello che scrivi qui vale anche per ogni atleta che non ha un numero suo.'
-          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(state.player||'')+'.')+
+          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(disp(state.player||''))+'.')+
         ' Sedute nel mese: '+nSed+', con RPE: '+nRpe+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
     }
   }
@@ -3317,7 +3324,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           '<b>modello AVG partita</b>: restano i numeri dell\'atleta e i totali dei microcicli stampati. '+
           (state.level === 'team'
             ? 'Adesso sei sulla squadra: scegli un\'atleta dalla barra in alto, il report va sulla singola.'
-            : 'Atleta: <b>'+esc(state.player||'')+'</b>.');
+            : 'Atleta: <b>'+esc(disp(state.player||''))+'</b>.');
       } else {
         note.textContent = 'Foglio interno: c\'e\' tutto, modello AVG partita e righe val/match comprese.';
       }
@@ -3581,7 +3588,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
     }
     const rows = ath.slice().sort((a,b)=>{
-      if(ssort.col==='name') return ssort.dir*a.name.localeCompare(b.name,'it');
+      if(ssort.col==='name') return ssort.dir*dispSort(a.name, b.name);
       if(ssort.col==='role') return ssort.dir*String(a.role).localeCompare(String(b.role),'it');
       let va=(a.v||[])[ssort.col], vb=(b.v||[])[ssort.col];
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
@@ -3625,7 +3632,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h += '<tr class="r-day"><td class="col-day" colspan="'+(V.length+1)+'">Nessuna atleta con dati per questa seduta</td></tr>';
     }
     rows.forEach(r=>{
-      h += '<tr class="r-day"><td class="col-day"><span class="lb">'+esc(r.name)+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
+      h += '<tr class="r-day"><td class="col-day"><span class="lb">'+esc(disp(r.name))+'</span>'+(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       const rv = r.v||[];
       V.forEach(i=> h += cell(rv[i], i, eff));
       h += '</tr>';
@@ -3712,7 +3719,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   function buildCSVRows(){
     const mon = activeMonth();
-    const who = state.level==='team' ? (S.squadra||'Squadra') : (state.player||'');
+    const who = state.level==='team' ? (S.squadra||'Squadra') : disp(state.player||'');
     const rows = [];
     rows.push(['Carico', who]);
     if(state.level==='player'){
@@ -3747,7 +3754,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const blob = new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const who = state.level==='team' ? 'squadra' : slugify(state.player);
+    const who = state.level==='team' ? 'squadra' : slugify(disp(state.player));
     const mon = activeMonth();
     const per = mon ? monthCode(mon.title) : 'stagione';
     a.href = url; a.download = 'carico_'+who+'_'+per+'_'+dateStamp()+'.csv';
@@ -3760,7 +3767,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function xlsNum(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
   function exportXLS(){
     const mon = activeMonth();
-    const who = state.level==='team' ? (S.squadra||'Squadra') : (state.player||'');
+    const who = state.level==='team' ? (S.squadra||'Squadra') : disp(state.player||'');
     const role = state.level==='player' ? roleOf(state.player) : '';
     const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472', EMB='#faf1ea', EMBT='#b8531f', KEYBG='#fbf3db';
     const V = VIS();
@@ -3804,7 +3811,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const blob = new Blob(['﻿'+h], {type:'application/vnd.ms-excel;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const slug = state.level==='team' ? 'squadra' : slugify(state.player);
+    const slug = state.level==='team' ? 'squadra' : slugify(disp(state.player));
     const per = mon ? monthCode(mon.title) : 'stagione';
     a.href=url; a.download='carico_'+slug+'_'+per+'_'+dateStamp()+'.xls';
     document.body.appendChild(a); a.click(); a.remove();
@@ -3823,7 +3830,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     updateRole();
     document.getElementById('subtitle').innerHTML = lv==='team'
       ? '<b>Fiorentina Primavera U19W</b> · Stagione '+esc(S.stagione||'')
-      : '<b>'+esc(state.player||'')+'</b> · Fiorentina Primavera U19W';
+      : '<b>'+esc(disp(state.player||''))+'</b> · Fiorentina Primavera U19W';
     viewSave();
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   }
@@ -3843,9 +3850,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   window.addEventListener('afterprint', clearPrintSheets);
   document.getElementById('player-select').addEventListener('change', e=>{
     state.player = e.target.value; state.monthKey=null; updateRole();
-    document.getElementById('subtitle').innerHTML = '<b>'+esc(state.player)+'</b> · Fiorentina Primavera U19W';
+    document.getElementById('subtitle').innerHTML = '<b>'+esc(disp(state.player))+'</b> · Fiorentina Primavera U19W';
     viewSave();
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+  });
+
+  /* Nome cambiato in Atlete, anche da un'altra scheda del browser: la tendina,
+     il sottotitolo e la griglia devono rileggersi subito col nome nuovo. Il
+     valore scelto non si tocca, perche' la chiave del dato e' rimasta la stessa. */
+  document.addEventListener('fio:nomi', function(){
+    const sel = document.getElementById('player-select');
+    if(sel){
+      const cur = state.player;
+      const names = Object.keys(S.players||{}).sort(dispSort);
+      sel.innerHTML = names.map(n=> '<option value="'+esc(n)+'">'+esc(disp(n))+'</option>').join('');
+      if(cur && S.players && S.players[cur]) sel.value = cur;
+    }
+    const sub = document.getElementById('subtitle');
+    if(sub) sub.innerHTML = state.level==='team'
+      ? '<b>Fiorentina Primavera U19W</b> · Stagione '+esc(S.stagione||'')
+      : '<b>'+esc(disp(state.player||''))+'</b> · Fiorentina Primavera U19W';
+    renderGrid();
+    renderSession();
   });
 
   // ---------- vista seduta / ricerca sedute ----------

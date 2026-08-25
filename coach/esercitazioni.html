@@ -728,6 +728,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   })();
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  // Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
+  // se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
+  // La chiave del dato resta quella del GPS, `disp()` cambia solo cio' che
+  // si vede: cercare, salvare e incrociare i dati passano sempre dalla chiave.
+  function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
+  function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
   function fmtLoad(c, v){
     if(v===null||v===undefined||Number.isNaN(v)) return '-';
@@ -1069,9 +1075,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const st = SORT[key] || (SORT[key] = { c:'nm', dir:1 });
     const rows = names.map(nm=> ({ nm:nm, v:atlete[nm]||[] }));
     rows.sort((a,b)=>{
-      if(st.c==='nm') return a.nm.localeCompare(b.nm,'it') * st.dir;
+      if(st.c==='nm') return dispSort(a.nm, b.nm) * st.dir;
       const av = vnum(a.v, st.c), bv = vnum(b.v, st.c);
-      if(av==null && bv==null) return a.nm.localeCompare(b.nm,'it');
+      if(av==null && bv==null) return dispSort(a.nm, b.nm);
       if(av==null) return 1;
       if(bv==null) return -1;
       return (av-bv) * st.dir;
@@ -1089,7 +1095,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     h += '</tr></thead><tbody>';
     rows.forEach(r=>{
-      h += '<tr><td class="nm">'+esc(r.nm)+'</td>';
+      h += '<tr><td class="nm">'+esc(disp(r.nm))+'</td>';
       vis.forEach(i=>{
         const v = vnum(r.v, i);
         h += '<td'+(i===I_DIST?' class="key"':'')+'>'+(v==null?'&#8211;':fmtLoad(LOAD[i], v))+'</td>';
@@ -1190,7 +1196,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       });
       if(s.ft && s.ft.atlete) Object.keys(s.ft.atlete).forEach(n=> set[n]=1);
     });
-    return Object.keys(set).sort((a,b)=> a.localeCompare(b,'it'));
+    return Object.keys(set).sort(dispSort);
   }
   // la finestra si conta dall'ultima seduta che c'e' nei dati, non da oggi: i
   // file GPS arrivano con qualche giorno di ritardo e "ultimi 7 giorni da oggi"
@@ -1244,7 +1250,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     el.hidden = false;
     if(state.ath && list.indexOf(state.ath)<0) state.ath = '';
     el.innerHTML = '<option value="">Tutte le calciatrici</option>'+
-      list.map(n=> '<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+      list.map(n=> '<option value="'+esc(n)+'">'+esc(disp(n))+'</option>').join('');
     el.value = state.ath;
     el.classList.toggle('on', !!state.ath);
   }
@@ -1261,7 +1267,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(from && last) win = 'dal '+DTFS.format(from).replace('.','')+' al '+DTFS.format(last).replace('.','');
     const pers = [{ k:7, l:'7 giorni' }, { k:14, l:'14 giorni' }, { k:0, l:'Tutto' }];
     let h = '<section class="athcard reveal" style="--i:2"><div class="athcard-head">'+
-      '<div class="who"><div class="an">'+esc(nm)+'</div>'+
+      '<div class="who"><div class="an">'+esc(disp(nm))+'</div>'+
       '<div class="aw">'+esc(win)+' &#183; '+fatte.length+(fatte.length===1?' seduta':' sedute')+'</div></div>'+
       '<div class="aper">'+pers.map(p=>
         '<button class="aperb'+(state.per===p.k?' on':'')+'" type="button" data-p="'+p.k+'">'+p.l+'</button>'
@@ -1362,13 +1368,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         return '<div class="grp"><span class="gn">'+(g.atlete||[]).length+
           ((g.atlete||[]).length===1?' atleta':' atlete')+'</span> <span class="gd">'+
           names.map(esc).join(' &#183; ')+'</span>'+
-          '<span class="ga">'+esc((g.atlete||[]).join(', '))+'</span></div>';
+          '<span class="ga">'+esc((g.atlete||[]).map(disp).join(', '))+'</span></div>';
       }).join('');
     }
 
     // chi ha fatto cosa, con il rapporto sul proprio Full Training
     const tot = perAtleta(s);
-    const names = Object.keys(tot).sort((a,b)=> a.localeCompare(b,'it'));
+    const names = Object.keys(tot).sort(dispSort);
     if(names.length){
       // sta chiusa: e' un controllo, non la parte che si guarda tutti i giorni
       html += '<details class="qdet"><summary>Chi ha fatto cosa'+
@@ -1380,7 +1386,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const t = tot[nm];
         const pc = t.pct==null ? '&#8211;'
           : '<span class="pct'+(t.pct<80?' low':'')+'">'+NF0.format(Math.round(t.pct))+'%</span>';
-        html += '<tr><td class="nm">'+esc(nm)+'</td>'+
+        html += '<tr><td class="nm">'+esc(disp(nm))+'</td>'+
           '<td class="r">'+NF.format(Math.round(t.min*10)/10)+'</td>'+
           '<td class="r">'+NF0.format(Math.round(t.dist))+'</td>'+
           '<td class="r">'+pc+'</td>'+
@@ -1392,7 +1398,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     // assenti: chi non compare in nessun file GPS del giorno
     html += '<h4>Assenti</h4><div class="absent">'+
       ((s.assenti && s.assenti.length)
-        ? s.assenti.map(n=> '<b>'+esc(n)+'</b>').join(', ')
+        ? s.assenti.map(n=> '<b>'+esc(disp(n))+'</b>').join(', ')
         : '<span class="none">Nessuna assente, rosa GPS al completo.</span>')+
       '</div>';
 
@@ -1426,7 +1432,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       if(state.tipo!=='all') attivi.push('tipologia ' + (TIPO_LBL[state.tipo]||state.tipo).toLowerCase());
       if(state.slot!=='all') attivi.push('slot ' + state.slot);
       if(state.q.trim()) attivi.push('ricerca ' + state.q.trim());
-      if(!FOCUS && state.ath) attivi.push('calciatrice ' + state.ath);
+      if(!FOCUS && state.ath) attivi.push('calciatrice ' + disp(state.ath));
       const ico = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'+
         '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 10h6M9 14h6M9 18h4"/></svg>';
       host.innerHTML = '<div class="empty">' + ico + (attivi.length
@@ -1697,10 +1703,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const lines = [head.join(';')];
     all.forEach(s=>{
       s.drills.forEach(d=>{
-        const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
+        // Nel foglio finiscono i nomi come si leggono in Atlete: e' il mister
+        // che rilegge il file, non il GPS.
+        const names = d.atlete ? Object.keys(d.atlete).sort(dispSort).map(disp) : [];
         const t = detOf(dets, s, d);
         const row = [s.date, s.slot, s.kind||'', d.descrizione, t.step, t.serie, t.metri, t.rec, t.note,
-          names.length||'', names.join(', '), (s.assenti||[]).join(', ')]
+          names.length||'', names.join(', '), (s.assenti||[]).map(disp).join(', ')]
           .concat(LOAD.map(c=>{ const v=d.load?d.load[c]:null; return (v==null||Number.isNaN(v))?'':String(v).replace('.',','); }));
         lines.push(row.map(x=> '"'+String(x).replace(/"/g,'""')+'"').join(';'));
       });
@@ -1808,7 +1816,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     // una riga per esercitazione: descrizione, dettagli scritti a mano, dati e atlete
     let rows = '';
     s.drills.forEach((d,i)=>{
-      const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
+      const names = d.atlete ? Object.keys(d.atlete).sort(dispSort).map(disp) : [];
       const t = detOf(dets, s, d);
       const dl = detLine(t);
       let c = '<div class="dsc">'+esc(d.descrizione)+'</div>';
@@ -1831,7 +1839,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           const nm = (g.drills||[]).map(k=> (byIdx[k]||{}).descrizione||'')
             .filter(Boolean).map(esc).join(' + ');
           return '<div class="grp"><b>'+(g.atlete||[]).length+' atlete</b> &#183; '+nm+
-            '<div class="who">'+esc((g.atlete||[]).join(', '))+'</div></div>';
+            '<div class="who">'+esc((g.atlete||[]).map(disp).join(', '))+'</div></div>';
         }).join('')+'</div>';
     }
 
@@ -1842,7 +1850,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     // assenti in fondo al foglio
     h += '<div class="ps-sec">Assenti</div><div class="box">'+
       ((s.assenti && s.assenti.length)
-        ? s.assenti.map(n=> '<b>'+esc(n)+'</b>').join(', ')
+        ? s.assenti.map(n=> '<b>'+esc(disp(n))+'</b>').join(', ')
         : 'Nessuna assente, rosa GPS al completo.')+'</div>';
 
     host.innerHTML = h;
@@ -1882,7 +1890,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       }).join('');
       body += '<tr><td colspan="8" style="background:'+VIOL+';color:'+VIO+';font-weight:700;border:1px solid '+BRD+'">'+esc(bandLabel)+'</td>'+loadCells+'</tr>';
       s.drills.forEach((d,i)=>{
-        const names = d.atlete ? Object.keys(d.atlete).sort((a,b)=> a.localeCompare(b,'it')) : [];
+        const names = d.atlete ? Object.keys(d.atlete).sort(dispSort).map(disp) : [];
         const t = detOf(dets, s, d);
         const cells = LOAD.map(c=>{
           const v = d.load ? d.load[c] : null;
@@ -1903,7 +1911,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       });
       if(s.assenti && s.assenti.length){
         body += '<tr><td colspan="'+ncols+'" style="border:1px solid '+BRD+';color:'+MUT+'">'+
-          esc('Assenti: '+s.assenti.join(', '))+'</td></tr>';
+          esc('Assenti: '+s.assenti.map(disp).join(', '))+'</td></tr>';
       }
     });
     const loadHead = LOAD.map(c=> '<th style="background:'+VIO+';color:#fff;border:1px solid '+BRD+';text-align:right">'+esc(c)+(UNIT[c]?' ('+esc(UNIT[c])+')':'')+'</th>').join('');
@@ -1985,7 +1993,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const el = document.getElementById('athpick'); if(!el) return;
     el.addEventListener('change', ()=>{
       state.ath = el.value;
-      toast(state.ath ? ('Solo le esercitazioni di '+state.ath) : 'Tutte le calciatrici');
+      toast(state.ath ? ('Solo le esercitazioni di '+disp(state.ath)) : 'Tutte le calciatrici');
       render();
     });
   })();
@@ -2026,6 +2034,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderSessions(filtered(all));
     buildPrintSheet();
   }
+  // Nome cambiato in Atlete, anche da un'altra scheda del browser: qui vanno
+  // rilette tendina, scheda della calciatrice e righe delle sedute.
+  document.addEventListener('fio:nomi', render);
   render();
 })();
 </script>
