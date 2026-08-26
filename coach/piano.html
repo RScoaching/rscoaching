@@ -657,6 +657,39 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .rn-in::placeholder{ color:var(--faint); }
 .rosa-empty{ font-size:12.5px; color:var(--faint); line-height:1.6; }
 
+/* aggregate: il chip porta accanto la x per toglierle dall'elenco */
+.atl-pair{ display:inline-flex; align-items:stretch; }
+.atl-pair.hide{ display:none; }
+.atl-pair .atl{ border-top-right-radius:0; border-bottom-right-radius:0; border-right-width:0; }
+.atl-x{ appearance:none; cursor:pointer; width:29px; display:grid; place-items:center;
+  border-radius:0 999px 999px 0; background:var(--surface2); border:1px solid var(--border2); color:var(--faint);
+  transition: color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease); }
+.atl-x:hover{ color:var(--red); background:var(--surface3); border-color:oklch(62% 0.22 25 / 0.35); }
+.atl-x:active{ transform:scale(.97); }
+.atl-x svg{ width:12px; height:12px; }
+.agg-add{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.agg-add input{ font-family:inherit; font-size:13px; color:var(--ink); background:var(--surface2);
+  border:1px solid var(--border2); border-radius:999px; padding:8px 14px; width:190px;
+  transition: border-color .15s var(--ease); }
+.agg-add input:focus{ outline:none; border-color:var(--orange); }
+.agg-add input::placeholder{ color:var(--faint); }
+.agg-hint{ font-size:11.5px; color:var(--faint); line-height:1.5; }
+
+/* resoconto del giorno: chi si allena davvero e dove */
+.rosa-res{ margin-top:16px; padding-top:16px; border-top:1px solid var(--border2); }
+.rosa-res:empty{ display:none; }
+.res-top{ display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+.res-n{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:34px; letter-spacing:.4px;
+  line-height:1; color:var(--ink); }
+.res-lb{ flex:1 1 220px; min-width:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
+.res-lb b{ color:var(--ink); font-weight:600; }
+.res-row{ display:flex; align-items:baseline; gap:11px; flex-wrap:wrap; padding:8px 0; border-top:1px solid var(--border); }
+.res-k{ flex:0 0 auto; font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  border-radius:999px; padding:3px 9px;
+  color:var(--c, var(--muted)); background:var(--cbg, var(--surface2)); border:1px solid var(--cbd, var(--border)); }
+.res-v{ flex:1 1 220px; min-width:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
+.res-v b{ color:var(--ink); font-weight:600; }
+
 /* ---------- sedute salvate ---------- */
 .sv-list{ display:flex; flex-direction:column; gap:8px; }
 .sv-empty{ padding:14px 2px; font-size:12.5px; color:var(--faint); line-height:1.6; }
@@ -803,6 +836,10 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 #pr-print .pp-rosa{ padding:4px 20px 13px; font-size:12.5px; color:#3a332e; line-height:1.65; }
 #pr-print .pp-rosa .r{ margin-top:7px; }
 #pr-print .pp-rosa b{ color:#14110f; }
+/* la riga del resoconto sta sopra gli elenchi: e' quella che si legge per prima */
+#pr-print .pp-rosa .res{ margin:2px 0 9px; padding:7px 11px; background:#fdf4ee;
+  border:1px solid #eddfd4; border-radius:6px; color:#3a332e; }
+#pr-print .pp-rosa .res b{ color:#8a3a12; }
 #pr-print .pp-foot{ padding:11px 20px 14px; font-size:10.5px; color:#65594f; border-top:1px solid #eddfd4; }
 
 /* reveal */
@@ -1009,6 +1046,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           <div class="rosa-sum" id="rosa-sum"></div>
           <div id="rosa-groups"></div>
           <div class="rosa-notes" id="rosa-notes"></div>
+          <div class="rosa-res" id="rosa-res"></div>
         </div>
       </section>
 
@@ -3295,6 +3333,9 @@ window.FORZA = window.FORZA || { roster:[] };
   const LS_AVAIL  = K('rs_fio_avail');
   const LS_BIO    = K('rs_fio_bio');
   const LS_CUSTOM = K('rs_fio_custom');
+  // aggregate: chi non e' in rosa Primavera ma si allena con noi, di solito le U17
+  // che salgono per una seduta. Elenco a parte, cosi' la rosa vera resta pulita.
+  const LS_AGG    = K('rs_fio_agg');
 
   /* Sei stati, gli stessi della pagina Atlete e con le stesse chiavi.
      'ft' e' l'atleta che oggi si allena su, in prima squadra: non e' assente e non
@@ -3318,9 +3359,11 @@ window.FORZA = window.FORZA || { roster:[] };
   const FZ     = (typeof window.fioRoster === 'function') ? window.fioRoster() : [];
   const BIO    = lsObj(LS_BIO);
   const CUSTOM = lsObj(LS_CUSTOM);
+  const AGG    = lsObj(LS_AGG);
   let   AVAIL  = lsObj(LS_AVAIL);
 
   function availSave(){ try{ localStorage.setItem(LS_AVAIL, JSON.stringify(AVAIL)); }catch(e){} }
+  function aggSave(){ try{ localStorage.setItem(LS_AGG, JSON.stringify(AGG)); }catch(e){} }
   function isOff(name){ const b = BIO[name]; return !!(b && b.off); }
 
   const ROSTER = (function(){
@@ -3335,6 +3378,8 @@ window.FORZA = window.FORZA || { roster:[] };
       list.push({ name:name, role:r, tipo:String(tipo || '') });
     }
     FZ.forEach(function(r){ add(r.name, r.role, r.tipo); });
+    // le aggregate prima delle chiavi sciolte di AVAIL, se no rientrerebbero senza tipo
+    Object.keys(AGG).forEach(function(n){ add(n, AGG[n], 'agg'); });
     Object.keys(CUSTOM).forEach(function(n){ add(n, CUSTOM[n], 'custom'); });
     Object.keys(AVAIL).forEach(function(n){ add(n, '', ''); });
     // l'ordine e' quello che si legge a schermo, non quello del foglio
@@ -3342,10 +3387,14 @@ window.FORZA = window.FORZA || { roster:[] };
     return list;
   })();
 
+  /* Le sporadiche del foglio e le U17 che salgono stanno nello stesso blocco:
+     per il mister sono la stessa cosa, gente che si allena con noi senza essere
+     in rosa. Il blocco resta a schermo anche vuoto, perche' li' dentro c'e' il
+     campo per aggregarne una. */
   const ROSA_GRPS = [
-    { key:'core',      lab:'Gruppo squadra' },
-    { key:'sporadica', lab:'Aggregate' },
-    { key:'custom',    lab:'Aggiunte a mano' }
+    { keys:['core'],              lab:'Gruppo squadra' },
+    { keys:['sporadica','agg'],   lab:'Aggregate',        add:true },
+    { keys:['custom'],            lab:'Aggiunte a mano' }
   ];
   const ROSA_KEY = 'fio_oggi_rosa_' + TSTR;
 
@@ -3392,6 +3441,47 @@ window.FORZA = window.FORZA || { roster:[] };
     note = String(note || '');
     if(note) NOTES[name] = note; else delete NOTES[name];
     notesSave();
+  }
+
+  /* ---- aggregate ----
+     Entrano nell'elenco del giorno come tutte le altre: stessi sei stati, stessa
+     chiave 'rs_fio_avail'. Quello che cambia e' che restano fuori dal conto della
+     rosa e si possono togliere con la x, perche' domani magari non salgono piu'.
+     Il nome da scrivere e' quello del foglio GPS: e' con quello che poi il carico
+     si attacca all'atleta. */
+  function inRoster(name){
+    return ROSTER.some(function(p){ return p.name === name; });
+  }
+  function aggAdd(name){
+    name = String(name || '').trim();
+    if(!name || isOff(name) || inRoster(name)) return false;
+    const r = (typeof window.fioRuolo === 'function') ? window.fioRuolo(name, '') : '';
+    AGG[name] = r;
+    aggSave();
+    ROSTER.push({ name:name, role:r, tipo:'agg' });
+    ROSTER.sort(function(a, b){ return plNomeSort(a.name, b.name); });
+    return true;
+  }
+  function aggDel(name){
+    if(!Object.prototype.hasOwnProperty.call(AGG, name)) return false;
+    delete AGG[name];
+    aggSave();
+    // via anche lo stato e la nota, se no domani rispunta come atleta senza gruppo
+    delete AVAIL[name];
+    availSave();
+    rosaSetNote(name, '');
+    for(let i = 0; i < ROSTER.length; i++){
+      if(ROSTER[i].name === name){ ROSTER.splice(i, 1); break; }
+    }
+    return true;
+  }
+  // suggerimenti: i nomi che stanno nei GPS ma non in rosa sono quasi sempre loro
+  function aggSug(){
+    const P = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+    if(!P) return [];
+    return Object.keys(P)
+      .filter(function(n){ return n && !isOff(n) && !inRoster(n); })
+      .sort(plNomeSort);
   }
 
   // ============ LA ROSA DI OGGI PARTE DALL'ULTIMA SEDUTA ============
@@ -3481,16 +3571,24 @@ window.FORZA = window.FORZA || { roster:[] };
 
   const PRE_KEY = 'fio_oggi_pre_' + TSTR;
   let PRE_UNDO = null;
+  let PRE_NUOVE = 0;      // quante aggregate ha tirato dentro l'ultima ricalcata
 
   /* Chi non compare nella seduta torna assente, con una sola eccezione: chi e' dal
      fisioterapista resta dal fisioterapista. Quello e' un percorso che dura
      settimane e non va cancellato da una seduta a cui, appunto, non poteva esserci. */
   function preApply(){
     if(!GPS_LAST) return 0;
+    // Nella seduta c'e' un nome che in rosa non esiste? E' una che e' salita
+    // dall'U17: entra da sola fra le aggregate, senza che nessuno la scriva.
+    let nuove = 0;
+    GPS_LAST.gruppo.concat(GPS_LAST.diff, GPS_LAST.ft).forEach(function(n){
+      if(aggAdd(n)) nuove++;
+    });
     const mappa = {};
     GPS_LAST.gruppo.forEach(function(n){ mappa[n] = 'disponibile'; });
     GPS_LAST.diff.forEach(function(n){ mappa[n] = 'differenziato'; });
     GPS_LAST.ft.forEach(function(n){ mappa[n] = 'ft'; });
+    PRE_NUOVE = nuove;
     const prima = {};
     Object.keys(AVAIL).forEach(function(n){ prima[n] = AVAIL[n]; });
     let cambi = 0;
@@ -3519,6 +3617,8 @@ window.FORZA = window.FORZA || { roster:[] };
 
   const ICO_PRE  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
   const ICO_UNDO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>';
+  const ICO_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+  const ICO_X    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>';
 
   function rosaPre(){
     const el = document.getElementById('rosa-pre');
@@ -3532,30 +3632,40 @@ window.FORZA = window.FORZA || { roster:[] };
     const pezzi = [GPS_LAST.gruppo.length + ' in gruppo'];
     if(GPS_LAST.diff.length) pezzi.push(GPS_LAST.diff.length + ' in differenziato');
     if(GPS_LAST.ft.length)   pezzi.push(GPS_LAST.ft.length + ' in prima squadra');
+    const extra = PRE_NUOVE
+      ? ' Ho aggregato ' + PRE_NUOVE + (PRE_NUOVE === 1 ? ' atleta che nella seduta' : ' atlete che nella seduta') +
+        ' ci sono ma in rosa no.'
+      : '';
     el.innerHTML =
       '<div class="rp-txt">Ricalcata dai GPS della seduta <b>'+esc(preGiorno())+'</b>: ' +
-        esc(pezzi.join(', '))+'. Le altre partono da assenti, tocca il nome per correggere.</div>' +
+        esc(pezzi.join(', '))+'. Le altre partono da assenti, tocca il nome per correggere.' +
+        esc(extra)+'</div>' +
       '<div class="rp-acts">' +
         (PRE_UNDO ? '<button class="rp-btn undo" id="rosa-pre-undo" type="button">'+ICO_UNDO+'Annulla</button>' : '') +
         '<button class="rp-btn" id="rosa-pre-go" type="button">'+ICO_PRE+'Ricalca la seduta</button>' +
       '</div>';
   }
 
+  /* 'tot' e' la rosa vera, le aggregate si contano a parte: se no ogni volta che
+     sale una U17 il numero in rosa cambia e non vuol dire piu' niente. */
   function rosaCount(){
-    const c = { tot:ROSTER.length };
+    const c = { tot:0, agg:0 };
     AV_STATES.forEach(function(s){ c[s.k] = 0; });
-    ROSTER.forEach(function(p){ c[avSt(p.name)]++; });
+    ROSTER.forEach(function(p){
+      c[avSt(p.name)]++;
+      if(p.tipo === 'agg') c.agg++; else c.tot++;
+    });
     return c;
   }
   function rosaGroups(){
     const done = {}, res = [];
     ROSA_GRPS.forEach(function(g){
-      const list = ROSTER.filter(function(p){ return p.tipo === g.key; });
+      const list = ROSTER.filter(function(p){ return g.keys.indexOf(p.tipo) >= 0; });
       list.forEach(function(p){ done[p.name] = 1; });
-      if(list.length) res.push({ lab:g.lab, list:list });
+      if(list.length || g.add) res.push({ lab:g.lab, list:list, add:!!g.add });
     });
     const rest = ROSTER.filter(function(p){ return !done[p.name]; });
-    if(rest.length) res.push({ lab:'Altre', list:rest });
+    if(rest.length) res.push({ lab:'Altre', list:rest, add:false });
     return res;
   }
 
@@ -3566,7 +3676,8 @@ window.FORZA = window.FORZA || { roster:[] };
     const c = rosaCount();
     el.innerHTML = AV_STATES.filter(function(s){ return s.k === 'disponibile' || c[s.k]; })
       .map(function(s){ return '<span class="rs-chip '+s.cls+'"><b>'+c[s.k]+'</b> '+esc(s.s)+'</span>'; }).join('') +
-      '<span class="rs-chip"><b>'+c.tot+'</b> in rosa</span>';
+      '<span class="rs-chip"><b>'+c.tot+'</b> in rosa</span>' +
+      (c.agg ? '<span class="rs-chip"><b>'+c.agg+'</b> aggregate</span>' : '');
   }
 
   function atlClass(st){
@@ -3584,20 +3695,42 @@ window.FORZA = window.FORZA || { roster:[] };
       return;
     }
     host.innerHTML = rosaGroups().map(function(g){
-      return '<div class="rosa-grp">' +
+      return '<div class="rosa-grp"'+(g.add ? ' data-add="1"' : '')+'>' +
         '<div class="rosa-gh">'+esc(g.lab)+' &#183; '+g.list.length+'</div>' +
-        '<div class="rosa-list">' + g.list.map(function(p){
-          const st  = avSt(p.name);
-          const lbl = avDef(st).l.toLowerCase();
-          // data-n resta la chiave con cui si salva la disponibilita'
-          return '<button type="button" class="'+atlClass(st)+'" data-n="'+esc(p.name)+'" ' +
-            'title="'+esc(plNome(p.name)+' - '+lbl)+'" aria-label="'+esc(plNome(p.name)+', '+lbl)+'">' +
-            '<span class="dot"></span>'+esc(plNome(p.name)) +
-            (p.role ? '<span class="rl">'+esc(p.role)+'</span>' : '') +
-            '</button>';
-        }).join('') + '</div></div>';
+        '<div class="rosa-list">' + g.list.map(atlHTML).join('') + '</div>' +
+        (g.add ? aggAddHTML() : '') +
+        '</div>';
     }).join('');
     rosaFilter();
+  }
+
+  function atlHTML(p){
+    const st  = avSt(p.name);
+    const lbl = avDef(st).l.toLowerCase();
+    // data-n resta la chiave con cui si salva la disponibilita'
+    const btn = '<button type="button" class="'+atlClass(st)+'" data-n="'+esc(p.name)+'" ' +
+      'title="'+esc(plNome(p.name)+' - '+lbl)+'" aria-label="'+esc(plNome(p.name)+', '+lbl)+'">' +
+      '<span class="dot"></span>'+esc(plNome(p.name)) +
+      (p.role ? '<span class="rl">'+esc(p.role)+'</span>' : '') +
+      '</button>';
+    if(p.tipo !== 'agg') return btn;
+    return '<span class="atl-pair">' + btn +
+      '<button type="button" class="atl-x" data-x="'+esc(p.name)+'" ' +
+      'title="'+esc('Togli '+plNome(p.name)+' dalle aggregate')+'" ' +
+      'aria-label="'+esc('Togli '+plNome(p.name)+' dalle aggregate')+'">'+ICO_X+'</button></span>';
+  }
+
+  function aggAddHTML(){
+    const sug = aggSug();
+    return '<div class="agg-add">' +
+      '<input type="text" id="agg-in" autocomplete="off" spellcheck="false" list="agg-sug" ' +
+        'placeholder="Cognome come nei GPS" aria-label="Aggrega un\'atleta per oggi">' +
+      '<button class="rp-btn" id="agg-go" type="button">'+ICO_PLUS+'Aggrega</button>' +
+      '<span class="agg-hint">chi sale dall\'U17 o si allena con noi senza essere in rosa</span>' +
+      (sug.length ? '<datalist id="agg-sug">' +
+        sug.map(function(n){ return '<option value="'+esc(n)+'"></option>'; }).join('') +
+        '</datalist>' : '') +
+      '</div>';
   }
 
   function rosaNotes(){
@@ -3617,6 +3750,58 @@ window.FORZA = window.FORZA || { roster:[] };
       }).join('');
   }
 
+  /* Il resoconto: quante si sono allenate davvero oggi e dove. Gruppo, parziale e
+     differenziato sono lavoro fatto qui; la prima squadra e' lavoro fatto su, e
+     conta uguale; le aggregate sono dentro il gruppo ma vanno dette, se no il
+     numero del giorno non torna con la rosa. Fuori restano fisio e assenti. */
+  function rosaRes(){
+    const el = document.getElementById('rosa-res');
+    if(!el) return;
+    if(!ROSTER.length){ el.innerHTML = ''; return; }
+    const box = {}, agg = [];
+    AV_STATES.forEach(function(s){ box[s.k] = []; });
+    ROSTER.forEach(function(p){
+      const st = avSt(p.name);
+      box[st].push(p.name);
+      if(p.tipo === 'agg' && st !== 'assente' && st !== 'fisico') agg.push(p.name);
+    });
+    const qui   = box.disponibile.length + box.parziale.length + box.differenziato.length;
+    const su    = box.ft.length;
+    const tot   = qui + su;
+    const fuori = box.fisico.length + box.assente.length;
+
+    const pezzi = [];
+    if(qui) pezzi.push('<b>'+qui+'</b> qui in Primavera');
+    if(su)  pezzi.push('<b>'+su+'</b> su in prima squadra');
+    let testo = pezzi.length ? ('si allenano: ' + pezzi.join(', ') + '.') : 'oggi non si allena nessuna.';
+    if(agg.length) testo += ' Di queste <b>'+agg.length+'</b> ' +
+      (agg.length === 1 ? 'e\' aggregata' : 'sono aggregate') + ', non ' +
+      (agg.length === 1 ? 'e\'' : 'sono') + ' in rosa.';
+    if(fuori) testo += ' Restano fuori <b>'+fuori+'</b>' +
+      (box.fisico.length ? ', di cui <b>'+box.fisico.length+'</b> dal fisioterapista' : '') + '.';
+
+    function nomi(list){
+      return list.map(function(n){ return esc(plNome(n)); }).join(', ');
+    }
+    function riga(k, lab, list){
+      if(!list.length) return '';
+      return '<div class="res-row">' +
+        '<span class="res-k '+k+'">'+esc(lab)+' &#183; '+list.length+'</span>' +
+        '<span class="res-v">'+nomi(list)+'</span></div>';
+    }
+
+    el.innerHTML =
+      '<div class="rn-hd">Resoconto del giorno</div>' +
+      '<div class="res-top"><span class="res-n">'+tot+'</span><span class="res-lb">'+testo+'</span></div>' +
+      riga('s-disp', 'In gruppo',      box.disponibile) +
+      riga('s-parz', 'Parziale',       box.parziale) +
+      riga('s-diff', 'Differenziato',  box.differenziato) +
+      riga('s-ft',   'Prima squadra',  box.ft) +
+      riga('',       'Aggregate',      agg) +
+      riga('s-fis',  'Fisioterapista', box.fisico) +
+      riga('s-ass',  'Assenti',        box.assente);
+  }
+
   function rosaFilter(){
     const inp = document.getElementById('rosa-q');
     const q = inp ? (inp.value||'').trim().toLowerCase() : '';
@@ -3626,10 +3811,14 @@ window.FORZA = window.FORZA || { roster:[] };
         // si cerca sia col nome del foglio sia con quello scritto in Atlete
         const hay = ((b.getAttribute('data-n')||'') + ' ' + (b.textContent||'')).toLowerCase();
         const hit = !q || hay.indexOf(q) >= 0;
-        b.classList.toggle('hide', !hit);
+        // le aggregate hanno la x accanto: si nasconde il paio, non solo il chip
+        const wrap = b.parentNode && b.parentNode.classList &&
+                     b.parentNode.classList.contains('atl-pair') ? b.parentNode : b;
+        wrap.classList.toggle('hide', !hit);
         if(hit) vis++;
       });
-      g.style.display = vis ? '' : 'none';
+      // il blocco delle aggregate resta a schermo anche vuoto: dentro c'e' il campo
+      g.style.display = (vis || (!q && g.getAttribute('data-add'))) ? '' : 'none';
     });
   }
 
@@ -3645,7 +3834,7 @@ window.FORZA = window.FORZA || { roster:[] };
       try{ localStorage.setItem(PRE_KEY, GPS_LAST.data); }catch(e){}
     }
 
-    renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+    rosaPaint();
 
     const pre = document.getElementById('rosa-pre');
     if(pre) pre.addEventListener('click', function(ev){
@@ -3653,19 +3842,30 @@ window.FORZA = window.FORZA || { roster:[] };
       if(!b) return;
       if(b.id === 'rosa-pre-undo'){
         preUndo();
-        renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+        rosaPaint();
         toast('Rosa rimessa com\'era prima');
         return;
       }
       const cambi = preApply();
-      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+      rosaPaint();
       toast(cambi ? ('Ricalcata sulla seduta '+preGiorno()+', '+cambi+' cambiate')
                   : ('Era gia\' uguale alla seduta '+preGiorno()));
     });
 
     const groups = document.getElementById('rosa-groups');
     if(groups) groups.addEventListener('click', function(ev){
-      const b = ev.target.closest ? ev.target.closest('.atl') : null;
+      const cl = ev.target.closest ? ev.target.closest.bind(ev.target) : function(){ return null; };
+      const x = cl('.atl-x');
+      if(x){
+        const nx = x.getAttribute('data-x');
+        const lbl = plNome(nx);
+        aggDel(nx);
+        rosaPaint();
+        toast(lbl+' non e\' piu\' aggregata');
+        return;
+      }
+      if(cl('#agg-go')){ aggFromInput(); return; }
+      const b = cl('.atl');
       if(!b) return;
       const n = b.getAttribute('data-n');
       const next = avNext(avSt(n));
@@ -3675,7 +3875,16 @@ window.FORZA = window.FORZA || { roster:[] };
       b.className = atlClass(next) + (hid ? ' hide' : '');
       b.setAttribute('title', plNome(n)+' - '+lbl);
       b.setAttribute('aria-label', plNome(n)+', '+lbl);
-      rosaSum(); rosaNotes();
+      rosaSum(); rosaNotes(); rosaRes();
+    });
+
+    // il campo delle aggregate si ricrea a ogni disegno: si ascolta da qui sopra
+    if(groups) groups.addEventListener('keydown', function(ev){
+      if(ev.key !== 'Enter') return;
+      const i = ev.target.closest ? ev.target.closest('#agg-in') : null;
+      if(!i) return;
+      ev.preventDefault();
+      aggFromInput();
     });
 
     const notes = document.getElementById('rosa-notes');
@@ -3690,7 +3899,7 @@ window.FORZA = window.FORZA || { roster:[] };
       ROSTER.forEach(function(p){ delete AVAIL[p.name]; });
       availSave();
       PRE_UNDO = null;                      // l'annulla si riferiva a un'altra cosa
-      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+      rosaPaint();
       toast('Tutte disponibili, anche nella pagina Atlete');
     });
 
@@ -3702,7 +3911,7 @@ window.FORZA = window.FORZA || { roster:[] };
       if(ev && ev.key && ev.key !== LS_AVAIL) return;
       AVAIL = lsObj(LS_AVAIL);
       PRE_UNDO = null;                      // gli stati arrivano da fuori, non da qui
-      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+      rosaPaint();
     });
 
     /* Nome cambiato in Atlete, anche da un'altra scheda: la rosa si rimette in
@@ -3710,15 +3919,48 @@ window.FORZA = window.FORZA || { roster:[] };
        la chiave con cui la disponibilita' si salva non e' cambiata. */
     document.addEventListener('fio:nomi', function(){
       ROSTER.sort(function(a, b){ return plNomeSort(a.name, b.name); });
-      renderRosa(); rosaSum(); rosaNotes(); rosaPre();
+      rosaPaint();
       if(typeof renderAlert === 'function') renderAlert();
     });
+  }
+
+  function rosaPaint(){
+    renderRosa(); rosaSum(); rosaNotes(); rosaRes(); rosaPre();
+  }
+
+  function aggFromInput(){
+    const i = document.getElementById('agg-in');
+    if(!i) return;
+    const n = (i.value || '').trim();
+    if(!n) return;
+    if(inRoster(n)){
+      i.value = '';
+      toast(plNome(n)+' c\'e\' gia\' nell\'elenco');
+      return;
+    }
+    if(!aggAdd(n)) return;
+    rosaPaint();
+    toast(plNome(n)+' aggregata, tocca il nome per lo stato');
+    const f = document.getElementById('agg-in');
+    if(f) f.focus();
   }
 
   // ================= SEDUTE SALVATE E SCHEDA STAMPABILE =================
   const SESS_KEY = 'fio_oggi_sedute';
   function sessLoad(){ try{ const v = JSON.parse(localStorage.getItem(SESS_KEY)); if(Array.isArray(v)) return v; }catch(e){} return []; }
   function sessSave(list){ try{ localStorage.setItem(SESS_KEY, JSON.stringify(list)); }catch(e){} }
+
+  /* Quante si sono allenate in quella seduta: il gruppo, chi ha fatto parziale o
+     differenziato e chi era su in prima squadra. Vale anche per le sedute vecchie,
+     che gli stati li scrivevano part e out. */
+  function sessAll(s){
+    let n = (s.disp && s.disp.length) || 0;
+    (s.rosa || []).forEach(function(p){
+      const k = p.st === 'part' ? 'parziale' : String(p.st || '');
+      if(k === 'parziale' || k === 'differenziato' || k === 'ft') n++;
+    });
+    return n;
+  }
 
   function snapshot(){
     const bl = blocks
@@ -3729,13 +3971,15 @@ window.FORZA = window.FORZA || { roster:[] };
       .map(function(p){ return { name:p.name, st:avSt(p.name), note:rosaNote(p.name) }; });
     const min  = bl.reduce(function(s,b){ return s + b.min; }, 0);
     const load = bl.reduce(function(s,b){ return s + b.min*b.rpe; }, 0);
+    // chi quel giorno era aggregata: fra un mese nessuno se lo ricorda, va scritto
+    const agg = ROSTER.filter(function(p){ return p.tipo === 'agg'; }).map(function(p){ return p.name; });
     return {
       id: 's' + Date.now().toString(36),
       data: TSTR,
       md: TODAY_MD || '',
       tit: PLAN ? PLAN.tit : (state === 'match' ? 'Giorno gara' : 'Seduta'),
       blocks: bl, min: min, load: load,
-      disp: disp, rosa: fuori, tot: ROSTER.length
+      disp: disp, rosa: fuori, tot: ROSTER.length, agg: agg
     };
   }
 
@@ -3761,6 +4005,37 @@ window.FORZA = window.FORZA || { roster:[] };
     const nDisp = (s.disp && s.disp.length) || 0;
     let rosaHtml = '';
     if(s.tot){
+      const cnt = {};
+      AV_STATES.forEach(function(st){ cnt[st.k] = 0; });
+      cnt.disponibile = nDisp;
+      (s.rosa||[]).forEach(function(p){
+        const k = stKey(p.st);
+        if(cnt[k] !== undefined) cnt[k]++;
+      });
+      /* Quante si sono allenate davvero: il lavoro fatto qui piu' quello fatto su
+         in prima squadra. Le aggregate stanno dentro il totale ma vanno dette, se
+         no il numero del giorno non torna con la rosa. Le sedute salvate prima di
+         questa versione il campo non ce l'hanno: si salta la frase e basta. */
+      const stFuori = {};
+      (s.rosa||[]).forEach(function(p){ stFuori[p.name] = stKey(p.st); });
+      const aggAtt = (s.agg||[]).filter(function(n){
+        const k = stFuori[n];
+        return k !== 'assente' && k !== 'fisico';
+      });
+      const qui  = cnt.disponibile + cnt.parziale + cnt.differenziato;
+      const tot  = qui + cnt.ft;
+      const pezzi = [];
+      if(qui)    pezzi.push('<b>'+qui+'</b> qui in Primavera');
+      if(cnt.ft) pezzi.push('<b>'+cnt.ft+'</b> su in prima squadra');
+      let res = pezzi.length
+        ? 'Si sono allenate <b>'+tot+'</b>: '+pezzi.join(', ')+'.'
+        : 'Nessuna atleta si e\' allenata.';
+      if(aggAtt.length) res += ' Di queste <b>'+aggAtt.length+'</b> ' +
+        (aggAtt.length === 1 ? 'aggregata' : 'aggregate') + ' fuori rosa: ' +
+        esc(aggAtt.map(plNome).join(', ')) + '.';
+      if(cnt.fisico || cnt.assente) res += ' Fuori <b>'+(cnt.fisico + cnt.assente)+'</b>' +
+        (cnt.fisico ? ', di cui <b>'+cnt.fisico+'</b> dal fisioterapista' : '') + '.';
+
       const righe = AV_STATES.slice(1).map(function(st){
         const l = (s.rosa||[]).filter(function(p){ return stKey(p.st) === st.k; });
         return l.length ? '<div class="r"><b>'+esc(st.l)+' ('+l.length+')</b>: '+nomi(l)+'</div>' : '';
@@ -3768,6 +4043,7 @@ window.FORZA = window.FORZA || { roster:[] };
       rosaHtml =
         '<div class="pp-sec"><div class="t">Rosa del giorno</div></div>' +
         '<div class="pp-rosa">' +
+          '<div class="res">'+res+'</div>' +
           '<div class="r"><b>In gruppo ('+nDisp+')</b>: '+
             (nDisp ? esc(s.disp.map(plNome).join(', ')) : 'nessuna')+'</div>' +
           righe +
@@ -3823,11 +4099,11 @@ window.FORZA = window.FORZA || { roster:[] };
     host.innerHTML = list.slice().reverse().map(function(s){
       const d = parse(s.data);
       const nb = (s.blocks && s.blocks.length) || 0;
-      const nd = (s.disp && s.disp.length) || 0;
+      const nd = sessAll(s);
       return '<div class="sv-row'+(s.data === TSTR ? ' today' : '')+'">' +
         '<div class="sv-main">' +
           '<div class="sv-tt">'+esc(s.tit || 'Seduta')+'</div>' +
-          '<div class="sv-dt">'+esc(itDate(d))+(s.md ? ' &#183; '+esc(s.md) : '')+' &#183; '+nb+' blocchi &#183; '+nd+' in gruppo</div>' +
+          '<div class="sv-dt">'+esc(itDate(d))+(s.md ? ' &#183; '+esc(s.md) : '')+' &#183; '+nb+' blocchi &#183; '+nd+' allenate</div>' +
         '</div>' +
         '<div class="sv-num"><b>'+NF.format(s.min||0)+'</b><small>min</small></div>' +
         '<div class="sv-num load"><b>'+NF.format(s.load||0)+'</b><small>u.a.</small></div>' +
