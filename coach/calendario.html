@@ -452,6 +452,8 @@ a.dbtn.xgo svg{ transform:none; }
 .pl-cpct{ font-size:9px; font-weight:700; padding:2px 6px; border-radius:999px; background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
 .pl-cvbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
   background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+/* dove si gioca conta meno di che gara e': resta li' ma senza gridare */
+.pl-cvbadge.venue{ background:var(--surface3); border-color:var(--border2); color:var(--muted); }
 .pl-cexbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
   background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 .pl-cactions{ position:absolute; top:5px; right:5px; display:flex; gap:3px; opacity:0; transition:opacity .16s var(--ease); }
@@ -501,6 +503,8 @@ a.dbtn.xgo svg{ transform:none; }
 .pl-dhead h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:22px; letter-spacing:.5px; color:var(--ink); }
 .pl-ddate{ font-size:12px; color:var(--muted); text-transform:capitalize; }
 .pl-drow{ display:flex; flex-direction:column; gap:6px; }
+/* .pl-drow imposta display, quindi l'attributo hidden da solo non basterebbe */
+#pl-ecomprow[hidden]{ display:none; }
 .pl-drow > label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--faint); }
 .pl-dgrid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .pl-dialog select, .pl-dialog input, .pl-dialog textarea{ appearance:none; font-family:inherit; font-size:13px; color:var(--text);
@@ -577,6 +581,15 @@ a.dbtn.xgo svg{ transform:none; }
 #pl-det{ width:min(620px, calc(100vw - 24px)); }
 .pl-dbody{ padding:20px; display:flex; flex-direction:column; gap:14px; }
 .pl-dbody .sdet{ margin-top:0; border-top:0; padding-top:0; }
+#pl-detbody{ display:flex; flex-direction:column; gap:12px; }
+.pl-comp{ display:flex; flex-wrap:wrap; gap:6px; }
+.pl-compb{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; color:var(--muted);
+  padding:6px 12px; border-radius:999px; border:1px solid var(--border2); background:var(--surface2);
+  transition:color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
+.pl-compb:hover{ color:var(--ink); border-color:var(--border3); }
+.pl-compb.on{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
+.pl-compb:focus-visible{ outline:2px solid var(--violet); outline-offset:2px; }
+.pl-compb:active{ transform:scale(.97); }
 .pl-dfx{ display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; font-size:16px; font-weight:600; color:var(--muted); }
 .pl-dfx .on{ color:var(--orange2); }
 .pl-dfx .vs{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
@@ -733,7 +746,8 @@ a.dbtn.xgo svg{ transform:none; }
           <label for="af-kind">Tipo</label>
           <select id="af-kind">
             <option value="training">Allenamento</option>
-            <option value="match">Partita</option>
+            <option value="campionato">Partita di campionato</option>
+            <option value="coppa">Partita di coppa</option>
             <option value="amichevole">Amichevole</option>
           </select>
         </div>
@@ -878,6 +892,10 @@ a.dbtn.xgo svg{ transform:none; }
         <select id="pl-egroup"></select>
       </div>
     </div>
+    <div class="pl-drow" id="pl-ecomprow" hidden>
+      <label for="pl-ecomp">Competizione</label>
+      <select id="pl-ecomp"></select>
+    </div>
     <div class="pl-drow">
       <label>Contenuto seduta</label>
       <div class="pl-phz">
@@ -1005,6 +1023,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const SCALE = Number(C.scale) || 7793;
   const DAYS = Array.isArray(C.days) ? C.days : [];
   const FIX  = Array.isArray(C.fixtures) ? C.fixtures : [];
+  /* Le gare del calendario indicizzate per data. Servono in due posti: alla
+     griglia del planner, per farle comparire da sole, e al tipo di gara, per
+     sapere se in quel giorno era in programma una partita ufficiale. */
+  const FIX_BY_DATE = {};
+  FIX.forEach(function(f, i){
+    if(!f || !f.data) return;
+    (FIX_BY_DATE[f.data] = FIX_BY_DATE[f.data] || []).push({ i:i, f:f });
+  });
 
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
@@ -1013,6 +1039,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const DTF_SHORT = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'short' });
 
   const KIND_LABEL = { training:'Allenamento', match:'Partita', amichevole:'Amichevole' };
+  /* Campionato, coppa o amichevole: nei fogli del GPS questo dato non esiste e
+     calendario_data.js viene riscritto a ogni aggiornamento, quindi la scelta
+     resta nel browser insieme a "svolto" e alle note. */
+  const COMP = { campionato:'Campionato', coppa:'Coppa', amichevole:'Amichevole' };
+  const COMP_SHORT = { campionato:'Camp.', coppa:'Coppa', amichevole:'Amich.' };
+  const COMP_ORDER = ['campionato','coppa','amichevole'];
   const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>';
   const XSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   const CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 6 6 6-6 6"/></svg>';
@@ -1173,7 +1205,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
         is_match: !!d.is_match, load: (d.load==null?null:Number(d.load)), pct: null,
         sigla: d.sigla||'', has_ex: !!d.has_ex,
         svolto: (comp.svolto!==undefined ? !!comp.svolto : true),   // storico: gia' svolto
-        note: comp.note || ''
+        note: comp.note || '',
+        comp_gara: comp.comp_gara || ''
       });
     });
     store.manual.forEach(m=>{
@@ -1187,6 +1220,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         sigla: '', has_ex: false,
         svolto: !!m.svolto,
         note: m.note || '',
+        comp_gara: m.comp_gara || '',
         type: m.type || '', group: m.group || '', diff: m.diff || '',
         /* Le atlete e le fasi stavano nel blocco salvato ma non arrivavano
            fin qui, quindi i cartellini del planner non riuscivano a dire chi
@@ -1212,6 +1246,32 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(sess.manual){ const m = s.manual.find(x=> String(x.id)===String(sess.id)); if(m) m.note = note; }
     else{ const c = s.comp[sess.key] || {}; c.note = note; s.comp[sess.key] = c; }
     saveStore(s);
+  }
+  /* Il tipo di gara si sceglie una volta e resta. Se non e' mai stato scelto lo
+     deduciamo: quel giorno c'era una gara del calendario, quindi campionato;
+     altrimenti e' una partita che il campionato non prevedeva, quindi
+     un'amichevole. Cosi' le 28 giornate della stagione sono gia' a posto e a
+     mano si corregge solo la coppa. */
+  function compOf(s){
+    if(!s || !s.is_match) return '';
+    if(s.comp_gara && COMP[s.comp_gara]) return s.comp_gara;
+    if(s.kind==='amichevole') return 'amichevole';
+    if(s.fix || FIX_BY_DATE[s.data]) return 'campionato';
+    return 'amichevole';
+  }
+  function compLabel(s, short){
+    const c = compOf(s);
+    if(!c) return '';
+    return short ? COMP_SHORT[c] : COMP[c];
+  }
+  /* Il nome con cui una seduta si presenta ovunque: lista, CSV, Excel, stampa. */
+  function sessLabel(s){ return s.title || (s.is_match ? compLabel(s) : '') || KIND_LABEL[s.kind] || s.kind; }
+  function setComp(sess, val){
+    const s = loadStore();
+    if(sess.manual){ const m = s.manual.find(x=> String(x.id)===String(sess.id)); if(m) m.comp_gara = val; }
+    else if(sess.key){ const c = s.comp[sess.key] || {}; c.comp_gara = val; s.comp[sess.key] = c; }
+    saveStore(s);
+    sess.comp_gara = val;
   }
   function delManual(id){
     const s = loadStore();
@@ -1561,7 +1621,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const dt = parseDate(s.data);
     const dow = dt ? cap(DTF_DOW.format(dt).replace('.','')) : '';
     const dnum = dt ? dt.getDate() : '';
-    const label = s.title || KIND_LABEL[s.kind] || s.kind;
+    /* Nella lista una partita dice subito che partita e': "Campionato" invece
+       del generico "Partita", che valeva per tutte e trentuno. */
+    const label = sessLabel(s);
     const pct = pctOf(s);
     const ex = exOf(s);
 
@@ -1720,7 +1782,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const lines = [head.join(';')];
     list.forEach(s=>{
       lines.push([
-        s.data, s.slot||'', (s.title||KIND_LABEL[s.kind]||s.kind), s.is_match?'si':'no',
+        s.data, s.slot||'', sessLabel(s), s.is_match?'si':'no',
         numIt(s.load), numIt(pctOf(s)), s.sigla||'', s.has_ex?'si':'no', s.svolto?'si':'no', s.manual?'si':'no', s.note||''
       ].map(csvVal).join(';'));
     });
@@ -1759,7 +1821,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       rows += '<tr class="brk">'+
         '<td class="l">'+esc(dlab)+'</td>'+
         '<td>'+esc(s.slot||'-')+'</td>'+
-        '<td class="l">'+esc(s.title||KIND_LABEL[s.kind]||s.kind)+(s.manual?' (man)':'')+'</td>'+
+        '<td class="l">'+esc(sessLabel(s))+(s.manual?' (man)':'')+'</td>'+
         '<td>'+(s.load!=null?NF0.format(s.load):'-')+'</td>'+
         '<td>'+(pctOf(s)!=null?NF0.format(pctOf(s))+'%':'-')+'</td>'+
         '<td>'+esc(s.sigla||'-')+'</td>'+
@@ -1859,7 +1921,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       body += '<tr>'+
         '<td '+tdL+'>'+esc(dlab)+'</td>'+
         '<td '+tdC+'>'+esc(s.slot||'')+'</td>'+
-        '<td '+tdL+'>'+esc(s.title||KIND_LABEL[s.kind]||s.kind)+'</td>'+
+        '<td '+tdL+'>'+esc(sessLabel(s))+'</td>'+
         '<td '+tdC+'>'+(s.is_match?'si':'no')+'</td>'+
         '<td '+tdR+'>'+(s.load!=null?NF0.format(s.load):'')+'</td>'+
         '<td '+tdC+'>'+(pctOf(s)!=null?NF0.format(pctOf(s))+'%':'')+'</td>'+
@@ -1936,9 +1998,15 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const date = $('af-date').value;
       if(!date){ err.textContent='Inserisci la data.'; err.classList.add('show'); return; }
       const pctVal = Math.max(0, Math.min(120, Number($('af-pct').value)||0));
+      /* Il menu chiede che cosa e', non come si chiama il campo: da campionato,
+         coppa e amichevole ricaviamo qui il kind e la competizione. */
+      const tipo = $('af-kind').value;
+      const kind = (tipo==='training') ? 'training' : (tipo==='amichevole' ? 'amichevole' : 'match');
       const rec = {
         id: 'm'+Date.now()+Math.random().toString(36).slice(2,6),
-        data: date, slot: $('af-slot').value, kind: $('af-kind').value, title: '',
+        data: date, slot: $('af-slot').value, kind: kind, title: '',
+        type: (tipo==='training') ? '' : 'gara',
+        comp_gara: (tipo==='training') ? '' : tipo,
         pct: pctVal>0 ? pctVal : null,
         load: pctVal>0 ? Math.round(pctVal/100*SCALE) : null,
         note: $('af-note').value.trim(), svolto: false
@@ -2119,11 +2187,6 @@ window.RS_ROSTER = window.RS_ROSTER || [
   /* Il campionato non e' una seduta da registrare: e' il paletto attorno a cui
      si costruisce la settimana. Nella griglia entra da solo, cosi' il giorno di
      gara si vede anche mesi prima che il GPS abbia scritto qualcosa. */
-  const FIX_BY_DATE = {};
-  FIX.forEach(function(f, i){
-    if(!f || !f.data) return;
-    (FIX_BY_DATE[f.data] = FIX_BY_DATE[f.data] || []).push({ i:i, f:f });
-  });
   function fixTeams(f){
     const casa = !!f.casa;
     return {
@@ -2133,12 +2196,18 @@ window.RS_ROSTER = window.RS_ROSTER || [
     };
   }
   function fixOpp(f){ const t = fixTeams(f); return (t.casa ? t.away : t.home) || 'Avversario'; }
-  function fixSession(rec){
+  /* La gara del calendario non e' una seduta registrata, ma il tipo di
+     competizione va salvato lo stesso: le diamo una chiave sua, distinta da
+     quella delle sedute, che vive nello stesso store. */
+  function fixKey(f){ return 'f|'+f.data+'|'+(f.sigla||''); }
+  function fixSession(rec, store){
     const f = rec.f;
-    return { id:'f'+rec.i, key:null, manual:false, fix:f, only_fix:true,
+    const key = fixKey(f);
+    const c = (store && store.comp[key]) || {};
+    return { id:'f'+rec.i, key:key, manual:false, fix:f, only_fix:true,
       data:f.data, slot:'', kind:'match', title:fixOpp(f),
       is_match:true, load:null, pct:null, sigla:'', has_ex:false,
-      svolto:(f.data < TODAY_KEY), note:'' };
+      svolto:(f.data < TODAY_KEY), note:'', comp_gara: c.comp_gara || '' };
   }
 
   // ---- sessioni per data ----
@@ -2146,6 +2215,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
   function plByDate(){
     const map = {};
     const ord = { AM:0, PM:1, '':2 };
+    const store = loadStore();
     buildSessions().forEach(s=>{ (map[s.data] = map[s.data] || []).push(s); });
     /* La gara del calendario entra solo se quel giorno non c'e' gia' una
        partita: se il GPS l'ha registrata, o se il mister l'ha messa a mano,
@@ -2162,7 +2232,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         });
         return;
       }
-      FIX_BY_DATE[iso].forEach(function(r){ day.push(fixSession(r)); });
+      FIX_BY_DATE[iso].forEach(function(r){ day.push(fixSession(r, store)); });
     });
     Object.keys(map).forEach(k=> map[k].sort((a,b)=>{
       const oa = ord[a.slot]!=null?ord[a.slot]:2, ob = ord[b.slot]!=null?ord[b.slot]:2;
@@ -2182,7 +2252,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       data: dateIso, slot: (type==='gara'||type==='riposo')?'':'PM',
       kind: meta.k, title:'', type: type,
       pct: null, load: null, note:'', svolto:false,
-      group: PL.group||'', diff:'', phases:[], players:[]
+      group: PL.group||'', diff:'', phases:[], players:[],
+      comp_gara: (type==='gara') ? (FIX_BY_DATE[dateIso] ? 'campionato' : 'amichevole') : ''
     };
     s.manual.push(rec); saveStore(s); return rec.id;
   }
@@ -2195,6 +2266,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(!m) return false;
     PL_CLIP = { slot:m.slot||'', kind:m.kind||'training', title:m.title||'', type:m.type||'',
       pct:(m.pct==null?null:m.pct), load:(m.load==null?null:m.load), note:m.note||'', group:m.group||'', diff:m.diff||'',
+      comp_gara:m.comp_gara||'',
       phases:clone(m.phases||[]), players:clone(m.players||[]) };
     return true;
   }
@@ -2214,7 +2286,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(s.fz && s.title) return s.title;
     if(s.type && SES[s.type]) return SES[s.type].l;
     if(s.title) return s.title;
-    if(s.is_match) return (s.kind==='amichevole'?'Amichevole':'Gara');
+    if(s.is_match) return compLabel(s) || 'Gara';
     return KIND_LABEL[s.kind] || 'Seduta';
   }
   function plAfterMutate(){ plRender(); renderSessions(); }
@@ -2238,6 +2310,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     else if(isRiposo) dot = 'var(--faint)';
     else dot = (pct!=null) ? loadColorOk(pct) : 'var(--violet2)';
     const slot = s.slot ? '<span class="pl-cslot">'+esc(s.slot)+'</span>' : '';
+    let ttl = plTitle(s);
     let badges = '';
     if(manual && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
     if(manual && Array.isArray(s.players) && s.players.length){
@@ -2249,11 +2322,23 @@ window.RS_ROSTER = window.RS_ROSTER || [
     /* Il cartellino dice da dove arriva il lavoro: la scheda sta in Forza,
        con esercizi, serie e carichi, qui se ne vede solo il posto nel giorno. */
     if(manual && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
+    /* Sul cartellino di una partita la prima cosa che conta e' che partita e':
+       campionato, coppa o amichevole. In vista mese l'etichetta si accorcia,
+       perche' li' il cartellino e' alto quanto una riga. */
+    if(isGara){
+      /* Se non c'e' un avversario da mostrare il titolo direbbe solo "Gara":
+         li' il nome della competizione fa da titolo e il badge sparisce,
+         invece di dire due volte la stessa cosa. */
+      const cl = compLabel(s, compact);
+      const full = compLabel(s);
+      if(full && ttl==='Gara') ttl = full;
+      else if(cl) badges += '<span class="pl-cvbadge">'+esc(cl)+'</span>';
+    }
     /* La gara del campionato non ha carico: al suo posto dice dove si gioca e
        se e' gia' stata giocata, cosi' il chip serve anche a mesi di distanza. */
     if(s.fix){
       const t = fixTeams(s.fix);
-      badges += '<span class="pl-cvbadge">'+(t.casa?'casa':'trasferta')+'</span>';
+      badges += '<span class="pl-cvbadge venue">'+(t.casa?'casa':'trasferta')+'</span>';
       if(!compact && s.only_fix) badges += '<span class="pl-cpct">'+(s.svolto ? 'giocata' : 'in programma')+'</span>';
     }
     if(!manual && !s.only_fix){
@@ -2294,7 +2379,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       ' role="button" tabindex="0" title="'+esc(tip)+'">'+
       actions+
       '<div class="pl-ctop"><span class="pl-cdot" style="background:'+dot+'"></span>'+
-        '<span class="pl-ctype">'+esc(plTitle(s))+'</span>'+slot+'</div>'+
+        '<span class="pl-ctype">'+esc(ttl)+'</span>'+slot+'</div>'+
       note+
       phHTML+
       (badges? '<div class="pl-cbadges">'+badges+'</div>' : '')+
@@ -2599,6 +2684,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
     let t = m.type;
     if(!t) t = (m.kind==='match'||m.kind==='amichevole') ? 'gara' : (m.kind==='riposo' ? 'riposo' : 'squadra');
     if(selT) selT.value = SES[t] ? t : 'squadra';
+    const selC = document.getElementById('pl-ecomp');
+    if(selC){
+      selC.innerHTML = COMP_ORDER.map(function(k){ return '<option value="'+k+'">'+esc(COMP[k])+'</option>'; }).join('');
+      selC.value = m.comp_gara || (m.kind==='amichevole' ? 'amichevole' : (FIX_BY_DATE[m.data] ? 'campionato' : 'amichevole'));
+    }
+    plCompRow();
     document.getElementById('pl-eslot').value = m.slot||'';
     document.getElementById('pl-epct').value = (m.pct==null?'':m.pct);
     document.getElementById('pl-enote').value = m.note||'';
@@ -2608,6 +2699,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const dt = parseDate(m.data);
     document.getElementById('pl-edate').textContent = dt ? cap(DTF_LONG.format(dt)) : (m.data||'');
     if(typeof plDialog.showModal==='function') plDialog.showModal(); else plDialog.setAttribute('open','');
+  }
+  /* La riga della competizione ha senso solo se il blocco e' una gara: sulle
+     altre attivita' resta chiusa invece di chiedere una cosa che non serve. */
+  function plCompRow(){
+    const row = document.getElementById('pl-ecomprow');
+    const selT = document.getElementById('pl-etype');
+    if(!row || !selT) return;
+    if(selT.value==='gara') row.removeAttribute('hidden'); else row.setAttribute('hidden','');
   }
   function plSaveEdit(){
     if(plEditId==null) return;
@@ -2620,7 +2719,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
     /* Il titolo di norma si azzera, lo fa il tipo di seduta. L'eccezione sono
        i blocchi che arrivano da una scheda di forza: li' il titolo e' il nome
        della scheda e cancellarlo vorrebbe dire perdere il riferimento. */
-    m.type = t; m.kind = meta.k; m.title = m.fz ? (m.title || '') : '';
+    /* Un'amichevole resta un "kind" a se' perche' i filtri e le esportazioni la
+       distinguono gia' cosi' da quando esisteva solo quel campo. */
+    const cg = (t==='gara') ? (document.getElementById('pl-ecomp').value || 'campionato') : '';
+    m.comp_gara = cg;
+    m.type = t;
+    m.kind = (cg==='amichevole') ? 'amichevole' : meta.k;
+    m.title = m.fz ? (m.title || '') : '';
     m.slot = document.getElementById('pl-eslot').value;
     m.pct  = (pct && pct>0) ? pct : null;
     m.load = (pct && pct>0) ? Math.round(pct/100*SCALE) : null;
@@ -2654,13 +2759,25 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(!s.only_fix){
       const bits = [];
       if(s.slot) bits.push('<span>'+esc(s.slot)+'</span>');
-      if(!s.fix) bits.push('<span>'+esc(KIND_LABEL[s.kind] || 'Seduta')+'</span>');
+      /* Su una partita il tipo lo dicono gia' le pillole della competizione. */
+      if(!s.fix && !s.is_match) bits.push('<span>'+esc(KIND_LABEL[s.kind] || 'Seduta')+'</span>');
       const p = pctOf(s);
       if(p!=null && s.kind!=='riposo') bits.push('<span class="hot">'+NF0.format(p)+'% della gara</span>');
       if(s.sigla) bits.push('<span>'+esc(s.sigla)+'</span>');
       bits.push('<span>'+(s.svolto?'svolta':'da fare')+'</span>');
       h += '<div class="pl-dmeta">'+bits.join('')+'</div>';
       if(s.note) h += '<div class="pl-dempty">'+esc(s.note)+'</div>';
+    }
+    /* Il tipo di gara si sceglie da qui, sulla partita stessa, e vale da subito
+       per il cartellino e per la lista sedute. */
+    if(s.is_match){
+      const cur = compOf(s);
+      h += '<div class="pl-drow"><label>Competizione</label><div class="pl-comp" id="pl-detcomp">'+
+        COMP_ORDER.map(function(k){
+          return '<button type="button" class="pl-compb'+(k===cur?' on':'')+'" data-comp="'+k+'"'+
+            ' aria-pressed="'+(k===cur?'true':'false')+'">'+esc(COMP[k])+'</button>';
+        }).join('')+
+      '</div></div>';
     }
     const ex = s.only_fix ? null : exOf(s);
     if(exHasDetail(ex)) h += exPanel(ex);
@@ -2675,7 +2792,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const ttl = document.getElementById('pl-dettitle');
     /* Il titolo dice che cosa e', le squadre stanno subito sotto: ripetere
        "Bologna" due volte di fila non aggiunge niente. */
-    if(ttl) ttl.textContent = s.is_match ? (s.kind==='amichevole'?'Amichevole':'Gara') : plTitle(s);
+    if(ttl) ttl.textContent = s.is_match ? (compLabel(s) || 'Gara') : plTitle(s);
     const dl = document.getElementById('pl-detdate');
     if(dl){
       const dt = parseDate(s.data);
@@ -2684,6 +2801,23 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }
     const body = document.getElementById('pl-detbody');
     if(body) body.innerHTML = plDetBody(s);
+    const cw = document.getElementById('pl-detcomp');
+    if(cw){
+      const btns = cw.querySelectorAll('[data-comp]');
+      btns.forEach(function(b){
+        b.addEventListener('click', function(){
+          setComp(s, b.getAttribute('data-comp'));
+          btns.forEach(function(x){
+            const on = (x===b);
+            x.classList.toggle('on', on);
+            x.setAttribute('aria-pressed', on?'true':'false');
+          });
+          if(ttl) ttl.textContent = compLabel(s) || 'Gara';
+          plRender(); renderSessions();
+          toast('Segnata come '+(compLabel(s)||'gara').toLowerCase());
+        });
+      });
+    }
     const go = document.getElementById('pl-detgo');
     if(go){
       const ex = s.only_fix ? null : exOf(s);
@@ -2705,6 +2839,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(plDialog){
       const form = document.getElementById('pl-eform');
       if(form) form.addEventListener('submit', ()=> plSaveEdit());   // method="dialog" chiude da solo
+      const selT = document.getElementById('pl-etype');
+      if(selT) selT.addEventListener('change', plCompRow);
       const cancel = document.getElementById('pl-ecancel');
       if(cancel) cancel.addEventListener('click', ()=> plDialog.close());
       const del = document.getElementById('pl-edel');
