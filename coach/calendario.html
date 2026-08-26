@@ -429,10 +429,13 @@ a.dbtn.xgo svg{ transform:none; }
 .pl-chip:hover{ border-color:var(--border3); }
 .pl-chip:active{ cursor:grabbing; transform:scale(.98); }
 .pl-chip.dragging{ opacity:.45; }
-.pl-chip.st{ cursor:default; opacity:.82; border-style:dashed; }
+.pl-chip.st{ cursor:pointer; opacity:.82; border-style:dashed; }
+.pl-chip.st:hover{ opacity:1; border-color:var(--violet-border); }
 .pl-chip.gara{ background:var(--ember-bg); border-color:var(--ember-border); }
 .pl-chip.riposo{ background:var(--surface); opacity:.6; }
 .pl-chip.other{ opacity:.34; }
+.pl-chip.fix{ opacity:1; border-style:solid; }
+.pl-chip:focus-visible{ outline:2px solid var(--violet); outline-offset:2px; }
 .pl-ctop{ display:flex; align-items:center; gap:6px; }
 .pl-cdot{ width:8px; height:8px; border-radius:999px; flex:0 0 auto; }
 .pl-ctype{ font-size:11.5px; font-weight:700; color:var(--ink); line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
@@ -447,6 +450,10 @@ a.dbtn.xgo svg{ transform:none; }
 .pl-fzbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
   background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
 .pl-cpct{ font-size:9px; font-weight:700; padding:2px 6px; border-radius:999px; background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
+.pl-cvbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
+  background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+.pl-cexbadge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 6px; border-radius:999px;
+  background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 .pl-cactions{ position:absolute; top:5px; right:5px; display:flex; gap:3px; opacity:0; transition:opacity .16s var(--ease); }
 .pl-chip:hover .pl-cactions, .pl-chip:focus-within .pl-cactions{ opacity:1; }
 @media (hover: none){ .pl-cactions{ opacity:1; } }
@@ -564,6 +571,25 @@ a.dbtn.xgo svg{ transform:none; }
   padding:9px 14px; border-radius:10px; border:1px solid var(--red-border); background:var(--red-bg); color:var(--red2);
   transition:background .16s var(--ease); }
 .pl-ddel:hover{ background:oklch(62% 0.22 25 / 0.18); }
+
+/* dettaglio di una seduta registrata o di una gara del calendario */
+/* piu' largo del dialog di modifica: qui dentro ci sta la tabella per atleta */
+#pl-det{ width:min(620px, calc(100vw - 24px)); }
+.pl-dbody{ padding:20px; display:flex; flex-direction:column; gap:14px; }
+.pl-dbody .sdet{ margin-top:0; border-top:0; padding-top:0; }
+.pl-dfx{ display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; font-size:16px; font-weight:600; color:var(--muted); }
+.pl-dfx .on{ color:var(--orange2); }
+.pl-dfx .vs{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--faint); }
+.pl-dmeta{ display:flex; flex-wrap:wrap; gap:6px; }
+.pl-dmeta span{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  padding:3px 8px; border-radius:999px; background:var(--surface3); border:1px solid var(--border2); color:var(--muted); }
+.pl-dmeta span.hot{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
+.pl-dempty{ font-size:12.5px; color:var(--muted); line-height:1.5; padding:12px; border-radius:10px;
+  border:1px dashed var(--border2); background:var(--surface2); }
+.pl-dact{ display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
+.pl-dact a.btn{ text-decoration:none; }
+/* .btn imposta display, quindi l'attributo hidden da solo non basterebbe */
+#pl-detgo[hidden]{ display:none; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 980px){
@@ -785,7 +811,7 @@ a.dbtn.xgo svg{ transform:none; }
         <div class="pl-scroll">
           <div class="pl-grid week" id="pl-grid"></div>
         </div>
-        <p class="pl-hint" id="pl-hint">Suggerimento: trascina un blocco su un altro giorno per spostarlo. Usa Copia sul blocco e poi Incolla in un giorno per duplicarlo.</p>
+        <p class="pl-hint" id="pl-hint">Le gare del campionato sono gia' nella griglia. Premi su una seduta passata per vedere le esercitazioni e chi c'era, su un blocco aggiunto a mano per modificarlo. Trascina un blocco su un altro giorno per spostarlo, oppure usa Copia e poi Incolla.</p>
       </section>
 
       <!-- sedute -->
@@ -887,6 +913,21 @@ a.dbtn.xgo svg{ transform:none; }
       <button type="submit" class="btn primary" value="save" id="pl-esave">Salva</button>
     </div>
   </form>
+</dialog>
+
+<!-- dialog dettaglio: seduta registrata dal GPS oppure gara del calendario -->
+<dialog id="pl-det" class="pl-dialog">
+  <div class="pl-dbody">
+    <div class="pl-dhead">
+      <h3 id="pl-dettitle">Dettaglio</h3>
+      <span class="pl-ddate" id="pl-detdate"></span>
+    </div>
+    <div id="pl-detbody"></div>
+    <div class="pl-dact">
+      <a class="btn primary" id="pl-detgo" href="./esercitazioni.html" hidden>Apri le esercitazioni</a>
+      <button type="button" class="btn" id="pl-detclose" autofocus>Chiudi</button>
+    </div>
+  </div>
 </dialog>
 
 <!-- snapshot calendario (window.CAL) -->
@@ -1480,13 +1521,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
         return '<div class="gr"><span class="gn">Gruppo '+(i+1)+'</span> '+
           '<span class="gd">'+nomi.length+(nomi.length===1?' atleta':' atlete')+
           (es.length?' &#183; '+esc(es.join(', ')):'')+'</span>'+
-          '<span class="ga">'+esc(nomi.join(', '))+'</span></div>';
+          '<span class="ga">'+esc(nomi.map(plNome).join(', '))+'</span></div>';
       }).join('')+'</div>';
     }
 
     // chi ha fatto cosa, col rapporto sul proprio Full Training
     const per = exPerAtleta(ex);
-    const nomi = Object.keys(per).sort();
+    // la chiave resta il nome del foglio, l'ordine segue il nome che si legge
+    const nomi = Object.keys(per).sort(function(a,b){ return plNome(a).localeCompare(plNome(b),'it'); });
     if(nomi.length){
       h += '<h4>Chi ha fatto cosa</h4><table class="blk atbl">'+
         '<thead><tr><th>Atleta</th><th class="r">Min</th><th class="r">Dist</th>'+
@@ -1495,7 +1537,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
           const t = per[nm];
           const pc = (t.pct==null) ? '-' : (NF0.format(t.pct)+'%');
           const low = (t.pct!=null && t.pct<80) ? ' low' : '';
-          return '<tr><td class="nm">'+esc(nm)+'</td>'+
+          return '<tr><td class="nm">'+esc(plNome(nm))+'</td>'+
             '<td class="r">'+NF1.format(t.min)+'</td>'+
             '<td class="r">'+NF0.format(t.dist)+'</td>'+
             '<td class="r pc'+low+'">'+pc+'</td></tr>';
@@ -1506,7 +1548,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const as = ex.assenti || [];
     if(ex.ft || dl.length){
       h += '<h4>Assenti</h4><div class="blk ass">'+
-        (as.length ? as.map(n=>'<b>'+esc(n)+'</b>').join(', ')
+        (as.length ? as.map(n=>'<b>'+esc(plNome(n))+'</b>').join(', ')
                    : '<span class="none">Nessuna assente, rosa GPS al completo.</span>')+'</div>';
     }
 
@@ -2073,11 +2115,55 @@ window.RS_ROSTER = window.RS_ROSTER || [
     plSave(); plRender();
   }
 
+  // ---- partite ufficiali dentro la griglia ----
+  /* Il campionato non e' una seduta da registrare: e' il paletto attorno a cui
+     si costruisce la settimana. Nella griglia entra da solo, cosi' il giorno di
+     gara si vede anche mesi prima che il GPS abbia scritto qualcosa. */
+  const FIX_BY_DATE = {};
+  FIX.forEach(function(f, i){
+    if(!f || !f.data) return;
+    (FIX_BY_DATE[f.data] = FIX_BY_DATE[f.data] || []).push({ i:i, f:f });
+  });
+  function fixTeams(f){
+    const casa = !!f.casa;
+    return {
+      casa: casa,
+      home: f.home || (casa ? (f.squadra||'Fiorentina') : (f.avversario||'')),
+      away: f.away || (casa ? (f.avversario||'') : (f.squadra||'Fiorentina'))
+    };
+  }
+  function fixOpp(f){ const t = fixTeams(f); return (t.casa ? t.away : t.home) || 'Avversario'; }
+  function fixSession(rec){
+    const f = rec.f;
+    return { id:'f'+rec.i, key:null, manual:false, fix:f, only_fix:true,
+      data:f.data, slot:'', kind:'match', title:fixOpp(f),
+      is_match:true, load:null, pct:null, sigla:'', has_ex:false,
+      svolto:(f.data < TODAY_KEY), note:'' };
+  }
+
   // ---- sessioni per data ----
+  let PL_BY_ID = {};
   function plByDate(){
     const map = {};
     const ord = { AM:0, PM:1, '':2 };
     buildSessions().forEach(s=>{ (map[s.data] = map[s.data] || []).push(s); });
+    /* La gara del calendario entra solo se quel giorno non c'e' gia' una
+       partita: se il GPS l'ha registrata, o se il mister l'ha messa a mano,
+       quella vince, perche' porta con se' il carico vero. */
+    Object.keys(FIX_BY_DATE).forEach(function(iso){
+      const day = map[iso] || (map[iso] = []);
+      const rec = FIX_BY_DATE[iso][0];
+      const giocate = day.filter(function(x){ return x.is_match; });
+      if(giocate.length){
+        /* La partita registrata resta lei, ma prende il nome dell'avversario e
+           il campo dal calendario: senza, il cartellino direbbe solo "Gara". */
+        giocate.forEach(function(x){
+          if(!x.fix){ x.fix = rec.f; if(!x.title) x.title = fixOpp(rec.f); }
+        });
+        return;
+      }
+      FIX_BY_DATE[iso].forEach(function(r){ day.push(fixSession(r)); });
+    });
     Object.keys(map).forEach(k=> map[k].sort((a,b)=>{
       const oa = ord[a.slot]!=null?ord[a.slot]:2, ob = ord[b.slot]!=null?ord[b.slot]:2;
       if(oa!==ob) return oa-ob;
@@ -2141,6 +2227,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const isGara = !!s.is_match;
     let cls = 'pl-chip';
     if(!manual) cls += ' st';
+    if(s.fix) cls += ' fix';
     if(isGara) cls += ' gara'; else if(isRiposo) cls += ' riposo';
     let dim = false;
     if(PL.group && manual && s.group && s.group!==PL.group) dim = true;
@@ -2162,6 +2249,21 @@ window.RS_ROSTER = window.RS_ROSTER || [
     /* Il cartellino dice da dove arriva il lavoro: la scheda sta in Forza,
        con esercizi, serie e carichi, qui se ne vede solo il posto nel giorno. */
     if(manual && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
+    /* La gara del campionato non ha carico: al suo posto dice dove si gioca e
+       se e' gia' stata giocata, cosi' il chip serve anche a mesi di distanza. */
+    if(s.fix){
+      const t = fixTeams(s.fix);
+      badges += '<span class="pl-cvbadge">'+(t.casa?'casa':'trasferta')+'</span>';
+      if(!compact && s.only_fix) badges += '<span class="pl-cpct">'+(s.svolto ? 'giocata' : 'in programma')+'</span>';
+    }
+    if(!manual && !s.only_fix){
+      /* Il numero delle esercitazioni dice subito se il click apre qualcosa. */
+      const exc = exOf(s);
+      if(exHasDetail(exc)){
+        const nd = (exc.drills||[]).length;
+        badges += '<span class="pl-cexbadge">'+(nd ? nd+' eserc.' : 'Dettaglio')+'</span>';
+      }
+    }
     if(!compact && pct!=null && !isRiposo) badges += '<span class="pl-cpct">'+NF0.format(pct)+'%</span>';
     const phases = Array.isArray(s.phases) ? s.phases : [];
     let phHTML = '';
@@ -2186,7 +2288,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '<button class="pl-cbtn del" type="button" data-act="del" data-id="'+esc(s.id)+'" title="Elimina blocco" aria-label="Elimina blocco">'+PL_TRASH_SVG+'</button>'+
       '</div>';
     }
-    return '<div class="'+cls+'"'+(manual?' draggable="true"':'')+' data-id="'+esc(s.id)+'" data-manual="'+(manual?'1':'0')+'">'+
+    const tip = manual ? 'Apri per modificare il blocco'
+      : (s.fix ? 'Apri la scheda della gara' : 'Apri il dettaglio della seduta');
+    return '<div class="'+cls+'"'+(manual?' draggable="true"':'')+' data-id="'+esc(s.id)+'" data-manual="'+(manual?'1':'0')+'"'+
+      ' role="button" tabindex="0" title="'+esc(tip)+'">'+
       actions+
       '<div class="pl-ctop"><span class="pl-cdot" style="background:'+dot+'"></span>'+
         '<span class="pl-ctype">'+esc(plTitle(s))+'</span>'+slot+'</div>'+
@@ -2303,6 +2408,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const grid = document.getElementById('pl-grid'); if(!grid) return;
     const label = document.getElementById('pl-label');
     const map = plByDate();
+    /* Indice per id: il click su un chip deve ritrovare la seduta senza
+       ricostruire tutto il calendario. */
+    PL_BY_ID = {};
+    Object.keys(map).forEach(function(k){ map[k].forEach(function(s){ PL_BY_ID[s.id] = s; }); });
     if(PL.view==='week'){
       grid.className = 'pl-grid week';
       const dates = plWeekDates();
@@ -2352,7 +2461,19 @@ window.RS_ROSTER = window.RS_ROSTER || [
         return;
       }
       const chip = e.target.closest('.pl-chip');
-      if(chip && chip.getAttribute('data-manual')==='1') plOpenEdit(chip.getAttribute('data-id'));
+      if(!chip) return;
+      /* Un blocco messo a mano si modifica, una seduta registrata o una gara
+         del campionato si aprono: sono dati arrivati, non si toccano. */
+      if(chip.getAttribute('data-manual')==='1') plOpenEdit(chip.getAttribute('data-id'));
+      else plOpenDet(chip.getAttribute('data-id'));
+    };
+    grid.onkeydown = function(e){
+      if(e.key!=='Enter' && e.key!==' ') return;
+      if(e.target.closest('button, a, select, input')) return;
+      const chip = e.target.closest('.pl-chip'); if(!chip) return;
+      e.preventDefault();
+      if(chip.getAttribute('data-manual')==='1') plOpenEdit(chip.getAttribute('data-id'));
+      else plOpenDet(chip.getAttribute('data-id'));
     };
     grid.querySelectorAll('.pl-chip[draggable="true"]').forEach(ch=>{
       ch.addEventListener('dragstart', e=>{
@@ -2511,6 +2632,67 @@ window.RS_ROSTER = window.RS_ROSTER || [
     saveStore(s); plEditId = null; plAfterMutate();
   }
 
+  // ---- dialog dettaglio ----
+  /* Una seduta gia' passata non si modifica: si guarda. Qui dentro finisce
+     quello che il GPS ha registrato quel giorno, le esercitazioni una per una,
+     chi ha fatto cosa e chi non c'era, senza uscire dalla griglia. */
+  const plDet = document.getElementById('pl-det');
+  function plDetBody(s){
+    let h = '';
+    if(s.fix){
+      const t = fixTeams(s.fix);
+      h += '<div class="pl-dfx">'+
+        '<span class="'+(t.casa?'on':'')+'">'+esc(t.home)+'</span>'+
+        '<span class="vs">vs</span>'+
+        '<span class="'+(t.casa?'':'on')+'">'+esc(t.away)+'</span>'+
+      '</div>';
+      h += '<div class="pl-dmeta">'+
+        '<span class="hot">'+(t.casa?'in casa':'in trasferta')+'</span>'+
+        (s.only_fix ? '<span>'+(s.svolto?'giocata':'in programma')+'</span>' : '')+
+      '</div>';
+    }
+    if(!s.only_fix){
+      const bits = [];
+      if(s.slot) bits.push('<span>'+esc(s.slot)+'</span>');
+      if(!s.fix) bits.push('<span>'+esc(KIND_LABEL[s.kind] || 'Seduta')+'</span>');
+      const p = pctOf(s);
+      if(p!=null && s.kind!=='riposo') bits.push('<span class="hot">'+NF0.format(p)+'% della gara</span>');
+      if(s.sigla) bits.push('<span>'+esc(s.sigla)+'</span>');
+      bits.push('<span>'+(s.svolto?'svolta':'da fare')+'</span>');
+      h += '<div class="pl-dmeta">'+bits.join('')+'</div>';
+      if(s.note) h += '<div class="pl-dempty">'+esc(s.note)+'</div>';
+    }
+    const ex = s.only_fix ? null : exOf(s);
+    if(exHasDetail(ex)) h += exPanel(ex);
+    else if(s.only_fix) h += '<div class="pl-dempty">'+
+      (s.svolto ? 'Nessun dato registrato per questa gara.'
+                : 'Gara in programma. Quando i dati arriveranno, qui ci saranno le esercitazioni della giornata e chi era in campo.')+'</div>';
+    else h += '<div class="pl-dempty">Nessuna esercitazione registrata per questa seduta.</div>';
+    return h;
+  }
+  function plOpenDet(id){
+    const s = PL_BY_ID[id]; if(!s || !plDet) return;
+    const ttl = document.getElementById('pl-dettitle');
+    /* Il titolo dice che cosa e', le squadre stanno subito sotto: ripetere
+       "Bologna" due volte di fila non aggiunge niente. */
+    if(ttl) ttl.textContent = s.is_match ? (s.kind==='amichevole'?'Amichevole':'Gara') : plTitle(s);
+    const dl = document.getElementById('pl-detdate');
+    if(dl){
+      const dt = parseDate(s.data);
+      dl.innerHTML = esc(dt ? cap(DTF_LONG.format(dt)) : (s.data||'')) +
+        (s.slot ? ' &#183; '+esc(s.slot) : '');
+    }
+    const body = document.getElementById('pl-detbody');
+    if(body) body.innerHTML = plDetBody(s);
+    const go = document.getElementById('pl-detgo');
+    if(go){
+      const ex = s.only_fix ? null : exOf(s);
+      if(exHasDetail(ex)){ go.href = exLink(ex.date, ex.slot, null); go.hidden = false; }
+      else go.hidden = true;
+    }
+    if(typeof plDet.showModal==='function') plDet.showModal(); else plDet.setAttribute('open','');
+  }
+
   function plInit(){
     const prev = document.getElementById('pl-prev'), next = document.getElementById('pl-next'),
           today = document.getElementById('pl-today'),
@@ -2531,6 +2713,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
         plDialog.close();
       });
       plDialog.addEventListener('cancel', ()=>{ plEditId = null; });
+    }
+    if(plDet){
+      const close = document.getElementById('pl-detclose');
+      if(close) close.addEventListener('click', ()=> plDet.close());
     }
     plBindPhases();
     plBindPlayerPick();
