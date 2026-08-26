@@ -341,6 +341,37 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-gap i{ display:block; font-style:normal; font-size:11px; color:var(--faint); margin-top:5px; white-space:nowrap; }
 .tg-ok{ font-size:11.5px; color:var(--muted); margin-top:13px; }
 .tg-ok b{ color:var(--text); font-weight:600; }
+
+/* obiettivo della singola atleta: una scheda per calciatrice in gruppo */
+.tg-at{ margin-top:18px; padding-top:16px; border-top:1px solid var(--border2); }
+.tg-at-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; }
+.tg-at-h .t{ font-size:13.5px; font-weight:700; color:var(--ink); }
+.tg-at-h .s{ font-size:12px; color:var(--muted); }
+.tg-at-n{ font-size:12px; color:var(--muted); margin-top:7px; max-width:70ch; }
+.tg-at-g{ display:grid; grid-template-columns:repeat(auto-fit, minmax(268px, 1fr)); gap:10px; margin-top:14px; }
+.tg-atc{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
+  padding:13px 14px 12px; }
+.tg-atc.gap{ border-color:var(--ember-border); }
+.tg-atc .hd{ display:flex; align-items:baseline; gap:8px; }
+.tg-atc .nm{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.tg-atc .rl{ font-size:11px; color:var(--faint); }
+.tg-atc .st{ margin-left:auto; font-size:9.5px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.04em; padding:2px 8px; border-radius:999px; background:var(--surface3);
+  border:1px solid var(--border2); color:var(--muted); white-space:nowrap; }
+.tg-atv{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:11px; }
+.tg-atv b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:25px;
+  letter-spacing:.5px; line-height:1; color:var(--ink); }
+.tg-atv .key b{ color:var(--orange2); }
+.tg-atv i{ display:block; font-style:normal; font-size:10px; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--faint); margin-top:5px; }
+.tg-atw{ margin-top:11px; padding-top:10px; border-top:1px solid var(--border); }
+.tg-atb{ height:5px; border-radius:999px; background:var(--surface3); overflow:hidden; }
+.tg-atb i{ display:block; height:100%; border-radius:999px; background:var(--orange); }
+.tg-atb i.full{ background:var(--green); }
+.tg-att{ font-size:11.5px; color:var(--muted); margin-top:7px; }
+.tg-att b{ color:var(--text); font-weight:600; }
+.tg-atc .src{ font-size:10.5px; color:var(--faint); margin-top:6px; }
+
 .tg-foot{ font-size:11px; color:var(--faint); margin-top:12px; }
 @media (max-width: 620px){
   .tg-row{ grid-template-columns:1fr auto; }
@@ -970,6 +1001,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           <div class="tg-note" id="tg-note"></div>
           <div class="tg-grid" id="tg-grid"></div>
           <div id="tg-drills"></div>
+          <div id="tg-atl"></div>
           <div id="tg-alert"></div>
           <div class="tg-foot" id="tg-foot"></div>
         </div>
@@ -3926,6 +3958,8 @@ window.FORZA = window.FORZA || { roster:[] };
 
   function rosaPaint(){
     renderRosa(); rosaSum(); rosaNotes(); rosaRes(); rosaPre();
+    // chi si allena oggi decide anche l'elenco degli obiettivi per atleta
+    if(typeof renderAtlete === 'function') renderAtlete();
   }
 
   function aggFromInput(){
@@ -4655,6 +4689,7 @@ window.FORZA = window.FORZA || { roster:[] };
     }).join('');
 
     renderDrills();
+    renderAtlete();
     renderAlert();
 
     document.getElementById('tg-foot').textContent =
@@ -4874,6 +4909,166 @@ window.FORZA = window.FORZA || { roster:[] };
         toast('Supplemento per '+r.name+' aggiunto alla costruzione seduta');
       });
     });
+  }
+
+  // ================= OGGI ATLETA PER ATLETA =================
+  // Fin qui i numeri sono del ruolo, uguali per tutte. Qui diventano di ognuna:
+  // quanto deve fare oggi e quanto le manca da qui a domenica.
+  // La base e' la sua gara quando c'e' registrata (TG_ATL, mediana delle gare
+  // oltre 80 minuti), la mediana del ruolo quando non c'e'. Il fatto della
+  // settimana arriva dai GPS gia' in pagina: per ogni seduta si legge la riga
+  // Full Training dell'atleta, che e' la seduta intera; se in quel file non
+  // compare si sommano le sue esercitazioni, saltando i file doppi.
+  const AT_MET = [
+    { k:'hi',   col:'DIST > 23km/h',   u:'m sopra 23', step:5,  key:true  },
+    { k:'mid',  col:'Dist 20-23 Km/h', u:'m 20-23',    step:5,  key:false },
+    { k:'dist', col:'Dist tot',        u:'m totali',   step:50, key:false }
+  ];
+  const AT_ST = ['disponibile','parziale','differenziato'];
+  let AT_WK = null;
+
+  // Somma della settimana in corso, dal lunedi' a oggi, per ogni atleta.
+  function atWeek(){
+    if(AT_WK) return AT_WK;
+    AT_WK = { n:0, lun:dstr(mondayOf(NOW)), p:{} };
+    const E = window.ESERC;
+    const cols = (E && Array.isArray(E.load_cols)) ? E.load_cols : [];
+    if(!E || !Array.isArray(E.sessions) || !cols.length) return AT_WK;
+
+    const ix = {};
+    AT_MET.forEach(function(m){ ix[m.k] = cols.indexOf(m.col); });
+
+    function add(name, arr, giorno){
+      if(!Array.isArray(arr)) return;
+      let p = AT_WK.p[name];
+      if(!p){ p = AT_WK.p[name] = { hi:0, mid:0, dist:0, gg:{} }; }
+      p.gg[giorno] = 1;
+      AT_MET.forEach(function(m){
+        const v = ix[m.k] >= 0 ? Number(arr[ix[m.k]]) : NaN;
+        if(!isNaN(v)) p[m.k] += v;
+      });
+    }
+
+    E.sessions.forEach(function(s){
+      const d = String(s.date || '');
+      if(d < AT_WK.lun || d > TSTR) return;
+      AT_WK.n++;
+      const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
+      const vis = {};
+      Object.keys(ft).forEach(function(n){ vis[n] = 1; add(n, ft[n], d); });
+      (s.drills || []).forEach(function(dr){
+        if(dr.dup) return;
+        const a = dr.atlete || {};
+        Object.keys(a).forEach(function(n){ if(!vis[n]) add(n, a[n], d); });
+      });
+    });
+    return AT_WK;
+  }
+
+  // La base di riferimento: la sua gara se c'e', altrimenti la mediana del ruolo.
+  function atBase(p){
+    const rk  = TG_REF[p.role] ? p.role : 'Squadra';
+    const ref = TG_REF[rk];
+    const a   = TG_ATL[p.name];
+    const sua = !!(a && a.hi > 0);
+    return { hi: sua ? a.hi : (+ref.hi || 0), mid: +ref.mid || 0, dist: +ref.dist || 0,
+             sua:sua, n: a ? a.n : 0, rk:rk };
+  }
+
+  function atRows(){
+    const out = { rows:[], fuori:[] };
+    const wk  = atWeek();
+    ROSTER.forEach(function(p){
+      if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
+      const st = avSt(p.name);
+      if(AT_ST.indexOf(st) < 0){ out.fuori.push({ name:p.name, st:st }); return; }
+      const b = atBase(p);
+      const t = {};
+      AT_MET.forEach(function(m){ t[m.k] = tgRound(b[m.k] * TG_COEF[m.k], m.step); });
+      const w    = wk.p[p.name] || null;
+      const done = w ? Math.round(w.hi) : 0;
+      const need = tgRound(b.hi * TG_WK_LO, 5);
+      out.rows.push({ name:p.name, role:p.role, st:st, base:b, t:t, done:done, need:need,
+                      rest: Math.max(0, need - done), sed: w ? Object.keys(w.gg).length : 0, ha: !!w });
+    });
+    out.rows.sort(function(x, y){ return y.rest - x.rest || plNomeSort(x.name, y.name); });
+    return out;
+  }
+
+  function renderAtlete(){
+    const box = document.getElementById('tg-atl');
+    if(!box) return;
+    const g  = atRows();
+    const wk = atWeek();
+    if(!g.rows.length && !g.fuori.length){ box.innerHTML = ''; return; }
+
+    let html = '<div class="tg-at">'+
+      '<div class="tg-at-h">'+
+        '<span class="t">Oggi atleta per atleta</span>'+
+        '<span class="s">'+g.rows.length+(g.rows.length === 1 ? ' atleta in gruppo' : ' atlete in gruppo')+'</span>'+
+      '</div>'+
+      '<div class="tg-at-n">Stessa seduta, obiettivi diversi: chi in gara corre di piu\' deve produrre di piu\'. '+
+        'La barra e\' la settimana in corso, dal lunedi\' a oggi, letta dai file GPS gia\' caricati.</div>';
+
+    if(g.rows.length){
+      html += '<div class="tg-at-g">'+g.rows.map(function(r){
+        const pct  = r.need > 0 ? Math.min(100, Math.round(r.done / r.need * 100)) : 100;
+        const full = r.rest <= 0;
+        const chip = r.st === 'disponibile' ? '' :
+          '<span class="st">'+esc(avDef(r.st).s)+'</span>';
+
+        let txt;
+        if(!wk.n){
+          txt = 'Nessuna seduta caricata questa settimana. Le servono <b>'+NF.format(r.need)+' m</b> sopra i 23 km/h.';
+        } else if(!r.ha){
+          txt = 'Non risulta nei file di questa settimana. Le servono <b>'+NF.format(r.need)+' m</b> sopra i 23 km/h.';
+        } else if(full){
+          txt = 'Settimana coperta: <b>'+NF.format(r.done)+' m</b> su '+NF.format(r.need)+
+                ' in '+r.sed+(r.sed === 1 ? ' seduta' : ' sedute')+'.';
+        } else {
+          txt = '<b>'+NF.format(r.done)+' m</b> su '+NF.format(r.need)+' in '+r.sed+
+                (r.sed === 1 ? ' seduta' : ' sedute')+', mancano <b>'+NF.format(r.rest)+' m</b>.';
+        }
+
+        const src = r.base.sua
+          ? 'base: la sua gara, '+NF.format(r.base.hi)+' m in '+r.base.n+(r.base.n === 1 ? ' gara intera' : ' gare intere')
+          : 'base: mediana '+esc(r.base.rk.toLowerCase())+', '+NF.format(r.base.hi)+' m';
+
+        return '<div class="tg-atc'+(full ? '' : ' gap')+'">'+
+          '<div class="hd">'+
+            '<span class="nm">'+esc(plNome(r.name))+'</span>'+
+            '<span class="rl">'+esc(r.role || 'senza ruolo')+'</span>'+
+            chip+
+          '</div>'+
+          '<div class="tg-atv">'+AT_MET.map(function(m){
+            return '<div'+(m.key ? ' class="key"' : '')+'>'+
+              '<b class="tnum">'+NF.format(r.t[m.k])+'</b>'+
+              '<i>'+esc(m.u)+'</i>'+
+            '</div>';
+          }).join('')+'</div>'+
+          '<div class="tg-atw">'+
+            '<div class="tg-atb"><i'+(full ? ' class="full"' : '')+' style="width:'+pct+'%"></i></div>'+
+            '<div class="tg-att tnum">'+txt+'</div>'+
+            '<div class="src tnum">'+src+'</div>'+
+          '</div>'+
+        '</div>';
+      }).join('')+'</div>';
+    } else {
+      html += '<div class="tg-ok">Nessuna atleta in gruppo oggi con il filtro attivo.</div>';
+    }
+
+    if(g.fuori.length){
+      const cnt = {};
+      g.fuori.forEach(function(x){ cnt[x.st] = (cnt[x.st] || 0) + 1; });
+      const parti = [];
+      AV_STATES.forEach(function(s){
+        if(AT_ST.indexOf(s.k) >= 0 || !cnt[s.k]) return;
+        parti.push('<b>'+cnt[s.k]+'</b> '+esc(s.s));
+      });
+      if(parti.length) html += '<div class="tg-ok">Fuori dall\'elenco: '+parti.join(', ')+'.</div>';
+    }
+
+    box.innerHTML = html + '</div>';
   }
 
   // ================= COSA SI E' FATTO =================
