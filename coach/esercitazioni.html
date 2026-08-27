@@ -682,6 +682,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const UNIT = E.load_unit || {};
   const NF = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
   const DTF = new Intl.DateTimeFormat('it-IT', { weekday:'short', day:'numeric', month:'short' });
   const DTFY = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'long', year:'numeric' });
   const DTFL = new Intl.DateTimeFormat('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
@@ -737,9 +738,19 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function disp(n){ return (typeof window.fioNome==='function') ? window.fioNome(n) : String(n==null?'':n); }
   function dispSort(a, b){ return disp(a).localeCompare(disp(b), 'it'); }
   function parseDate(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+  // Quanti decimali merita un parametro. Quasi nessuno: metri, minuti e conteggi si leggono
+  // meglio interi, e una colonna di numeri tondi si scorre a colpo d'occhio. Cambiano davvero
+  // sotto la virgola solo le percentuali, la velocita' massima, le azioni intense al minuto e
+  // la potenza metabolica, e li' resta un decimale. I metri al minuto stanno sulle centinaia:
+  // interi anche loro, nonostante l'unita' finisca per /min.
+  function decUnit(u){
+    const s = String(u==null?'':u).trim().toLowerCase();
+    if(s==='m/min') return 0;
+    return (s==='%' || s==='km/h' || s==='w/kg' || s.slice(-4)==='/min') ? 1 : 0;
+  }
   function fmtLoad(c, v){
     if(v===null||v===undefined||Number.isNaN(v)) return '-';
-    return (v>=1000 || c==='Dist tot') ? NF0.format(Math.round(v)) : NF.format(v);
+    return decUnit(UNIT[c]) ? NF1.format(v) : NF0.format(v);
   }
 
   // ---------- localStorage manual entries ----------
@@ -1308,7 +1319,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const pc = r.pct==null ? '&#8211;'
           : '<span class="pct'+(r.pct<80?' low':'')+'">'+NF0.format(Math.round(r.pct))+'%</span>';
         h += '<tr><td class="nm">'+esc(dl)+'</td>'+
-          '<td class="r">'+NF.format(Math.round(r.min*10)/10)+'</td>'+
+          '<td class="r">'+NF0.format(Math.round(r.min))+'</td>'+
           '<td class="r">'+NF0.format(Math.round(r.dist))+'</td>'+
           '<td class="r">'+NF0.format(Math.round(r.alta))+'</td>'+
           '<td class="r">'+pc+'</td>'+
@@ -1353,7 +1364,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(s.ft && s.ft.load){
       const ftd = s.ft.load['Dist tot'], ftm = s.ft.load['Minuti'];
       const bits = [];
-      if(ftm!=null) bits.push(NF.format(ftm)+" min");
+      if(ftm!=null) bits.push(NF0.format(Math.round(ftm))+" min");
       if(ftd!=null) bits.push(NF0.format(Math.round(ftd))+' m');
       html += '<h4>Full Training di squadra</h4>'+
         '<div class="ftline">Riferimento del carico: <b>'+esc(bits.join(' &#183; '))+'</b>'+
@@ -1389,7 +1400,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const pc = t.pct==null ? '&#8211;'
           : '<span class="pct'+(t.pct<80?' low':'')+'">'+NF0.format(Math.round(t.pct))+'%</span>';
         html += '<tr><td class="nm">'+esc(disp(nm))+'</td>'+
-          '<td class="r">'+NF.format(Math.round(t.min*10)/10)+'</td>'+
+          '<td class="r">'+NF0.format(Math.round(t.min))+'</td>'+
           '<td class="r">'+NF0.format(Math.round(t.dist))+'</td>'+
           '<td class="r">'+pc+'</td>'+
           '<td class="ex">'+t.ex.map(esc).join(' &#183; ')+'</td></tr>';

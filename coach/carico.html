@@ -1191,6 +1191,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const S = window.SNAP;
   const NF = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
   const M = S.metrics_full || [];
   const SHORT = S.metrics_short || M;
   const UNIT = S.metrics_unit || M.map(()=> '');
@@ -1460,7 +1461,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function updateColsCount(){ const el=document.getElementById('cols-count'); if(el) el.textContent = VIS().length+'/'+M.length; }
 
   // ---------- helpers ----------
-  function fmt(v){ return (v===null||v===undefined||Number.isNaN(v)) ? '-' : NF.format(v); }
+  // Quanti decimali merita un parametro. Quasi nessuno: metri, minuti e conteggi si leggono
+  // meglio interi, e una colonna di numeri tondi si scorre a colpo d'occhio. Cambiano davvero
+  // sotto la virgola solo le percentuali, la velocita' massima, le azioni intense al minuto e
+  // la potenza metabolica, e li' resta un decimale. I metri al minuto stanno sulle centinaia:
+  // interi anche loro, nonostante l'unita' finisca per /min.
+  function decUnit(u){
+    const s = String(u==null?'':u).trim().toLowerCase();
+    if(s==='m/min') return 0;
+    return (s==='%' || s==='km/h' || s==='w/kg' || s.slice(-4)==='/min') ? 1 : 0;
+  }
+  const DEC = M.map((x,i)=> decUnit(UNIT[i]));
+  function fmt(v, i){
+    if(v===null||v===undefined||Number.isNaN(v)) return '-';
+    if(i==null) return NF.format(v);
+    return (DEC[i] ? NF1 : NF0).format(v);
+  }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   /* Come si legge un'atleta. Il nome scritto in Atlete vale in tutto il sito:
      se il mister l'ha messa Faggioli, qui non deve uscire Faggioli Federica.
@@ -2120,7 +2136,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       else  g += '<rect class="bar" data-i="'+i+'" x="'+xs[i].toFixed(1)+'" y="'+(H-padB-1).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="1" fill="'+fill+'" opacity="'+op+'"></rect>';
     });
     // il numero sopra la colonna: si legge senza passarci sopra, quindi anche da telefono
-    const labs = pts.map(p=> (p.value==null || !isFinite(p.value)) ? '' : fmtLoad(p.value));
+    const labs = pts.map(p=> (p.value==null || !isFinite(p.value)) ? '' : fmtLoad(p.value, idx));
     let maxLab = 0; labs.forEach(s=>{ if(s.length>maxLab) maxLab = s.length; });
     if(maxLab && barW >= maxLab*5.6 + 5){
       pts.forEach((p,i)=>{
@@ -2135,12 +2151,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(isFinite(mean) && mean>0){
       const y = yOf(Math.min(mean, nice));
       g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(66% 0.012 38)" stroke-width="1.4" stroke-dasharray="5 4"/>';
-      g += '<text x="'+(padL+5)+'" y="'+(y-6).toFixed(1)+'" font-size="10" font-weight="600" fill="oklch(74% 0.012 38)">media '+esc(fmtLoad(mean))+'</text>';
+      g += '<text x="'+(padL+5)+'" y="'+(y-6).toFixed(1)+'" font-size="10" font-weight="600" fill="oklch(74% 0.012 38)">media '+esc(fmtLoad(mean, idx))+'</text>';
     }
     if(modV!=null && modV>0){
       const y = yOf(Math.min(modV, nice));
       g += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--violet2)" stroke-width="1.8" stroke-dasharray="2 4" stroke-linecap="round"/>';
-      g += '<text x="'+(W-padR)+'" y="'+(y-6).toFixed(1)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--violet2)">modello partita '+esc(fmtLoad(modV))+'</text>';
+      g += '<text x="'+(W-padR)+'" y="'+(y-6).toFixed(1)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--violet2)">modello partita '+esc(fmtLoad(modV, idx))+'</text>';
     }
     // aree di tocco larghe quanto lo slot, sopra a tutto: il dito non deve centrare la colonna
     pts.forEach((p,i)=>{
@@ -2180,7 +2196,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(modV!=null && modV>0 && p.value!=null && isFinite(p.value))
         extra = '<div class="tt-x"><span>rispetto al match</span><b>'+Math.round(p.value/modV*100)+'%</b></div>';
       tip.innerHTML = '<div class="tt-m">'+esc(p.ttTitle||'')+'</div><div class="tt-w">'+esc(p.ttSub||'')+'</div>'+
-        '<div class="tt-v tnum">'+fmt(p.value)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>'+extra;
+        '<div class="tt-v tnum">'+fmt(p.value, idx)+ (unit?'<small>'+esc(unit)+'</small>':'') +'</div>'+extra;
       tip.style.left = cx+'px'; tip.style.top = cy+'px'; tip.classList.add('show');
     }
     function hideTip(){
@@ -2245,7 +2261,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const on = (i===state.chartIdx), u = metUnit(i);
     return '<button type="button" class="mcell'+(on?' on':'')+'" data-idx="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+
       '<div class="mc-name">'+esc(metShort(i))+'</div>'+
-      '<div class="mc-val tnum">'+ (agg==null ? '-' : fmtLoad(agg)) + (u ? '<small>'+esc(u)+'</small>' : '') +'</div>'+
+      '<div class="mc-val tnum">'+ (agg==null ? '-' : fmtLoad(agg, i)) + (u ? '<small>'+esc(u)+'</small>' : '') +'</div>'+
       '<div class="mc-sub">'+ (sum ? 'totale del periodo' : 'media del periodo') +'</div>'+
       miniSpark(pts)+
       '</button>';
@@ -2292,7 +2308,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- analisi carico (ACWR / preparatore) ----------
   function round2(v){ return Math.round(v*100)/100; }
-  function fmtLoad(v){ if(v==null||!isFinite(v)) return '-'; return Math.abs(v)>=100 ? NF0.format(Math.round(v)) : NF.format(round1(v)); }
+  // Stessa regola dei decimali della griglia: se so di che parametro si tratta uso la sua
+  // unita', altrimenti (numeri senza parametro, tipo il carico RPE) resto sul vecchio criterio.
+  function fmtLoad(v, i){
+    if(v==null||!isFinite(v)) return '-';
+    if(i!=null) return (DEC[i] ? NF1 : NF0).format(v);
+    return Math.abs(v)>=100 ? NF0.format(Math.round(v)) : NF.format(round1(v));
+  }
   const AN_DEFS = '<defs>'+
     '<linearGradient id="acwrArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(74% 0.15 50 / 0.34)"/><stop offset="1" stop-color="oklch(74% 0.15 50 / 0.02)"/></linearGradient>'+
     '<linearGradient id="anBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="oklch(74% 0.15 50)"/><stop offset="1" stop-color="oklch(64% 0.19 40)"/></linearGradient>'+
@@ -2409,7 +2431,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return '<button type="button" class="acell z-'+z.key+(on?' on':'')+'" data-idx="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+
       '<div class="ac-top"><span class="ac-name">'+esc(metShort(i))+'</span><span class="ac-pill z-'+z.key+'">'+esc(z.label)+'</span></div>'+
       '<div class="ac-val tnum">'+ (a && a.ratio!=null ? NF.format(round2(a.ratio)) : '-') +'</div>'+
-      '<div class="ac-sub">'+ (a ? ('acuto '+fmtLoad(a.acute)+(u?' '+esc(u):'')+' su cronico '+fmtLoad(a.chronic)) : 'settimane insufficienti') +'</div>'+
+      '<div class="ac-sub">'+ (a ? ('acuto '+fmtLoad(a.acute, i)+(u?' '+esc(u):'')+' su cronico '+fmtLoad(a.chronic, i)) : 'settimane insufficienti') +'</div>'+
       acwrSpark(acwr)+
       '</button>';
   }
@@ -2445,8 +2467,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="ah-val tnum">'+(a.ratio==null?'-':NF.format(round2(a.ratio)))+'</div>'+
         '<div class="ah-sub">carico ultima settimana vs media 4 settimane</div>'+
       '</div>'+
-      '<div class="acwr-tile"><div class="at-lbl">Carico acuto</div><div class="at-val tnum">'+fmtLoad(a.acute)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">ultima settimana</div></div>'+
-      '<div class="acwr-tile"><div class="at-lbl">Carico cronico</div><div class="at-val tnum">'+fmtLoad(a.chronic)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">media 4 settimane</div></div>'+
+      '<div class="acwr-tile"><div class="at-lbl">Carico acuto</div><div class="at-val tnum">'+fmtLoad(a.acute, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">ultima settimana</div></div>'+
+      '<div class="acwr-tile"><div class="at-lbl">Carico cronico</div><div class="at-val tnum">'+fmtLoad(a.chronic, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">media 4 settimane</div></div>'+
       '<div class="acwr-tile"><div class="at-lbl">Variazione</div><div class="at-val tnum '+varCls+'">'+varTxt+'</div><div class="at-sub">vs settimana prec.</div></div>';
   }
   function renderAcwrRatio(weeks, acwr, idx){
@@ -2498,8 +2520,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         tip.innerHTML = '<div class="tt-m">'+esc(w.code)+' &#183; '+esc(w.week||'sett.')+'</div>'+
           '<div class="tt-w" style="color:'+z.color+'">'+esc(z.label)+'</div>'+
           '<div class="tt-v tnum">'+(x.ratio==null?'-':NF.format(round2(x.ratio)))+'<small>ACWR</small></div>'+
-          '<div class="tt-x"><span>acuto</span><b>'+fmtLoad(x.acute)+'</b></div>'+
-          '<div class="tt-x"><span>cronico</span><b>'+fmtLoad(x.chronic)+'</b></div>';
+          '<div class="tt-x"><span>acuto</span><b>'+fmtLoad(x.acute, idx)+'</b></div>'+
+          '<div class="tt-x"><span>cronico</span><b>'+fmtLoad(x.chronic, idx)+'</b></div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
     });
@@ -2540,8 +2562,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const i=+b.getAttribute('data-i'), x=acwr[i], w=weeks[i];
         tip.innerHTML = '<div class="tt-m">'+esc(w.code)+' &#183; '+esc(w.week||'sett.')+'</div>'+
           '<div class="tt-w">carico settimana</div>'+
-          '<div class="tt-v tnum">'+fmtLoad(x.acute)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>'+
-          '<div class="tt-x"><span>media 4 sett.</span><b>'+fmtLoad(x.chronic)+'</b></div>';
+          '<div class="tt-v tnum">'+fmtLoad(x.acute, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>'+
+          '<div class="tt-x"><span>media 4 sett.</span><b>'+fmtLoad(x.chronic, idx)+'</b></div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
     });
@@ -2568,7 +2590,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const fill = r.md===0 ? 'url(#anViolet)' : 'url(#anBar)';
       const d=barPath(geo.xs[i]-barW/2, y, barW, h, 4);
       if(d) g += '<path class="an-bar" data-i="'+i+'" d="'+d+'" fill="'+fill+'" opacity="0.92"></path>';
-      g += '<text x="'+geo.xs[i].toFixed(1)+'" y="'+(y-6).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--text)">'+fmtLoad(r.v)+'</text>';
+      g += '<text x="'+geo.xs[i].toFixed(1)+'" y="'+(y-6).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--text)">'+fmtLoad(r.v, idx)+'</text>';
       g += '<text x="'+geo.xs[i].toFixed(1)+'" y="'+(geo.H-geo.padB+18)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+(r.md===0?'var(--violet2)':'var(--muted)')+'">'+(r.md===0?'Partita':'MD-'+r.md)+'</text>';
     });
     wrap.innerHTML = svgWrap(W, geo.H, 'Microciclo tipo per match day', g);
@@ -2581,7 +2603,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const r=rows[+b.getAttribute('data-i')];
         tip.innerHTML = '<div class="tt-m">microciclo tipo</div>'+
           '<div class="tt-w">'+(r.md===0?'Partita (MD)':'MD-'+r.md)+'</div>'+
-          '<div class="tt-v tnum">'+fmtLoad(r.v)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>';
+          '<div class="tt-v tnum">'+fmtLoad(r.v, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
     });
@@ -2663,7 +2685,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const MOD = MODEL();
     if(MOD){
       body += '<tr class="r-model"><td class="col-day"><span class="wd">rif.</span><span class="lb">Modello AVG partita'+esc(modelTag())+'</span></td>';
-      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
+      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i], i)+'</td>');
       body += pad+'</tr>';
     }
     const wks = weekLabels(mon);
@@ -2705,7 +2727,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
-      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
+      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i], i)+'</td>');
       // coda RPE e TL: casella da riempire sulle sedute, conto fatto sui totali, vuoto sul resto
       if(on){
         if(r.type==='day' || r.type==='match'){
@@ -3429,13 +3451,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const MOD = MODEL();
     if(MOD){
       h += '<tr class="r-model"><td class="col-day"><span class="lb">AVG partita</span></td><td class="data">'+(modelEditN()?'modello corretto':'modello')+'</td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i], i)+'</td>');
       h += '</tr>';
     }
     rows.forEach(r=>{
       const rv = r.v||[];
       h += '<tr class="r-day"><td class="col-day sigla">'+esc(r.sigla)+'</td><td class="data">'+esc(r.data||'')+'</td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i])+'</td>');
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(rv[i], i)+'</td>');
       h += '</tr>';
     });
     h += '</tbody></table>';
@@ -3597,12 +3619,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // rende una cella: valore o percentuale rispetto alla baseline
     const cell = (v, i, cmp)=>{
       const kc = KEY.has(i)?' key':'';
-      if(cmp!=='match' && cmp!=='md') return '<td class="num tnum'+kc+'">'+fmt(v)+'</td>';
+      if(cmp!=='match' && cmp!=='md') return '<td class="num tnum'+kc+'">'+fmt(v, i)+'</td>';
       const b = base ? base[i] : null;
       if(v==null || !isFinite(v) || b==null || !isFinite(b) || b===0) return '<td class="num cmp na'+kc+'">-</td>';
       const r = v/b, pct = Math.round(r*100);
       const cls = r>=1.05 ? 'over' : r>=0.95 ? 'near' : 'under';
-      return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v)+'</span></td>';
+      return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v, i)+'</span></td>';
     };
     const arw = k=> ssort.col===k ? (ssort.dir>0?'&#9650;':'&#9660;') : '&#9652;';
     const ariaSort = k=> ssort.col===k ? (ssort.dir>0?'ascending':'descending') : 'none';
@@ -3621,11 +3643,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // riga di riferimento (baseline) mostrata come valori assoluti
     if(eff==='md' && mdAvg){
       h += '<tr class="r-model"><td class="col-day"><span class="lb">Media '+esc(mdLabel(md))+' (rif.)</span></td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(mdAvg[i])+'</td>');
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(mdAvg[i], i)+'</td>');
       h += '</tr>';
     } else if(MOD){
       h += '<tr class="r-model"><td class="col-day"><span class="lb">Modello AVG partita'+(eff==='match'?' (rif.)':'')+esc(modelTag())+'</span></td>';
-      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i])+'</td>');
+      V.forEach(i=> h += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i], i)+'</td>');
       h += '</tr>';
     }
     if(!rows.length){
