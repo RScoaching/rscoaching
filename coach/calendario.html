@@ -392,6 +392,12 @@ a.dbtn.xgo svg{ transform:none; }
   padding:2px 7px; border-radius:999px; background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
 .pl-dtag.pre{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
 .pl-dtag.post{ background:var(--green-bg); border-color:var(--green-border); color:var(--green); }
+/* nel mese la testata del giorno e' la porta verso la settimana */
+.pl-grid.month .pl-dh.go{ cursor:pointer; margin:-3px -4px 0; padding:3px 4px; border-radius:7px;
+  transition:background .16s var(--ease); }
+.pl-grid.month .pl-dh.go:hover{ background:var(--surface2); }
+.pl-grid.month .pl-dh.go:hover .pl-dn{ color:var(--violet2); }
+.pl-grid.month .pl-dh.go:focus-visible{ outline:2px solid var(--violet); outline-offset:1px; }
 .pl-day.flash{ animation: flashrow 1.6s var(--ease); }
 .pl-body{ display:flex; flex-direction:column; gap:6px; flex:1; }
 
@@ -741,9 +747,9 @@ a.dbtn.xgo svg{ transform:none; }
       <section class="planr reveal" style="--i:3">
         <div class="sec-head">
           <h2>Pianificazione</h2>
-          <span class="sec-n">modelli di settimana · trascina, copia, dividi in gruppi</span>
+          <span class="sec-n">il mese per orientarsi, la settimana per lavorare</span>
         </div>
-        <p class="pl-intro">Scegli un modello di microciclo e riempi la settimana in vista, poi sistema i blocchi come vuoi. Trascina un blocco su un altro giorno per spostarlo, copialo dove serve, e apri un blocco per modificarlo. Con "+ Gruppo" dividi le atlete: in campo la seduta e uguale per tutte, poi aggiungi una mini sessione di differenziate al blocco.</p>
+        <p class="pl-intro">Nel mese vedi dove cadono le gare: un clic sul numero del giorno apre quella settimana. Nella settimana ogni giorno porta scritto quanto manca alla gara (MD-3, MD+1), scegli un modello di microciclo e riempi i giorni ancora vuoti, poi sistema i blocchi come vuoi: trascina un blocco su un altro giorno per spostarlo, copialo dove serve, aprilo per modificarlo. Con "+ Gruppo" dividi le atlete: in campo la seduta e' uguale per tutte, poi aggiungi una mini sessione di differenziate al blocco.</p>
         <div class="pl-toolbar">
           <div class="pl-nav">
             <button class="pl-navbtn" id="pl-prev" type="button" aria-label="Periodo precedente">
@@ -1896,7 +1902,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       view: (v && v.view==='month') ? 'month' : 'week',
       anchor: anchor,
       group: (v && typeof v.group==='string') ? v.group : '',
-      player: (v && typeof v.player==='string') ? v.player : ''
+      player: (v && typeof v.player==='string') ? v.player : '',
+      tpl: (v && WK_TPLS[v.tpl]) ? v.tpl : ''
     };
   })();
   function plSave(){ try{ localStorage.setItem(PL_KEY, JSON.stringify(PL)); }catch(e){} }
@@ -1910,6 +1917,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const PL_COPY_SVG  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
   const PL_TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>';
   const PL_PASTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="4" width="8" height="4" rx="1"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/></svg>';
+  const PL_PRINT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 9V3h10v6"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 16h10v5H7z"/></svg>';
+  const PL_FILL_SVG  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16"/><path d="M7 16V9M12 16V5M17 16v-4"/></svg>';
   const PL_QUICK = [
     { t:'forza',       l:'Forza' },
     { t:'attivazione', l:'Attivazione' },
@@ -1985,6 +1994,114 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(PL.view==='week'){ const m = mondayOf(a); m.setDate(m.getDate()+dir*7); PL.anchor = keyOfDate(m); }
     else{ PL.anchor = keyOfDate(new Date(a.getFullYear(), a.getMonth()+dir, 1)); }
     plSave(); plRender();
+  }
+
+  /* Il mese e' la mappa, la settimana e' il tavolo di lavoro: dal numero del
+     giorno si entra dritti nella settimana giusta, senza rinavigare a mano. */
+  function plGotoWeek(iso){
+    if(!parseDate(iso)) return;
+    PL.anchor = iso; PL.view = 'week'; plSave(); plRender();
+    requestAnimationFrame(function(){
+      const cell = document.querySelector('.pl-day[data-date="'+iso+'"]');
+      if(cell){ cell.classList.add('flash'); setTimeout(function(){ cell.classList.remove('flash'); }, 1600); }
+    });
+  }
+
+  // ---- giorni gara e distanza dalla gara ----
+  /* MD si conta dai giorni di gara veri del calendario, non dal modello: il
+     lunedi dopo una domenica di gara e' MD+1, non MD-6. */
+  function plDayDiff(a, b){
+    const da = parseDate(a), db = parseDate(b);
+    if(!da || !db) return null;
+    return Math.round((da.getTime() - db.getTime()) / 86400000);
+  }
+  function plMatchDays(map){
+    return Object.keys(map||{}).filter(function(iso){
+      return (map[iso]||[]).some(function(s){ return !!s.is_match; });
+    }).sort();
+  }
+  function plMdInfo(iso, days){
+    if(!Array.isArray(days) || !days.length) return '';
+    if(days.indexOf(iso) >= 0) return 'Gara';
+    let next = null, prev = null;
+    days.forEach(function(g){
+      const d = plDayDiff(g, iso);
+      if(d==null) return;
+      if(d>0 && (next==null || d<next)) next = d;
+      if(d<0 && (prev==null || -d<prev)) prev = -d;
+    });
+    if(prev===1) return 'MD+1';
+    if(next!=null && next<=6) return 'MD-'+next;
+    if(prev!=null && prev<=3) return 'MD+'+prev;
+    return '';
+  }
+
+  // ---- modelli di settimana (dentro la pianificazione) ----
+  /* Il modello e' un punto di partenza, non una regola: riempie i giorni ancora
+     vuoti e lascia stare tutto quello che e' gia' in griglia. */
+  function plTplSuggest(map){
+    let sab = false, dom = false;
+    plWeekDates().forEach(function(d){
+      const iso = keyOfDate(d);
+      if(!(map[iso]||[]).some(function(s){ return !!s.is_match; })) return;
+      const g = d.getDay();
+      if(g===0) dom = true; else if(g===6) sab = true;
+    });
+    if(dom) return 'gara_dom';
+    if(sab) return 'gara_sab';
+    return 'accumulo';
+  }
+  function plTplRender(map){
+    const host = document.getElementById('pl-tpl');
+    if(!host) return;
+    if(PL.view!=='week'){ host.innerHTML=''; host.style.display='none'; return; }
+    host.style.display = '';
+    const sug = plTplSuggest(map);
+    if(!WK_TPLS[PL.tpl]){ PL.tpl = sug; plSave(); }
+    let h = '<span class="pl-glabel">Modello</span>';
+    WK_ORDER.forEach(function(k){
+      h += '<button type="button" class="pl-tchip'+(PL.tpl===k?' on':'')+'" data-tpl="'+k+'">'+
+             esc(WK_META[k].l)+
+             (k===sug ? ' <span class="pl-tsug">consigliato</span>' : '')+
+           '</button>';
+    });
+    h += '<button type="button" class="pl-tchip go" data-fill="1">'+PL_FILL_SVG+'Riempi i giorni vuoti</button>';
+    h += '<button type="button" class="pl-tchip" data-wprint="1">'+PL_PRINT_SVG+'Stampa settimana</button>';
+    host.innerHTML = h;
+    host.querySelectorAll('[data-tpl]').forEach(function(b){
+      b.addEventListener('click', function(){
+        PL.tpl = b.getAttribute('data-tpl'); plSave(); plTplRender(map);
+      });
+    });
+    const fill = host.querySelector('[data-fill]');
+    if(fill) fill.addEventListener('click', function(){ plFillWeek(PL.tpl); });
+    const pr = host.querySelector('[data-wprint]');
+    if(pr) pr.addEventListener('click', function(){ doPrint('week'); });
+  }
+  function plFillWeek(type){
+    const tpl = WK_TPLS[type];
+    if(!tpl){ toast('Scegli prima un modello'); return; }
+    const map = plByDate();
+    const s = loadStore();
+    let n = 0;
+    plWeekDates().forEach(function(d, i){
+      const iso = keyOfDate(d);
+      if((map[iso]||[]).length) return;
+      const day = tpl.days[i]; if(!day) return;
+      const meta = SES[day.type] || SES.squadra;
+      s.manual.push({
+        id: 'm'+Date.now()+i+Math.random().toString(36).slice(2,6),
+        data: iso, slot: day.slot||'', kind: meta.k, title:'', type: day.type,
+        pct: (day.pct==null || day.pct<=0) ? null : day.pct, load:null, note: day.note||'',
+        svolto:false, group: PL.group||'', diff:'', phases:[], players:[],
+        comp_gara: (day.type==='gara') ? (FIX_BY_DATE[iso] ? 'campionato' : 'amichevole') : ''
+      });
+      n++;
+    });
+    if(!n){ toast("La settimana e' gia' piena"); return; }
+    saveStore(s);
+    plAfterMutate();
+    toast(n+(n===1?' giorno riempito':' giorni riempiti')+' con "'+WK_META[type].l+'"');
   }
 
   // ---- partite ufficiali dentro la griglia ----
@@ -2203,7 +2320,15 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(hasMatch) cls += ' match';
     if(month && d.getMonth()!==opts.curMonth) cls += ' dim';
     const dow = PL_DOW[(d.getDay()+6)%7];
-    const tag = hasMatch ? '<span class="pl-dtag">Gara</span>' : '';
+    /* In settimana serve sapere quanto manca alla gara, non solo dov'e' la
+       gara: MD-3 dice come deve essere la seduta di quel giorno. Nel mese
+       resta il solo cartellino della gara, sono 42 caselle. */
+    let tag = '';
+    if(month){ tag = hasMatch ? '<span class="pl-dtag">Gara</span>' : ''; }
+    else{
+      const md = plMdInfo(iso, opts.mds || []);
+      if(md) tag = '<span class="pl-dtag'+(md==='Gara' ? '' : (md.charAt(2)==='-' ? ' pre' : ' post'))+'">'+md+'</span>';
+    }
     const chips = list.map(s=> plChipHTML(s, month)).join('');
     let foot;
     if(month){
@@ -2220,8 +2345,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '</div>'+
       '</div>';
     }
+    const dh = month
+      ? '<div class="pl-dh go" data-week="'+iso+'" role="button" tabindex="0" title="Apri la settimana di '+esc(cap(DTF_SHORT.format(d).replace('.','')))+'">'
+      : '<div class="pl-dh">';
     return '<div class="'+cls+'" data-date="'+iso+'">'+
-      '<div class="pl-dh"><span class="pl-dow">'+dow+'</span><span class="pl-dn">'+d.getDate()+'</span>'+tag+'</div>'+
+      dh+'<span class="pl-dow">'+dow+'</span><span class="pl-dn">'+d.getDate()+'</span>'+tag+'</div>'+
       '<div class="pl-body">'+chips+'</div>'+
       foot+
     '</div>';
@@ -2304,7 +2432,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(PL.view==='week'){
       grid.className = 'pl-grid week';
       const dates = plWeekDates();
-      grid.innerHTML = dates.map(d=> plDayHTML(d, { map:map })).join('');
+      const mds = plMatchDays(map);
+      grid.innerHTML = dates.map(d=> plDayHTML(d, { map:map, mds:mds })).join('');
       if(label) label.textContent = cap(DTF_SHORT.format(dates[0]).replace('.','')) + ' - ' +
         cap(DTF_SHORT.format(dates[6]).replace('.','')) + ' ' + dates[6].getFullYear();
     }else{
@@ -2322,6 +2451,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       vw.setAttribute('aria-selected', PL.view==='week'?'true':'false');
       vm.setAttribute('aria-selected', PL.view==='month'?'true':'false');
     }
+    plTplRender(map);
     plRenderGroups();
     plRenderPlayers();
     plBindGrid();
@@ -2349,6 +2479,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
         else{ delManual(id); plAfterMutate(); toast('Blocco eliminato'); }
         return;
       }
+      const wk = e.target.closest('[data-week]');
+      if(wk){ plGotoWeek(wk.getAttribute('data-week')); return; }
       const chip = e.target.closest('.pl-chip');
       if(!chip) return;
       /* Un blocco messo a mano si modifica, una seduta registrata o una gara
@@ -2359,6 +2491,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     grid.onkeydown = function(e){
       if(e.key!=='Enter' && e.key!==' ') return;
       if(e.target.closest('button, a, select, input')) return;
+      const wk = e.target.closest('[data-week]');
+      if(wk){ e.preventDefault(); plGotoWeek(wk.getAttribute('data-week')); return; }
       const chip = e.target.closest('.pl-chip'); if(!chip) return;
       e.preventDefault();
       if(chip.getAttribute('data-manual')==='1') plOpenEdit(chip.getAttribute('data-id'));
@@ -2666,7 +2800,6 @@ window.RS_ROSTER = window.RS_ROSTER || [
   // ---------- init ----------
   renderKPIs();
   renderFilters();
-  renderBuilder();
   renderSessions();
   renderFixtures();
   buildPrintTable();
