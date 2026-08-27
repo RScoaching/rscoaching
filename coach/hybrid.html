@@ -542,6 +542,21 @@ table.partite td.sigla.nolink{ color:var(--muted); }
      una seconda pagina che una griglia tagliata via */
   #sedute-view, #partite-view, #confronto-view{ break-inside:auto !important; }
 
+  /* ---------- confronto: tutto in un foglio ---------- */
+  /* I cinque riquadri del riepilogo qui non servono: dicono quanti e da quando, cioe' quello
+     che sta scritto per esteso nella riga sotto al titolo, e portano via l'altezza che serve
+     alla tabella. La riga che spiega come si ottiene il radar e' un'istruzione da schermo:
+     sul foglio non si puo' cliccare niente. Tolte tutte e due, il confronto sta in una pagina
+     sola e la griglia puo' respirare. */
+  #cf-stats{ display:none !important; }
+  .cf-radar.solo-nota{ display:none !important; }
+  /* la riga di servizio accanto al titolo dice le stesse cose della riga qui sotto, e le dice
+     peggio: sta in fila coi pulsanti e va a capo dove capita. In stampa parla solo una delle due */
+  #cf-hint{ display:none !important; }
+  .cf-print-head{ margin:0 2px 9px; }
+  .cph-t{ font-size:13.5px; font-weight:700; color:#b8531f !important; letter-spacing:.01em; }
+  .cph-s{ font-size:11.5px; line-height:1.45; color:#3a332e !important; margin-top:3px; }
+
   .print-hidden{ display:none !important; }
   .print-split{ display:block !important; }
   /* ogni blocco e' un pezzo di griglia gia' misurato per stare in una pagina: se il browser lo
@@ -555,6 +570,11 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   .print-split table.grid{ width:100% !important; table-layout:auto; font-size:var(--pfs, 10px) !important; }
   .print-split table.grid th, .print-split table.grid td{ padding:var(--ppad, 5px 8px) !important; }
   .print-split table.grid thead th .u{ font-size:.82em !important; }
+  /* Con la rosa intera la griglia resta stretta e alta: mezzo foglio bianco a destra e un corpo
+     da sette pixel per far entrare tutte le righe. Se due copie ci stanno affiancate le atlete
+     si dividono in due colonne come su un elenco: stessa pagina, testo grande il doppio. */
+  .print-duo{ display:flex; gap:12px; align-items:flex-start; }
+  .print-duo > table.grid{ flex:1 1 0; min-width:0; width:auto !important; }
 }
 
 /* ---------- responsive ---------- */
@@ -832,6 +852,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const CF_RADAR_MAX = 4;
   let cfSessSel = null;   // Set di "monthKey|label"
   let cfPlaySel = null;   // Set di nomi atlete
+  // La lettura che finisce davvero in tabella: se manca la media squadra o il modello, il
+  // confronto ripiega sulla media per seduta. In stampa il titolo deve dire quella, non
+  // quella chiesta col pulsante.
+  let cfEff = 'val';
   const CF_CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>';
   const ARROW_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   const SF = S.sum_flags || [];
@@ -1693,6 +1717,40 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const sp=cfSeasonSpan();
     [f,t].forEach(i=>{ if(!i) return; if(sp.a!=null) i.min=dIso(sp.a); if(sp.b!=null) i.max=dIso(sp.b); });
   }
+  // ---------- intestazione del confronto stampato ----------
+  // Sul foglio i riquadri del riepilogo spariscono e al loro posto restano due righe: sopra
+  // che lettura e', sotto su quante atlete e su quali sedute. Per le sedute vince il nome
+  // quando sono poche (due partite si chiamano per nome, non "dal 12 al 19"), poi il periodo
+  // se il filtro e' acceso, e in ultimo il primo e l'ultimo giorno.
+  const CF_PRINT_NOMI = 6;
+  function cfSessNome(s){
+    const g = sessDayShort(s);
+    return s.label + (g ? (' ('+g+')') : '');
+  }
+  function cfPrintSu(sess){
+    if(sess.length && sess.length<=CF_PRINT_NOMI) return sess.map(cfSessNome).join(', ');
+    if(cfPerActive()) return cfPerText();
+    let da=null, a=null;
+    sess.forEach(s=>{ const t=tsOf(s); if(t==null) return; if(da==null||t<da) da=t; if(a==null||t>a) a=t; });
+    return (da==null) ? 'tutta la stagione' : ('dal '+dFull(da)+' al '+dFull(a));
+  }
+  function cfPrintHead(){
+    const sess=cfSelectedSessions(), players=cfSelectedPlayers();
+    if(!sess.length || !players.length) return null;
+    const nM=sess.filter(s=> s.type==='match').length, nA=sess.length-nM;
+    const conto=[];
+    if(nM) conto.push(nM+(nM===1?' partita':' partite'));
+    if(nA) conto.push(nA+(nA===1?' allenamento':' allenamenti'));
+    const modo=cfModeText(cfEff);
+    const el=document.createElement('div');
+    el.className='print-split cf-print-head';
+    el.innerHTML='<div class="cph-t">'+esc(modo.charAt(0).toUpperCase()+modo.slice(1))+'</div>'
+      +'<div class="cph-s">'+players.length+(players.length===1?' atleta':' atlete')
+      +' &#183; '+esc(conto.join(' e '))
+      +(cfState.role?(' &#183; ruolo '+esc(cfState.role)):'')
+      +' &#183; '+esc(cfPrintSu(sess))+'</div>';
+    return el;
+  }
   // ---------- radar delle caratteristiche ----------
   // Un raggio per parametro chiave. Il bordo esterno e' il valore piu' alto fra le atlete
   // scelte e la media squadra, cosi' si legge subito chi corre di piu', chi va sopra i 23
@@ -1806,6 +1864,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const eff=(cmp==='team' && !teamRows.length)?'val'
       :(cmp==='model' && !hasModel)?'val'
       :(cmp==='tvm' && !canTvm)?'val':cmp;
+    cfEff=eff;
     const isTvm=(eff==='tvm');
     const aggMode=(eff==='tot')?'sum':'avg';
     const teamAgg=aggRows(teamRows, aggMode).v;
@@ -2256,6 +2315,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // 196mm di altezza meno intestazione, riepilogo e cornice della scheda. Il valore e' stato
   // verificato stampando davvero: a 478 la griglia sfora di poco, a 438 il foglio regge.
   const PRINT_H = 462;
+  // Nel confronto i cinque riquadri del riepilogo e la riga del radar in stampa non ci sono
+  // (li toglie il CSS): quei circa 88 pixel tornano alla tabella, meno i 45 della riga di
+  // intestazione che prende il loro posto. La legenda invece c'e' solo in certe letture,
+  // percio' si misura a schermo invece di indovinarla.
+  const PRINT_H_CF = 500;
   // scaletta fitta apposta: prima si stringe la spaziatura, poi il corpo del testo, cosi' si
   // rimpicciolisce il minimo indispensabile invece di saltare da una misura all'altra
   const PRINT_TIERS = [
@@ -2362,14 +2426,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   // parte dal corpo piu' grande e stringe solo finche' serve: prima per far entrare i parametri
   // in larghezza, poi per far stare tutte le atlete nella stessa pagina
-  function printPickTier(node, probe){
+  function printPickTier(node, probe, budget){
     let best = null, minima = null, last = null;
     for(let k=0;k<PRINT_TIERS.length;k++){
       const info = printMeasure(node, probe, PRINT_TIERS[k]);
       last = info;
       if(info.w > PRINT_W) continue;
       minima = info;                                 // in larghezza ci sta: la piu' piccola vista finora
-      if(info.h <= PRINT_H){ best = info; break; }   // ci stanno anche tutte le righe: e' quella giusta
+      if(info.h <= budget){ best = info; break; }    // ci stanno anche tutte le righe: e' quella giusta
     }
     // se nessuna misura fa stare tutte le atlete nel foglio si prende la piu' piccola che almeno
     // regge in larghezza: con una rosa intera e' l'unico modo di restare su un foglio solo
@@ -2381,8 +2445,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return c;
   }
   // sceglie misura del testo e, se proprio non bastasse la larghezza, in quante fasce dividere
-  function printPlan(clean, lead, nMet, probe){
-    const use = printPickTier(clean, probe);
+  function printPlan(clean, lead, nMet, probe, budget){
+    const use = printPickTier(clean, probe, budget);
     if(!use) return null;
     if(use.w <= PRINT_W) return use;             // tutti i parametri in una pagina di larghezza
     // nemmeno il corpo piu' piccolo li fa entrare: si divide in fasce, contando quante colonne
@@ -2393,19 +2457,94 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const chunks = printChunks(nMet, cap);
     let wide = 1;
     chunks.forEach(c=>{ wide = Math.max(wide, c[1] - c[0]); });
-    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide), probe) || big;
+    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide), probe, budget) || big;
     pick.chunks = chunks;
     return pick;
   }
-  function printSheetFor(tb, lead, nMet, probe){
+  // La griglia non deve restare rannicchiata in cima al foglio con mezza pagina bianca sotto:
+  // con poche atlete l'altezza che avanza va alle righe. Cresce solo la spaziatura sopra e
+  // sotto, il corpo del testo resta quello gia' scelto, e ogni passo viene rimisurato: si tiene
+  // il piu' largo che sta ancora dentro la pagina, con sei pixel di margine di sicurezza.
+  function printFillPad(node, probe, plan, budget){
+    const parti = String(plan.tier.pad).split(' ');
+    const su = parseFloat(parti[0]), lato = parti[1] || '8px';
+    const righe = node.querySelectorAll('tr').length;
+    const tetto = budget - 6, avanzo = tetto - plan.h;
+    if(!isFinite(su) || righe < 1 || avanzo < righe*2) return plan.tier.pad;
+    let extra = Math.min(9, Math.floor(avanzo / (righe*2)));
+    while(extra > 0){
+      const t = { fs:plan.tier.fs, pad:(su+extra)+'px '+lato };
+      if(printMeasure(node, probe, t).h <= tetto) return t.pad;
+      extra--;
+    }
+    return plan.tier.pad;
+  }
+  // ---------- due colonne di atlete sullo stesso foglio ----------
+  // Il confronto ha pochi parametri e tante righe: la griglia viene stretta e altissima, cosi'
+  // resta mezzo foglio bianco a destra e il corpo del testo scende a sette pixel per far entrare
+  // tutte le atlete. Se due copie della stessa griglia stanno affiancate nella larghezza della
+  // pagina, le atlete si dividono in due colonne come su un elenco: le righe da leggere si
+  // dimezzano, il testo puo' tornare grande e la pagina si riempie sul serio.
+  const PRINT_DUO_GAP = 12;   // il corridoio bianco tra le due colonne
+  const PRINT_DUO_SAFE = 10;  // margine: due colonne al millimetro giusto in stampa non reggono
+  const PRINT_DUO_MIN = 12;   // sotto questo numero di atlete la colonna singola gia' basta
+  // la riga della media squadra e' il metro di paragone: va ripetuta in cima a tutte e due le
+  // colonne, altrimenti la meta' di destra non si capisce
+  function printDuoParts(clean){
+    const tb = clean.querySelector('tbody');
+    if(!tb) return null;
+    const righe = tb.children;
+    let capo = 0;
+    while(capo < righe.length && righe[capo].classList.contains('r-teamref')) capo++;
+    const dati = righe.length - capo;
+    if(dati < PRINT_DUO_MIN) return null;
+    return { capo:capo, meta:capo + Math.ceil(dati/2), tot:righe.length };
+  }
+  function printSplitRows(clean, capo, a, b){
+    const c = clean.cloneNode(true);
+    const tb = c.querySelector('tbody');
+    if(!tb) return c;
+    Array.prototype.slice.call(tb.children).forEach((tr, i)=>{
+      if(i >= capo && (i < a || i >= b)) tr.remove();
+    });
+    return c;
+  }
+  function printDuoPlan(clean, probe, budget){
+    const parti = printDuoParts(clean);
+    if(!parti) return null;
+    const sx = printSplitRows(clean, parti.capo, parti.capo, parti.meta);  // la meta' piu' alta
+    for(let k=0;k<PRINT_TIERS.length;k++){
+      const info = printMeasure(sx, probe, PRINT_TIERS[k]);
+      if(info.w*2 + PRINT_DUO_GAP + PRINT_DUO_SAFE > PRINT_W) continue;  // affiancate non ci stanno
+      if(info.h <= budget) return { tier:PRINT_TIERS[k], h:info.h, sx:sx, capo:parti.capo, meta:parti.meta, tot:parti.tot };
+    }
+    return null;
+  }
+  function printSheetFor(tb, lead, nMet, probe, budget, duoOk){
     const clean = printCleanClone(tb);
-    const plan = printPlan(clean, lead, nMet, probe);
+    const plan = printPlan(clean, lead, nMet, probe, budget);
     if(!plan) return null;
     const chunks = plan.chunks && plan.chunks.length ? plan.chunks : [[0, nMet]];
     const wrap = document.createElement('div');
     wrap.className = 'print-split';
+    // le due colonne si provano solo quando i parametri stanno tutti in una fascia: e' li' che
+    // avanza larghezza, e si tengono solo se fanno guadagnare almeno una misura di testo
+    const duo = (duoOk && chunks.length===1) ? printDuoPlan(clean, probe, budget) : null;
+    if(duo && PRINT_TIERS.indexOf(duo.tier) < PRINT_TIERS.indexOf(plan.tier)){
+      const blk = document.createElement('div');
+      blk.className = 'print-blk print-duo';
+      blk.appendChild(duo.sx);
+      blk.appendChild(printSplitRows(clean, duo.capo, duo.meta, duo.tot));
+      wrap.style.setProperty('--pfs', duo.tier.fs+'px');
+      wrap.style.setProperty('--ppad', printFillPad(duo.sx, probe, duo, budget));
+      wrap.appendChild(blk);
+      return { wrap:wrap, tier:duo.tier, fasce:1 };
+    }
+    // a fasce le colonne vengono tagliate dopo, quindi l'altezza misurata non vale piu': si
+    // riempie solo quando la griglia sta tutta in un blocco
+    const pad = (chunks.length===1) ? printFillPad(clean, probe, plan, budget) : plan.tier.pad;
     wrap.style.setProperty('--pfs', plan.tier.fs+'px');
-    wrap.style.setProperty('--ppad', plan.tier.pad);
+    wrap.style.setProperty('--ppad', pad);
     chunks.forEach(ch=>{
       const a = ch[0], b = ch[1];
       const blk = document.createElement('div');
@@ -2427,6 +2566,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
   }
+  // quanto foglio resta alla tabella del confronto: la legenda c'e' solo in certe letture e
+  // occupa una riga o due, percio' si misura invece di scommetterci sopra
+  function cfPrintBudget(){
+    const lg = document.getElementById('cf-legend');
+    const h = (lg && !lg.hidden) ? lg.getBoundingClientRect().height : 0;
+    return Math.max(320, PRINT_H_CF - Math.round(h));
+  }
   function buildPrintSheets(){
     clearPrintSheets();
     const nMet = VIS().length;
@@ -2441,10 +2587,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         if(!hr) return;
         const lead = hr.children.length - nMet;
         if(lead < 1) return;
-        const sheet = printSheetFor(tb, lead, nMet, probe);
+        const cf = (host.id === 'cf-scroll');
+        const sheet = printSheetFor(tb, lead, nMet, probe, cf ? cfPrintBudget() : PRINT_H, cf);
         if(!sheet) return;
         host.classList.add('print-hidden');
         host.parentNode.insertBefore(sheet.wrap, host.nextSibling);
+        // la riga di intestazione va in cima alla scheda, sopra al radar: e' il titolo del
+        // report, non una didascalia della tabella
+        if(cf){
+          const head = cfPrintHead();
+          if(head) host.parentNode.insertBefore(head, host.parentNode.firstChild);
+        }
       });
     } finally {
       if(probe.parentNode) probe.parentNode.removeChild(probe);
