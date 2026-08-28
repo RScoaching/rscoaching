@@ -3624,10 +3624,16 @@ window.FORZA = window.FORZA || { roster:[] };
     return (d.getMonth() === mo-1) ? d : null;
   }
 
-  /* Ultima seduta in archivio, oggi compreso: se i GPS di stamattina sono gia'
-     stati scaricati e' giusto partire da quelli, sono la fotografia migliore.
+  /* Ultimo allenamento della squadra, oggi compreso: se i GPS di stamattina sono
+     gia' stati scaricati e' giusto partire da quelli, sono la fotografia migliore.
      Nell'archivio ogni atleta ha soltanto le righe delle sedute che ha fatto,
-     quindi la presenza si legge direttamente, senza doverla dedurre. */
+     quindi la presenza si legge direttamente, senza doverla dedurre.
+     Non si guarda il giorno prima ma l'allenamento prima: nel giorno di riposo la
+     squadra non c'e' e chi e' su in prima squadra o lavora a parte continua ad
+     avere la sua riga, quindi partire dall'ultima data dell'archivio voleva dire
+     ritrovarsi la rosa quasi tutta assente. Si risale fino al giorno in cui la
+     squadra era in campo davvero, e dai giorni dopo si tiene solo chi era in prima
+     squadra o a parte, che e' l'informazione piu' fresca su dove si trova. */
   const GPS_LAST = (function(){
     const P = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
     if(!P) return null;
@@ -3652,7 +3658,30 @@ window.FORZA = window.FORZA || { roster:[] };
       });
     });
     const keys = Object.keys(byDay).sort();
-    return keys.length ? byDay[keys[keys.length-1]] : null;
+    if(!keys.length) return null;
+    // un giorno conta come allenamento solo se qualcuna era in gruppo: le righe
+    // con FT o diff da sole vogliono dire che la squadra quel giorno era ferma
+    let i = keys.length - 1;
+    while(i >= 0 && !byDay[keys[i]].gruppo.length) i--;
+    if(i < 0) i = keys.length - 1;   // mai un lavoro di squadra: si tiene l'ultimo giorno
+    const base = byDay[keys[i]];
+    const out = { data:base.data, gruppo:base.gruppo.slice(),
+                  diff:base.diff.slice(), ft:base.ft.slice(), dopo:0 };
+    function sposta(nome, dove){
+      ['gruppo','diff','ft'].forEach(function(k){
+        const j = out[k].indexOf(nome);
+        if(j >= 0) out[k].splice(j, 1);
+      });
+      out[dove].push(nome);
+    }
+    for(let k = i+1; k < keys.length; k++){
+      const d = byDay[keys[k]];
+      if(!d.ft.length && !d.diff.length) continue;
+      out.dopo++;
+      d.diff.forEach(function(n){ sposta(n, 'diff'); });
+      d.ft.forEach(function(n){ sposta(n, 'ft'); });
+    }
+    return out;
   })();
 
   const PRE_KEY = 'fio_oggi_pre_' + TSTR;
@@ -3722,10 +3751,17 @@ window.FORZA = window.FORZA || { roster:[] };
       ? ' Ho aggregato ' + PRE_NUOVE + (PRE_NUOVE === 1 ? ' atleta che nella seduta' : ' atlete che nella seduta') +
         ' ci sono ma in rosa no.'
       : '';
+    // se fra quell'allenamento e oggi ci sono giorni senza squadra si dice, se no
+    // sembra che la proposta arrivi da una data vecchia senza motivo
+    const dopo = GPS_LAST.dopo
+      ? ' Dopo quel giorno la squadra non e\' scesa in campo: ' +
+        (GPS_LAST.dopo === 1 ? 'dal giorno dopo' : 'dai giorni dopo') +
+        ' ho tenuto solo chi era in prima squadra o a parte.'
+      : '';
     el.innerHTML =
       '<div class="rp-txt">Ricalcata dai GPS della seduta <b>'+esc(preGiorno())+'</b>: ' +
         esc(pezzi.join(', '))+'. Le altre partono da assenti, tocca il nome per correggere.' +
-        esc(extra)+'</div>' +
+        esc(dopo)+esc(extra)+'</div>' +
       '<div class="rp-acts">' +
         (PRE_UNDO ? '<button class="rp-btn undo" id="rosa-pre-undo" type="button">'+ICO_UNDO+'Annulla</button>' : '') +
         '<button class="rp-btn" id="rosa-pre-go" type="button">'+ICO_PRE+'Ricalca la seduta</button>' +
