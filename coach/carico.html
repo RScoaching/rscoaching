@@ -661,6 +661,16 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 .seg.pdf-seg button{ font-size:12px; padding:6px 11px; }
 .pdf-note{ font-size:11.5px; color:var(--faint); line-height:1.45; margin:7px 0 0; }
 .pdf-note b{ color:var(--violet2); font-weight:700; }
+/* le atlete da mettere nello stesso report: una pastiglia per nome, si accendono
+   quelle scelte. Sono tante, quindi vanno a capo e il blocco ha una sua altezza */
+.who-wrap{ display:flex; flex-wrap:wrap; gap:6px; max-height:184px; overflow:auto;
+  padding:2px; border-radius:var(--r); }
+.who-chip{ appearance:none; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600;
+  color:var(--muted); background:var(--surface2); border:1px solid var(--border2);
+  border-radius:999px; padding:6px 12px; white-space:nowrap;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease); }
+.who-chip:hover{ color:var(--ink); border-color:var(--border3); }
+.who-chip.on{ color:#1a0d05; background:var(--orange); border-color:transparent; }
 @media (max-width: 560px){
   .cols-foot #pdf-go{ flex:1 1 100%; justify-content:center; }
 }
@@ -709,6 +719,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 /* ---------- blocchi di stampa (creati al volo, invisibili a schermo) ---------- */
 .print-split{ display:none; }
 #print-head{ display:none; }
+#print-multi{ display:none; }
 
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
@@ -758,6 +769,20 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   #print-head .ph-meta{ font-size:12px; color:#5a524c; margin-top:3px; }
   #print-head .ph-meta b{ color:#3a332e; font-weight:700; }
   .wrap{ max-width:none !important; padding:0 !important; }
+  /* report su piu' atlete: la pagina viva sparisce e al suo posto va la fila delle
+     copie, una per atleta, ognuna col suo nome in cima e la sua pagina. La copia non
+     puo' restare di classe wrap, se no sparirebbe insieme all'originale */
+  body.multi-print .wrap{ display:none !important; }
+  #print-multi{ display:block !important; }
+  .print-wrap{ max-width:none !important; padding:0 !important; }
+  .print-atl{ break-after:page; page-break-after:always; }
+  .print-atl.last{ break-after:auto; page-break-after:auto; }
+  .print-atl-head{ border-bottom:1px solid #ccc; padding-bottom:8px; margin:0 0 12px; }
+  .print-atl-head .ph-name{ font-family:'Bebas Neue',sans-serif; font-size:30px; line-height:1.05;
+    letter-spacing:.6px; color:#14110f; }
+  .print-atl-head .ph-meta{ font-size:11.5px; color:#5a524c; margin-top:2px; }
+  .print-atl-head .ph-num{ font-size:10.5px; color:#7a726c; letter-spacing:.08em;
+    text-transform:uppercase; font-weight:700; }
   /* la pillola del mese e' un comando, non un dato: il mese sta gia' scritto nel titolo di
      ogni scheda, quindi in stampa la fila di pillole sparisce del tutto */
   .months{ display:none !important; }
@@ -1137,6 +1162,11 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
           <button type="button" data-per="w2">Ultimi 2</button>
           <button type="button" data-per="w1">Ultimo</button>
         </div>
+      </div>
+      <div class="pdf-set">
+        <span class="pdf-set-lbl">Atlete nel report</span>
+        <div class="who-wrap" id="pdf-who" role="group" aria-label="Atlete nel report"></div>
+        <p class="pdf-note" id="pdf-who-note"></p>
       </div>
       <div class="col-tools">
         <button class="mini" id="pdf-all" type="button">Tutto</button>
@@ -3222,12 +3252,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return { wrap:wrap, tier:plan.tier, fasce:chunks.length, pagine:(groups ? groups.length : 1) };
   }
-  function clearPrintSheets(){
+  /* toglie solo i pezzi costruiti attorno alla griglia viva. Nel report su piu' atlete
+     serve tra un nome e l'altro: la copia e' gia' stata presa, la pagina deve tornare
+     pulita prima di rifare i conti sull'atleta dopo. */
+  function clearLiveSheets(){
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
+  }
+  function clearPrintSheets(){
+    clearLiveSheets();
     const old = document.getElementById('print-head');
     if(old && old.parentNode) old.parentNode.removeChild(old);
+    const mul = document.getElementById('print-multi');
+    if(mul && mul.parentNode) mul.parentNode.removeChild(mul);
+    document.body.classList.remove('multi-print');
     pdfClear();
+    sheetsOn = false;
   }
   /* Intestazione del foglio. Prima il nome dell'atleta era una riga piccola accanto al
      titolo della pagina e il mese un pezzetto attaccato in fondo: su un foglio che esce
@@ -3240,10 +3280,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const wrap = document.querySelector('.title-wrap');
     if(!wrap || document.getElementById('print-head')) return;
     const sel = pdfRead();
-    const solo = state.level === 'player' && !!state.player;
+    const multi = sel.who.length >= 2;
+    const solo = !multi && state.level === 'player' && !!state.player;
     const bits = [];
     if(sel.mode === 'naz') bits.push('Report nazionale');
-    if(solo){
+    if(multi){
+      bits.push(sel.who.length + ' atlete');
+      bits.push(esc(sel.who.map(disp).join(', ')));
+    } else if(solo){
       const r = roleOf(state.player);
       if(r) bits.push(esc(r));
       bits.push('Fiorentina Primavera U19W');
@@ -3258,14 +3302,88 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const box = document.createElement('div');
     box.id = 'print-head';
     box.innerHTML = '<div class="ph-name">'
-      + esc(solo ? disp(state.player) : (S.squadra || 'Fiorentina Primavera U19W')) + '</div>'
+      + esc((solo && !multi) ? disp(state.player) : (S.squadra || 'Fiorentina Primavera U19W')) + '</div>'
       + '<div class="ph-meta">' + bits.join(' &#183; ') + '</div>';
     wrap.appendChild(box);
   }
+  /* la riga di testa della scheda di ogni atleta dentro il report unico. Il numero
+     serve a chi riceve il foglio: se una pagina si perde in stampa se ne accorge. */
+  function printAtlHead(name, i, tot){
+    const sel = pdfRead();
+    const bits = [];
+    const r = roleOf(name);
+    if(r) bits.push(esc(r));
+    bits.push('Fiorentina Primavera U19W');
+    if(S.stagione) bits.push('Stagione ' + esc(S.stagione));
+    const m = activeMonth();
+    if(m) bits.push(esc(m.title));
+    const keep = PDF_PERS[sel.per] || 0;
+    if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
+    const box = document.createElement('div');
+    box.className = 'print-atl-head';
+    box.innerHTML = '<div class="ph-num">Atleta ' + (i + 1) + ' di ' + tot + '</div>'
+      + '<div class="ph-name">' + esc(disp(name)) + '</div>'
+      + '<div class="ph-meta">' + bits.join(' &#183; ') + '</div>';
+    return box;
+  }
+  /* Il pulsante Stampa costruisce i fogli e poi chiama window.print(), che fa partire
+     anche beforeprint: senza questa guardia il report su piu' atlete verrebbe rifatto
+     da capo una seconda volta. Lo rimette a posto clearPrintSheets a stampa finita. */
+  let sheetsOn = false;
   function buildPrintSheets(){
+    if(sheetsOn) return;
     clearPrintSheets();
+    sheetsOn = true;
+    const names = pdfRead().who;
+    if(names.length >= 2){ buildMultiSheets(names); return; }
     pdfApply();
     printHeadTag();
+    buildGridSheets();
+  }
+  /* Report unico su piu' atlete. La pagina viene ricalcolata una atleta per volta e di
+     ogni giro si tiene una copia gia' impaginata: e' l'unico modo per avere le tabelle
+     una dopo l'altra senza toccare il modo in cui la pagina viene costruita. Le copie
+     entrano nel documento solo alla fine, cosi' i doppioni di id non danno fastidio
+     mentre si disegna. Alla fine si torna all'atleta di partenza: a schermo non cambia
+     niente. */
+  function buildMultiSheets(names){
+    const wrap = document.querySelector('.wrap');
+    if(!wrap) return;
+    const keep = { level:state.level, player:state.player, monthKey:state.monthKey };
+    const host = document.createElement('div');
+    host.id = 'print-multi';
+    names.forEach(function(n, i){
+      state.level = 'player'; state.player = n;
+      renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+      pdfApply();
+      buildGridSheets();
+      const sec = document.createElement('section');
+      sec.className = 'print-atl' + (i === names.length - 1 ? ' last' : '');
+      sec.appendChild(printAtlHead(n, i, names.length));
+      const copy = wrap.cloneNode(true);
+      copy.className = 'print-wrap';
+      copy.querySelectorAll('.controls, .months, .secnav, .print-off, .print-hidden')
+        .forEach(function(x){ if(x.parentNode) x.parentNode.removeChild(x); });
+      /* nella copia gli id spariscono, se no in pagina ce ne sarebbero cinque uguali e
+         chi cerca un blocco per id troverebbe la copia sbagliata. Dentro gli SVG invece
+         restano: le sfumature delle barre sono agganciate a quegli id e senza restano
+         barre nere. Sono definizioni identiche per tutte, quindi va bene la prima. */
+      copy.querySelectorAll('[id]').forEach(function(x){
+        if(x.closest && x.closest('svg')) return;
+        x.removeAttribute('id');
+      });
+      sec.appendChild(copy);
+      host.appendChild(sec);
+      clearLiveSheets();
+    });
+    state.level = keep.level; state.player = keep.player; state.monthKey = keep.monthKey;
+    renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+    pdfApply();
+    printHeadTag();
+    document.body.classList.add('multi-print');
+    wrap.parentNode.insertBefore(host, wrap.nextSibling);
+  }
+  function buildGridSheets(){
     const nMet = VIS().length;
     if(nMet < 1) return;
     const probe = printProbe();
@@ -3333,7 +3451,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     PDF_BLOCKS.forEach(b=>{ out[b.id] = (o && typeof o[b.id]==='boolean') ? o[b.id] : b.def; });
     out.mode = (o && PDF_MODES.indexOf(o.mode)>=0) ? o.mode : 'full';
     out.per  = (o && Object.prototype.hasOwnProperty.call(PDF_PERS, o.per)) ? o.per : 'all';
+    // le atlete scelte per un report unico. Un nome cancellato in Atlete resterebbe qui
+    // dentro per sempre: si tiene solo chi esiste davvero, e l'ordine e' quello dei nomi
+    out.who = pdfWho(o && o.who);
     return out;
+  }
+  // ordine fisso per nome: sul foglio le tabelle escono nello stesso ordine in cui le
+  // pastiglie sono scritte nel pannello, se no chi legge non ritrova nessuno
+  function pdfWho(list){
+    if(!Array.isArray(list)) return [];
+    return list.filter(function(n, i){
+      return typeof n === 'string' && S.players && S.players[n] && list.indexOf(n) === i;
+    }).sort(dispSort);
   }
   function pdfWrite(o){ try{ localStorage.setItem(PDF_KEY, JSON.stringify(o)); }catch(e){} }
   // quanti RPE scritti restano fuori dal foglio col periodo scelto. Il taglio nazionale
@@ -3379,14 +3508,39 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(mseg) mseg.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.getAttribute('data-mode')===sel.mode));
     const pseg = document.getElementById('pdf-per-seg');
     if(pseg) pseg.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.getAttribute('data-per')===sel.per));
+    const who = document.getElementById('pdf-who');
+    if(who){
+      const names = Object.keys(S.players||{}).sort(dispSort);
+      who.innerHTML = names.map(function(n){
+        const on = sel.who.indexOf(n) >= 0;
+        return '<button type="button" class="who-chip'+(on?' on':'')+'" data-who="'+esc(n)+'"'+
+               ' aria-pressed="'+(on?'true':'false')+'">'+esc(disp(n))+'</button>';
+      }).join('');
+    }
+    const wnote = document.getElementById('pdf-who-note');
+    if(wnote){
+      if(sel.who.length >= 2){
+        wnote.innerHTML = 'Foglio unico su <b>'+sel.who.length+' atlete</b>: '+
+          esc(sel.who.map(disp).join(', '))+'. Le schede escono una dopo l\'altra, ognuna col '+
+          'suo nome in cima e la sua pagina. A schermo non cambia niente.';
+      } else if(sel.who.length === 1){
+        wnote.innerHTML = 'Hai acceso solo <b>'+esc(disp(sel.who[0]))+'</b>: per il foglio unico '+
+          'servono almeno due nomi. Cosi\' com\'e\' il report esce sull\'atleta che stai guardando.';
+      } else {
+        wnote.textContent = "Nessun nome acceso: il report esce sull'atleta che stai guardando adesso. "+
+          "Accendine due o piu' per avere un foglio solo, per la nazionale o per le aggregate.";
+      }
+    }
     const note = document.getElementById('pdf-mode-note');
     if(note){
       if(sel.mode === 'naz'){
         note.innerHTML = 'Foglio per chi sta fuori dalla societa\'. Spariscono le righe <b>val/match</b> e il '+
           '<b>modello AVG partita</b>: restano i numeri dell\'atleta e i totali dei microcicli stampati. '+
-          (state.level === 'team'
-            ? 'Adesso sei sulla squadra: scegli un\'atleta dalla barra in alto, il report va sulla singola.'
-            : 'Atleta: <b>'+esc(disp(state.player||''))+'</b>.');
+          (sel.who.length >= 2
+            ? 'Atlete: <b>'+esc(sel.who.map(disp).join(', '))+'</b>.'
+            : (state.level === 'team'
+              ? 'Adesso sei sulla squadra: scegli un\'atleta dalla barra in alto, il report va sulla singola.'
+              : 'Atleta: <b>'+esc(disp(state.player||''))+'</b>.'));
       } else {
         note.textContent = 'Foglio interno: c\'e\' tutto, modello AVG partita e righe val/match comprese.';
       }
@@ -3395,6 +3549,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const n = PDF_BLOCKS.filter(b=> sel[b.id]).length;
       let s = n ? (n+' blocchi su '+PDF_BLOCKS.length) : 'Nessun blocco scelto';
       if(sel.mode === 'naz') s += ' · taglio nazionale';
+      if(sel.who.length >= 2) s += ' · ' + sel.who.length + ' atlete in un foglio solo';
       const kp = PDF_PERS[sel.per] || 0;
       if(kp) s += ' · ultimi ' + kp + (kp===1 ? ' microciclo' : ' microcicli');
       if(sel['grid-card']){
@@ -3443,6 +3598,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(pseg) pseg.addEventListener('click', e=>{
       const b = e.target.closest('button[data-per]'); if(!b) return;
       const o = pdfRead(); o.per = b.getAttribute('data-per'); pdfWrite(o); renderPdfPanel();
+    });
+    // le pastiglie delle atlete: si accendono e si spengono, l'ordine sul foglio resta
+    // sempre quello dei nomi, non quello in cui le hai toccate
+    const who = document.getElementById('pdf-who');
+    if(who) who.addEventListener('click', e=>{
+      const b = e.target.closest('button[data-who]'); if(!b) return;
+      const n = b.getAttribute('data-who');
+      const o = pdfRead();
+      const i = o.who.indexOf(n);
+      if(i >= 0) o.who.splice(i, 1); else o.who.push(n);
+      o.who = pdfWho(o.who);
+      pdfWrite(o); renderPdfPanel();
     });
     const a = document.getElementById('pdf-all'); if(a) a.addEventListener('click', ()=> setAll(true));
     const n = document.getElementById('pdf-none'); if(n) n.addEventListener('click', ()=> setAll(false));
