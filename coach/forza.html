@@ -324,6 +324,8 @@ table.fbtbl tr:last-child td{ border-bottom:0; }
 .fb-in:focus{ border-color:var(--border3); }
 .fb-in.ex{ min-width:150px; }
 .fb-in.num{ width:66px; text-align:center; margin:0 auto; }
+/* la casella della percentuale accetta anche "40-50" e "manuale": serve respiro */
+.fb-in.num.pct{ width:88px; }
 .fb-in.rec{ width:70px; text-align:center; margin:0 auto; }
 .fb-in.note{ min-width:130px; }
 .fb-z{ display:inline-flex; align-items:center; padding:4px 9px; border-radius:7px; font-size:11px; font-weight:600; white-space:nowrap; }
@@ -610,7 +612,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fb-head">
           <div>
             <div class="fb-title">Costruttore seduta</div>
-            <div class="fb-sub">Costruisci la seduta di palestra con i carichi in percentuale (%1RM), assegna la data e le atlete, poi salvala nel programma. Stampa la scheda o proiettala in sala.</div>
+            <div class="fb-sub">Costruisci la seduta di palestra, assegna la data e le atlete, poi salvala nel programma. Stampa la scheda o proiettala in sala. Nella colonna %1RM scrivi 80 per la percentuale del massimale, 40kg o 40-50 per un carico uguale per tutte, manuale per avere la colonna vuota nel foglio dei carichi.</div>
           </div>
           <span class="spacer"></span>
         </div>
@@ -646,7 +648,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fb-tags" id="fb-tags"></div>
         <div class="fb-body">
           <table class="fbtbl">
-            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n">Serie</th><th class="n">Rip</th><th class="n">%1RM</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
+            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n">Serie</th><th class="n">Rip</th><th class="n" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi">%1RM o kg</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
             <tbody id="fb-rows"></tbody>
           </table>
           <button class="btn fb-add" id="fb-add" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Aggiungi esercizio</button>
@@ -1030,6 +1032,15 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(l && l!=='auto' && SESS_LIFT[l]) return l;
     return autoLift(r && r.ex);
   }
+  /* Il campo del costruttore ospita anche "40-50", "40kg" e "manuale": qui vale
+     solo la percentuale vera, se no un range verrebbe letto come 40% e lo
+     storico si riempirebbe di carichi mai fatti. */
+  function pctOnly(v){
+    const s = String(v==null ? '' : v).trim().replace(/\s+/g,'').replace(/,/g,'.').replace(/%/g,'');
+    if(!/^\d+(\.\d+)?$/.test(s)) return null;
+    const n = parseFloat(s);
+    return (isFinite(n) && n>0) ? n : null;
+  }
   /* stessa chiave del costruttore per i kg corretti a mano nell'anteprima */
   function ovKey(r, name){
     return String(r.ex||'').trim().toLowerCase()+'|'+String(r.pct||'').trim()+'|'+name;
@@ -1060,8 +1071,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const kgov = (s.kgov && typeof s.kgov==='object' && !Array.isArray(s.kgov)) ? s.kgov : {};
       team.forEach(name=>{
         rows.forEach((r, ri)=>{
-          const pn = parseFloat(r.pct);
-          const pct = (Number.isFinite(pn) && pn>0) ? pn : null;
+          const pct = pctOnly(r.pct);
           let kg = null;
           const ov = parseFloat(kgov[ovKey(r, name)]);
           if(Number.isFinite(ov) && ov>0) kg = ov;
@@ -1608,15 +1618,50 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     vuota: { name:'', rows:[] }
   };
 
+  /* La casella della percentuale legge tre cose diverse, cosi' non serve piu'
+     inventarsi un 80% finto per far comparire la colonna nel foglio dei carichi:
+       80            percentuale del massimale di riferimento, come sempre
+       40kg  40-50   carico uguale per tutte, scritto sul foglio del lavoro
+                     accanto a serie e ripetizioni, senza colonna nei carichi
+       manuale       colonna nei carichi con le caselle vuote, i kg li scrive
+                     il mister a mano atleta per atleta
+     Sotto al nome dell'esercizio finisce solo la riga "80% di ...", quindi negli
+     ultimi due casi il foglio resta pulito. */
+  function pctInfo(v){
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    if(!s) return null;
+    if(s === 'm' || s === 'man' || s === 'manu' || s === 'manuale' || s === '?') return { k:'man' };
+    s = s.replace(/\s+/g, '').replace(/,/g, '.');
+    var kg = s.indexOf('kg') !== -1;
+    var num = s.replace(/kg/g, '').replace(/%/g, '');
+    var rng = num.match(/^(\d+(\.\d+)?)-(\d+(\.\d+)?)$/);
+    if(rng){
+      var a = parseFloat(rng[1]), b = parseFloat(rng[3]);
+      if(!isFinite(a) || !isFinite(b) || a <= 0 || b <= 0) return null;
+      return { k:'fix', txt: kgTxt(a) + '-' + kgTxt(b) + ' kg' };
+    }
+    if(!/^\d+(\.\d+)?$/.test(num)) return null;
+    var n = parseFloat(num);
+    if(!isFinite(n) || n <= 0) return null;
+    if(kg) return { k:'fix', txt: kgTxt(n) + ' kg' };
+    return { k:'pct', p:n };
+  }
+  function isManRow(r){ var q = pctInfo(r && r.pct); return !!q && q.k === 'man'; }
+  function fixTxt(r){ var q = pctInfo(r && r.pct); return (q && q.k === 'fix') ? q.txt : ''; }
+
   function zinfo(pct){
-    var p = parseFloat(pct);
-    if(!isFinite(p) || p<=0) return null;
+    var q = pctInfo(pct);
+    if(!q || q.k !== 'pct') return null;
+    var p = q.p;
     if(p>=90) return {cls:'z-max', l:'Forza max'};
     if(p>=80) return {cls:'z-forza', l:'Forza'};
     if(p>=65) return {cls:'z-iper', l:'Ipertrofia'};
     return {cls:'z-res', l:'Resistenza'};
   }
   function zcell(pct){
+    var q = pctInfo(pct);
+    if(q && q.k === 'man') return '<span class="fb-z z-none">A mano</span>';
+    if(q && q.k === 'fix') return '<span class="fb-z z-none">'+esc(q.txt)+'</span>';
     var z = zinfo(pct);
     if(!z) return '<span class="fb-z z-none">-</span>';
     return '<span class="fb-z '+z.cls+'">'+z.l+'</span>';
@@ -1819,19 +1864,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
   function round25(v){ return Math.round(v / 2.5) * 2.5; }
   function kgTxt(v){ return (v % 1 === 0) ? String(v) : String(v).replace('.', ','); }
-  /* righe con carico calcolabile: percentuale valida + massimale di riferimento */
+  /* colonne del foglio dei carichi: o una percentuale con un massimale a cui
+     agganciarsi, oppure una riga a mano, che la colonna la vuole vuota. Il
+     carico fisso non entra qui: vale per tutte e sta sul foglio del lavoro. */
   function kgRows(rows){
     return (rows || []).filter(hasEx).filter(function(r){
-      var p = parseFloat(r.pct);
-      return isFinite(p) && p > 0 && liftOf(r);
+      var q = pctInfo(r.pct);
+      if(!q) return false;
+      if(q.k === 'man') return true;
+      return q.k === 'pct' && !!liftOf(r);
     });
   }
   function kgFor(name, r){
+    var q = pctInfo(r && r.pct);
+    if(!q || q.k !== 'pct') return null;
     var k = liftOf(r); if(!k) return null;
     var m = rmGet(name, k); if(m == null) return null;
-    var p = parseFloat(r.pct);
-    if(!isFinite(p) || p <= 0) return null;
-    return round25(m * p / 100);
+    return round25(m * q.p / 100);
   }
   function audience(src){ return isAll(src.players) ? NAMES.slice() : (src.players || []).slice(); }
 
@@ -2020,7 +2069,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         + '<td><input class="fb-in ex" list="ex-list" data-i="'+i+'" data-f="ex" value="'+esc(r.ex)+'" placeholder="Esercizio"></td>'
         + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="serie" value="'+esc(r.serie)+'" inputmode="numeric"></td>'
         + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="rip" value="'+esc(r.rip)+'" inputmode="numeric"></td>'
-        + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="pct" value="'+esc(r.pct)+'" inputmode="numeric" placeholder="-"></td>'
+        + '<td class="n"><input class="fb-in num pct" data-i="'+i+'" data-f="pct" value="'+esc(r.pct)+'" placeholder="-" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi"></td>'
         + '<td data-z="'+i+'">'+zcell(r.pct)+'</td>'
         + '<td class="n">'+liftSelect(r, i)+'</td>'
         + '<td class="n"><input class="fb-in rec" data-i="'+i+'" data-f="rec" value="'+esc(r.rec)+'" inputmode="numeric"></td>'
@@ -2569,8 +2618,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       inner = '<div class="fz-void" style="font-size:16px">Nessun esercizio nella seduta</div>';
     } else {
       rows.forEach(function(r, i){
+        /* il carico uguale per tutte sta qui, accanto a serie e ripetizioni:
+           non merita una colonna nei carichi, il numero e' uno solo */
+        var fx = fixTxt(r);
         var sr = (r.serie || '-') + ' &#215; ' + (r.rip || '-')
-               + (FZ_EACH.test(String(r.ex || '')) ? ' ea.' : '');
+               + (FZ_EACH.test(String(r.ex || '')) ? ' ea.' : '')
+               + (fx ? ' &#183; ' + esc(fx) : '');
         var rec = r.rec ? ('rec ' + esc(r.rec) + ' s') : '';
         inner += '<div class="fz-li">'
           + '<span class="fz-x">'+(i+1)+') '+esc(r.ex)+'</span>'
@@ -2591,7 +2644,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   /* foglio 2: i carichi della seduta, dalla percentuale di ogni esercizio */
   function fzPage2(src, edit){
     var cols = kgRows(src.rows);
+    /* con una colonna a mano il foglio serve a tutte, anche a chi non ha
+       nessun massimale registrato: le caselle sono vuote apposta */
+    var hasMan = false;
+    cols.forEach(function(r){ if(isManRow(r)) hasMan = true; });
     var atl = cols.length ? audience(src).filter(function(n){
+      if(hasMan) return true;
       for(var i = 0; i < cols.length; i++){ if(fzKg(src, n, cols[i]) != null) return true; }
       return false;
     }) : [];
@@ -2602,7 +2660,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       body = '<div class="fz-in"><div class="fz-void" style="font-size:16px">'
         + (cols.length
             ? 'Nessun massimale registrato per le atlete di questa seduta. Apri Massimali per inserirli.'
-            : 'Metti una percentuale su almeno un esercizio per vedere i carichi.')
+            : 'Nel campo %1RM metti una percentuale (80) oppure la parola manuale, per avere la colonna con le caselle vuote.')
         + '</div></div>';
     } else {
       /* altezza utile sotto l'intestazione, meno il bordo e il respiro laterale */
@@ -2612,8 +2670,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       var tds = 'padding:' + pad + 'mm 1.6mm';
 
       var head = '<tr><th class="a">Atleta</th>';
+      /* la riga piccola sotto il nome esce solo quando dice qualcosa: una
+         colonna a mano non ha nessuna percentuale da dichiarare */
       cols.forEach(function(r){
-        head += '<th>'+esc(r.ex)+'<span class="p">'+esc(r.pct)+'% di '+esc(RM_LAB[liftOf(r)])+'</span></th>';
+        var q = pctInfo(r.pct);
+        var sub = (q && q.k === 'pct')
+          ? '<span class="p">'+esc(kgTxt(q.p))+'% di '+esc(RM_LAB[liftOf(r)])+'</span>'
+          : '';
+        head += '<th>'+esc(r.ex)+sub+'</th>';
       });
       head += '</tr>';
 
@@ -2622,13 +2686,16 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         var cells = '';
         cols.forEach(function(r){
           var kg = fzKg(src, n, r);
-          if(kg == null){ cells += '<td class="miss" style="'+tds+'">-</td>'; return; }
+          var mn = isManRow(r);
+          /* la casella vuota di una colonna a mano non e' un buco: e' lo spazio
+             per scrivere il carico in palestra, quindi niente trattino */
+          if(kg == null && !mn){ cells += '<td class="miss" style="'+tds+'">-</td>'; return; }
           if(edit){
-            cells += '<td style="'+tds+'"><input class="fz-kgin'+(kg.ov ? ' ov' : '')+'" type="number"'
-              + ' step="0.5" min="0" inputmode="decimal" value="'+kg.v+'"'
+            cells += '<td style="'+tds+'"><input class="fz-kgin'+(kg && kg.ov ? ' ov' : '')+'" type="number"'
+              + ' step="0.5" min="0" inputmode="decimal" value="'+(kg ? kg.v : '')+'"'
               + ' data-k="'+esc(fzKey(r, n))+'" aria-label="'+esc(disp(n)+' '+r.ex)+'"></td>';
           } else {
-            cells += '<td style="'+tds+'">'+kgTxt(kg.v)+'</td>';
+            cells += '<td style="'+tds+'">'+(kg ? kgTxt(kg.v) : '&#160;')+'</td>';
           }
         });
         trs += '<tr><td class="a" style="'+tds+'">'+esc(disp(n))+'</td>'+cells+'</tr>';
