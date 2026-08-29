@@ -366,6 +366,9 @@ tr.r-diff td.col-day .role-inline{ color:var(--muted); }
 table.grid th.cf-n, table.grid td.cf-n{ text-align:center; min-width:52px; }
 table.grid td.cf-n{ color:var(--muted); font-variant-numeric:tabular-nums; }
 table.grid tr.r-day:hover td.cf-n{ color:var(--text); }
+/* chi non era presente in tutte le sedute scelte: il conto va letto subito, se no
+   la percentuale sembra un calo di condizione mentre e' solo una assenza */
+table.grid td.cf-n .miss{ color:var(--orange2); }
 
 /* ---------- radar del confronto ----------
    Con poche atlete selezionate il radar dice a colpo d'occhio chi va piu' forte e dove:
@@ -1662,6 +1665,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }));
   }
   function cfPlayerRows(name, sess){ const out=[]; sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(r) out.push(r); }); return out; }
+  function cfTeamRows(sess){ const out=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) out.push(r); }); return out; }
+  // Le sedute in cui l'atleta ha davvero un dato. Servono per costruirle un riferimento
+  // di squadra sulle stesse sedute: chi ha giocato una amichevole su due non va messa
+  // contro il totale di tutte e due, quel confronto misura le presenze, non il carico.
+  function cfPlayerSess(name, sess){ return sess.filter(s=> !!playerRow(name, s.monthKey, s.label)); }
   // Le stesse sedute divise in due mucchi: da una parte le partite, dall'altra gli allenamenti.
   function cfSplitPlayerRows(name, sess){
     const m=[], d=[];
@@ -1888,7 +1896,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     };
     if(!sess.length){ vuoto(cfPerActive() ? ('Nessuna seduta in questo periodo: '+cfPerText()) : 'Nessuna seduta selezionata'); return; }
     if(!players.length){ vuoto(cfState.role ? ('Nessuna atleta selezionata fra i ruoli "'+cfState.role+'"') : 'Nessuna atleta selezionata'); return; }
-    const teamRows=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) teamRows.push(r); });
+    const teamRows=cfTeamRows(sess);
     const hasModel=!!(S.model && S.model.length);
     const nMatch=sess.filter(s=> s.type==='match').length, nTrain=sess.filter(s=> s.type==='day').length;
     const canTvm=(nMatch>0 && nTrain>0);
@@ -1912,8 +1920,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const am=aggRows(sp.m,'avg'), ad=aggRows(sp.d,'avg');
         return { name, role:roleOf(name), v:am.v, v2:ad.v, vr:cfRatio(am.v, ad.v), n:sp.m.length+sp.d.length, nm:sp.m.length, nd:sp.d.length };
       }
+      const own=cfPlayerSess(name, sess);
       const a=aggRows(cfPlayerRows(name,sess), aggMode);
-      return { name, role:roleOf(name), v:a.v, n:a.n };
+      // Il riferimento di squadra e' quello delle sedute che l'atleta ha fatto davvero.
+      // Cosi' 40 minuti in una amichevole sola si leggono sui 90 di quella partita,
+      // non sui 180 delle due: la percentuale torna a dire quanto ha spinto, non
+      // quante volte c'era.
+      const bs=(eff==='team') ? aggRows(cfTeamRows(own), aggMode).v : null;
+      return { name, role:roleOf(name), v:a.v, n:a.n, base:bs };
     });
     pdata.sort((a,b)=>{
       if(csort.col==='name') return csort.dir*dispSort(a.name, b.name);
@@ -1941,7 +1955,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       } else if(isCmp){
         const ref=eff==='team'?'media squadra':'modello AVG partita';
         lg.hidden=false;
-        lg.innerHTML='% rispetto alla <b>'+esc(ref)+'</b>'
+        lg.innerHTML='% <b>per seduta</b> rispetto alla <b>'+esc(ref)+'</b>'
+          +(eff==='team'
+            ? ', calcolata solo sulle sedute che l\'atleta ha fatto: chi ne ha saltata qualcuna '
+              +'ha il conto in arancio nella colonna Sed. e non viene penalizzata dalle assenze'
+            : '')
           +'<span class="lg"><span class="dot under"></span>&lt;95%</span>'
           +'<span class="lg"><span class="dot near"></span>95-105%</span>'
           +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
@@ -1956,10 +1974,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     renderCfRadar(pdata, teamAgg, !isTvm && teamRows.length>0,
       isTvm ? 'parametri chiave, qui il profilo disegnato e\' quello delle partite' : '');
-    const cell=(v,i)=>{
+    const cell=(v,i,rb)=>{
       const kc=keyCls(i);
       if(!isCmp) return '<td class="num tnum'+kc+'">'+fmt(v, i)+'</td>';
-      const b=base?base[i]:null;
+      const bb=rb||base;
+      const b=bb?bb[i]:null;
       if(v==null||!isFinite(v)||b==null||!isFinite(b)||b===0) return '<td class="num cmp na'+kc+'">-</td>';
       const r=v/b,pct=Math.round(r*100),cls=r>=1.05?'over':r>=0.95?'near':'under';
       return '<td class="num cmp '+cls+kc+'"><span class="pct">'+pct+'%</span><span class="raw">'+fmt(v, i)+'</span></td>';
@@ -1991,9 +2010,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     pdata.forEach(r=>{
       h+='<tr class="r-day"><td class="col-day"><span class="lb">'+esc(disp(r.name))+'</span>'
         +(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
-      h+='<td class="cf-n">'+(isTvm?(r.nm+'/'+r.nd):(r.n||0))+'</td>';
+      if(isTvm){ h+='<td class="cf-n">'+r.nm+'/'+r.nd+'</td>'; }
+      else {
+        const nn=r.n||0;
+        h+= (nn<sess.length)
+          ? '<td class="cf-n" title="'+nn+' sedute con dati su '+sess.length+' selezionate">'+nn+'<span class="miss">/'+sess.length+'</span></td>'
+          : '<td class="cf-n">'+nn+'</td>';
+      }
       if(isTvm){ const vm=r.v||[], vd=r.v2||[], vr=r.vr||[]; V.forEach(i=> h+=cfPctCell(vr[i], fmt(vm[i], i)+' / '+fmt(vd[i], i), keyCls(i))); }
-      else { const rv=r.v||[]; V.forEach(i=> h+=cell(rv[i], i)); }
+      else { const rv=r.v||[]; V.forEach(i=> h+=cell(rv[i], i, r.base)); }
       h+='</tr>';
     });
     if(duello){
