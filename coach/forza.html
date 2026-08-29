@@ -2533,12 +2533,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     +   ' opacity:.09; pointer-events:none; }'
     + p+'.fz-in{ position:relative; height:100%; display:flex; flex-direction:column; justify-content:center;'
     +   ' padding:6mm 9mm; }'
-    + p+'.fz-li{ display:grid; grid-template-columns:1fr 46mm 30mm; align-items:baseline; gap:6mm; }'
+    /* le colonne arrivano da fzPage1 in --fzc: sono misurate sul testo piu'
+       lungo del foglio, cosi' nessun pezzo finisce sopra a quello dopo */
+    + p+'.fz-li{ display:grid; grid-template-columns:var(--fzc, minmax(0,1fr) 46mm 30mm);'
+    +   ' align-items:baseline; gap:var(--fzg, 5mm); }'
     + p+'.fz-x{ font-weight:800; letter-spacing:.01em; text-transform:uppercase; white-space:nowrap;'
     +   ' overflow:hidden; text-overflow:ellipsis; }'
-    /* serie e recupero restano proporzionali al nome: cosi' il nome puo'
+    /* serie, carico e recupero restano proporzionali al nome: cosi' il nome puo'
        crescere senza che i numeri escano dalle loro colonne */
     + p+'.fz-s{ font-weight:800; text-align:center; white-space:nowrap; font-size:.82em; }'
+    + p+'.fz-k{ font-weight:800; text-align:center; white-space:nowrap; font-size:.72em;'
+    +   ' color:'+FZ_VIO+'; }'
     + p+'.fz-r{ font-weight:600; color:#5f5768; text-align:right; white-space:nowrap; font-size:.62em; }'
     + p+'.fz-void{ text-align:center; color:#7a7385; font-weight:700; line-height:1.45; }'
     + p+'.fz-tbl{ width:100%; border-collapse:collapse; table-layout:fixed; }'
@@ -2598,37 +2603,68 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      per lato, quindi sul foglio va scritto "ea." dopo il numero */
   var FZ_EACH = /monopod|monolater|unilater|bulgar|affond|single leg|single arm|split squat|step ?-?up|lunge|pistol|skater|copenhag|una gamba|1 gamba|per lato|ogni lato/i;
 
+  /* larghezza in px di una riga di testo, stimata dal numero di caratteri:
+     0.6 em per carattere e' la media di questo carattere in grassetto */
+  function fzW(len, em, fs){ return 0.6 * len * em * fs; }
+  /* quanto e' alto, in em, ogni pezzo della riga rispetto al nome dell'esercizio */
+  var FZ_EM_S = 0.82, FZ_EM_K = 0.72, FZ_EM_R = 0.62;
+  var FZ_GAPM = 5;                       /* spazio fra le colonne, in mm */
+  var FZ_ROWW = 933;                     /* larghezza utile di una riga, in px */
+
   /* foglio 1: il lavoro, niente altro. Il testo cresce fino a riempire il
-     foglio: il limite e' l'altezza utile, 150 mm, oppure il nome piu' lungo,
-     che deve restare su una riga sola nei suoi 159 mm di colonna. */
+     foglio, ma le quattro colonne (nome, serie per ripetizioni, carico,
+     recupero) devono starci tutte: la larghezza di ognuna esce dal suo testo
+     piu' lungo, cosi' il carico non finisce sopra al recupero. */
   function fzPage1(src){
     var rows = (src.rows || []).filter(hasEx);
     var n = rows.length;
     var gap = n <= 6 ? 9 : (n <= 8 ? 7 : (n <= 10 ? 5.5 : (n <= 14 ? 3.6 : 2.4)));
-    var maxLen = 0;
-    rows.forEach(function(r, i){
-      var L = String((i + 1) + ') ' + (r.ex || '')).length;
-      if(L > maxLen) maxLen = L;
+
+    var cells = rows.map(function(r, i){
+      return {
+        x: (i + 1) + ') ' + String(r.ex || ''),
+        /* il carico uguale per tutte ha la sua colonna: non merita una colonna
+           nel foglio dei carichi, il numero e' uno solo, ma qui deve respirare */
+        s: (r.serie || '-') + ' x ' + (r.rip || '-')
+           + (FZ_EACH.test(String(r.ex || '')) ? ' ea.' : ''),
+        k: fixTxt(r),
+        r: r.rec ? ('rec ' + r.rec + ' s') : ''
+      };
     });
+    var mx = 0, ms = 0, mk = 0, mr = 0;
+    cells.forEach(function(c){
+      if(c.x.length > mx) mx = c.x.length;
+      if(c.s.length > ms) ms = c.s.length;
+      if(c.k.length > mk) mk = c.k.length;
+      if(c.r.length > mr) mr = c.r.length;
+    });
+
+    var ncol = mk ? 4 : 3;
+    var gaps = (ncol - 1) * FZ_GAPM / PX_MM;
+    /* il carattere di respiro di ogni colonna va messo nel conto qui, se no il
+       nome dell'esercizio se lo ritrova sottratto e finisce troncato */
+    var need = 0.6 * (mx + FZ_EM_S * (ms + 1) + FZ_EM_K * (mk ? mk + 1 : 0) + FZ_EM_R * (mr + 1));
     var fsH = n ? (150 - (n - 1) * gap) / n / (1.3 * PX_MM) : 36;
-    var fsW = maxLen ? 601 / (0.6 * maxLen) : 36;
-    var fs  = Math.max(13, Math.min(36, Math.floor(Math.min(fsH, fsW))));
+    var fsW2 = need ? (FZ_ROWW - gaps) / need : 36;
+    var fs  = Math.max(13, Math.min(36, Math.floor(Math.min(fsH, fsW2))));
+
+    /* due caratteri di respiro per colonna: la stima per carattere e' una media,
+       le cifre larghe come lo 0 sono appena sopra */
+    var cs = Math.ceil(fzW(ms + 1, FZ_EM_S, fs));
+    var ck = mk ? Math.ceil(fzW(mk + 1, FZ_EM_K, fs)) : 0;
+    var cr = Math.ceil(fzW(mr + 1, FZ_EM_R, fs));
+    var tmpl = 'minmax(0,1fr) ' + cs + 'px ' + (ck ? ck + 'px ' : '') + cr + 'px';
+
     var inner = '';
     if(!n){
       inner = '<div class="fz-void" style="font-size:16px">Nessun esercizio nella seduta</div>';
     } else {
-      rows.forEach(function(r, i){
-        /* il carico uguale per tutte sta qui, accanto a serie e ripetizioni:
-           non merita una colonna nei carichi, il numero e' uno solo */
-        var fx = fixTxt(r);
-        var sr = (r.serie || '-') + ' &#215; ' + (r.rip || '-')
-               + (FZ_EACH.test(String(r.ex || '')) ? ' ea.' : '')
-               + (fx ? ' &#183; ' + esc(fx) : '');
-        var rec = r.rec ? ('rec ' + esc(r.rec) + ' s') : '';
+      cells.forEach(function(c){
         inner += '<div class="fz-li">'
-          + '<span class="fz-x">'+(i+1)+') '+esc(r.ex)+'</span>'
-          + '<span class="fz-s">'+sr+'</span>'
-          + '<span class="fz-r">'+rec+'</span>'
+          + '<span class="fz-x">'+esc(c.x)+'</span>'
+          + '<span class="fz-s">'+esc(c.s).replace(' x ', ' &#215; ')+'</span>'
+          + (ck ? '<span class="fz-k">'+esc(c.k)+'</span>' : '')
+          + '<span class="fz-r">'+esc(c.r)+'</span>'
           + '</div>';
       });
     }
@@ -2636,7 +2672,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       + fzHead(src, esc(fzDate(src)))
       + '<div class="fz-body">'
       +   '<img class="fz-mark" src="'+FZ_ABS+'fiorentina.png" alt="">'
-      +   '<div class="fz-in" style="font-size:'+fs+'px;gap:'+gap+'mm">'+inner+'</div>'
+      +   '<div class="fz-in" style="font-size:'+fs+'px;gap:'+gap+'mm;'
+      +     '--fzc:'+tmpl+';--fzg:'+FZ_GAPM+'mm">'+inner+'</div>'
       + '</div>'
       + '</section>';
   }
