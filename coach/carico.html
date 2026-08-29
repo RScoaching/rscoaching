@@ -708,7 +708,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 
 /* ---------- blocchi di stampa (creati al volo, invisibili a schermo) ---------- */
 .print-split{ display:none; }
-#print-month{ display:none; }
+#print-head{ display:none; }
 
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
@@ -746,13 +746,21 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   .main{ padding:0 !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
     backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
-  .title-wrap h1{ color:#14110f !important; }
-  .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
+  /* Il foglio esce dalla societa': chi lo riceve deve capire di chi si parla al primo
+     sguardo. Il titolo della pagina diventa la riga piccola sopra, il nome dell'atleta
+     prende il posto grande e sotto ci vanno ruolo, squadra, stagione e periodo. */
+  .title-wrap h1{ font-family:inherit !important; font-size:11px !important; font-weight:700 !important;
+    letter-spacing:.09em !important; text-transform:uppercase; color:#7a726c !important; }
+  .title-wrap .sub{ display:none !important; }
+  #print-head{ display:block !important; margin-top:1px; }
+  #print-head .ph-name{ font-family:'Bebas Neue',sans-serif; font-size:34px; line-height:1.05;
+    letter-spacing:.6px; color:#14110f; }
+  #print-head .ph-meta{ font-size:12px; color:#5a524c; margin-top:3px; }
+  #print-head .ph-meta b{ color:#3a332e; font-weight:700; }
   .wrap{ max-width:none !important; padding:0 !important; }
   /* la pillola del mese e' un comando, non un dato: il mese sta gia' scritto nel titolo di
      ogni scheda, quindi in stampa la fila di pillole sparisce del tutto */
   .months{ display:none !important; }
-  #print-month{ display:inline !important; }
   .card{ box-shadow:none !important; border:1px solid #ccc !important; background:#fff !important;
     break-inside:avoid; margin-bottom:14px; }
   .card-head h2{ color:#14110f !important; }
@@ -3217,25 +3225,47 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function clearPrintSheets(){
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
-    const old = document.getElementById('print-month');
+    const old = document.getElementById('print-head');
     if(old && old.parentNode) old.parentNode.removeChild(old);
     pdfClear();
   }
-  // la fila delle pillole del mese in stampa sparisce, ma il mese deve restare scritto da qualche
-  // parte: se si stampano solo i riquadri in cima, quelli non lo dicono. Va nel sottotitolo.
-  function printMonthTag(){
-    const sub = document.getElementById('subtitle');
+  /* Intestazione del foglio. Prima il nome dell'atleta era una riga piccola accanto al
+     titolo della pagina e il mese un pezzetto attaccato in fondo: su un foglio che esce
+     dalla societa' non bastava. Adesso il nome sta grande e sotto ci va tutto quello che
+     serve per capire di che foglio si tratta senza chiederlo: ruolo, squadra, stagione,
+     mese e quanti microcicli sono stampati. La fila delle pillole del mese in stampa
+     sparisce, quindi il mese deve essere scritto qui. Il blocco vive solo per la stampa:
+     lo toglie clearPrintSheets. */
+  function printHeadTag(){
+    const wrap = document.querySelector('.title-wrap');
+    if(!wrap || document.getElementById('print-head')) return;
+    const sel = pdfRead();
+    const solo = state.level === 'player' && !!state.player;
+    const bits = [];
+    if(sel.mode === 'naz') bits.push('Report nazionale');
+    if(solo){
+      const r = roleOf(state.player);
+      if(r) bits.push(esc(r));
+      bits.push('Fiorentina Primavera U19W');
+    } else {
+      bits.push('Tutta la squadra');
+    }
+    if(S.stagione) bits.push('Stagione ' + esc(S.stagione));
     const m = activeMonth();
-    if(!sub || !m) return;
-    const sp = document.createElement('span');
-    sp.id = 'print-month';
-    sp.textContent = ' · ' + m.title;
-    sub.appendChild(sp);
+    if(m) bits.push(esc(m.title));
+    const keep = PDF_PERS[sel.per] || 0;
+    if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
+    const box = document.createElement('div');
+    box.id = 'print-head';
+    box.innerHTML = '<div class="ph-name">'
+      + esc(solo ? disp(state.player) : (S.squadra || 'Fiorentina Primavera U19W')) + '</div>'
+      + '<div class="ph-meta">' + bits.join(' &#183; ') + '</div>';
+    wrap.appendChild(box);
   }
   function buildPrintSheets(){
     clearPrintSheets();
     pdfApply();
-    printMonthTag();
+    printHeadTag();
     const nMet = VIS().length;
     if(nMet < 1) return;
     const probe = printProbe();
