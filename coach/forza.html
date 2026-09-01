@@ -759,6 +759,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
           <div class="fb-stat"><span class="v tnum" id="fb-serie">0</span><span class="l">Serie totali</span></div>
           <div class="fb-stat"><span class="v tnum" id="fb-vol">0</span><span class="l">Volume (serie x rip)</span></div>
           <div class="fb-stat"><span class="v" id="fb-zona" style="text-transform:capitalize">-</span><span class="l">Zona prevalente</span></div>
+          <div class="fb-stat"><span class="v tnum" id="fb-dur">-</span><span class="l">Durata stimata</span></div>
         </div>
       </section>
 
@@ -2240,6 +2241,13 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     m.group = s.groupName || '';
     m.players = isAll(s.players) ? [] : s.players.slice();
     m.svolto = fatta(s.date);
+    /* La giornata riceve anche la durata, sotto forma di fase, cosi' il
+       programma del giorno e il totale della settimana leggono la palestra
+       come leggono il campo. Una fase sola: dentro il calendario la scheda si
+       vede per intero aprendo il giorno, spezzarla esercizio per esercizio
+       farebbe un elenco lungo il doppio che dice le stesse cose. */
+    var min = fbMin(s.rows);
+    m.phases = min ? [{ t:'forza', m:min, n:(s.title || 'Seduta forza') }] : [];
   }
   function calPut(s, slot){
     var st = calLoad(), m = null;
@@ -2278,6 +2286,38 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     st.manual = keep; calSave(st);
   }
 
+  /* Quanto dura la scheda (punto 74). La seduta di forza andava in calendario
+     senza minuti, quindi il giorno la mostrava come un lavoro a durata zero e
+     la settimana la contava per niente: cinque esercizi con tre minuti di
+     recupero sono un'ora abbondante di palestra, e un'ora non e' zero.
+     I minuti non si chiedono a mano perche' sono gia' scritti nella tabella:
+     serie, ripetizioni e recupero dicono quanto si sta li'. */
+  function fbMin(rows){
+    var sec = 0;
+    var list = rows || [];
+    for(var i = 0; i < list.length; i++){
+      var r = list[i];
+      var s = (parseFloat(r.serie)||0) + (parseFloat(r.wu)||0);
+      if(s <= 0) continue;
+      var rp = parseFloat(r.rip)||0;
+      /* quattro secondi a ripetizione e' il tempo di un alzata controllata
+         andata e ritorno; sotto i venti secondi non si scende perche' anche
+         una serie da una ripetizione porta con se' il caricarsi il bilanciere
+         addosso e il mettersi in posizione */
+      var lav = Math.max(20, rp * 4);
+      var rec = parseFloat(r.rec);
+      if(!isFinite(rec) || rec < 0) rec = 90;
+      /* in un complex fra 1a e 1b non ci si ferma: se la riga dopo e'
+         collegata, il recupero di questa non esiste */
+      var nx = list[i+1];
+      if(nx && nx.link) rec = 0;
+      sec += s * (lav + rec);
+    }
+    if(sec <= 0) return 0;
+    /* arrotondato a cinque minuti: e' una stima dai tempi scritti, scriverla
+       al minuto la farebbe leggere come una misura */
+    return Math.max(5, Math.round(sec / 300) * 5);
+  }
   function statsOf(rows){
     var serie = 0, vol = 0, zoneVol = {};
     (rows||[]).forEach(function(r){
@@ -2288,7 +2328,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     var best = '-', bestv = 0;
     Object.keys(zoneVol).forEach(function(k){ if(zoneVol[k]>bestv){ bestv=zoneVol[k]; best=k; } });
-    return { n:(rows||[]).length, serie:serie, vol:vol, zona:best };
+    return { n:(rows||[]).length, serie:serie, vol:vol, zona:best, min:fbMin(rows) };
   }
   function isAll(players){ return !players || players.length===0 || players.length>=NAMES.length; }
   function audLabel(s){
@@ -2318,6 +2358,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     document.getElementById('fb-serie').textContent = st.serie;
     document.getElementById('fb-vol').textContent = st.vol;
     document.getElementById('fb-zona').textContent = st.zona;
+    var du = document.getElementById('fb-dur');
+    if(du) du.textContent = st.min ? (st.min + "'") : '-';
   }
 
   function fbRender(){
