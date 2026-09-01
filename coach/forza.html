@@ -421,6 +421,21 @@ table.fbtbl tr.lkd td.rowc::before{ content:''; position:absolute; left:50%; top
   background-repeat:no-repeat; background-position:right 11px center; padding-right:32px;
 }
 
+/* la casella della parte alta: sta accanto alla data perche' e' un dato della
+   seduta, non un filtro, e si accende una volta sola quando si scrive */
+.fb-chk{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; min-height:42px;
+  padding:8px 12px; border:1px solid var(--border2); border-radius:9px; background:var(--surface2);
+  font-size:13px; font-weight:600; color:var(--text); white-space:nowrap;
+  transition: border-color .18s var(--ease), background .18s var(--ease); }
+.fb-chk:hover{ border-color:var(--border3); }
+.fb-chk input{ appearance:none; width:16px; height:16px; flex:0 0 auto; margin:0; cursor:pointer;
+  border:1px solid var(--border3); border-radius:5px; background:var(--surface3);
+  transition: background .16s var(--ease), border-color .16s var(--ease); }
+.fb-chk input:checked{ background:var(--violet2); border-color:var(--violet2);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'><path d='M5 12l5 5L19 7'/></svg>");
+  background-repeat:no-repeat; background-position:center; }
+.fb-chk input:focus-visible{ outline:2px solid var(--violet2); outline-offset:2px; }
+
 /* destinatari nel costruttore */
 .fb-dest{ display:flex; flex-direction:column; gap:6px; }
 .fb-dest > label{ font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
@@ -580,6 +595,9 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
   font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 .fs-done svg{ width:11px; height:11px; flex:0 0 auto; }
+.fs-alta{ display:inline-flex; align-items:center; margin-left:8px; padding:2px 8px; border-radius:999px;
+  font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
 .fs-body{ padding:12px 15px 4px; }
 .fs-stats{ display:flex; gap:16px; margin-bottom:11px; }
 .fs-st{ display:flex; flex-direction:column; }
@@ -742,6 +760,9 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
             <input id="fb-name" type="text" placeholder="es. Forza - meso 2, settimana 3"></div>
           <div class="fg w-date"><label for="fb-date">Data seduta</label>
             <input id="fb-date" type="date"></div>
+          <div class="fg w-alta"><label for="fb-alta">Distretto</label>
+            <label class="fb-chk" for="fb-alta" title="Le sedute di parte alta muovono pochi kg: restano fuori dal tonnellaggio dell'andamento, ma serie e volume continuano a contare">
+              <input id="fb-alta" type="checkbox"><span>Parte alta</span></label></div>
           <div class="fb-dest">
             <label>Destinatari</label>
             <button class="fb-pick" id="fb-pick" type="button">
@@ -2219,6 +2240,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
   function audience(src){ return isAll(src.players) ? NAMES.slice() : (src.players || []).slice(); }
 
+  /* ---- parte alta (punto 80) --------------------------------------------
+     Una seduta di parte alta muove pochi kg per definizione: trazioni, spinte,
+     lavoro di spalla, spesso a corpo libero o con manubri leggeri. Messa nella
+     stessa linea del tonnellaggio di una seduta di squat fa un crollo che non
+     e' un crollo, e la settimana sembra scaricata quando invece si e' solo
+     cambiato distretto. Il segno sta sulla seduta: si accende a mano con la
+     casella nel costruttore, e se non lo si e' acceso lo si legge dal titolo,
+     perche' chi scrive "Forza parte alta" lo ha gia' detto. */
+  function altaAuto(t){
+    return /(parte\s*alta|arti\s*superiori|upper\s*body|treno\s*superiore)/i.test(String(t == null ? '' : t));
+  }
+  function isAlta(s){
+    if(!s) return false;
+    if(s.alta === true) return true;
+    if(s.alta === false) return false;
+    return altaAuto(s.title);
+  }
   function normDraft(o){
     o = o || {};
     var tpl = o.tpl || 'forzamax';
@@ -2242,6 +2280,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       tpl: tpl,
       title: (o.title!=null) ? o.title : ((FB_TPLS[tpl] && FB_TPLS[tpl].name) || ''),
       date: o.date || '',
+      /* true o false quando lo si e' deciso a mano, null quando decide il titolo */
+      alta: (o.alta === true || o.alta === false) ? o.alta : null,
       groupName: o.groupName || '',
       players: players,
       rows: rows,
@@ -2782,6 +2822,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(tpl && tpl.querySelector('option[value="'+FB.tpl+'"]')) tpl.value = FB.tpl;
     if(name) name.value = FB.title || '';
     if(date) date.value = FB.date || '';
+    var alta = document.getElementById('fb-alta');
+    if(alta) alta.checked = isAlta(FB);
     updatePickLabel(); renderTags(); fbRender(); fbStateRender();
   }
 
@@ -2840,6 +2882,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       tpl: FB.tpl,
       title: FB.title || ((FB_TPLS[FB.tpl] && FB_TPLS[FB.tpl].name) || 'Seduta forza'),
       date: FB.date,
+      alta: FB.alta,
       groupName: all ? '' : (FB.groupName || ''),
       players: all ? [] : FB.players.slice(),
       rows: clone(named),
@@ -2931,12 +2974,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var done = fatta(s.date)
       ? '<span class="fs-done">'+DONESVG+'Eseguita</span>'
       : '';
+    /* il segno del distretto sta in testa alla scheda: serve a capire subito
+       perche' quella seduta non ha una linea nel tonnellaggio */
+    var alta = isAlta(s)
+      ? '<span class="fs-alta" title="Parte alta: fuori dal tonnellaggio dell\'andamento, serie e volume contano">Parte alta</span>'
+      : '';
     return ''
       + '<div class="fs-card-head">'
       +   '<div class="fs-date"><span class="d">'+day+'</span><span class="my">'+esc(mon)+'</span></div>'
       +   '<div class="fs-htext">'
       +     '<div class="fs-title">'+esc(s.title||'Seduta forza')+'</div>'
-      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'+done
+      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'+done+alta
       +   '</div>'
       + '</div>'
       + '<div class="fs-body">'
@@ -3007,6 +3055,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function storVal(s, m, name){
     var rows = storRows(s);
     if(!rows.length) return 0;
+    /* la parte alta non entra nel tonnellaggio: i kg di una trazione o di una
+       spinta non stanno sulla stessa scala di uno squat, e messi in fila fanno
+       un crollo che non c'e' stato. Si torna null e non zero, cosi' la linea
+       si interrompe invece di scendere a terra. Serie e volume restano, perche'
+       quel lavoro e' stato fatto davvero. */
+    if(m === 'ton' && isAlta(s)) return null;
     if(m !== 'ton'){
       var t = 0;
       rows.forEach(function(r){
@@ -3146,10 +3200,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       lines.push({ lab:'Squadra', v: seq.map(function(s){ return storVal(s, m, null); }) });
     }
 
+    /* quante sedute restano fuori dal tonnellaggio perche' sono di parte alta */
+    var nAlta = 0;
+    seq.forEach(function(s){ if(isAlta(s)) nAlta++; });
+
     var plot = storChart(seq, lines, m);
     if(!plot){
-      plot = '<div class="fstor-none">Su questa scelta non ci sono carichi da mettere in fila.'
-        + ' Prova con altri esercizi, o con tutti.</div>';
+      plot = '<div class="fstor-none">'
+        + ((m === 'ton' && nAlta === seq.length)
+            ? 'Tutte le sedute in fila sono di parte alta, quindi il tonnellaggio non si conta. Guarda il volume o le serie.'
+            : 'Su questa scelta non ci sono carichi da mettere in fila. Prova con altri esercizi, o con tutti.')
+        + '</div>';
     }
 
     /* la direzione complessiva della prima linea: dalla prima all'ultima
@@ -3163,8 +3224,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         ? (chi + ' prima all\'ultima seduta il carico e\' rimasto <b>fermo</b>.')
         : (chi + ' prima all\'ultima seduta il carico e\' <b>'+(tot>0?'salito':'sceso')+' del '+Math.abs(tot)+'%</b>.');
     }
+    var fuori = (m === 'ton' && nAlta > 0)
+      ? (' Fuori dal conto ' + (nAlta === 1 ? 'una seduta di parte alta' : (nAlta + ' sedute di parte alta'))
+         + ': in quelle i kg sono pochi per natura, quindi la linea si interrompe invece di crollare.')
+      : '';
     var spieg = (m === 'ton')
-      ? 'Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.'
+      ? ('Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.' + fuori)
       : (m === 'vol'
         ? 'Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.'
         : 'Serie di lavoro della seduta, senza contare le serie di avvicinamento.');
@@ -3681,7 +3746,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       name.value = FB.title || '';
       fbRender(); fbSave();
     });
-    name.addEventListener('input', function(){ FB.title = name.value; fbSave(); fzPrevRender(); });
+    name.addEventListener('input', function(){
+      FB.title = name.value; fbSave(); fzPrevRender();
+      /* finche' non si e' deciso a mano, il distretto lo dice il titolo: chi
+         scrive "Forza parte alta" vede la casella accendersi da sola */
+      var ck = document.getElementById('fb-alta');
+      if(ck && FB.alta == null) ck.checked = altaAuto(FB.title);
+    });
+    var altaCk = document.getElementById('fb-alta');
+    if(altaCk) altaCk.addEventListener('change', function(){
+      /* se la scelta a mano coincide con quella che il titolo darebbe da solo
+         si torna in automatico, cosi' correggendo il titolo il segno segue */
+      FB.alta = (altaCk.checked === altaAuto(FB.title)) ? null : altaCk.checked;
+      fbSave();
+      fbToast(altaCk.checked
+        ? 'Parte alta: questa seduta resta fuori dal tonnellaggio dell\'andamento'
+        : 'Parte bassa: questa seduta torna nel tonnellaggio dell\'andamento');
+    });
     if(date) date.addEventListener('input', function(){
       FB.date = date.value; fbSave(); fzPrevRender();
       /* Cambiare giorno vuol dire quasi sempre "questa e' la seduta della
