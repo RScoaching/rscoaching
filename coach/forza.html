@@ -209,6 +209,36 @@ a{ color:inherit; text-decoration:none; }
 .pbrow .pv{ font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:.4px; color:var(--ink); white-space:nowrap; min-width:64px; text-align:right; }
 .pbrow .pv small{ font-family:'Inter'; font-size:10px; font-weight:600; color:var(--muted); margin-left:2px; }
 
+/* andamento sui tre fondamentali: una riga per seduta, una colonna per
+   esercizio, e dentro la cella una barretta lunga quanto il numero. Serve a
+   vedere in un colpo se il carico sale, sta fermo o e' tornato indietro. */
+.andt{ margin-bottom:16px; }
+.and-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.and-cap{ font-size:10.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+.and-sw{ display:inline-flex; margin-left:auto; border:1px solid var(--border2); border-radius:8px; overflow:hidden; }
+.and-sw button{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:600;
+  color:var(--muted); background:transparent; border:0; padding:4px 10px;
+  transition:color .15s var(--ease), background .15s var(--ease); }
+.and-sw button + button{ border-left:1px solid var(--border2); }
+.and-sw button:hover{ color:var(--ink); background:var(--surface2); }
+.and-sw button.on{ color:var(--ink); background:var(--surface3); }
+.andtbl{ width:100%; border-collapse:collapse; }
+.andtbl th, .andtbl td{ padding:6px 8px; font-size:12px; text-align:right; border-bottom:1px solid var(--border); }
+.andtbl th{ color:var(--muted); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; }
+.andtbl th.l, .andtbl td.l{ text-align:left; }
+.andtbl tr:last-child td{ border-bottom:0; }
+.andtbl td.d{ color:var(--text); text-transform:capitalize; white-space:nowrap; }
+.and-cell{ position:relative; display:block; border-radius:6px; padding:3px 7px; overflow:hidden;
+  background:var(--surface2); border:1px solid var(--border2); }
+.and-cell .bar{ position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg, var(--violet), var(--violet2)); opacity:.28; }
+.and-cell .n{ position:relative; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:.4px; color:var(--ink); }
+.and-cell .n small{ font-family:'Inter'; font-size:9.5px; font-weight:600; color:var(--muted); margin-left:2px; }
+.and-void{ color:var(--faint); font-size:12px; }
+.and-delta{ font-size:10.5px; font-weight:600; margin-left:5px; }
+.and-delta.up{ color:var(--green); }
+.and-delta.dn{ color:var(--red2); }
+.and-note{ margin:8px 0 0; font-size:11.5px; color:var(--faint); }
+
 /* date subgroup */
 .dgroup{ margin-top:4px; }
 .dgroup + .dgroup{ margin-top:10px; }
@@ -934,7 +964,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const DTF = new Intl.DateTimeFormat('it-IT', { weekday:'short', day:'numeric', month:'short' });
   const DTFY = new Intl.DateTimeFormat('it-IT', { day:'numeric', month:'short' });
 
-  const state = { pat:'all', q:'' };
+  const state = { pat:'all', q:'', and:'kg' };
 
   // roster lookup
   const ROLE = {};
@@ -1242,6 +1272,87 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return '<div class="pbal"><div class="pbal-cap">Distribuzione carico-volume per pattern</div>'+body+'</div>';
   }
 
+  /* ---------- andamento sui tre fondamentali ----------
+     Squat, hip thrust e stacco sono i tre esercizi su cui si guarda se una
+     ragazza sta crescendo. Le voci dell'archivio finiscono sotto uno dei tre
+     con le stesse parole che usa il costruttore (`autoLift`), poi si mette una
+     riga per giorno di lavoro. Nella cella ci va il carico piu' alto di quel
+     giorno, che e' il numero che si confronta da una settimana all'altra,
+     oppure il carico-volume, che dice quanto lavoro e' stato fatto in tutto:
+     due letture diverse dello stesso allenamento, quindi c'e' l'interruttore.
+     La barretta dietro al numero e' lunga in proporzione al massimo di quella
+     colonna, cosi' la salita si vede senza leggere le cifre. */
+  const AND_LIFTS = [
+    { key:'squat',  lab:'Squat' },
+    { key:'hip',    lab:'Hip thrust' },
+    { key:'stacco', lab:'Stacco' }
+  ];
+  function andamento(list){
+    const giorni = {};
+    list.forEach(e=>{
+      const k = autoLift(e.esercizio);
+      if(!k || !SESS_LIFT[k]) return;
+      const d = String(e.data||'').slice(0,10);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      if(!giorni[d]) giorni[d] = {};
+      if(!giorni[d][k]) giorni[d][k] = { kg:null, vol:0 };
+      const c = giorni[d][k];
+      if(Number.isFinite(e.carico_kg) && (c.kg==null || e.carico_kg>c.kg)) c.kg = e.carico_kg;
+      if(Number.isFinite(e.volume_load)) c.vol += e.volume_load;
+    });
+    const date = Object.keys(giorni).sort();
+    if(!date.length) return '';
+    const vol = state.and === 'vol';
+    /* le colonne senza un solo numero non si disegnano: una tabella con una
+       colonna vuota fa credere che il dato manchi, e invece l'esercizio in
+       stagione non e' mai stato fatto */
+    function val(c){ if(!c) return null; const v = vol ? c.vol : c.kg; return (v==null || !v) ? null : v; }
+    const lifts = AND_LIFTS.filter(L=> date.some(d=> val(giorni[d][L.key]) != null));
+    if(!lifts.length) return '';
+    const max = {};
+    lifts.forEach(L=>{
+      max[L.key] = date.reduce(function(m,d){ const v = val(giorni[d][L.key]); return (v!=null && v>m) ? v : m; }, 0);
+    });
+    const head = lifts.map(L=>{
+      const serie = date.map(d=> val(giorni[d][L.key])).filter(v=> v!=null);
+      let delta = '';
+      if(serie.length > 1){
+        const dv = serie[serie.length-1] - serie[0];
+        if(Math.abs(dv) >= (vol ? 1 : 0.5)){
+          const seg = dv > 0 ? 'up' : 'dn';
+          const txt = (dv>0?'+':'-') + (vol ? NF0.format(Math.abs(dv)) : NF.format(Math.abs(dv)));
+          delta = '<span class="and-delta '+seg+'">'+txt+'</span>';
+        }
+      }
+      return '<th>'+esc(L.lab)+delta+'</th>';
+    }).join('');
+    const body = date.map(function(d){
+      const dt = parseDate(d);
+      const lab = dt ? DTFY.format(dt).replace('.','') : d;
+      const cells = lifts.map(function(L){
+        const v = val(giorni[d][L.key]);
+        if(v==null) return '<td><span class="and-void">-</span></td>';
+        const w = max[L.key] ? Math.max(6, Math.round(v/max[L.key]*100)) : 0;
+        const num = vol ? NF0.format(Math.round(v)) : NF.format(v);
+        return '<td><span class="and-cell"><span class="bar" style="width:'+w+'%"></span>'+
+          '<span class="n">'+num+'<small>kg</small></span></span></td>';
+      }).join('');
+      return '<tr><td class="l d">'+esc(lab)+'</td>'+cells+'</tr>';
+    }).join('');
+    return '<div class="andt">'+
+      '<div class="and-head"><span class="and-cap">Andamento sui tre fondamentali</span>'+
+        '<span class="and-sw" role="group" aria-label="Cosa mostrare">'+
+          '<button type="button" class="and-b'+(vol?'':' on')+'" data-and="kg">Carico</button>'+
+          '<button type="button" class="and-b'+(vol?' on':'')+'" data-and="vol">Volume</button>'+
+        '</span></div>'+
+      '<table class="andtbl"><thead><tr><th class="l">Seduta</th>'+head+'</tr></thead>'+
+      '<tbody>'+body+'</tbody></table>'+
+      '<p class="and-note">'+(vol
+        ? 'Carico-volume del giorno: serie per ripetizioni per kg, sommato su tutte le righe di quell\'esercizio.'
+        : 'Carico piu\' alto sollevato quel giorno su quell\'esercizio.')+'</p>'+
+    '</div>';
+  }
+
   // ---------- one athlete card ----------
   function athleteCard(a, idx){
     const meta = ROLE[a.name] || { role:'', tipo:'' };
@@ -1300,7 +1411,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           '<div class="astat"><span class="asv tnum">'+a.sedute+'</span><span class="asl">'+(a.sedute===1?'seduta':'sedute')+'</span></div>'+
         '</div>'+
       '</div>'+
-      '<div class="acard-body">'+ patternBalance(a.list) + groups +'</div>'+
+      '<div class="acard-body">'+ andamento(a.list) + patternBalance(a.list) + groups +'</div>'+
     '</section>';
   }
 
@@ -1318,6 +1429,22 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       return;
     }
     host.innerHTML = groups.map((a,i)=> athleteCard(a,i)).join('');
+    /* l'interruttore sta dentro ogni scheda ma la scelta e' una sola: cambia
+       per tutte, se no confrontare due atlete vorrebbe dire leggere due numeri
+       che non vogliono dire la stessa cosa */
+    host.querySelectorAll('.and-b').forEach(b=> b.addEventListener('click', ()=>{
+      const v = b.getAttribute('data-and');
+      if(!v || v === state.and) return;
+      const card = b.closest ? b.closest('.acard') : null;
+      const cards = Array.prototype.slice.call(host.querySelectorAll('.acard'));
+      const pos = card ? cards.indexOf(card) : -1;
+      state.and = v;
+      renderAthletes(buildEntries());
+      if(pos < 0) return;
+      const nuova = host.querySelectorAll('.acard')[pos];
+      const tasto = nuova ? nuova.querySelector('.and-b[data-and="'+v+'"]') : null;
+      if(tasto && tasto.focus) tasto.focus({ preventScroll:true });
+    }));
     host.querySelectorAll('.edel').forEach(b=> b.addEventListener('click', ()=>{
       const id = b.getAttribute('data-id');
       const a = loadManual().filter(m=> String(m.id)!==String(id));
