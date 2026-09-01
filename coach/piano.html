@@ -1143,6 +1143,12 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           <span class="hint">appunti liberi, li trasformo in blocchi</span>
           <span class="spacer"></span>
           <div class="bld-tools">
+            <!-- se la seduta di oggi era gia' scritta nel Calendario, si prende
+                 da li' invece di riscriverla a mano una seconda volta -->
+            <button class="btn" id="wr-cal" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+              Dal calendario
+            </button>
             <button class="btn" id="wr-ex" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/><path d="M16 3h5v5"/></svg>
               Esempio
@@ -2332,7 +2338,9 @@ window.FORZA = window.FORZA || { roster:[] };
     ['rientr','Rientri'], ['infortunat','Infortunate'], ['squadra','Squadra']
   ];
   const WR_STOP = ['ecc','eccetera','poi','quindi','circa','di','per','con','da','le','la','il','lo','i','gli','a','e','ed','in','su','piu','oltre','fino'];
-  const WR_JUNK = ['m','mt','metri','min','minuti','sec','secondi','rec','recupero','riposo','pausa','serie','blocchi','giri','set','sets','rip','ripetizioni','reps','rep','volte','tot','totale','km','atlete','giocatrici','ragazze','calciatrici'];
+  // "j" e "gk" restano appesi quando il formato e' scritto "6c6+2j" o "5v5+2gk":
+  // sono la sigla dei jolly e dei portieri, non il nome dell'esercizio
+  const WR_JUNK = ['m','mt','metri','min','minuti','sec','secondi','rec','recupero','riposo','pausa','serie','blocchi','giri','set','sets','rip','ripetizioni','reps','rep','volte','tot','totale','km','atlete','giocatrici','ragazze','calciatrici','j','jolly','gk'];
   // token temporale: 1'30" | 4' | 45" | 10 min | 30 sec
   const WR_T = '(?:\\d{1,3}\'\\d{1,2}"?|\\d{1,3}"|\\d{1,3}\'|\\d{1,3}\\s*min(?:uti)?\\b|\\d{1,3}\\s*sec(?:ondi)?\\b)';
   // recupero opzionale agganciato alla serie: "4x5' rec 2'"
@@ -2892,6 +2900,43 @@ window.FORZA = window.FORZA || { roster:[] };
                 "velocita 6x30 m rec 1'\n"+
                 "defaticamento 8'";
 
+  // ---------- la seduta di oggi gia' scritta nel Calendario (punto 71) ----------
+  /* La seduta si programma nel Calendario, coi minuti e il dettaglio di ogni fase,
+     e poi il giorno stesso la si riscriveva qui daccapo. Due volte lo stesso lavoro,
+     e alla seconda qualcosa cambiava sempre. Adesso il tasto la va a prendere. */
+  const CAL_KEY = 'rs_fio_calendario';
+  /* Nel Calendario le fasi hanno una chiave secca (possesso, ssg, z2, plyo). Qui
+     serve la parola con cui la riga viene poi riletta dagli appunti: dove la chiave
+     e' gia' una parola buona resta com'e', dove non lo e' si usa quella che si
+     scrive nei fogli, cosi' il blocco esce col tipo giusto e non come "Blocco". */
+  const CAL_WORD = {
+    attivazione:'Attivazione', rondo:'Rondo', possesso:'Possesso',
+    passing:'Passing tecnico', ssg:'Partita a tema', transizioni:'Transizioni',
+    finalizzazione:'Finalizzazione', palleinattive:'Palle inattive', duelli:'Duelli',
+    tecnica:'Tecnica', forza:'Forza', sprint:'Velocita', plyo:'Pliometria',
+    z2:'Aerobico', interval:'Intermittente', rec:'Defaticamento', test:'Test'
+  };
+  function calLinesToday(){
+    let st = null;
+    try{ st = JSON.parse(localStorage.getItem(CAL_KEY) || 'null'); }catch(e){}
+    const man = (st && Array.isArray(st.manual)) ? st.manual : [];
+    const out = [];
+    man.forEach(function(m){
+      if(!m || m.data !== TSTR || !Array.isArray(m.phases)) return;
+      m.phases.forEach(function(p){
+        if(!p || (!p.t && !p.n)) return;
+        const w = CAL_WORD[p.t] || p.t || 'Blocco';
+        const min = Number(p.m) || 0;
+        /* I minuti si scrivono come "tot", che negli appunti vince sui minuti
+           dedotti dalle serie: quello che c'e' nel Calendario e' la durata
+           decisa, non una stima da ricalcolare. */
+        const line = w + (min ? (' tot '+min+"'") : '') + (p.n ? (' '+String(p.n)) : '');
+        out.push(line.replace(/\s+/g,' ').trim());
+      });
+    });
+    return out;
+  }
+
   function buildWriter(){
     const ta = document.getElementById('wr-in');
     let saved = '';
@@ -2903,6 +2948,24 @@ window.FORZA = window.FORZA || { roster:[] };
       try{ localStorage.setItem(WR_KEY, ta.value); }catch(e){}
       clearTimeout(t);
       t = setTimeout(renderWriter, 180);
+    });
+    /* Le fasi si aggiungono in fondo e non al posto di quello che c'e' gia':
+       cancellare gli appunti di chi ha appena scritto sarebbe il modo piu' veloce
+       per non farsi piu' premere. Le righe gia' presenti si saltano, cosi' due
+       clic di fila non raddoppiano la seduta. */
+    document.getElementById('wr-cal').addEventListener('click', function(){
+      const lines = calLinesToday();
+      if(!lines.length){ toast('Per oggi il Calendario non ha fasi scritte'); return; }
+      const have = ta.value.split(/\r?\n/).map(function(x){ return x.trim(); });
+      const add = lines.filter(function(l){ return have.indexOf(l) < 0; });
+      if(!add.length){ toast('Le fasi del Calendario ci sono gia\''); return; }
+      const base = ta.value.replace(/\s+$/,'');
+      ta.value = (base ? (base+'\n') : '') + add.join('\n');
+      try{ localStorage.setItem(WR_KEY, ta.value); }catch(e){}
+      WR_OPEN = -1;
+      renderWriter();
+      ta.focus();
+      toast(add.length+(add.length === 1 ? ' fase presa dal Calendario' : ' fasi prese dal Calendario'));
     });
     document.getElementById('wr-ex').addEventListener('click', function(){
       ta.value = WR_EX;
