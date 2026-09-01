@@ -960,6 +960,25 @@ window.fioCognome = function(name) {
   return p.slice(0, n).join(' ');
 };
 
+// Nomi scritti male nei fogli di partenza. La chiave del dato resta quella
+// sbagliata, altrimenti RPE, forza, prevenzione e biometrie si sganciano
+// dall'atleta e sembra una giocatrice nuova. Qui si corregge solo come si
+// legge: chiave a sinistra in minuscolo, forma giusta a destra.
+window.FIO_ORTOGRAFIA = {
+  'oberparlaiter': 'Oberparleiter'
+};
+
+// Riscrive parola per parola: cosi' vale sia per il cognome da solo sia per
+// "Cognome Nome", e chi non e' in tabella resta com'e'.
+window.fioOrtografia = function(name) {
+  var s = String(name == null ? '' : name).trim();
+  if (!s) return '';
+  return s.split(/\s+/).map(function(w) {
+    var k = w.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(window.FIO_ORTOGRAFIA, k) ? window.FIO_ORTOGRAFIA[k] : w;
+  }).join(' ');
+};
+
 var FIO_NOMI_OV = null, FIO_NOMI_OV_K = null;
 var FIO_NOMI_AUTO = null, FIO_NOMI_AUTO_K = null;
 
@@ -999,7 +1018,7 @@ function fioNomiAuto() {
   });
   rosa.forEach(function(p) {
     var c = window.fioCognome(p.name);
-    m[p.name] = (c && conta[c] === 1) ? c : p.name;
+    m[p.name] = window.fioOrtografia((c && conta[c] === 1) ? c : p.name);
   });
   FIO_NOMI_AUTO = m; FIO_NOMI_AUTO_K = k;
   return m;
@@ -1015,7 +1034,7 @@ window.fioNome = function(name) {
     var v = String(o[name] == null ? '' : o[name]).trim();
     if (v) return v;
   }
-  return fioNomiAuto()[name] || name;
+  return fioNomiAuto()[name] || window.fioOrtografia(name);
 };
 
 // Nome automatico da solo, senza guardare quello scritto a mano: serve in
@@ -1023,7 +1042,7 @@ window.fioNome = function(name) {
 window.fioNomeAuto = function(name) {
   name = String(name == null ? '' : name).trim();
   if (!name) return '';
-  return fioNomiAuto()[name] || name;
+  return fioNomiAuto()[name] || window.fioOrtografia(name);
 };
 
 // Scrittura: la usa Atlete. Se il nome torna a essere quello automatico
