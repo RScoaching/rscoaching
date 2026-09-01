@@ -377,13 +377,18 @@ table.fbtbl tr:last-child td{ border-bottom:0; }
 /* Le frecce per rimettere gli esercizi nell'ordine in cui si fanno davvero.
    Stanno strette una sull'altra perche' la colonna e' l'ultima e non deve
    rubare spazio al nome dell'esercizio. */
+/* La lettura della riga: sotto il nome dell'esercizio, cosa vuol dire quello
+   che si e' appena scritto. Sta piccola e in grigio perche' e' una conferma,
+   non un dato da inserire. */
+.fb-rd{ display:block; margin-top:3px; padding-left:2px; font-size:10.5px; line-height:1.35; color:var(--faint); }
+.fb-rd:empty{ display:none; }
 .fb-ord{ display:inline-flex; align-items:center; gap:2px; }
-.fb-mv{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:5px 3px; border-radius:6px;
+.fb-mv, .fb-cp{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:5px 3px; border-radius:6px;
   display:inline-flex; transition:color .15s var(--ease), background .15s var(--ease); }
-.fb-mv:hover{ color:var(--ink); background:var(--surface2); }
+.fb-mv:hover, .fb-cp:hover{ color:var(--ink); background:var(--surface2); }
 .fb-mv[disabled]{ opacity:.28; cursor:default; }
 .fb-mv[disabled]:hover{ color:var(--faint); background:transparent; }
-.fb-mv svg{ width:15px; height:15px; }
+.fb-mv svg, .fb-cp svg{ width:15px; height:15px; }
 /* Complex: due esercizi che si fanno di seguito, senza recupero in mezzo.
    Il numero diventa 1a e 1b, e la graffetta li tiene attaccati. */
 .fb-nb{ display:flex; flex-direction:column; align-items:center; gap:2px; }
@@ -2429,6 +2434,70 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     document.getElementById('fb-zona').textContent = st.zona;
     var du = document.getElementById('fb-dur');
     if(du) du.textContent = st.min ? (st.min + "'") : '-';
+    try{ rdSync(); }catch(e){}
+  }
+
+  /* ---- lettura della riga (P8.5) ----------------------------------------
+     Nel costruttore di seduta sotto il dettaglio c'e' la riga che dice cosa
+     significa quello che si e' appena scritto: quante in campo, quanto campo,
+     quanti metri quadri a testa. Nel costruttore di forza mancava, e quello
+     che si scrive qui e' altrettanto in codice: 4+1 al 82 per cento non dice
+     da solo quante alzate sono ne' con che bilanciere finiranno le ragazze,
+     e per saperlo bisognava scendere fino al foglio dei carichi. Adesso sotto
+     il nome dell'esercizio c'e' la lettura: le alzate di lavoro, il carico che
+     esce davvero per il gruppo scelto e quanto pesa la riga a testa.
+     Le serie di avvicinamento restano fuori dalle alzate perche' non sono
+     lavoro, ma vengono dette a parte perche' occupano tempo e attenzione.
+     Il carico e' un intervallo e non un numero solo: al 82 per cento una
+     ragazza da 90 e una da 50 fanno due esercizi diversi, e vedere gli
+     estremi e' l'unico modo per accorgersi che una percentuale e' fuori
+     misura per qualcuna. Chi non ha il massimale non entra nell'intervallo:
+     un valore inventato peserebbe come uno vero. */
+  function rowRead(r){
+    if(!hasEx(r)) return '';
+    var se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0, wu = parseFloat(r.wu) || 0;
+    var bit = [], kgm = 0;
+    if(se > 0 && rp > 0){
+      bit.push((se * rp) + ' alzate' + (wu > 0 ? ' piu\' ' + wu + ' di avvicinamento' : ''));
+    }else if(wu > 0){
+      bit.push(wu + ' serie di avvicinamento');
+    }
+    var q = pctInfo(r.pct);
+    if(q && q.k === 'fix'){
+      bit.push('uguale per tutte'); kgm = q.v || 0;
+    }else if(q && q.k === 'man'){
+      bit.push('carico scritto a mano sul foglio');
+    }else if(q && q.k === 'pct'){
+      var team = audience(FB), lo = 0, hi = 0, n = 0, som = 0;
+      team.forEach(function(nm){
+        var v = kgFor(nm, r); if(v == null) return;
+        if(!n || v < lo) lo = v;
+        if(!n || v > hi) hi = v;
+        som += v; n++;
+      });
+      if(!n){ bit.push('massimale mancante'); }
+      else {
+        bit.push(lo === hi ? (kgTxt(lo) + ' kg') : ('da ' + kgTxt(lo) + ' a ' + kgTxt(hi) + ' kg'));
+        kgm = som / n;
+      }
+    }
+    if(kgm > 0 && se > 0 && rp > 0){
+      var t = se * rp * kgm;
+      bit.push('circa ' + (t >= 1000 ? (Math.round(t / 100) / 10 + ' t') : (Math.round(t / 10) * 10 + ' kg')) + ' a testa');
+    }
+    return bit.join(' &#183; ');
+  }
+  /* la lettura cambia quando cambia la riga e anche quando cambia il gruppo,
+     quindi si riscrive da sola invece di aspettare un nuovo disegno della
+     tabella, che porterebbe via il cursore mentre si sta scrivendo */
+  function rdSync(){
+    var tb = document.getElementById('fb-rows'); if(!tb) return;
+    var sp = tb.querySelectorAll('[data-rd]');
+    for(var i = 0; i < sp.length; i++){
+      var k = parseInt(sp[i].getAttribute('data-rd'), 10);
+      if(isNaN(k) || !FB.rows[k]) continue;
+      sp[i].innerHTML = rowRead(FB.rows[k]);
+    }
   }
 
   function fbRender(){
@@ -2445,7 +2514,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         +   (i === 0 ? ' disabled' : '')
         +   ' title="Si fa subito dopo l\'esercizio sopra (complex)" aria-label="Lega all\'esercizio sopra">'+LINKSVG+'</button>'
         + '</span></td>'
-        + '<td><input class="fb-in ex" list="ex-list" data-i="'+i+'" data-f="ex" value="'+esc(r.ex)+'" placeholder="Esercizio"></td>'
+        + '<td><input class="fb-in ex" list="ex-list" data-i="'+i+'" data-f="ex" value="'+esc(r.ex)+'" placeholder="Esercizio">'
+        +   '<span class="fb-rd" data-rd="'+i+'">'+rowRead(r)+'</span></td>'
         + '<td class="n"><span class="fb-sx">'
         +   '<input class="fb-in num wu" data-i="'+i+'" data-f="wu" value="'+esc(r.wu)+'" inputmode="numeric" placeholder="W" title="Serie di avvicinamento prima di quelle di lavoro">'
         +   '<span class="p">+</span>'
@@ -2460,6 +2530,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         + '<td class="n"><span class="fb-ord">'
         +   '<button class="fb-mv" data-mv="up" data-i="'+i+'" type="button" aria-label="Sposta su"'+(i===0?' disabled':'')+'>'+UPSVG+'</button>'
         +   '<button class="fb-mv" data-mv="down" data-i="'+i+'" type="button" aria-label="Sposta giu"'+(i===FB.rows.length-1?' disabled':'')+'>'+DOWNSVG+'</button>'
+        +   '<button class="fb-cp" data-cp="'+i+'" type="button" title="Copia la riga qui sotto" aria-label="Copia esercizio">'+COPYSVG+'</button>'
         +   '<button class="fb-del" data-i="'+i+'" type="button" aria-label="Rimuovi esercizio">'+DELSVG+'</button>'
         + '</span></td>'
         + '</tr>';
@@ -3538,7 +3609,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       var i = parseInt(t.getAttribute('data-i'),10);
       if(isNaN(i) || !FB.rows[i]) return;
       FB.rows[i].lift = t.value;
-      fbSave(); renderRmPrev();
+      fbSave(); renderRmPrev(); rdSync();
     });
     rows.addEventListener('click', function(e){
       /* Le frecce spostano la riga di un posto. L'ordine della tabella e'
@@ -3557,6 +3628,27 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         fbRender(); fbSave();
         var moved = rows.querySelector('tr[data-i="'+mj+'"] .fb-mv[data-mv="'+mv.getAttribute('data-mv')+'"]');
         if(moved && !moved.disabled && moved.focus) moved.focus();
+        return;
+      }
+      /* Copia la riga e la mette subito sotto. In palestra lo stesso esercizio
+         torna spesso a poca distanza, cambiando solo una cosa: due serie da
+         cinque all'ottanta e poi una da tre al novanta. Riscriverlo da capo
+         vuol dire ribattere nome, serie, recupero e massimale di riferimento
+         per cambiare un numero. La copia resta dentro il blocco dell'originale:
+         se sopra o sotto c'e' un complex, si aggiunge come 1c invece di
+         spezzarlo in due. Il cursore va sulla percentuale della copia, che e'
+         quasi sempre la cosa che si vuole cambiare. */
+      var cp = e.target.closest ? e.target.closest('.fb-cp') : null;
+      if(cp){
+        var ci = parseInt(cp.getAttribute('data-cp'),10);
+        if(isNaN(ci) || !FB.rows[ci]) return;
+        var src = FB.rows[ci], nx = FB.rows[ci + 1];
+        var cop = normDraft({ rows:[src] }).rows[0];
+        cop.link = !!(src.link || (nx && nx.link));
+        FB.rows.splice(ci + 1, 0, cop);
+        fbRender(); fbSave();
+        var np = rows.querySelector('tr[data-i="'+(ci+1)+'"] .fb-in.pct');
+        if(np && np.focus){ np.focus(); if(np.select) np.select(); }
         return;
       }
       /* La graffetta lega la riga a quella sopra: da li' in avanti le due
