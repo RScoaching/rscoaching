@@ -344,6 +344,16 @@ table.fbtbl tr:last-child td{ border-bottom:0; }
   display:inline-flex; transition:color .15s var(--ease), background .15s var(--ease); }
 .fb-del:hover{ color:var(--red); background:var(--red-bg); }
 .fb-del svg{ width:15px; height:15px; }
+/* Le frecce per rimettere gli esercizi nell'ordine in cui si fanno davvero.
+   Stanno strette una sull'altra perche' la colonna e' l'ultima e non deve
+   rubare spazio al nome dell'esercizio. */
+.fb-ord{ display:inline-flex; align-items:center; gap:2px; }
+.fb-mv{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:5px 3px; border-radius:6px;
+  display:inline-flex; transition:color .15s var(--ease), background .15s var(--ease); }
+.fb-mv:hover{ color:var(--ink); background:var(--surface2); }
+.fb-mv[disabled]{ opacity:.28; cursor:default; }
+.fb-mv[disabled]:hover{ color:var(--faint); background:transparent; }
+.fb-mv svg{ width:15px; height:15px; }
 .fb-add{ margin:6px 10px 4px; }
 .fb-empty{ padding:22px 10px; text-align:center; color:var(--muted); font-size:13px; }
 .fb-foot{ display:flex; flex-wrap:wrap; gap:22px; padding:13px 18px 15px; border-top:1px solid var(--border); }
@@ -1708,6 +1718,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   var EDITSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   var COPYSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   var PRINTSVG  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>';
+  var UPSVG     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  var DOWNSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
   var DELSVG    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/></svg>';
 
   function hasEx(r){ return r && r.ex && String(r.ex).trim(); }
@@ -2108,7 +2120,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         + '<td class="n">'+liftSelect(r, i)+'</td>'
         + '<td class="n"><input class="fb-in rec" data-i="'+i+'" data-f="rec" value="'+esc(r.rec)+'" inputmode="numeric"></td>'
         + '<td><input class="fb-in note" data-i="'+i+'" data-f="note" value="'+esc(r.note)+'" placeholder="Note"></td>'
-        + '<td class="n"><button class="fb-del" data-i="'+i+'" type="button" aria-label="Rimuovi esercizio">'+DELSVG+'</button></td>'
+        + '<td class="n"><span class="fb-ord">'
+        +   '<button class="fb-mv" data-mv="up" data-i="'+i+'" type="button" aria-label="Sposta su"'+(i===0?' disabled':'')+'>'+UPSVG+'</button>'
+        +   '<button class="fb-mv" data-mv="down" data-i="'+i+'" type="button" aria-label="Sposta giu"'+(i===FB.rows.length-1?' disabled':'')+'>'+DOWNSVG+'</button>'
+        +   '<button class="fb-del" data-i="'+i+'" type="button" aria-label="Rimuovi esercizio">'+DELSVG+'</button>'
+        + '</span></td>'
         + '</tr>';
     });
     tb.innerHTML = h;
@@ -2957,6 +2973,24 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       fbSave(); renderRmPrev();
     });
     rows.addEventListener('click', function(e){
+      /* Le frecce spostano la riga di un posto. L'ordine della tabella e'
+         l'ordine in cui la seduta si fa e in cui esce stampata, quindi
+         quando in palestra si cambia idea si sistema da qui invece di
+         riscrivere gli esercizi uno per uno. I kg corretti a mano seguono la
+         riga da soli: la loro chiave e' nome dell'esercizio piu' atleta, non
+         il numero di riga. */
+      var mv = e.target.closest ? e.target.closest('.fb-mv') : null;
+      if(mv){
+        if(mv.disabled) return;
+        var mi = parseInt(mv.getAttribute('data-i'),10);
+        var mj = mi + (mv.getAttribute('data-mv') === 'up' ? -1 : 1);
+        if(isNaN(mi) || mj < 0 || mj >= FB.rows.length) return;
+        var tmp = FB.rows[mi]; FB.rows[mi] = FB.rows[mj]; FB.rows[mj] = tmp;
+        fbRender(); fbSave();
+        var moved = rows.querySelector('tr[data-i="'+mj+'"] .fb-mv[data-mv="'+mv.getAttribute('data-mv')+'"]');
+        if(moved && !moved.disabled && moved.focus) moved.focus();
+        return;
+      }
       var b = e.target.closest ? e.target.closest('.fb-del') : null;
       if(!b) return;
       var i = parseInt(b.getAttribute('data-i'),10);
