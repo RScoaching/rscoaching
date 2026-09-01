@@ -1233,6 +1233,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const M = S.metrics_full || [];
   const SHORT = S.metrics_short || M;
   const UNIT = S.metrics_unit || M.map(()=> '');
+  // La colonna dei minuti serve in due posti: il carico interno TL, che e' minuti per RPE,
+  // e il foglio dei portieri, che di GPS non ha niente e vive solo di minuti giocati. Si
+  // cerca una volta sola e per nome, non per posizione: i fogli 26-27 hanno venti colonne
+  // e quelli 25-26 quattordici, quindi una posizione da una stagione all'altra non tiene.
+  const MIN_IDX = (function(){
+    for(let i=0;i<M.length;i++){ if(String(M[i]||'').toLowerCase().indexOf('minut')===0) return i; }
+    return -1;
+  })();
   // ---------- parametri chiave: si scelgono in un posto solo ----------
   // Il generatore ne propone una lista (`S.key_idx`), ma quali siano davvero i
   // parametri che il mister guarda lo decide lui, dal pannello dei parametri, e
@@ -1424,7 +1432,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }catch(e){}
   })();
   function saveCols(){ try{ localStorage.setItem(COLS_KEY, JSON.stringify({ order:colOrder, hidden:[...colHidden] })); }catch(e){} }
-  function VIS(){ const v = colOrder.filter(i=> !colHidden.has(i)); return v.length ? v : colOrder.slice(); }
+  function VIS(){
+    // sul portiere resta la sola colonna dei minuti: il resto dei parametri non lo ha
+    if(gkOn()) return [MIN_IDX];
+    const v = colOrder.filter(i=> !colHidden.has(i));
+    return v.length ? v : colOrder.slice();
+  }
   function sinRead(){
     try{
       const o = JSON.parse(localStorage.getItem(SIN_STORE) || 'null');
@@ -1901,6 +1914,109 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function repaintAll(){
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+  }
+  // ---------- portieri: solo minuti, RPE e TL ----------
+  // Wenin e Agostini il GPS non lo portano, quindi nei fogli del mister non hanno nessuna
+  // riga: la loro pagina resterebbe vuota. Il foglio che serve a loro pero' e' piu' semplice
+  // di quello delle altre: quanti minuti hanno fatto, che RPE hanno dato e il carico interno
+  // che ne esce. I minuti partono da quelli della seduta di squadra e si correggono a mano,
+  // seduta per seduta, perche' il portiere spesso fa un lavoro suo e non sta in campo tutto
+  // il tempo. L'interruttore e' il ruolo: basta scrivere Portiere nella pagina Atlete.
+  const GKM_KEY = 'rs_fio_carico_gkmin';
+  function isGk(name){ return !!name && roleOf(name) === 'Portiere'; }
+  function gkOn(){ return MIN_IDX >= 0 && state.level === 'player' && isGk(state.player); }
+  function gkAll(){
+    try{ const o = JSON.parse(localStorage.getItem(GKM_KEY) || 'null'); return (o && typeof o==='object') ? o : {}; }
+    catch(e){ return {}; }
+  }
+  function gkSave(o){ try{ localStorage.setItem(GKM_KEY, JSON.stringify(o)); }catch(e){} }
+  function gkKeyOf(name, mk, label){ return name+'||'+mk+'||'+label; }
+  function gkMinOf(name, mk, label){
+    const v = gkAll()[gkKeyOf(name, mk, label)];
+    return (typeof v === 'number' && isFinite(v)) ? v : null;
+  }
+  function gkMinSet(name, mk, label, v){
+    const o = gkAll(), k = gkKeyOf(name, mk, label);
+    if(v === null) delete o[k]; else o[k] = v;
+    gkSave(o);
+  }
+  function gkOwnCount(name, mk){
+    const pre = name+'||'+mk+'||';
+    return Object.keys(gkAll()).filter(k=> k.indexOf(pre)===0).length;
+  }
+  function gkClearMonth(name, mk){
+    const o = gkAll(), pre = name+'||'+mk+'||';
+    Object.keys(o).forEach(k=>{ if(k.indexOf(pre)===0) delete o[k]; });
+    gkSave(o);
+  }
+  // i minuti non hanno la scala dell'RPE: si accetta da 0 a 200, mezzo minuto alla volta
+  function gkNum(s){
+    const t = String(s==null?'':s).trim().replace(',','.');
+    if(!t) return null;
+    const v = parseFloat(t);
+    if(!isFinite(v)) return null;
+    return Math.min(200, Math.max(0, Math.round(v*10)/10));
+  }
+  function gkBlank(){ return new Array(M.length).fill(null); }
+  // il mese del portiere ricalcato su quello della squadra: stesse fasce, stesse sedute,
+  // stessi giorni, ma dentro c'e' solo la colonna dei minuti. I TOT si rifanno qui invece di
+  // copiarli, se no direbbero i minuti della squadra e non i suoi. Le righe val/AVG partita
+  // saltano: senza GPS non c'e' niente da rapportare al modello.
+  function gkBuildMonths(name){
+    const out = [];
+    ((S.team && S.team.months) || []).forEach(tm=>{
+      const src = tm.rows0 || tm.rows || [];
+      const rows = [];
+      let train = [], week = [], month = [];
+      src.forEach(r=>{
+        if(r.type==='valmatch_train' || r.type==='valmatch_week' || r.type==='valmatch_month') return;
+        if(r.type==='wk_header'){
+          train = []; week = [];
+          rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:gkBlank() });
+          return;
+        }
+        if(r.type==='day' || r.type==='match'){
+          const ov = gkMinOf(name, tm.key, r.label);
+          const tv = (r.v && typeof r.v[MIN_IDX]==='number' && isFinite(r.v[MIN_IDX])) ? r1(r.v[MIN_IDX]) : null;
+          const v = gkBlank();
+          v[MIN_IDX] = (ov!=null) ? ov : tv;
+          const row = { label:r.label, type:r.type, wd:r.wd||'', v:v, gk:true, seed:tv };
+          rows.push(row);
+          if(r.type==='day') train.push(row);
+          week.push(row); month.push(row);
+          return;
+        }
+        if(r.type==='tot_train'){ rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:sumRows(train) }); return; }
+        if(r.type==='tot_week'){ rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:sumRows(week) }); return; }
+        if(r.type==='tot_month'){ rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:sumRows(month) }); return; }
+        rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:gkBlank() });
+      });
+      if(rows.length) out.push({ key:tm.key, title:tm.title, rows:rows.slice(), rows0:rows.slice(), gk:true });
+    });
+    return out;
+  }
+  // rifa' i mesi del portiere: gira all'avvio, quando si cambia atleta, quando si corregge un
+  // minuto e quando il ruolo cambia in Atlete. Se il ruolo non e' piu' Portiere le righe finte
+  // se ne vanno e resta quello che c'e' nei dati veri.
+  function gkSeed(name){
+    const P = S.players || {};
+    const list = name ? [name] : Object.keys(P);
+    list.forEach(n=>{
+      const p = P[n]; if(!p) return;
+      if(isGk(n) && MIN_IDX >= 0){
+        if((p.months||[]).length && !p.gk) return;
+        p.gk = true;
+        p.months = gkBuildMonths(n);
+      } else if(p.gk){
+        p.gk = false;
+        p.months = [];
+      }
+    });
+  }
+  // sul portiere il grafico deve guardare i minuti: e' l'unica colonna che ha
+  function gkSync(){
+    gkSeed(state.player);
+    if(gkOn() && state.chartIdx !== MIN_IDX){ state.chartIdx = MIN_IDX; syncMetricSelect(); }
   }
   // elenco delle fasce settimana del mese come si vedono adesso
   function weekLabels(mon){
@@ -2730,7 +2846,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let nSed = 0, nRpe = 0;
     let body = '<tbody>';
     // modello AVG partita in testa (riferimento sempre visibile)
-    const MOD = MODEL();
+    const MOD = gkOn() ? null : MODEL();
     if(MOD){
       body += '<tr class="r-model"><td class="col-day"><span class="wd">rif.</span><span class="lb">Modello AVG partita'+esc(modelTag())+'</span></td>';
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i], i)+'</td>');
@@ -2775,7 +2891,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
-      V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmtRow(rv[i], i, r.type)+'</td>');
+      // sul portiere i minuti si scrivono a mano: la casella parte dal tempo della squadra
+      const gkEdit = gkOn() && (r.type==='day' || r.type==='match');
+      V.forEach(i=>{
+        if(gkEdit && i===MIN_IDX){
+          const own = gkMinOf(state.player, mon.key, r.label);
+          const mv = rv[i];
+          body += '<td class="num rpe-c"><input class="rpe-in'+(own==null && mv!=null ? ' borrowed' : '')+
+                  '" type="number" min="0" max="200" step="0.5" inputmode="decimal" data-gk="'+esc(r.label)+
+                  '" value="'+(mv==null ? '' : mv)+'" aria-label="Minuti del portiere nella seduta '+esc(txt)+'"'+
+                  (own==null && mv!=null ? ' title="Presi dai minuti della squadra"' : '')+'></td>';
+          return;
+        }
+        body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmtRow(rv[i], i, r.type)+'</td>';
+      });
       // coda RPE e TL: casella da riempire sulle sedute, conto fatto sui totali, vuoto sul resto
       if(on){
         if(r.type==='day' || r.type==='match'){
@@ -2812,14 +2941,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(note) note.textContent = 'Nei dati non c\'e\' la colonna dei minuti: senza minuti il TL non si calcola, quindi le colonne RPE e TL restano fuori.';
       return;
     }
-    host.querySelectorAll('.rpe-in').forEach(inp=>{
+    host.querySelectorAll('.rpe-in[data-l]').forEach(inp=>{
       inp.addEventListener('input', ()=>{ rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value)); });
       inp.addEventListener('change', ()=>{
         rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value));
         renderGrid();
       });
     });
-    if(clr) clr.hidden = !rpeOwnCount(mk);
+    // minuti del portiere: si salvano e si rifanno i totali del mese
+    host.querySelectorAll('.rpe-in[data-gk]').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        gkMinSet(state.player, mk, inp.getAttribute('data-gk'), gkNum(inp.value));
+        gkSeed(state.player);
+        applyMoves();
+        renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+      });
+    });
+    if(clr) clr.hidden = !(rpeOwnCount(mk) || (gkOn() && gkOwnCount(state.player, mk)));
+    if(note && gkOn()){
+      note.innerHTML = '<b>'+esc(disp(state.player||''))+'</b> non porta il GPS: qui restano solo i minuti, l\'RPE e il TL. '+
+        'I minuti col bordo tratteggiato sono quelli della seduta di squadra: scrivici sopra il tempo vero del portiere, '+
+        'poi metti l\'RPE da 0 a 10 e il <b>TL</b> (minuti per RPE) si fa da solo, riga per riga e sui totali. '+
+        'Minuti corretti a mano in questo mese: '+gkOwnCount(state.player, mk)+'. Sedute nel mese: '+nSed+', con RPE: '+nRpe+
+        '. I numeri restano su questo dispositivo e non toccano i file dei dati.';
+      return;
+    }
     if(note){
       note.innerHTML = 'Scrivi l\'RPE della seduta da 0 a 10 nell\'ultima colonna: il <b>TL</b> (minuti per RPE) si fa da solo, riga per riga e sui totali. '+
         'Sui totali l\'RPE non e\' una somma ma la media pesata sui minuti. '+
@@ -2834,10 +2980,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Le atlete danno l'RPE su un'app della societa': qui il numero si riscrive a mano, seduta per
   // seduta, perche' il foglio che esce di qui vuole minuti, RPE e il carico interno TL = min x RPE.
   const RPE_KEY = 'rs_fio_rpe';
-  const RPE_MIN_IDX = (function(){
-    for(let i=0;i<M.length;i++){ if(String(M[i]||'').toLowerCase().indexOf('minut')===0) return i; }
-    return -1;
-  })();
+  const RPE_MIN_IDX = MIN_IDX;
   function rpeScope(){ return state.level==='team' ? '_squadra' : (state.player || '_squadra'); }
   function rpeAll(){
     try{ const o = JSON.parse(localStorage.getItem(RPE_KEY) || 'null'); return (o && typeof o==='object') ? o : {}; }
@@ -3349,11 +3492,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function buildMultiSheets(names){
     const wrap = document.querySelector('.wrap');
     if(!wrap) return;
-    const keep = { level:state.level, player:state.player, monthKey:state.monthKey };
+    const keep = { level:state.level, player:state.player, monthKey:state.monthKey, chartIdx:state.chartIdx };
     const host = document.createElement('div');
     host.id = 'print-multi';
     names.forEach(function(n, i){
       state.level = 'player'; state.player = n;
+      // se nel gruppo c'e' un portiere il suo foglio guarda i minuti, gli altri restano com'erano
+      state.chartIdx = (MIN_IDX >= 0 && isGk(n)) ? MIN_IDX : keep.chartIdx;
       renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
       pdfApply();
       buildGridSheets();
@@ -3384,7 +3529,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       host.appendChild(sec);
       clearLiveSheets();
     });
-    state.level = keep.level; state.player = keep.player; state.monthKey = keep.monthKey;
+    state.level = keep.level; state.player = keep.player; state.monthKey = keep.monthKey; state.chartIdx = keep.chartIdx;
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
     pdfApply();
     printHeadTag();
@@ -4065,6 +4210,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.getElementById('seg-player').setAttribute('aria-selected', lv==='player');
     document.getElementById('player-field').style.display = lv==='player' ? '' : 'none';
     updateRole();
+    gkSync();
     document.getElementById('subtitle').innerHTML = lv==='team'
       ? '<b>Fiorentina Primavera U19W</b> · Stagione '+esc(S.stagione||'')
       : '<b>'+esc(disp(state.player||''))+'</b> · Fiorentina Primavera U19W';
@@ -4087,6 +4233,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   window.addEventListener('afterprint', clearPrintSheets);
   document.getElementById('player-select').addEventListener('change', e=>{
     state.player = e.target.value; state.monthKey=null; updateRole();
+    gkSync();
     document.getElementById('subtitle').innerHTML = '<b>'+esc(disp(state.player))+'</b> · Fiorentina Primavera U19W';
     viewSave();
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
@@ -4109,6 +4256,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       : '<b>'+esc(disp(state.player||''))+'</b> · Fiorentina Primavera U19W';
     renderGrid();
     renderSession();
+  });
+
+  /* Ruolo cambiato in Atlete: e' l'interruttore del foglio portiere. Appena qualcuno
+     diventa Portiere le sue righe minuti compaiono, appena smette tornano i dati veri. */
+  document.addEventListener('fio:ruoli', function(){
+    updateRole();
+    gkSeed();
+    applyMoves();
+    if(gkOn() && state.chartIdx !== MIN_IDX){ state.chartIdx = MIN_IDX; syncMetricSelect(); }
+    repaintAll();
   });
 
   // ---------- vista seduta / ricerca sedute ----------
@@ -4468,12 +4625,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- init (con deep-link ?atleta=NOME) ----------
   (function init(){
     // prima di qualsiasi disegno: rimette le sedute nei microcicli scelti dal mister,
-    // cosi' griglia, KPI, grafici, ACWR ed esportazioni partono gia' dagli stessi numeri
+    // cosi' griglia, KPI, grafici, ACWR ed esportazioni partono gia' dagli stessi numeri.
+    // Prima ancora si costruiscono i mesi dei portieri, se no non ci sarebbe niente da mettere in ordine.
+    gkSeed();
     applyMoves();
     const mvr = document.getElementById('mv-reset'); if(mvr) mvr.addEventListener('click', resetMoves);
     const rpc = document.getElementById('rpe-clear');
     if(rpc) rpc.addEventListener('click', ()=>{
       const mon = activeMonth(); if(!mon) return;
+      // sul portiere il tasto rimette anche i minuti come quelli della squadra
+      if(gkOn()){
+        const nm = state.player;
+        rpeClearMonth(mon.key); gkClearMonth(nm, mon.key);
+        gkSeed(nm); applyMoves();
+        renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+        toast('RPE e minuti del mese rimessi come la squadra');
+        return;
+      }
       rpeClearMonth(mon.key); renderGrid();
       toast('RPE del mese cancellati');
     });
