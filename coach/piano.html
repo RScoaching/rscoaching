@@ -2916,6 +2916,35 @@ window.FORZA = window.FORZA || { roster:[] };
     tecnica:'Tecnica', forza:'Forza', sprint:'Velocita', plyo:'Pliometria',
     z2:'Aerobico', interval:'Intermittente', rec:'Defaticamento', test:'Test'
   };
+  /* Il dettaglio scritto nel Calendario dice "6c6+2j, campo 30x25": sono le stesse
+     misure che Oggi sa gia' leggere, ma solo nella forma "[campo: 30x25 m / 14 atlete]".
+     Qui si traducono, cosi' i metri quadri a giocatrice escono anche sulla seduta
+     presa dal Calendario e la parola "campo" non finisce nel nome del blocco. */
+  function calCampo(det){
+    const t = wrNorm(det);
+    const out = { w:0, l:0, pl:0 };
+    /* le misure si leggono solo dove la parola campo le annuncia: "6x30 m" in una
+       riga di velocita' sono ripetute per metri, non un rettangolo, e prenderle
+       per campo farebbe uscire metri quadri a testa senza senso */
+    const d = /\bcampo\b/.test(t) ? t.match(/(\d{1,3})\s*[x*]\s*(\d{1,3})/) : null;
+    if(d){
+      const a = +d[1], b = +d[2];
+      if(a >= 5 && a <= 120 && b >= 5 && b <= 120){ out.w = a; out.l = b; }
+    }
+    const f = t.match(/(\d{1,2})\s*(?:c|v|vs|contro)\s*(\d{1,2})/);
+    if(f) out.pl = (+f[1]) + (+f[2]);
+    /* i jolly giocano, quindi contano nei metri quadri a testa; i portieri stanno
+       in porta e non consumano lo spazio del possesso, quindi restano fuori */
+    const j = t.match(/\+\s*(\d{1,2})\s*(?:j|jolly)\b/);
+    if(j && out.pl) out.pl += (+j[1]);
+    if(out.pl > 30) out.pl = 0;
+    return out;
+  }
+  function calDetCut(det, sp){
+    let s = String(det||'');
+    if(sp.w) s = s.replace(/(\d{1,3})\s*[x*]\s*(\d{1,3})/, ' ').replace(/\bcampo\b/gi, ' ');
+    return s.replace(/\s+/g,' ').replace(/^[\s,;.]+|[\s,;.]+$/g,'').trim();
+  }
   function calLinesToday(){
     let st = null;
     try{ st = JSON.parse(localStorage.getItem(CAL_KEY) || 'null'); }catch(e){}
@@ -2930,7 +2959,12 @@ window.FORZA = window.FORZA || { roster:[] };
         /* I minuti si scrivono come "tot", che negli appunti vince sui minuti
            dedotti dalle serie: quello che c'e' nel Calendario e' la durata
            decisa, non una stima da ricalcolare. */
-        const line = w + (min ? (' tot '+min+"'") : '') + (p.n ? (' '+String(p.n)) : '');
+        const sp = calCampo(p.n);
+        const det = calDetCut(p.n, sp);
+        let tail = '';
+        if(sp.w) tail = ' [campo: '+sp.w+'x'+sp.l+' m'+(sp.pl ? (' / '+sp.pl+' atlete') : '')+']';
+        else if(sp.pl) tail = ' [campo: '+sp.pl+' atlete]';
+        const line = w + (min ? (' tot '+min+"'") : '') + (det ? (' '+det) : '') + tail;
         out.push(line.replace(/\s+/g,' ').trim());
       });
     });
