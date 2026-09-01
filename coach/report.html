@@ -341,6 +341,40 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 .dc-foot .sw.r{ background:var(--red2); }
 .dc-foot .sw.m{ width:2px; height:12px; border-radius:0; background:var(--ink); opacity:.5; }
 
+/* cosa si e' fatto: i blocchi di lavoro di quella seduta, presi dal calendario
+   e dalla scheda di forza dello stesso giorno. Il mister guarda il report per
+   capire il carico, ma senza sapere cosa c'era dentro la seduta il numero non
+   dice niente: qui sopra la tabella c'e' il contenuto, sotto ci sono i dati. */
+.cf-list{ display:grid; gap:12px; }
+.cf-blk{ background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:13px 15px; }
+.cf-top{ display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.cf-t{ font-size:13.5px; font-weight:600; color:var(--ink); }
+.cf-tag{ font-size:10.5px; font-weight:600; color:var(--muted); background:var(--surface3);
+  border:1px solid var(--border2); border-radius:999px; padding:2px 9px; }
+.cf-num{ margin-left:auto; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--text); }
+.cf-num small{ font-size:10.5px; font-weight:600; color:var(--faint); margin-left:3px; }
+.cf-num + .cf-num{ margin-left:14px; }
+.cf-bar{ display:flex; height:9px; border-radius:5px; overflow:hidden; background:var(--surface3); margin-top:11px; }
+.cf-bar i{ display:block; height:100%; }
+.cf-bar i.pal{ background:var(--orange); }
+.cf-bar i.fis{ background:var(--violet2); }
+.cf-bar i.rec{ background:var(--green); }
+.cf-ph{ list-style:none; margin:11px 0 0; padding:0; display:grid; gap:6px; }
+.cf-ph li{ display:flex; align-items:baseline; gap:9px; font-size:12.5px; color:var(--text); }
+.cf-ph .d{ width:8px; height:8px; border-radius:3px; flex:0 0 auto; align-self:center; }
+.cf-ph .d.pal{ background:var(--orange); }
+.cf-ph .d.fis{ background:var(--violet2); }
+.cf-ph .d.rec{ background:var(--green); }
+.cf-ph .n{ font-weight:600; color:var(--ink); }
+.cf-ph .nt{ color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cf-ph .m{ margin-left:auto; font-variant-numeric:tabular-nums; font-weight:600; color:var(--text); white-space:nowrap; }
+.cf-ex{ list-style:none; margin:11px 0 0; padding:0; display:grid; gap:5px; }
+.cf-ex li{ display:flex; align-items:baseline; gap:9px; font-size:12.5px; color:var(--text); }
+.cf-ex .n{ font-weight:600; color:var(--ink); }
+.cf-ex .s{ margin-left:auto; font-variant-numeric:tabular-nums; color:var(--muted); white-space:nowrap; }
+.cf-note{ margin:11px 0 0; font-size:12.5px; line-height:1.55; color:var(--muted); }
+.cf-void{ font-size:12.5px; color:var(--faint); margin:0; }
+
 /* ---------- image preview modal ---------- */
 dialog.imgmodal{ border:0; padding:0; background:transparent; max-width:min(94vw,680px); width:100%; margin:auto; }
 dialog.imgmodal::backdrop{ background:oklch(0% 0 0 / 0.62); backdrop-filter: blur(4px); }
@@ -444,6 +478,15 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .dc-foot .sw.g{ background:#2f9e4f !important; }
   .dc-foot .sw.r{ background:#cf3b38 !important; }
   .dc-foot .sw.m{ background:#333 !important; opacity:1 !important; }
+  .cf-blk{ background:#faf8f5 !important; border:1px solid #e2ddd6 !important; break-inside:avoid; }
+  .cf-t, .cf-ph .n, .cf-ex .n{ color:#111 !important; }
+  .cf-num, .cf-ph .m, .cf-ph li, .cf-ex li{ color:#222 !important; }
+  .cf-num small, .cf-note, .cf-ph .nt, .cf-ex .s, .cf-void{ color:#8a847c !important; }
+  .cf-tag{ background:#f0ece5 !important; border-color:#e2ddd6 !important; color:#555 !important; }
+  .cf-bar{ background:#efece7 !important; }
+  .cf-bar i.pal, .cf-ph .d.pal{ background:#e6763a !important; }
+  .cf-bar i.fis, .cf-ph .d.fis{ background:#7a5bd0 !important; }
+  .cf-bar i.rec, .cf-ph .d.rec{ background:#2f9e4f !important; }
   .tbl-scroll{ overflow:visible !important; }
   .rsec{ break-inside:avoid; }
   .rkpis{ break-inside:avoid; }
@@ -1322,6 +1365,220 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     '</div>';
     return pills+'<div class="dc-chart">'+bars+'</div>'+foot;
   }
+
+  /* ---------- cosa si e' fatto in quella seduta ----------
+     Il carico lo racconta gia' la tabella. Quello che manca al mister e' il
+     contenuto: quali blocchi, quanti minuti per blocco, che scheda di forza.
+     Quei dati sono gia' scritti in due posti, il calendario e la pagina Forza,
+     e qui vengono solo riletti: niente da compilare di nuovo. */
+  const CF_CAL_KEY = 'rs_fio_calendario';
+  const CF_LAB = {
+    attivazione:'Attivazione', rondo:'Rondo', possesso:'Possesso palla', passing:'Passing drill',
+    ssg:'Partita a tema', transizioni:'Transizioni', finalizzazione:'Finalizzazione',
+    palleinattive:'Palle inattive', duelli:'Duelli 1v1', tecnica:'Tecnica e tattica',
+    squadra:'Sessione squadra', forza:'Forza', sprint:'Sprint e velocita', plyo:'Pliometria',
+    z2:'Aerobico Z2', interval:'Intervallato', priming:'Priming pre-gara', rec:'Rigenerante',
+    riposo:'Riposo', gara:'Gara'
+  };
+  // tre famiglie di lavoro, cosi' la barra dice a colpo d'occhio quanto c'era
+  // di palla, quanto di lavoro fisico e quanto di scarico
+  const CF_FAM = {
+    attivazione:'rec', rec:'rec', riposo:'rec',
+    forza:'fis', sprint:'fis', plyo:'fis', z2:'fis', interval:'fis', priming:'fis'
+  };
+  function cfFam(t){ return CF_FAM[t] || 'pal'; }
+  function cfLab(t){ return CF_LAB[t] || (t ? String(t) : 'Seduta'); }
+  // la data del report arriva come GG/MM/AAAA, i due archivi la scrivono ISO
+  function cfIso(dateStr){
+    const p = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dateStr||''));
+    return p ? (p[3]+'-'+p[2]+'-'+p[1]) : '';
+  }
+  function cfCal(){
+    try{
+      const o = JSON.parse(localStorage.getItem(CF_CAL_KEY) || '{}');
+      return {
+        comp: (o && o.comp && typeof o.comp==='object') ? o.comp : {},
+        manual: Array.isArray(o && o.manual) ? o.manual : []
+      };
+    }catch(e){ return { comp:{}, manual:[] }; }
+  }
+  function cfForzaSess(){
+    const k = window.fioKey ? window.fioKey('rs_fio_forza_sessions') : 'rs_fio_forza_sessions';
+    try{ const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; }
+    catch(e){ return []; }
+  }
+  // uno slot vuoto sta per "vale per tutta la giornata": non si scarta
+  function cfSlotOk(slot, ap){
+    const s = String(slot||'').toUpperCase();
+    if(!s || !ap) return true;
+    return s === ap;
+  }
+  function cfMinuti(arr){
+    return (Array.isArray(arr)?arr:[]).reduce(function(a,p){ return a + (Number(p && p.m)||0); }, 0);
+  }
+  function cfBlockHTML(b){
+    const fasi = (Array.isArray(b.phases)?b.phases:[]).filter(function(p){
+      return p && ((Number(p.m)||0) > 0 || String(p.n||'').trim());
+    });
+    const tot = cfMinuti(fasi);
+    const tags = [];
+    if(b.group) tags.push(String(b.group));
+    if(b.diff)  tags.push(String(b.diff));
+    if(Array.isArray(b.players) && b.players.length) tags.push(b.players.length+' atlete');
+    const pct = (b.pct==null || b.pct==='') ? null : Number(b.pct);
+    const nums =
+      (tot > 0 ? '<span class="cf-num">'+NF0.format(tot)+'<small>min</small></span>' : '') +
+      ((pct!=null && Number.isFinite(pct)) ? '<span class="cf-num">'+NF0.format(Math.round(pct))+'<small>% carico</small></span>' : '');
+    const top = '<div class="cf-top">'+
+      '<span class="cf-t">'+esc(b.title || cfLab(b.type))+'</span>'+
+      tags.map(function(t){ return '<span class="cf-tag">'+esc(t)+'</span>'; }).join('')+
+      nums+
+    '</div>';
+    let bar = '';
+    let lista = '';
+    if(fasi.length && tot > 0){
+      bar = '<div class="cf-bar">'+fasi.map(function(p){
+        const m = Number(p.m)||0;
+        if(m <= 0) return '';
+        return '<i class="'+cfFam(p.t)+'" style="width:'+(m/tot*100).toFixed(2)+'%"></i>';
+      }).join('')+'</div>';
+    }
+    if(fasi.length){
+      lista = '<ul class="cf-ph">'+fasi.map(function(p){
+        const m = Number(p.m)||0;
+        return '<li><span class="d '+cfFam(p.t)+'"></span>'+
+          '<span class="n">'+esc(cfLab(p.t))+'</span>'+
+          (String(p.n||'').trim() ? '<span class="nt">'+esc(String(p.n).trim())+'</span>' : '')+
+          (m>0 ? '<span class="m">'+NF0.format(m)+' min</span>' : '')+
+        '</li>';
+      }).join('')+'</ul>';
+    }
+    const note = String(b.note||'').trim();
+    return '<div class="cf-blk">'+top+bar+lista+
+      (note ? '<p class="cf-note">'+esc(note)+'</p>' : '')+'</div>';
+  }
+  function cfForzaHTML(s){
+    const righe = (Array.isArray(s.rows)?s.rows:[]).filter(function(r){ return r && String(r.ex||'').trim(); });
+    if(!righe.length) return '';
+    const top = '<div class="cf-top">'+
+      '<span class="cf-t">'+esc(String(s.title||'').trim() || 'Seduta di forza')+'</span>'+
+      '<span class="cf-tag">Forza</span>'+
+      '<span class="cf-num">'+NF0.format(righe.length)+'<small>esercizi</small></span>'+
+    '</div>';
+    const lista = '<ul class="cf-ex">'+righe.map(function(r){
+      const serie = String(r.serie||'').trim();
+      const rip   = String(r.rip||'').trim();
+      const pct   = String(r.pct||'').trim();
+      const parti = [];
+      if(serie && rip) parti.push(serie+' x '+rip);
+      else if(serie)   parti.push(serie+' serie');
+      else if(rip)     parti.push(rip+' rip');
+      if(pct) parti.push(pct.indexOf('%')>=0 ? pct : (pct+'%'));
+      return '<li><span class="n">'+esc(String(r.ex).trim())+'</span>'+
+        (parti.length ? '<span class="s">'+esc(parti.join(' · '))+'</span>' : '')+'</li>';
+    }).join('')+'</ul>';
+    return '<div class="cf-blk">'+top+lista+'</div>';
+  }
+  function cosaFattoHTML(m){
+    const iso = cfIso(m.meta.dateStr);
+    const ap  = m.meta.ap || '';
+    const parti = [];
+    if(iso){
+      const cal = cfCal();
+      cal.manual.forEach(function(b){
+        if(String(b && b.data||'').slice(0,10) !== iso) return;
+        if(!cfSlotOk(b.slot, ap)) return;
+        parti.push(cfBlockHTML(b));
+      });
+      // le sedute gia' a calendario non hanno fasi, ma la nota del giorno si':
+      // e' quello che il preparatore ha scritto mentre la seduta girava
+      const pref = 'r|'+iso+'|';
+      Object.keys(cal.comp).forEach(function(k){
+        if(k.indexOf(pref) !== 0) return;
+        const pezzi = k.split('|');
+        if(!cfSlotOk(pezzi[2], ap)) return;
+        const c = cal.comp[k] || {};
+        const nota = String(c.note||'').trim();
+        const avv  = String(c.comp_gara||'').trim();
+        if(!nota && !avv) return;
+        parti.push('<div class="cf-blk">'+
+          '<div class="cf-top"><span class="cf-t">'+esc(avv ? ('Gara con '+avv) : 'Nota della seduta')+'</span>'+
+          '<span class="cf-tag">Calendario</span></div>'+
+          (nota ? '<p class="cf-note">'+esc(nota)+'</p>' : '')+
+        '</div>');
+      });
+      cfForzaSess().forEach(function(s){
+        if(String(s && s.date||'').slice(0,10) !== iso) return;
+        const h = cfForzaHTML(s);
+        if(h) parti.push(h);
+      });
+    }
+    const corpo = parti.length
+      ? '<div class="cf-list">'+parti.join('')+'</div>'
+      : '<p class="cf-void">Per questa data non ci sono blocchi nel calendario ne\' schede di forza. Il contenuto della seduta si scrive nel planner o nella pagina Forza e compare qui da solo.</p>';
+    return '<div class="rsec"><div class="rsec-head"><h3>Cosa si e\' fatto</h3>'+
+      '<span class="rsec-n">blocchi e minuti presi dal calendario e dalle schede di forza di quel giorno</span></div>'+
+      corpo+'</div>';
+  }
+  /* Le stesse informazioni ridotte a righe di testo, per il PNG che il mister
+     si porta via: sul foglio conta leggere cosa c'era dentro, non la barra. */
+  function cfTesto(m){
+    const iso = cfIso(m.meta.dateStr);
+    const ap  = m.meta.ap || '';
+    const out = [];
+    if(!iso) return out;
+    const cal = cfCal();
+    cal.manual.forEach(function(b){
+      if(String(b && b.data||'').slice(0,10) !== iso) return;
+      if(!cfSlotOk(b.slot, ap)) return;
+      const fasi = (Array.isArray(b.phases)?b.phases:[]).filter(function(p){
+        return p && ((Number(p.m)||0) > 0 || String(p.n||'').trim());
+      });
+      const tot = cfMinuti(fasi);
+      const cap = [];
+      if(tot > 0) cap.push(NF0.format(tot)+' min');
+      if(b.pct!=null && b.pct!=='' && Number.isFinite(Number(b.pct))) cap.push(NF0.format(Math.round(Number(b.pct)))+'% carico');
+      if(b.group) cap.push(String(b.group));
+      out.push({ h:true, s:(b.title || cfLab(b.type)) + (cap.length ? ('   '+cap.join(' · ')) : '') });
+      if(fasi.length){
+        out.push({ h:false, s:fasi.map(function(p){
+          const mi = Number(p.m)||0;
+          return cfLab(p.t) + (mi>0 ? (' '+NF0.format(mi)+"'") : '');
+        }).join(' · ') });
+      }
+      const nota = String(b.note||'').trim();
+      if(nota) out.push({ h:false, s:nota });
+    });
+    const pref = 'r|'+iso+'|';
+    Object.keys(cal.comp).forEach(function(k){
+      if(k.indexOf(pref) !== 0) return;
+      const pezzi = k.split('|');
+      if(!cfSlotOk(pezzi[2], ap)) return;
+      const c = cal.comp[k] || {};
+      const nota = String(c.note||'').trim();
+      const avv  = String(c.comp_gara||'').trim();
+      if(avv) out.push({ h:true, s:'Gara con '+avv });
+      if(nota) out.push({ h:false, s:nota });
+    });
+    cfForzaSess().forEach(function(s){
+      if(String(s && s.date||'').slice(0,10) !== iso) return;
+      const righe = (Array.isArray(s.rows)?s.rows:[]).filter(function(r){ return r && String(r.ex||'').trim(); });
+      if(!righe.length) return;
+      out.push({ h:true, s:(String(s.title||'').trim() || 'Seduta di forza')+'   '+NF0.format(righe.length)+' esercizi' });
+      out.push({ h:false, s:righe.map(function(r){
+        const serie = String(r.serie||'').trim();
+        const rip   = String(r.rip||'').trim();
+        const pct   = String(r.pct||'').trim();
+        let coda = '';
+        if(serie && rip) coda = ' '+serie+'x'+rip;
+        else if(rip)     coda = ' '+rip;
+        if(pct) coda += ' @'+(pct.indexOf('%')>=0 ? pct : (pct+'%'));
+        return String(r.ex).trim()+coda;
+      }).join(' · ') });
+    });
+    return out;
+  }
+
   function renderDaily(){
     const host = document.getElementById('rdoc');
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
@@ -1378,7 +1635,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const foot = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(sessLine)+'</span>'+
       '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
 
-    host.innerHTML = headHTML + '<div class="rbody">'+kpis+descBlock+tbl+chart+foot+'</div>';
+    host.innerHTML = headHTML + '<div class="rbody">'+kpis+descBlock+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
     // le pillole cambiano solo il grafico: ridisegnare tutta la pagina farebbe
@@ -1553,9 +1810,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const descLines = desc ? wrapLines(ctx, desc, W - P*2, 3) : [];
     const descH = desc ? (22 + descLines.length*22 + 20) : 0;
 
+    /* Il contenuto della seduta va sotto la tabella: prima i numeri, poi cosa
+       li ha prodotti. Ogni riga viene tagliata alla larghezza del foglio, cosi'
+       una nota lunga non esce dal bordo. */
+    const cfr = cfTesto(m);
+    ctx.font = '400 13.5px Inter, sans-serif';
+    const cfLines = cfr.map(function(r){ return { h:r.h, s:shorten(ctx, r.s, W - P*2) }; });
+    const cfH = cfLines.length ? (26 + cfLines.length*21 + 16) : 0;
+
     const contentY = P + headerH;
     const tableH = headRowH + m.rows.length*rowH + mediaH;
-    const H = contentY + descH + tableH + footerH;
+    const H = contentY + descH + tableH + cfH + footerH;
 
     cv.width = Math.round(W*scale);
     cv.height = Math.round(H*scale);
@@ -1622,6 +1887,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       ctx.fillText(s!=null ? s : '-', cright, ty + mediaH/2);
       ctx.textAlign = 'left';
     });
+    ty += mediaH;
+
+    // cosa si e' fatto
+    if(cfLines.length){
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+      ctx.fillStyle = PC.faint; ctx.font = '700 11px Inter, sans-serif';
+      ctx.fillText('COSA SI E\' FATTO', P, ty + 24);
+      let cy = ty + 46;
+      cfLines.forEach(function(r){
+        ctx.fillStyle = r.h ? PC.ink : PC.text;
+        ctx.font = r.h ? '700 13.5px Inter, sans-serif' : '400 13.5px Inter, sans-serif';
+        ctx.fillText(r.s, P, cy);
+        cy += 21;
+      });
+    }
 
     // footer
     ctx.textBaseline = 'alphabetic';
