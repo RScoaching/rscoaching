@@ -577,6 +577,17 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-fzgo{ display:inline-block; margin-top:9px; font-size:11.5px; font-weight:700;
   color:var(--violet2); text-decoration:none; }
 .pl-fzgo:hover{ color:var(--ink); }
+/* Programma e dati a confronto: tre righe possibili, quello che manca, quello
+   che e' comparso e il caso in cui combacia tutto. */
+.pl-xc{ font-size:12.5px; line-height:1.5; color:var(--text); padding:8px 10px; border-radius:9px;
+  border:1px solid var(--border2); background:var(--surface2); }
+.pl-xc + .pl-xc{ margin-top:7px; }
+.pl-xc b{ font-weight:700; }
+.pl-xc.miss{ border-color:var(--ember-border); background:var(--ember-bg); }
+.pl-xc.miss b{ color:var(--orange2); }
+.pl-xc.extra{ border-color:var(--violet-border); background:var(--violet-bg); }
+.pl-xc.extra b{ color:var(--violet2); }
+.pl-xc.ok{ color:var(--muted); }
 /* "Svolto" e la nota del giorno: stanno qui perche' il dettaglio e' l'unico
    posto dove si apre una seduta, da quando la lista in fondo alla pagina
    non c'e' piu'. Il bottone e il campo sono gli stessi atomi di prima. */
@@ -2767,6 +2778,85 @@ window.RS_ROSTER = window.RS_ROSTER || [
     '</div>';
   }
 
+  /* ---- controllo incrociato col GPS (P20) ----
+     Nel programma c'e' quello che si voleva fare, nei file del GPS quello che
+     e' stato fatto davvero. Quando le due cose non combaciano non e' per forza
+     un errore: una fase salta perche' il campo era occupato, un'altra nasce li'
+     per li'. Ma e' l'unica cosa che vale la pena far vedere, perche' in mezzo
+     ai numeri una fase mancante non si nota. */
+  const XC_WORDS = {
+    attivazione:   ['attivazione','riscaldamento','activation'],
+    rondo:         ['rondo'],
+    possesso:      ['possesso','possessi'],
+    passing:       ['passing','giro palla','circuito passaggi'],
+    ssg:           ['partita a tema','ssg','partitina','partita libera'],
+    transizioni:   ['transizion'],
+    finalizzazione:['finalizzazione','conclusion','tiri in porta'],
+    palleinattive: ['palle inattive','calci piazzati','corner','punizioni','inattive'],
+    duelli:        ['duell','1c1','1v1','uno contro uno'],
+    tecnica:       ['tecnic'],
+    forza:         ['forza','palestra','sala pesi'],
+    sprint:        ['sprint','velocit','accelerazion','navette'],
+    plyo:          ['pliometr','balzi','salti','plyo'],
+    rec:           ['rigenerante','scarico','defaticamento','recupero attivo']
+  };
+  /* Quello che si fa in palestra il GPS non lo vede: segnalarlo come mancante
+     sarebbe un allarme falso ogni volta che c'e' forza in programma. */
+  const XC_NOGPS = { forza:1, plyo:1, rec:1 };
+  function xcType(txt){
+    const t = String(txt || '').toLowerCase();
+    if(!t) return '';
+    for(let i=0;i<PHASE_TYPES.length;i++){
+      const k = PHASE_TYPES[i], w = XC_WORDS[k] || [];
+      for(let j=0;j<w.length;j++){ if(t.indexOf(w[j]) >= 0) return k; }
+    }
+    return '';
+  }
+  /* Le fasi del giorno. Un blocco aggiunto a mano le ha addosso; una giornata
+     registrata no, quindi si cerca il blocco del planner che sta nello stesso
+     giorno e nella stessa parte della giornata. */
+  function xcPhases(s){
+    if(s.manual) return Array.isArray(s.phases) ? s.phases : [];
+    const st = loadStore();
+    const hit = (st.manual || []).find(function(m){
+      if(m.data !== s.data) return false;
+      if(!m.slot || !s.slot) return true;
+      return m.slot === s.slot;
+    });
+    return (hit && Array.isArray(hit.phases)) ? hit.phases : [];
+  }
+  function xcPanel(s){
+    if(!s || s.only_fix) return '';
+    const gps = EX_BY_KEY[String(s.data)+'|'+String(s.slot||'')] || null;
+    const drills = (gps && gps.drills) || [];
+    const plan = xcPhases(s);
+    /* Senza uno dei due lati non c'e' niente da incrociare: un programma senza
+       dati e' una seduta futura, dei dati senza programma sono una giornata
+       registrata e basta. */
+    if(!drills.length || !plan.length) return '';
+    const want = [], ws = {};
+    plan.forEach(function(p){
+      const t = p && p.t;
+      if(t && PHASE_TYPES.indexOf(t) >= 0 && !ws[t]){ ws[t] = 1; want.push(t); }
+    });
+    const got = [], gs = {};
+    drills.forEach(function(d){
+      const t = xcType(d && d.descrizione);
+      if(t && !gs[t]){ gs[t] = 1; got.push(t); }
+    });
+    if(!want.length) return '';
+    const miss  = want.filter(function(t){ return !XC_NOGPS[t] && got.indexOf(t) < 0; });
+    const extra = got.filter(function(t){ return want.indexOf(t) < 0; });
+    const lab = function(t){ return (SES[t] && SES[t].l) || t; };
+    let b = '';
+    if(miss.length) b += '<div class="pl-xc miss"><b>In programma ma non nei dati:</b> '+
+      esc(miss.map(lab).join(', '))+'</div>';
+    if(extra.length) b += '<div class="pl-xc extra"><b>Nei dati ma non in programma:</b> '+
+      esc(extra.map(lab).join(', '))+'</div>';
+    if(!b) b = '<div class="pl-xc ok">Il programma e i dati del giorno dicono la stessa cosa.</div>';
+    return '<div class="sdet"><h4>Programma e dati a confronto</h4><div class="blk">'+b+'</div></div>';
+  }
+
   function plDetBody(s){
     let h = '';
     if(s.fix){
@@ -2829,6 +2919,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
        giorno: aggiungere "nessuna esercitazione" suonerebbe come una seduta
        vuota, che non e'. */
     else if(!fzh) h += '<div class="pl-dempty">Nessuna esercitazione registrata per questa seduta.</div>';
+    /* Il confronto sta in fondo: prima si legge cosa e' successo, poi se
+       combacia con quello che era scritto. */
+    h += xcPanel(s);
     return h;
   }
   function plOpenDet(id){
