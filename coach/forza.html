@@ -518,10 +518,10 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fs-filter select{ appearance:none; font-family:inherit; font-size:13px; color:var(--text);
   background:var(--surface2); border:1px solid var(--border2); border-radius:9px; padding:8px 12px; min-height:40px; min-width:210px; }
 .fs-filter select:hover{ border-color:var(--border3); }
-/* Storico delle sedute salvate: una colonna per seduta, in ordine di data.
-   L'altezza dice quanto lavoro c'era quel giorno, il colore dice se rispetto
-   alla seduta prima si e' salito o scesi. Serve a vedere la direzione del
-   carico senza aprire le schede una per una. */
+/* Andamento del carico: una linea per atleta, messa sul tempo vero delle
+   sedute. Le colonne di prima impilavano tutte le atlete e tutti gli esercizi
+   in un numero solo, e un mucchio non e' un andamento: qui si sceglie chi
+   guardare e su quali esercizi, e la linea risponde. */
 .fstor{ background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
   padding:14px 16px 12px; margin-bottom:18px; }
 .fstor-top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
@@ -532,20 +532,25 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
   font-weight:600; padding:5px 10px; border-radius:7px; cursor:pointer; transition:color .15s var(--ease), background .15s var(--ease); }
 .fstor-b:hover{ color:var(--ink); }
 .fstor-b.on{ background:var(--surface3); color:var(--ink); }
-.fstor-plot{ display:flex; align-items:flex-end; gap:6px; overflow-x:auto; padding-bottom:4px; }
-.fstor-col{ flex:0 0 auto; width:52px; display:flex; flex-direction:column; align-items:center; gap:5px; }
-.fstor-v{ font-size:11px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
-.fstor-bar{ width:100%; height:96px; display:flex; align-items:flex-end;
-  background:linear-gradient(var(--surface2), transparent); border-radius:6px; }
-.fstor-bar i{ display:block; width:100%; border-radius:5px; background:var(--violet2); opacity:.85; min-height:3px; }
-.fstor-col.up .fstor-bar i{ background:var(--orange); }
-.fstor-col.dn .fstor-bar i{ background:var(--violet); opacity:.55; }
-.fstor-d{ font-size:10.5px; color:var(--faint); text-align:center; line-height:1.25; }
-.fstor-d b{ display:block; color:var(--text); font-weight:700; }
-.fstor-dl{ font-size:10.5px; font-weight:700; font-variant-numeric:tabular-nums; }
-.fstor-dl.up{ color:var(--orange2); }
-.fstor-dl.dn{ color:var(--violet2); }
-.fstor-dl.eq{ color:var(--faint); }
+.fstor-fil{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.fstor-frow{ display:flex; align-items:flex-start; gap:10px; }
+.fstor-fl{ flex:0 0 62px; padding-top:5px; font-size:10.5px; font-weight:700; color:var(--faint);
+  text-transform:uppercase; letter-spacing:.04em; }
+.fstor-chips{ flex:1 1 auto; display:flex; flex-wrap:wrap; gap:5px; max-height:104px; overflow-y:auto; }
+.fstor-c{ appearance:none; font-family:inherit; font-size:11.5px; font-weight:600; color:var(--muted);
+  background:var(--surface2); border:1px solid var(--border2); border-radius:999px; padding:4px 10px; cursor:pointer;
+  transition:color .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease); }
+.fstor-c:hover{ color:var(--ink); border-color:var(--border3); }
+.fstor-c.on{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
+.fstor-chart{ display:block; width:100%; height:auto; }
+.fstor-gr{ stroke:var(--border); stroke-width:1; }
+.fstor-ax{ fill:var(--faint); font-size:10px; }
+.fstor-ln{ fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.fstor-pt{ stroke:var(--surface); stroke-width:1.5; }
+.fstor-leg{ display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:8px; }
+.fstor-lg{ display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+.fstor-lg i{ display:inline-block; width:10px; height:10px; border-radius:3px; }
+.fstor-none{ padding:22px 0; text-align:center; font-size:12px; color:var(--faint); }
 .fstor-note{ font-size:11.5px; color:var(--muted); margin:10px 0 0; }
 .fstor-note b{ color:var(--text); font-weight:600; }
 .fmonth + .fmonth{ margin-top:18px; }
@@ -1855,16 +1860,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     s = s.replace(/\s+/g, '').replace(/,/g, '.');
     var kg = s.indexOf('kg') !== -1;
     var num = s.replace(/kg/g, '').replace(/%/g, '');
-    var rng = num.match(/^(\d+(\.\d+)?)-(\d+(\.\d+)?)$/);
-    if(rng){
-      var a = parseFloat(rng[1]), b = parseFloat(rng[3]);
-      if(!isFinite(a) || !isFinite(b) || a <= 0 || b <= 0) return null;
-      return { k:'fix', txt: kgTxt(a) + '-' + kgTxt(b) + ' kg' };
+    /* Un ventaglio di carichi, due numeri o piu': "40-50", "30-35-40 kg". La
+       riga resta a carico fisso, uguale per tutte, ma adesso porta con se'
+       anche un numero: la media del ventaglio. Serve al tonnellaggio, che
+       prima di questi esercizi non sapeva niente e li contava come zero. */
+    if(/^\d+(\.\d+)?(-\d+(\.\d+)?)+$/.test(num)){
+      var ps = num.split('-'), som = 0, lab = [];
+      for(var i = 0; i < ps.length; i++){
+        var pv = parseFloat(ps[i]);
+        if(!isFinite(pv) || pv <= 0) return null;
+        som += pv; lab.push(kgTxt(pv));
+      }
+      return { k:'fix', txt: lab.join('-') + ' kg', v: som / ps.length };
     }
     if(!/^\d+(\.\d+)?$/.test(num)) return null;
     var n = parseFloat(num);
     if(!isFinite(n) || n <= 0) return null;
-    if(kg) return { k:'fix', txt: kgTxt(n) + ' kg' };
+    if(kg) return { k:'fix', txt: kgTxt(n) + ' kg', v:n };
     return { k:'pct', p:n };
   }
   function isManRow(r){ var q = pctInfo(r && r.pct); return !!q && q.k === 'man'; }
@@ -2048,7 +2060,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   /* Prova fatta ma stima saltata: si dice a che percentuale e' caduta la
      ripetizione e dentro che velocita' deve stare perche' il numero valga. */
   function vbtFuori(name, key){
-    if(vbtGet(name, key)) return null;
+    if(vbtGet(name, key) || indGet(name, key)) return null;
     var t = vbtVel(name, key);
     if(!t) return null;
     var p = vbtPct(key, t.v);
@@ -2081,11 +2093,66 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var v = parseFloat(o[key]);
     return (isFinite(v) && v > 0) ? v : null;
   }
-  /* il massimale che conta: quello a mano, altrimenti la stima del test VBT */
+  /* ---- massimale per formula indiretta (punto 77) ------------------------
+     Una seduta gia' fatta dice piu' di una prova in laboratorio: se il carico
+     di quel giorno e' scritto nero su bianco e le ripetizioni sono state
+     quelle, il massimale si ricava con la formula di Epley,
+     1RM = kg per (1 + ripetizioni / 30).
+     Contano solo i kg che esistono da soli: quelli corretti a mano nel foglio
+     dei carichi e quelli fissi scritti nella scheda. Le righe a percentuale
+     restano fuori di proposito, perche' quei kg nascono dal massimale e
+     ricavarci sopra il massimale vorrebbe dire farsi dare ragione da soli.
+     Sopra le dieci ripetizioni la formula si allarga troppo e non si usa, e
+     una seduta che non e' ancora arrivata non ha sollevato niente. */
+  var IND = null;
+  function indKg(s, name, r){
+    var ov = parseFloat((s.kgov || {})[fzKey(r, name)]);
+    if(isFinite(ov) && ov > 0) return ov;
+    var q = pctInfo(r && r.pct);
+    if(q && q.k === 'fix' && q.v > 0) return q.v;
+    return 0;
+  }
+  function indBuild(){
+    var out = {};
+    sessLoad().forEach(function(s){
+      if(!fatta(s.date)) return;
+      var team = audience(s);
+      (s.rows || []).filter(hasEx).forEach(function(r){
+        var key = liftOf(r); if(!key || !RM_LAB[key]) return;
+        var rip = parseFloat(r.rip);
+        if(!isFinite(rip) || rip < 1 || rip > 10) return;
+        team.forEach(function(name){
+          var kg = indKg(s, name, r); if(!kg) return;
+          var v = Math.round(kg * (1 + rip / 30) * 10) / 10;
+          if(!out[name]) out[name] = {};
+          var old = out[name][key];
+          /* si tiene il piu' alto della stagione: un massimale e' il meglio che
+             si e' visto fare, non l'ultima cosa fatta in una giornata leggera */
+          if(old && old.v >= v) return;
+          out[name][key] = { v:v, d:fmtDay(s.date), src:'formula indiretta', lab:'form.' };
+        });
+      });
+    });
+    return out;
+  }
+  function indGet(name, key){
+    if(!IND) IND = indBuild();
+    var o = IND[name];
+    return (o && o[key]) ? o[key] : null;
+  }
+  /* La stima migliore fra le due: se la seduta fatta dice piu' della prova, la
+     prova e' vecchia e il numero vero e' quello alzato in palestra. */
+  function rmEst(name, key){
+    var t = vbtGet(name, key);
+    var f = indGet(name, key);
+    if(t && (!f || f.v <= t.v)) return { v:t.v, d:t.d, src:'test VBT', lab:'test' };
+    return f;
+  }
+  /* il massimale che conta: quello a mano, altrimenti la stima migliore */
   function rmGet(name, key){
     var m = rmMan(name, key);
     if(m != null) return m;
-    var t = vbtGet(name, key);
+    var t = rmEst(name, key);
     return t ? t.v : null;
   }
   function rmSet(name, key, val){
@@ -2202,6 +2269,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      qui sopra la deve vedere subito, non al prossimo caricamento della pagina */
   function sessSave(a){
     try{ localStorage.setItem(SESS_KEY, JSON.stringify(a)); }catch(e){}
+    /* le sedute sono cambiate, quindi i massimali per formula vanno rifatti */
+    IND = null;
     try{ calSync(a); }catch(e){}
     try{ if(typeof window.fioForzaRicarica === 'function') window.fioForzaRicarica(); }catch(e){}
   }
@@ -2428,11 +2497,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     el.textContent = n + (n === 1 ? ' atleta con massimale' : ' atlete con massimale');
   }
   /* Una casella del massimale. Sotto al numero si dice sempre da dove arriva:
-     se il valore e' la stima del test VBT lo si scrive, se invece e' stato scritto
-     a mano resta un pulsantino che riporta al numero del test. */
+     la stima del test VBT o il conto sulla seduta fatta (formula indiretta); se
+     invece il numero e' stato scritto a mano resta un pulsantino che riporta
+     alla stima. */
   function rmCell(name, L, inCls, boxCls, srcCls, undoCls, numerico){
     var man = rmMan(name, L.key);
-    var est = vbtGet(name, L.key);
+    var est = rmEst(name, L.key);
     var v = (man != null) ? man : (est ? est.v : null);
     var cls = inCls + (man != null ? ' set' : (est ? ' vbt' : ''));
     /* la casella numerica del browser accetta solo il punto: 66,3 le farebbe
@@ -2444,10 +2514,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       + ' placeholder="-" aria-label="'+esc(L.label+' '+disp(name))+'">';
     var sotto = '';
     if(est && man == null){
-      sotto = '<span class="'+srcCls+'">test VBT'+(est.d ? ' &#183; '+esc(est.d) : '')+'</span>';
+      sotto = '<span class="'+srcCls+'">'+esc(est.src)+(est.d ? ' &#183; '+esc(est.d) : '')+'</span>';
     }else if(est){
       sotto = '<button class="'+undoCls+'" type="button" data-undo="'+esc(name)+'" data-k="'+L.key+'"'
-        + ' title="Torna alla stima del test VBT">test '+esc(kgTxt(est.v))+'</button>';
+        + ' title="Torna alla stima: '+esc(est.src)+(est.d ? ', '+esc(est.d) : '')+'">'
+        + esc(est.lab)+' '+esc(kgTxt(est.v))+'</button>';
     }else{
       var fu = vbtFuori(name, L.key);
       if(fu) sotto = '<span class="'+srcCls+' fuori" title="'+esc(fu.det)+'">'+fu.breve+'</span>';
@@ -2458,7 +2529,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      cambia il bordo e riscrive la riga sotto con la provenienza aggiornata. */
   function rmSync(inp){
     var name = inp.getAttribute('data-n'), key = inp.getAttribute('data-k');
-    var man = rmMan(name, key), est = vbtGet(name, key);
+    var man = rmMan(name, key), est = rmEst(name, key);
     inp.classList.toggle('set', man != null);
     inp.classList.toggle('vbt', man == null && !!est);
     var box = inp.parentNode;
@@ -2480,14 +2551,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(man == null){
       var s = document.createElement('span');
       s.className = 'rm-src';
-      s.innerHTML = 'test VBT' + (est.d ? ' &#183; ' + esc(est.d) : '');
+      s.innerHTML = esc(est.src) + (est.d ? ' &#183; ' + esc(est.d) : '');
       box.appendChild(s);
     }else{
       var b = document.createElement('button');
       b.className = 'rm-undo'; b.type = 'button';
       b.setAttribute('data-undo', name); b.setAttribute('data-k', key);
-      b.title = 'Torna alla stima del test VBT';
-      b.textContent = 'test ' + kgTxt(est.v);
+      b.title = 'Torna alla stima: ' + est.src + (est.d ? ', ' + est.d : '');
+      b.textContent = est.lab + ' ' + kgTxt(est.v);
       box.appendChild(b);
     }
   }
@@ -2495,7 +2566,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function rmRefill(inp){
     var name = inp.getAttribute('data-n'), key = inp.getAttribute('data-k');
     if(rmMan(name, key) != null) return;
-    var est = vbtGet(name, key);
+    var est = rmEst(name, key);
     if(!est){ inp.value = ''; return; }
     inp.value = (inp.type === 'number') ? String(est.v) : kgTxt(est.v);
   }
@@ -2645,9 +2716,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   /* ---- sedute salvate ---- */
   var schedState = { player:'all' };
-  /* cosa si guarda nello storico: serie di lavoro, volume (serie per
-     ripetizioni) oppure il tonnellaggio medio per atleta in kg */
-  var storState = { m:'ton' };
+  /* cosa si guarda nell'andamento: serie di lavoro, volume (serie per
+     ripetizioni) oppure il tonnellaggio in kg. `pl` sono le atlete scelte, una
+     linea a testa, e vuoto vuol dire la media della squadra; `ex` sono gli
+     esercizi scelti, e vuoto vuol dire tutti. */
+  var storState = { m:'ton', pl:[], ex:[] };
 
   /* ---- il filo fra costruttore e archivio -------------------------------
      Il costruttore tiene una bozza sola. Finche' quella bozza resta legata a
@@ -2814,15 +2887,18 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       + '</div>';
   }
 
-  /* ---------- storico e direzione del carico -----------------------------
-     Le schede da sole dicono cosa c'era in ogni seduta, non dove sta andando
-     il lavoro. Qui le sedute con una data si mettono in fila nel tempo, una
-     colonna a testa, e si legge la direzione: colonna arancione se rispetto
-     alla seduta prima si e' salito, viola smorzato se si e' scesi.
-     Tre letture dello stesso allenamento: le serie di lavoro, il volume
-     (serie per ripetizioni) e il tonnellaggio, cioe' i kg davvero sollevati in
-     media da una atleta. Il tonnellaggio e' l'unico che tiene conto del
-     massimale, quindi e' quello che dice se la seduta era pesante.
+  /* ---------- andamento del carico (punto 76) -----------------------------
+     Prima qui c'era una colonna per seduta con dentro tutte le atlete e tutti
+     gli esercizi mescolati insieme. Un numero solo che tiene la squadra intera
+     e la scheda intera non e' un andamento, e' una somma: se una alza lo squat
+     e un'altra scende sul calf la colonna resta ferma e sembra che non sia
+     successo niente. Da qui in avanti si sceglie chi guardare e su quali
+     esercizi, e il disegno e' una linea sul tempo vero delle sedute, non una
+     fila di colonne una accanto all'altra.
+     Tre letture dello stesso lavoro: le serie, il volume (serie per
+     ripetizioni) e il tonnellaggio, cioe' i kg davvero sollevati. Il
+     tonnellaggio e' l'unico che guarda il carico, quindi e' quello che dice se
+     la seduta era pesante.
      Le serie di avvicinamento restano fuori da tutti e tre: sono la salita al
      carico, non il lavoro. --------------------------------------------- */
   var STOR_M = [
@@ -2830,83 +2906,202 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     { k:'vol',   lab:'Volume' },
     { k:'serie', lab:'Serie' }
   ];
-  /* kg medi per atleta di una seduta: si sommano serie per ripetizioni per
-     kg su ogni riga che ha un carico, poi si divide per quante la fanno. */
-  function storTon(s){
-    var rows = kgRows(s.rows || []);
+  /* Sei colori che si distinguono anche accostati: piu' di sei linee insieme
+     non si leggono comunque, e da li' in poi ricominciano. */
+  var STOR_COL = ['var(--orange)','var(--violet2)','var(--green)','var(--red2)','var(--orange2)','var(--violet)'];
+
+  function exKey(v){ return String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' '); }
+  function inSess(s, name){ return isAll(s.players) ? true : (s.players || []).indexOf(name) !== -1; }
+
+  /* i kg di una riga per quella atleta: la percentuale passa dal massimale e
+     dalle correzioni a mano, il carico scritto vale uguale per tutte. Di un
+     ventaglio tipo "30-35-40 kg" si prende la media, che e' quello che in una
+     scala di serie si solleva davvero. */
+  function tonKg(s, name, r){
+    var q = pctInfo(r && r.pct);
+    if(!q) return 0;
+    if(q.k === 'fix') return q.v || 0;
+    if(q.k !== 'pct') return 0;
+    var kg = fzKg(s, name, r);
+    return kg ? kg.v : 0;
+  }
+  function storRows(s){
+    var sel = storState.ex || [];
+    return (s.rows || []).filter(hasEx).filter(function(r){
+      return !sel.length || sel.indexOf(exKey(r.ex)) !== -1;
+    });
+  }
+  /* il valore di una seduta. Con un nome e' il lavoro di quella atleta, senza
+     nome e' la media della squadra convocata quel giorno. */
+  function storVal(s, m, name){
+    var rows = storRows(s);
     if(!rows.length) return 0;
-    var team = audience(s);
+    if(m !== 'ton'){
+      var t = 0;
+      rows.forEach(function(r){
+        var se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0;
+        t += (m === 'serie') ? se : se * rp;
+      });
+      return t;
+    }
+    var team = name ? [name] : audience(s);
     if(!team.length) return 0;
     var tot = 0;
-    team.forEach(function(name){
+    team.forEach(function(n){
       rows.forEach(function(r){
-        var kg = fzKg(s, name, r); if(!kg) return;
+        var kg = tonKg(s, n, r); if(!kg) return;
         var se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0;
-        if(se > 0 && rp > 0) tot += se * rp * kg.v;
+        if(se > 0 && rp > 0) tot += se * rp * kg;
       });
     });
     return tot / team.length;
-  }
-  function storVal(s, m){
-    var st = statsOf((s.rows || []).filter(hasEx));
-    if(m === 'serie') return st.serie;
-    if(m === 'vol') return st.vol;
-    return storTon(s);
   }
   function storNum(v, m){
     if(m === 'ton') return (v >= 1000) ? (Math.round(v / 100) / 10 + 't') : (Math.round(v) + '');
     return Math.round(v) + '';
   }
+  function storExList(list){
+    var seen = {}, out = [];
+    (list || []).forEach(function(s){
+      (s.rows || []).filter(hasEx).forEach(function(r){
+        var k = exKey(r.ex);
+        if(k && !seen[k]){ seen[k] = 1; out.push({ k:k, lab:String(r.ex).trim() }); }
+      });
+    });
+    out.sort(function(a,b){ return a.lab.localeCompare(b.lab); });
+    return out;
+  }
+  function storPlList(list){
+    var seen = {}, out = [];
+    (list || []).forEach(function(s){
+      audience(s).forEach(function(n){ if(!seen[n]){ seen[n] = 1; out.push(n); } });
+    });
+    out.sort(function(a,b){ return disp(a).localeCompare(disp(b)); });
+    return out;
+  }
+  function sxn(v){ return Math.round(v * 10) / 10; }
+
+  /* Il disegno. Le sedute stanno sull'asse dove cadono davvero nel calendario:
+     due sedute a due giorni di distanza e due a un mese non possono avere la
+     stessa pendenza, se no la linea racconta una progressione che non c'e'
+     stata. La scala parte da zero perche' e' un carico: partire dal minimo
+     farebbe sembrare un raddoppio quello che e' un ritocco. */
+  function storChart(seq, lines, m){
+    var W = 720, H = 200, PL = 48, PR = 14, PT = 14, PB = 32;
+    var xs = seq.map(function(s){ var d = parseISO(s.date); return d ? Math.floor(d.getTime()/86400000) : null; });
+    var okx = true;
+    for(var q = 0; q < xs.length; q++){ if(xs[q] == null){ okx = false; break; } }
+    if(okx && (Math.max.apply(null, xs) - Math.min.apply(null, xs)) <= 0) okx = false;
+    if(!okx) xs = seq.map(function(s, i){ return i; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    var hi = 0;
+    lines.forEach(function(L){ L.v.forEach(function(v){ if(v != null && v > hi) hi = v; }); });
+    if(hi <= 0) return '';
+    var top = hi * 1.08;
+    var px = function(i){ return PL + (xs[i] - x0) * (W - PL - PR) / ((x1 - x0) || 1); };
+    var py = function(v){ return H - PB - v * (H - PT - PB) / top; };
+
+    var g = '';
+    [0, 0.5, 1].forEach(function(f){
+      var y = sxn(py(top * f));
+      g += '<line class="fstor-gr" x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'"></line>'
+        + '<text class="fstor-ax" x="'+(PL-6)+'" y="'+(y+3.5)+'" text-anchor="end">'+esc(storNum(top*f, m))+'</text>';
+    });
+    /* le date sotto: se sono tante se ne scrive una ogni tot, se no i giorni
+       si sovrappongono e non si legge piu' niente */
+    var step = Math.ceil(seq.length / 8);
+    seq.forEach(function(s, i){
+      if(i % step !== 0 && i !== seq.length - 1) return;
+      var d = parseISO(s.date);
+      var lab = d ? (d.getDate() + ' ' + MON3.format(d).replace('.', '')) : '-';
+      g += '<text class="fstor-ax" x="'+sxn(px(i))+'" y="'+(H-PB+16)+'" text-anchor="middle">'+esc(lab)+'</text>';
+    });
+
+    var body = '', leg = '';
+    lines.forEach(function(L, li){
+      var col = STOR_COL[li % STOR_COL.length];
+      var d = '', open = false, pts = '';
+      L.v.forEach(function(v, i){
+        if(v == null || v <= 0){ open = false; return; }
+        var x = sxn(px(i)), y = sxn(py(v));
+        d += (open ? 'L' : 'M') + x + ' ' + y + ' ';
+        open = true;
+        pts += '<circle class="fstor-pt" cx="'+x+'" cy="'+y+'" r="3.2" fill="'+col+'"></circle>';
+      });
+      if(d) body += '<path class="fstor-ln" d="'+d.trim()+'" stroke="'+col+'"></path>' + pts;
+      leg += '<span class="fstor-lg"><i style="background:'+col+'"></i>'+esc(L.lab)+'</span>';
+    });
+    if(!body) return '';
+    return '<svg class="fstor-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Andamento del carico nel tempo">'
+      + g + body + '</svg>'
+      + '<div class="fstor-leg">' + leg + '</div>';
+  }
+
   function fbStorico(list){
     var m = storState.m;
     /* senza data una seduta non ha un posto nella fila del tempo */
     var seq = (list || []).filter(function(s){ return !!s.date && (s.rows || []).filter(hasEx).length; });
     seq.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.ts||0)-(b.ts||0); });
     if(seq.length < 2) return '';
-    var vals = seq.map(function(s){ return storVal(s, m); });
-    var max = vals.reduce(function(a,v){ return v > a ? v : a; }, 0);
-    if(!max) return '';
-    var cols = '';
-    seq.forEach(function(s, i){
-      var v = vals[i], prec = i ? vals[i-1] : null;
-      var seg = '', dl = '<span class="fstor-dl eq">-</span>';
-      if(prec != null && prec > 0){
-        var dp = Math.round((v - prec) / prec * 100);
-        if(dp >= 3){ seg = ' up'; dl = '<span class="fstor-dl up">+'+dp+'%</span>'; }
-        else if(dp <= -3){ seg = ' dn'; dl = '<span class="fstor-dl dn">'+dp+'%</span>'; }
-        else dl = '<span class="fstor-dl eq">'+(dp>0?'+':'')+dp+'%</span>';
-      }
-      var d = parseISO(s.date);
-      var gg = d ? d.getDate() : '-';
-      var mm = d ? MON3.format(d).replace('.','') : '';
-      var h = Math.max(3, Math.round(v / max * 96));
-      cols += '<div class="fstor-col'+seg+'" title="'+esc((s.title||'Seduta')+' - '+fmtDay(s.date))+'">'
-        + '<span class="fstor-v">'+esc(storNum(v, m))+'</span>'
-        + '<span class="fstor-bar"><i style="height:'+h+'px"></i></span>'
-        + dl
-        + '<span class="fstor-d"><b>'+gg+'</b>'+esc(mm)+'</span>'
-        + '</div>';
-    });
+
     var sw = STOR_M.map(function(o){
       return '<button type="button" class="fstor-b'+(o.k===m?' on':'')+'" data-stor="'+o.k+'">'+o.lab+'</button>';
     }).join('');
-    /* la direzione complessiva: dalla prima all'ultima seduta della fila */
-    var primo = vals[0], ultimo = vals[vals.length-1], dir = '';
-    if(primo > 0){
-      var tot = Math.round((ultimo - primo) / primo * 100);
+
+    var plSel = storState.pl || [], exSel = storState.ex || [];
+    var plc = '<button type="button" class="fstor-c'+(plSel.length?'':' on')+'" data-pl="*">Squadra</button>';
+    storPlList(seq).forEach(function(n){
+      plc += '<button type="button" class="fstor-c'+(plSel.indexOf(n)!==-1?' on':'')+'" data-pl="'+esc(n)+'">'+esc(disp(n))+'</button>';
+    });
+    var exc = '<button type="button" class="fstor-c'+(exSel.length?'':' on')+'" data-ex="*">Tutti</button>';
+    storExList(seq).forEach(function(o){
+      exc += '<button type="button" class="fstor-c'+(exSel.indexOf(o.k)!==-1?' on':'')+'" data-ex="'+esc(o.k)+'">'+esc(o.lab)+'</button>';
+    });
+    var fil = '<div class="fstor-fil">'
+      + '<div class="fstor-frow"><span class="fstor-fl">Atlete</span><div class="fstor-chips">'+plc+'</div></div>'
+      + '<div class="fstor-frow"><span class="fstor-fl">Esercizi</span><div class="fstor-chips">'+exc+'</div></div>'
+      + '</div>';
+
+    /* una linea per atleta scelta, e se non ne hai scelta nessuna una linea
+       sola con la media della squadra */
+    var lines = [];
+    if(plSel.length){
+      plSel.forEach(function(n){
+        lines.push({ lab: disp(n), v: seq.map(function(s){
+          return inSess(s, n) ? storVal(s, m, n) : null;
+        }) });
+      });
+    } else {
+      lines.push({ lab:'Squadra', v: seq.map(function(s){ return storVal(s, m, null); }) });
+    }
+
+    var plot = storChart(seq, lines, m);
+    if(!plot){
+      plot = '<div class="fstor-none">Su questa scelta non ci sono carichi da mettere in fila.'
+        + ' Prova con altri esercizi, o con tutti.</div>';
+    }
+
+    /* la direzione complessiva della prima linea: dalla prima all'ultima
+       seduta in cui c'e' un numero */
+    var dir = '', v0 = null, v1 = null;
+    lines[0].v.forEach(function(v){ if(v != null && v > 0){ if(v0 == null) v0 = v; v1 = v; } });
+    if(v0 != null && v1 != null && v0 > 0){
+      var tot = Math.round((v1 - v0) / v0 * 100);
+      var chi = lines.length > 1 ? (lines[0].lab + ': dalla') : 'Dalla';
       dir = (Math.abs(tot) < 3)
-        ? 'Dalla prima all\'ultima seduta il carico e\' rimasto <b>fermo</b>.'
-        : ('Dalla prima all\'ultima seduta il carico e\' <b>'+(tot>0?'salito':'sceso')+' del '+Math.abs(tot)+'%</b>.');
+        ? (chi + ' prima all\'ultima seduta il carico e\' rimasto <b>fermo</b>.')
+        : (chi + ' prima all\'ultima seduta il carico e\' <b>'+(tot>0?'salito':'sceso')+' del '+Math.abs(tot)+'%</b>.');
     }
     var spieg = (m === 'ton')
-      ? 'Tonnellaggio: kg medi sollevati da una atleta in quella seduta, massimali e correzioni a mano compresi.'
+      ? 'Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.'
       : (m === 'vol'
         ? 'Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.'
         : 'Serie di lavoro della seduta, senza contare le serie di avvicinamento.');
     return '<div class="fstor">'
-      + '<div class="fstor-top"><span class="fstor-cap">Storico e direzione del carico</span>'
-      +   '<span class="fstor-sw" role="group" aria-label="Cosa mostrare nello storico">'+sw+'</span></div>'
-      + '<div class="fstor-plot">'+cols+'</div>'
+      + '<div class="fstor-top"><span class="fstor-cap">Andamento del carico</span>'
+      +   '<span class="fstor-sw" role="group" aria-label="Cosa mostrare nell\'andamento">'+sw+'</span></div>'
+      + fil
+      + plot
       + '<p class="fstor-note">'+spieg+' '+dir+'</p>'
       + '</div>';
   }
@@ -3577,12 +3772,26 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(e.target && e.target.id==='fs-player'){ schedState.player = e.target.value; renderSched(); }
       });
       fsched.addEventListener('click', function(e){
-        /* l'interruttore dello storico: serie, volume o tonnellaggio */
+        /* l'interruttore dell'andamento: serie, volume o tonnellaggio */
         var sb = e.target.closest ? e.target.closest('.fstor-b') : null;
         if(sb){
           var mk = sb.getAttribute('data-stor');
           if(mk && mk !== storState.m){ storState.m = mk; renderSched(); }
           return;
+        }
+        /* le scelte: atlete ed esercizi. La pastiglia di sinistra rimette
+           tutto com'era, le altre si accendono e si spengono una per una. */
+        var cc = e.target.closest ? e.target.closest('.fstor-c') : null;
+        if(cc){
+          var pv = cc.getAttribute('data-pl'), ev = cc.getAttribute('data-ex');
+          var key = pv != null ? 'pl' : 'ex', val = pv != null ? pv : ev;
+          if(val === '*'){ storState[key] = []; }
+          else {
+            var arr = storState[key].slice(), at = arr.indexOf(val);
+            if(at === -1) arr.push(val); else arr.splice(at, 1);
+            storState[key] = arr;
+          }
+          renderSched(); return;
         }
         var b = e.target.closest ? e.target.closest('.fs-btn') : null; if(!b) return;
         var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
