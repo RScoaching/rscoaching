@@ -454,7 +454,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-dialog select:focus, .pl-dialog input:focus, .pl-dialog textarea:focus{ border-color:var(--violet-border); }
 .pl-phz{ display:flex; flex-direction:column; gap:9px; }
 .pl-phz-list{ display:flex; flex-direction:column; gap:9px; }
-.pl-phz-row{ display:grid; grid-template-columns:1fr 72px 34px; gap:7px; align-items:center;
+.pl-phz-row{ display:grid; grid-template-columns:1fr 72px 34px 34px; gap:7px; align-items:center;
   padding:8px; border:1px solid var(--border2); border-radius:10px; background:var(--surface2); }
 .pl-phz-row .pl-phz-n{ grid-column:1 / -1; }
 .pl-phz-row .pl-phz-t, .pl-phz-row .pl-phz-m, .pl-phz-row .pl-phz-n{ background:var(--surface); min-height:34px; }
@@ -463,6 +463,23 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   transition:color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
 .pl-phz-x:hover{ color:var(--red2); border-color:var(--red-border); background:var(--red-bg); }
 .pl-phz-x svg{ width:13px; height:13px; }
+/* Copiare una fase sola. Il blocco intero si copia gia' dal giorno, ma spesso
+   quello che si ripete e' un pezzo: lo stesso rondo di lunedi' rimesso in
+   mezzo alla seduta di giovedi'. La fase copiata resta in mano finche' non se
+   ne copia un'altra, cosi' la si puo' incollare in piu' giorni di seguito. */
+.pl-phz-c{ appearance:none; cursor:pointer; width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:8px; border:1px solid var(--border2); background:var(--surface); color:var(--muted);
+  transition:color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
+.pl-phz-c:hover{ color:var(--violet2); border-color:var(--violet-border); background:var(--violet-bg); }
+.pl-phz-c svg{ width:13px; height:13px; }
+.pl-phz-clip{ display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:7px 9px; border:1px dashed var(--violet-border); border-radius:10px; background:var(--violet-bg); }
+.pl-phz-clip .t{ font-size:11.5px; color:var(--muted); flex:1 1 auto; min-width:0; }
+.pl-phz-clip .t b{ color:var(--ink); font-weight:600; }
+.pl-phz-clipb{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:700; color:var(--violet2);
+  padding:5px 11px; border-radius:999px; border:1px solid var(--violet-border); background:var(--surface);
+  transition:color .16s var(--ease), background .16s var(--ease); }
+.pl-phz-clipb:hover{ color:var(--ink); background:var(--surface2); }
 .pl-phz-empty{ font-size:11.5px; color:var(--faint); line-height:1.45; padding:2px 0; }
 .pl-phz-quick{ display:flex; flex-wrap:wrap; gap:5px; }
 .pl-phz-qc{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:600; color:var(--muted);
@@ -1679,6 +1696,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
   })();
   function plSave(){ try{ localStorage.setItem(PL_KEY, JSON.stringify(PL)); }catch(e){} }
   let PL_CLIP = null;   // blocco copiato (senza id)
+  /* Fase singola copiata: e' il pezzo di seduta, non la seduta intera. Resta
+     in mano finche' non se ne copia un'altra, cosi' si incolla in piu' giorni. */
+  let PL_PHCLIP = null;
 
   const DTF_PL_MONTH = new Intl.DateTimeFormat('it-IT', { month:'long', year:'numeric' });
   const PL_DOW = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
@@ -2444,10 +2464,23 @@ window.RS_ROSTER = window.RS_ROSTER || [
         return '<div class="pl-phz-row" data-i="'+i+'">'+
           '<select class="pl-phz-t" data-i="'+i+'" aria-label="Attivita fase">'+opts+'</select>'+
           '<input class="pl-phz-m" data-i="'+i+'" type="number" min="0" max="240" step="5" value="'+(p.m||'')+'" placeholder="min" aria-label="Minuti">'+
+          '<button type="button" class="pl-phz-c" data-i="'+i+'" title="Copia questa fase" aria-label="Copia questa fase">'+PL_COPY_SVG+'</button>'+
           '<button type="button" class="pl-phz-x" data-i="'+i+'" aria-label="Rimuovi fase">'+PL_X_SVG+'</button>'+
           '<input class="pl-phz-n" data-i="'+i+'" type="text" maxlength="80" value="'+esc(p.n||'')+'" placeholder="dettaglio: es. 4v4+3 sponde, campo 30x25" aria-label="Dettaglio fase">'+
         '</div>';
       }).join('');
+    }
+    /* La fase in mano si vede sempre, anche a lista vuota: e' il caso in cui
+       serve di piu', un giorno appena aperto in cui si rimette il rondo di
+       lunedi'. Il tasto la aggiunge in fondo e la lascia in mano. */
+    if(PL_PHCLIP){
+      const et = sesShort(PL_PHCLIP.t) + (PL_PHCLIP.m ? (' ' + PL_PHCLIP.m + ' min') : '');
+      const ed = PL_PHCLIP.n ? (': ' + PL_PHCLIP.n) : '';
+      host.innerHTML += '<div class="pl-phz-clip">'+
+        '<span class="t">Fase copiata: <b>'+esc(et)+'</b>'+esc(ed)+'</span>'+
+        '<button type="button" class="pl-phz-clipb" data-phpaste="1">Incolla fase</button>'+
+        '<button type="button" class="pl-phz-clipb" data-phdrop="1">Lascia</button>'+
+      '</div>';
     }
     plUpdatePhaseTot();
   }
@@ -2477,7 +2510,30 @@ window.RS_ROSTER = window.RS_ROSTER || [
         if(el.classList.contains('pl-phz-t')){ plEditPhases[i].t = SES[el.value]?el.value:'possesso'; }
       });
       host.addEventListener('click', function(e){
-        const x=e.target.closest('.pl-phz-x'); if(x){ e.preventDefault(); const i=+x.getAttribute('data-i'); if(!isNaN(i)){ plEditPhases.splice(i,1); plRenderPhases(); } }
+        const x=e.target.closest('.pl-phz-x'); if(x){ e.preventDefault(); const i=+x.getAttribute('data-i'); if(!isNaN(i)){ plEditPhases.splice(i,1); plRenderPhases(); } return; }
+        /* copia della singola fase: si porta dietro attivita', minuti e
+           dettaglio, cioe' tutto quello che la descrive */
+        const c=e.target.closest('.pl-phz-c');
+        if(c){
+          e.preventDefault();
+          const i=+c.getAttribute('data-i');
+          if(!isNaN(i) && plEditPhases[i]){
+            PL_PHCLIP = phNorm(plEditPhases[i]);
+            plRenderPhases();
+            toast('Fase copiata: aprine un\'altra e premi Incolla fase');
+          }
+          return;
+        }
+        if(e.target.closest('[data-phpaste]')){
+          e.preventDefault();
+          if(PL_PHCLIP){ plEditPhases.push(phNorm(PL_PHCLIP)); plRenderPhases(); }
+          return;
+        }
+        if(e.target.closest('[data-phdrop]')){
+          e.preventDefault();
+          PL_PHCLIP = null; plRenderPhases();
+          return;
+        }
       });
     }
   }
