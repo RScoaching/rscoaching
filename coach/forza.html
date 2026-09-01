@@ -307,6 +307,17 @@ a{ color:inherit; text-decoration:none; }
 .fb-head{ display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; padding:15px 18px 13px; border-bottom:1px solid var(--border); }
 .fb-title{ font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:.5px; color:var(--ink); line-height:1; }
 .fb-sub{ font-size:12px; color:var(--muted); margin-top:4px; max-width:60ch; }
+/* La riga che dice se quello che sta nel costruttore e' una seduta nuova o una
+   gia' salvata che si sta correggendo. Serve per non riscrivere sopra a quella
+   della settimana prima senza accorgersene. */
+.fb-state{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:12px;
+  color:var(--muted); background:var(--surface2); border:1px solid var(--border2);
+  border-radius:999px; padding:5px 6px 5px 12px; }
+.fb-state b{ color:var(--ink); font-weight:600; }
+.fb-state.edit{ border-color:var(--border3); background:var(--surface3); }
+.fb-state .fb-new{ appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:600;
+  color:var(--text); background:var(--surface); border:1px solid var(--border2); border-radius:999px; padding:4px 11px; }
+.fb-state .fb-new:hover{ color:var(--ink); border-color:var(--border3); }
 .fb-tools{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 12px; padding:14px 18px; border-bottom:1px solid var(--border); }
 .fb-tools .fg.w-tpl select{ width:200px; }
 .fb-tools .fg.w-name input{ width:230px; }
@@ -615,6 +626,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
             <div class="fb-sub">Costruisci la seduta di palestra, assegna la data e le atlete, poi salvala nel programma. Stampa la scheda o proiettala in sala. Nella colonna %1RM scrivi 80 per la percentuale del massimale, 40kg o 40-50 per un carico uguale per tutte, manuale per avere la colonna vuota nel foglio dei carichi.</div>
           </div>
           <span class="spacer"></span>
+          <div class="fb-state" id="fb-state"></div>
         </div>
         <div class="fb-tools">
           <div class="fg w-tpl"><label for="fb-tpl">Modello</label>
@@ -2344,11 +2356,46 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(tpl && tpl.querySelector('option[value="'+FB.tpl+'"]')) tpl.value = FB.tpl;
     if(name) name.value = FB.title || '';
     if(date) date.value = FB.date || '';
-    updatePickLabel(); renderTags(); fbRender();
+    updatePickLabel(); renderTags(); fbRender(); fbStateRender();
   }
 
   /* ---- sedute salvate ---- */
   var schedState = { player:'all' };
+
+  /* ---- il filo fra costruttore e archivio -------------------------------
+     Il costruttore tiene una bozza sola. Finche' quella bozza resta legata a
+     una seduta gia' salvata (`_editId`), ogni salvataggio riscrive quella li'.
+     E' cosi' che sono sparite le sedute del 18 e del 24: si riapre la scheda
+     della settimana prima, si cambiano esercizi e data, si salva, e al posto
+     di due sedute ne resta una. Da qui in avanti il filo si vede in testa al
+     costruttore e si taglia da solo appena la data cambia giorno. */
+  function fbLinked(){
+    if(!FB._editId) return null;
+    var list = sessLoad();
+    for(var i=0;i<list.length;i++){ if(list[i].id === FB._editId) return list[i]; }
+    return null;
+  }
+  function fbStateRender(){
+    var el = document.getElementById('fb-state'); if(!el) return;
+    var s = fbLinked();
+    if(!s){
+      el.className = 'fb-state';
+      el.innerHTML = '<span>Seduta nuova: al salvataggio si aggiunge all\'archivio</span>';
+      return;
+    }
+    el.className = 'fb-state edit';
+    el.innerHTML = '<span>Stai correggendo <b>' + esc(s.title || 'Seduta forza') + '</b>'
+      + (s.date ? (' del <b>' + esc(fmtDay(s.date)) + '</b>') : '') + '</span>'
+      + '<button class="fb-new" id="fb-new" type="button">Seduta nuova</button>';
+  }
+  /* Taglia il filo: la bozza resta com'e', ma il prossimo salvataggio crea una
+     seduta in piu' invece di riscrivere quella vecchia. */
+  function fbDetach(msg){
+    if(!FB._editId) return false;
+    FB._editId = null; fbSave(); fbStateRender();
+    if(msg) fbToast(msg);
+    return true;
+  }
 
   function saveSession(){
     var named = FB.rows.filter(hasEx);
@@ -2369,6 +2416,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     };
     var idx = -1;
     if(FB._editId){ for(var i=0;i<list.length;i++){ if(list[i].id===FB._editId){ idx=i; break; } } }
+    /* Ultima rete di sicurezza: se il giorno non e' piu' quello della seduta
+       collegata, questa e' un'altra seduta e la vecchia resta dov'e'. */
+    var spostata = idx>=0 && list[idx].date && list[idx].date !== sess.date;
+    if(spostata){ idx = -1; sess.id = 's'+Date.now()+Math.floor(Math.random()*1000); }
     var updated = idx>=0;
     if(updated){ sess.id = list[idx].id; list[idx] = sess; } else { list.push(sess); }
     sessSave(list);
@@ -2923,7 +2974,23 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       fbRender(); fbSave();
     });
     name.addEventListener('input', function(){ FB.title = name.value; fbSave(); fzPrevRender(); });
-    if(date) date.addEventListener('input', function(){ FB.date = date.value; fbSave(); fzPrevRender(); });
+    if(date) date.addEventListener('input', function(){
+      FB.date = date.value; fbSave(); fzPrevRender();
+      /* Cambiare giorno vuol dire quasi sempre "questa e' la seduta della
+         settimana dopo": si stacca da quella salvata, che resta in archivio. */
+      var l = fbLinked();
+      if(l && l.date && FB.date && l.date !== FB.date){
+        fbDetach('Giorno diverso: la seduta del ' + fmtDay(l.date) + ' resta in archivio, questa si salva a parte');
+      } else { fbStateRender(); }
+    });
+    /* Il bottone nasce e muore dentro la riga di stato, percio' l'ascolto sta
+       sulla riga e non sul bottone. */
+    var fbState = document.getElementById('fb-state');
+    if(fbState) fbState.addEventListener('click', function(e){
+      var b = e.target.closest ? e.target.closest('#fb-new') : null;
+      if(!b) return;
+      fbDetach('Seduta nuova: quella di prima resta salvata');
+    });
 
     document.getElementById('fb-add').addEventListener('click', function(){
       FB.rows.push({ex:'', serie:'3', rip:'8', pct:'', rec:'90', note:'', lift:'auto'});
