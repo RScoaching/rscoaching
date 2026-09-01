@@ -601,6 +601,20 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-xc.extra{ border-color:var(--violet-border); background:var(--violet-bg); }
 .pl-xc.extra b{ color:var(--violet2); }
 .pl-xc.ok{ color:var(--muted); }
+/* Il programma della seduta, cioe' le fasi scritte nel costruttore. Una riga per
+   fase: minuti a sinistra perche' e' quello che si cerca scorrendo, poi il nome
+   dell'attivita', poi il dettaglio con la sua lettura. */
+.pl-pg{ display:flex; align-items:baseline; gap:9px; padding:6px 0; }
+.pl-pg + .pl-pg{ border-top:1px solid var(--border2); }
+.pl-pg .m{ flex:0 0 42px; text-align:right; font-size:12.5px; font-weight:700; color:var(--ink);
+  font-variant-numeric:tabular-nums; }
+.pl-pg .b{ flex:1 1 auto; min-width:0; }
+.pl-pg .t{ font-size:12.5px; font-weight:600; color:var(--text); }
+.pl-pg .n{ display:block; font-size:11.5px; color:var(--muted); line-height:1.45; }
+.pl-pg .s{ display:block; font-size:11px; color:var(--faint); line-height:1.4; }
+.pl-pg .s b{ color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+.pl-pgtot{ margin-top:8px; font-size:12px; color:var(--muted); }
+.pl-pgtot b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
 /* "Svolto" e la nota del giorno: stanno qui perche' il dettaglio e' l'unico
    posto dove si apre una seduta, da quando la lista in fondo alla pagina
    non c'e' piu'. Il bottone e il campo sono gli stessi atomi di prima. */
@@ -3008,6 +3022,40 @@ window.RS_ROSTER = window.RS_ROSTER || [
     });
     return (hit && Array.isArray(hit.phases)) ? hit.phases : [];
   }
+  /* Il programma della seduta dentro il dettaglio del giorno (punto 70).
+     Le fasi si scrivevano nel costruttore e poi sparivano: aprendo il giorno si
+     vedeva solo quello che il GPS aveva registrato, e per rileggere il programma
+     bisognava rientrare in Modifica. Qui il programma si legge e basta, con la
+     stessa lettura del dettaglio del punto 69 e la stessa stima del punto 68,
+     cosi' il dialogo racconta l'ordine giusto: cosa era scritto, cosa e'
+     successo, e se le due cose combaciano. */
+  function pgPanel(s){
+    if(!s || s.only_fix) return '';
+    const plan = xcPhases(s);
+    if(!plan.length) return '';
+    let rows = '';
+    plan.forEach(function(p){
+      if(!p || (!p.t && !p.n && !p.m)) return;
+      const m = Number(p.m) || 0;
+      const sp = spLine(p.n);
+      rows += '<div class="pl-pg">'+
+        '<span class="m">'+(m ? (m+"'") : '')+'</span>'+
+        '<span class="b"><span class="t">'+esc(sesShort(p.t))+'</span>'+
+          (p.n ? '<span class="n">'+esc(p.n)+'</span>' : '')+
+          (sp ? '<span class="s">'+sp+'</span>' : '')+
+        '</span>'+
+      '</div>';
+    });
+    if(!rows) return '';
+    const tm = phasesTotal(plan);
+    let tot = '<div class="pl-pgtot">Durata totale <b>'+tm+'</b> min &#183; '+plan.length+' fasi';
+    /* La stima si aggiunge solo se qualche fase ha uno storico: scriverla a zero
+       farebbe pensare a una seduta leggera invece che a un dato che non c'e'. */
+    const r = expCalc(plan);
+    if(r.min) tot += ' &#183; carico atteso circa <b>'+NF0.format(expRound(r.dist, 50))+' m</b> per atleta';
+    tot += '</div>';
+    return '<div class="sdet"><h4>Programma della seduta</h4><div class="blk">'+rows+tot+'</div></div>';
+  }
   function xcPanel(s){
     if(!s || s.only_fix) return '';
     const gps = EX_BY_KEY[String(s.data)+'|'+String(s.slot||'')] || null;
@@ -3089,6 +3137,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
         }).join('')+
       '</div></div>';
     }
+    /* Il programma apre la parte tecnica: e' quello che si era deciso di fare,
+       e va letto prima di quello che poi e' successo in campo. */
+    const pgh = pgPanel(s);
+    h += pgh;
     /* La forza va prima delle esercitazioni GPS: e' quello che si e' deciso,
        il GPS e' quello che poi e' successo in campo. */
     const fzh = fzPanel(fzOf(s));
@@ -3101,6 +3153,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     /* Se la scheda di forza c'e', il dialogo ha gia' detto che cosa si fa quel
        giorno: aggiungere "nessuna esercitazione" suonerebbe come una seduta
        vuota, che non e'. */
+    /* Se il programma c'e' ma i dati no, la seduta non e' vuota: e' scritta e
+       non ancora fatta, oppure fatta senza GPS. Dirlo cosi' evita di far
+       sembrare un buco quello che e' solo un giorno che deve ancora arrivare. */
+    else if(pgh) h += '<div class="pl-dempty">Programma scritto, dati GPS non ancora registrati.</div>';
     else if(!fzh) h += '<div class="pl-dempty">Nessuna esercitazione registrata per questa seduta.</div>';
     /* Il confronto sta in fondo: prima si legge cosa e' successo, poi se
        combacia con quello che era scritto. */
