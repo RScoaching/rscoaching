@@ -139,6 +139,15 @@ a{ color:inherit; text-decoration:none; }
 .btn:active{ transform:scale(.97); }
 .btn.primary{ color:#1a0d05; background:var(--orange); border-color:transparent; box-shadow: var(--shadow-btn); }
 .btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
+/* interruttore acceso: si deve vedere da lontano che in lista ci sono anche le
+   aggregate, se no si stampano schede per ragazze che quel giorno non ci sono */
+.btn.on{ color:var(--ink); border-color:var(--border3); background:var(--surface3); }
+.btn.on .sw{ background:var(--orange); border-color:transparent; }
+.btn .sw{ width:9px; height:9px; border-radius:50%; border:1px solid var(--border3); background:transparent; }
+/* titolo del gruppo dentro l'elenco delle atlete */
+.ath-grp{ flex:1 0 100%; display:flex; align-items:center; gap:9px; margin:6px 0 0;
+  font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+.ath-grp .ln{ flex:1; height:1px; background:var(--border2); }
 
 /* ---------- righe scheda editabili ---------- */
 .pv-tools{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -428,6 +437,10 @@ a{ color:inherit; text-decoration:none; }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
               <input id="ath-q" type="search" placeholder="Cerca atleta" autocomplete="off" aria-label="Cerca atleta">
             </span>
+            <button class="btn" id="gp-agg" type="button" aria-pressed="false" title="Mostra anche le aggregate scritte in Oggi">
+              <span class="sw"></span>
+              Aggregate
+            </button>
             <button class="btn" id="gp-reload" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
               Rigenera
@@ -1381,12 +1394,24 @@ a{ color:inherit; text-decoration:none; }
       railEl.innerHTML = '<div class="ath-empty">Nessuna atleta trovata per "'+esc(QUERY)+'"</div>';
       return;
     }
-    railEl.innerHTML = list.map(function(s){
+    // Le aggregate stanno in fondo, sotto il loro titolo: cosi' si vedono tutte
+    // insieme invece che sparse fra le ventitre della Primavera, e per farne le
+    // schede basta scorrere l'ultima riga.
+    var AGG = (typeof window.fioAgg === 'function') ? window.fioAgg() : {};
+    var base = list.filter(function(s){ return !AGG[s.name]; });
+    var agg  = list.filter(function(s){ return !!AGG[s.name]; });
+    function chip(s){
       var lev = scLevel(s);
       var cls = 'ath-chip'+(s.name === SELECTED ? ' active' : '')+(lev ? ' '+lev : '');
       var dot = lev ? '<span class="ath-dot"></span>' : '';
       return '<button type="button" class="'+cls+'" data-name="'+esc(s.name)+'">'+esc(disp(s.name))+dot+'</button>';
-    }).join('');
+    }
+    var h = base.map(chip).join('');
+    if(agg.length){
+      h += '<div class="ath-grp"><span>Aggregate</span><span class="ln"></span><span>'+agg.length+'</span></div>'
+        + agg.map(chip).join('');
+    }
+    railEl.innerHTML = h;
   }
 
   function qtSide(side, tag){
@@ -1716,6 +1741,29 @@ a{ color:inherit; text-decoration:none; }
   });
   document.getElementById('gp-print').addEventListener('click', function(){ printAthlete(SELECTED); });
   document.getElementById('gp-all').addEventListener('click', printAllGen);
+
+  /* Interruttore delle aggregate. Sta qui perche' e' qui che si scelgono le
+     atlete a cui fare la scheda: acceso, le U17 scritte in Oggi entrano in
+     elenco e si trovano tutte insieme in fondo; spento resta la sola Primavera.
+     La scelta e' la stessa di tutte le altre pagine, non una spunta locale. */
+  var aggBtn = document.getElementById('gp-agg');
+  function aggPaint(){
+    if(!aggBtn) return;
+    var on = (typeof window.fioAggOn === 'function') && window.fioAggOn();
+    aggBtn.classList.toggle('on', !!on);
+    aggBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  aggPaint();
+  if(aggBtn) aggBtn.addEventListener('click', function(){
+    if(typeof window.fioAggSet !== 'function') return;
+    var on = !window.fioAggOn();
+    window.fioAggSet(on);
+    var n = Object.keys((typeof window.fioAgg === 'function') ? window.fioAgg() : {}).length;
+    toast(on
+      ? (n ? ('Aggregate in elenco: '+n) : 'Nessuna aggregata scritta in Oggi')
+      : 'Aggregate tolte dall\'elenco');
+  });
+  document.addEventListener('fio:agg', function(){ aggPaint(); renderGen(); });
 
   qEl.addEventListener('input', function(){ QUERY = qEl.value; renderRail(); });
   railEl.addEventListener('click', function(ev){

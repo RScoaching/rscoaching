@@ -657,6 +657,41 @@ window.fioFuoriRosa = function(name) {
   return !!(b && b.off);
 };
 
+// Aggregate: le ragazze che in rosa Primavera non ci sono ma si allenano con
+// noi, di solito le U17 che salgono per una seduta. Si scrivono in Oggi, nella
+// sezione aggregate, e restano li' sotto "rs_fio_agg", una mappa {nome: ruolo}.
+// Fino a ieri quella chiave la leggeva soltanto Oggi: un'aggregata in Forza o
+// in Prevenzione non arrivava, e li' bisognava riscriverla a mano. Adesso passa
+// da qui con tipo 'sporadica', lo stesso che hanno le aggregate dei fogli,
+// percio' le pagine che dividono la rosa in gruppi se la ritrovano gia' messa
+// sotto "Aggregate" invece che sparsa in ordine alfabetico.
+window.fioAgg = function() {
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(window.fioKey('rs_fio_agg')) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  return o;
+};
+
+// L'interruttore delle aggregate. Spento vuol dire rosa Primavera e basta, ed
+// e' il caso normale: una U17 sale una seduta ogni tanto, per il resto
+// dell'anno non deve stare in mezzo ai nomi. Acceso le riporta dentro tutte
+// insieme, senza doverle riscrivere una per una.
+window.fioAggOn = function() {
+  try { return localStorage.getItem(window.fioKey('rs_fio_agg_on')) === '1'; }
+  catch (e) { return false; }
+};
+window.fioAggSet = function(on) {
+  try {
+    if (on) localStorage.setItem(window.fioKey('rs_fio_agg_on'), '1');
+    else localStorage.removeItem(window.fioKey('rs_fio_agg_on'));
+  } catch (e) {}
+  try {
+    document.dispatchEvent(new CustomEvent('fio:agg', { detail: { attive: !!on } }));
+  } catch (e) {}
+};
+
 // Rosa completa della stagione attiva, in forma [{name, role, tipo}], comprese
 // le atlete segnate fuori rosa. La usa Atlete, che deve poterle mostrare per
 // rimetterle dentro; tutte le altre pagine usano fioRoster, che le toglie.
@@ -689,6 +724,14 @@ window.fioRosterFull = function() {
     // di carico.
     var L = window.RS_ROSTER;
     if (Array.isArray(L)) L.forEach(function(p) { add(p.n, p.r, ''); });
+  }
+  // Le aggregate entrano prima delle atlete scritte a mano e solo a
+  // interruttore acceso: un nome che sta gia' in rosa non viene doppiato,
+  // ci pensa il controllo dei nomi gia' visti.
+  if (window.fioAggOn()) {
+    var A = window.fioAgg();
+    Object.keys(A).sort(function(a, b) { return a.localeCompare(b, 'it'); })
+      .forEach(function(n) { add(n, A[n], 'sporadica'); });
   }
   var C = window.fioCustom();
   Object.keys(C).sort(function(a, b) { return a.localeCompare(b, 'it'); })

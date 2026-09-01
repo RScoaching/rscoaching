@@ -899,9 +899,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // Rosa della stagione attiva: sulla 26/27 solo le atlete di quest'anno. Il ruolo
   // arriva gia' risolto da `fio_sidebar.js`, cosi' il filtro per ruolo qui sotto
   // vede anche i ruoli riscritti a mano in Atlete.
-  const ROSTER = (typeof window.fioRosterRuoli === 'function')
-    ? window.fioRosterRuoli().map(function(p){ return { name:p.name, role:p.role, tipo:p.tipo }; })
-    : (F.roster || []);
+  // Non e' piu' fissa: l'interruttore delle aggregate la puo' allargare senza
+  // ricaricare la pagina, percio' si rifa' da capo quando arriva l'avviso.
+  let ROSTER = leggiRosa();
+  function leggiRosa(){
+    return (typeof window.fioRosterRuoli === 'function')
+      ? window.fioRosterRuoli().map(function(p){ return { name:p.name, role:p.role, tipo:p.tipo }; })
+      : (F.roster || []);
+  }
   const NF = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const DTF = new Intl.DateTimeFormat('it-IT', { weekday:'short', day:'numeric', month:'short' });
@@ -911,7 +916,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   // roster lookup
   const ROLE = {};
-  ROSTER.forEach(r=>{ ROLE[r.name] = { role:r.role||'', tipo:r.tipo||'' }; });
+  function leggiRuoli(){
+    Object.keys(ROLE).forEach(k=>{ delete ROLE[k]; });
+    ROSTER.forEach(r=>{ ROLE[r.name] = { role:r.role||'', tipo:r.tipo||'' }; });
+  }
+  leggiRuoli();
 
   /* Come e' entrata in rosa. Le aggregate (nei dati `tipo:'sporadica'`) sono
      le ragazze che si allenano con noi ogni tanto, quelle scritte a mano
@@ -1518,6 +1527,13 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   /* il costruttore sta piu' in basso nella stessa pagina: quando salva o
      cancella una seduta l'archivio qui sopra si rifa' subito, senza ricaricare */
   window.fioForzaRicarica = render;
+  /* acceso o spento l'interruttore delle aggregate, la rosa cambia: qui si
+     rilegge e si ridisegna, se no i carichi resterebbero quelli di prima */
+  document.addEventListener('fio:agg', function(){
+    ROSTER = leggiRosa();
+    leggiRuoli();
+    render();
+  });
 })();
 </script>
 
@@ -1531,11 +1547,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   var RM_KEY = K2('rs_fio_forza_1rm');
   var toastT2 = null;
   var F = window.FORZA || {};
-  var SRC = (typeof window.fioRoster === 'function') ? window.fioRoster() : (F.roster || []);
-  var ROSTER = SRC.map(function(r){
-    return { name:r.name, role:(r.role && r.role!=='nan') ? r.role : '', tipo:r.tipo||'' };
-  });
-  var NAMES = ROSTER.map(function(r){ return r.name; });
+  var ROSTER = [], NAMES = [];
+  /* La rosa si rilegge quando serve, non una volta sola: l'interruttore delle
+     aggregate la allarga e la stringe mentre la pagina e' aperta. */
+  function fbLeggiRosa(){
+    var SRC = (typeof window.fioRoster === 'function') ? window.fioRoster() : (F.roster || []);
+    ROSTER = SRC.map(function(r){
+      return { name:r.name, role:(r.role && r.role!=='nan') ? r.role : '', tipo:r.tipo||'' };
+    });
+    NAMES = ROSTER.map(function(r){ return r.name; });
+  }
+  fbLeggiRosa();
 
   /* Come e' divisa la rosa, con le stesse tre voci di Oggi: il gruppo squadra,
      le aggregate (nei dati `tipo:'sporadica'`, ragazze che si allenano con noi
@@ -2265,6 +2287,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     roles.forEach(function(rr){ h += '<button class="pill" type="button" data-q="role:'+esc(rr)+'">'+esc(rr)+'</button>'; });
     h += '<button class="pill" type="button" data-q="none">Deseleziona</button>';
+    /* L'interruttore delle aggregate sta qui dentro perche' e' qui che ci si
+       accorge che mancano: la U17 salita oggi non c'e' in elenco, si accende e
+       compare, con le altre, sotto il titolo Aggregate. */
+    if(typeof window.fioAggSet === 'function'){
+      var aggOn = window.fioAggOn();
+      h += '<button class="pill'+(aggOn ? ' on' : '')+'" type="button" data-q="agg" aria-pressed="'
+        + (aggOn ? 'true' : 'false') + '">Aggregate ' + (aggOn ? 'in elenco' : 'fuori elenco') + '</button>';
+    }
     host.innerHTML = h;
   }
   function renderDlgBody(){
@@ -3025,11 +3055,25 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     document.getElementById('fb-dlg-quick').addEventListener('click', function(e){
       var p = e.target.closest ? e.target.closest('.pill') : null; if(!p) return;
       var q = p.getAttribute('data-q');
+      if(q==='agg'){
+        /* si accende o si spegne e basta: la rosa nuova la rileggono tutti
+           dall'avviso fio:agg, dialogo compreso */
+        window.fioAggSet(!window.fioAggOn());
+        return;
+      }
       if(q==='all'){ NAMES.forEach(function(n){ pickSel[n]=true; }); }
       else if(q==='none'){ pickSel = {}; }
       else if(q.indexOf('grp:')===0){ var gk = q.slice(4); ROSTER.forEach(function(r){ if(grpKey(r)===gk) pickSel[r.name]=true; }); }
       else if(q.indexOf('role:')===0){ var role = q.slice(5); ROSTER.forEach(function(r){ if(r.role===role) pickSel[r.name]=true; }); }
       renderDlgBody(); updateDlgN();
+    });
+    /* rosa cambiata: si rilegge e si ridisegna quello che la usa, senza
+       ricaricare la pagina e senza perdere la seduta in costruzione */
+    document.addEventListener('fio:agg', function(){
+      fbLeggiRosa();
+      updatePickLabel(); renderTags(); renderSched();
+      var d = document.getElementById('fb-dlg');
+      if(d && (d.open || d.hasAttribute('open'))){ renderDlgQuick(); renderDlgBody(); updateDlgN(); }
     });
     document.getElementById('fb-dlg-body').addEventListener('change', function(e){
       var cb = e.target; if(!cb || cb.type!=='checkbox') return;
