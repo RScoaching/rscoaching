@@ -384,6 +384,25 @@ table.fbtbl tr:last-child td{ border-bottom:0; }
 .fb-mv[disabled]{ opacity:.28; cursor:default; }
 .fb-mv[disabled]:hover{ color:var(--faint); background:transparent; }
 .fb-mv svg{ width:15px; height:15px; }
+/* Complex: due esercizi che si fanno di seguito, senza recupero in mezzo.
+   Il numero diventa 1a e 1b, e la graffetta li tiene attaccati. */
+.fb-nb{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+.fb-lk{ appearance:none; border:0; background:transparent; color:var(--faint); cursor:pointer; padding:3px; border-radius:6px;
+  display:inline-flex; transition:color .15s var(--ease), background .15s var(--ease); }
+.fb-lk svg{ width:13px; height:13px; }
+.fb-lk:hover{ color:var(--ink); background:var(--surface2); }
+.fb-lk[aria-pressed="true"]{ color:var(--violet2); }
+.fb-lk[disabled]{ visibility:hidden; }
+table.fbtbl tr.lkd td{ border-top:0; }
+table.fbtbl tr.lkd td.rowc{ position:relative; }
+table.fbtbl tr.lkd td.rowc::before{ content:''; position:absolute; left:50%; top:-9px; width:2px; height:12px;
+  transform:translateX(-50%); background:var(--violet2); opacity:.5; border-radius:2px; }
+/* Le serie di avvicinamento sul carico pesante: si scrivono qui, restano
+   fuori dal conto delle serie di lavoro. */
+.fb-sx{ display:inline-flex; align-items:center; gap:4px; justify-content:center; }
+.fb-sx .p{ font-size:11px; color:var(--faint); font-weight:600; }
+.fb-in.num.wu{ width:44px; padding:7px 4px; }
+.fb-in.num.wu:placeholder-shown{ color:var(--faint); }
 .fb-add{ margin:6px 10px 4px; }
 .fb-empty{ padding:22px 10px; text-align:center; color:var(--muted); font-size:13px; }
 .fb-foot{ display:flex; flex-wrap:wrap; gap:22px; padding:13px 18px 15px; border-top:1px solid var(--border); }
@@ -700,7 +719,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fb-tags" id="fb-tags"></div>
         <div class="fb-body">
           <table class="fbtbl">
-            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n">Serie</th><th class="n">Rip</th><th class="n" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi">%1RM o kg</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
+            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n" title="A sinistra le serie di avvicinamento, a destra quelle di lavoro">Avv. + Serie</th><th class="n">Rip</th><th class="n" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi">%1RM o kg</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
             <tbody id="fb-rows"></tbody>
           </table>
           <button class="btn fb-add" id="fb-add" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Aggiungi esercizio</button>
@@ -1848,8 +1867,48 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   var UPSVG     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
   var DOWNSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
   var DELSVG    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/></svg>';
+  var LINKSVG   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 17H7a5 5 0 0 1 0-10h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg>';
 
   function hasEx(r){ return r && r.ex && String(r.ex).trim(); }
+
+  /* --------------------------------------------------------------------
+     Complex e serie di avvicinamento.
+     Un complex sono due o tre esercizi che si fanno di seguito, senza
+     recupero in mezzo: squat e poi subito salto. Sul foglio si scrivono
+     1a e 1b, cosi' la ragazza capisce che vanno insieme e non li legge
+     come due esercizi staccati. Il legame sta nel campo `link` della riga
+     che viene dopo: vuol dire "questa si fa attaccata a quella sopra".
+     Le serie di avvicinamento (`wu`) sono le salite di carico prima delle
+     serie vere, quelle che finora si scrivevano a mano come "1W+3". Non
+     contano nelle serie di lavoro, perche' non sono carico allenante.
+     -------------------------------------------------------------------- */
+  function fbBlocks(rows){
+    var bl = [], cur = null;
+    (rows || []).forEach(function(r, i){
+      if(i === 0 || !r.link){ cur = [i]; bl.push(cur); }
+      else cur.push(i);
+    });
+    return bl;
+  }
+  /* Etichetta di ogni riga: 1, 2a, 2b, 3. Da sola quando e' sola. */
+  function fbLabels(rows){
+    var out = [];
+    fbBlocks(rows).forEach(function(b, bi){
+      b.forEach(function(idx, k){
+        out[idx] = (bi + 1) + (b.length > 1 ? String.fromCharCode(97 + (k % 26)) : '');
+      });
+    });
+    return out;
+  }
+  function wuNum(v){
+    var n = parseInt(String(v == null ? '' : v).replace(/[^0-9]/g, ''), 10);
+    return (isFinite(n) && n > 0) ? n : 0;
+  }
+  /* Serie e ripetizioni come si leggono: "2 avv. + 4 x 3". */
+  function serieTxt(r){
+    var w = wuNum(r && r.wu);
+    return (w ? (w + ' avv. + ') : '') + ((r && r.serie) || '-') + ' x ' + ((r && r.rip) || '-');
+  }
 
   /* ---- massimali 1RM per atleta ---- */
   /* Il test VBT stima gia' il massimale di back squat e hip thrust dalla velocita'
@@ -2063,6 +2122,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var rows = Array.isArray(o.rows) ? o.rows.map(function(r){
       return { ex:r.ex||'', serie:(r.serie==null?'':''+r.serie), rip:(r.rip==null?'':''+r.rip),
         pct:(r.pct==null?'':''+r.pct), rec:(r.rec==null?'':''+r.rec), note:r.note||'',
+        /* wu: serie di avvicinamento, link: si fa subito dopo la riga sopra */
+        wu:(r.wu==null?'':''+r.wu), link: !!r.link,
         lift:(r.lift && RM_LAB[r.lift]) ? r.lift : ((r.lift === 'none') ? 'none' : 'auto') };
     }) : [];
     var players = Array.isArray(o.players) ? o.players.filter(function(n){ return NAMES.indexOf(n)!==-1; }) : [];
@@ -2235,12 +2296,20 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       tb.innerHTML = '<tr><td colspan="10" class="fb-empty">Nessun esercizio. Scegli un modello o aggiungi una riga.</td></tr>';
       fbStats(); renderRmPrev(); return;
     }
-    var h = '';
+    var h = '', lab = fbLabels(FB.rows);
     FB.rows.forEach(function(r, i){
-      h += '<tr data-i="'+i+'">'
-        + '<td class="n rown">'+(i+1)+'</td>'
+      h += '<tr data-i="'+i+'"'+(r.link && i > 0 ? ' class="lkd"' : '')+'>'
+        + '<td class="n rown rowc"><span class="fb-nb">'+esc(lab[i] || (i+1))
+        +   '<button class="fb-lk" data-lk="'+i+'" type="button" aria-pressed="'+(r.link && i>0 ? 'true':'false')+'"'
+        +   (i === 0 ? ' disabled' : '')
+        +   ' title="Si fa subito dopo l\'esercizio sopra (complex)" aria-label="Lega all\'esercizio sopra">'+LINKSVG+'</button>'
+        + '</span></td>'
         + '<td><input class="fb-in ex" list="ex-list" data-i="'+i+'" data-f="ex" value="'+esc(r.ex)+'" placeholder="Esercizio"></td>'
-        + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="serie" value="'+esc(r.serie)+'" inputmode="numeric"></td>'
+        + '<td class="n"><span class="fb-sx">'
+        +   '<input class="fb-in num wu" data-i="'+i+'" data-f="wu" value="'+esc(r.wu)+'" inputmode="numeric" placeholder="W" title="Serie di avvicinamento prima di quelle di lavoro">'
+        +   '<span class="p">+</span>'
+        +   '<input class="fb-in num" data-i="'+i+'" data-f="serie" value="'+esc(r.serie)+'" inputmode="numeric" aria-label="Serie di lavoro">'
+        + '</span></td>'
         + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="rip" value="'+esc(r.rip)+'" inputmode="numeric"></td>'
         + '<td class="n"><input class="fb-in num pct" data-i="'+i+'" data-f="pct" value="'+esc(r.pct)+'" placeholder="-" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi"></td>'
         + '<td data-z="'+i+'">'+zcell(r.pct)+'</td>'
@@ -2844,12 +2913,15 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var n = rows.length;
     var gap = n <= 6 ? 9 : (n <= 8 ? 7 : (n <= 10 ? 5.5 : (n <= 14 ? 3.6 : 2.4)));
 
+    /* la numerazione si rifa sulle righe con un nome: se una riga vuota sta in
+       mezzo a un complex, il blocco non deve spezzarsi in due */
+    var lab = fbLabels(rows);
     var cells = rows.map(function(r, i){
       return {
-        x: (i + 1) + ') ' + String(r.ex || ''),
+        x: (lab[i] || (i + 1)) + ') ' + String(r.ex || ''),
         /* il carico uguale per tutte ha la sua colonna: non merita una colonna
            nel foglio dei carichi, il numero e' uno solo, ma qui deve respirare */
-        s: (r.serie || '-') + ' x ' + (r.rip || '-')
+        s: serieTxt(r)
            + (FZ_EACH.test(String(r.ex || '')) ? ' ea.' : ''),
         k: fixTxt(r),
         r: r.rec ? ('rec ' + r.rec + ' s') : ''
@@ -3118,6 +3190,20 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(moved && !moved.disabled && moved.focus) moved.focus();
         return;
       }
+      /* La graffetta lega la riga a quella sopra: da li' in avanti le due
+         diventano 1a e 1b e sul foglio si leggono come un blocco solo. Il
+         primo esercizio non ha niente sopra a cui attaccarsi. */
+      var lk = e.target.closest ? e.target.closest('.fb-lk') : null;
+      if(lk){
+        if(lk.disabled) return;
+        var li = parseInt(lk.getAttribute('data-lk'),10);
+        if(isNaN(li) || !FB.rows[li] || li === 0) return;
+        FB.rows[li].link = !FB.rows[li].link;
+        fbRender(); fbSave();
+        var again = rows.querySelector('.fb-lk[data-lk="'+li+'"]');
+        if(again && again.focus) again.focus();
+        return;
+      }
       var b = e.target.closest ? e.target.closest('.fb-del') : null;
       if(!b) return;
       var i = parseInt(b.getAttribute('data-i'),10);
@@ -3154,7 +3240,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
 
     document.getElementById('fb-add').addEventListener('click', function(){
-      FB.rows.push({ex:'', serie:'3', rip:'8', pct:'', rec:'90', note:'', lift:'auto'});
+      FB.rows.push({ex:'', serie:'3', rip:'8', pct:'', rec:'90', note:'', wu:'', link:false, lift:'auto'});
       fbRender(); fbSave();
       var last = rows.querySelector('tr:last-child .fb-in.ex');
       if(last) last.focus();
