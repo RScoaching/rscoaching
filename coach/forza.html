@@ -518,6 +518,36 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fs-filter select{ appearance:none; font-family:inherit; font-size:13px; color:var(--text);
   background:var(--surface2); border:1px solid var(--border2); border-radius:9px; padding:8px 12px; min-height:40px; min-width:210px; }
 .fs-filter select:hover{ border-color:var(--border3); }
+/* Storico delle sedute salvate: una colonna per seduta, in ordine di data.
+   L'altezza dice quanto lavoro c'era quel giorno, il colore dice se rispetto
+   alla seduta prima si e' salito o scesi. Serve a vedere la direzione del
+   carico senza aprire le schede una per una. */
+.fstor{ background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  padding:14px 16px 12px; margin-bottom:18px; }
+.fstor-top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.fstor-cap{ font-size:12px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.04em; }
+.fstor-sw{ margin-left:auto; display:inline-flex; background:var(--surface2); border:1px solid var(--border2);
+  border-radius:9px; padding:2px; gap:2px; }
+.fstor-b{ appearance:none; border:0; background:transparent; color:var(--muted); font-family:inherit; font-size:11.5px;
+  font-weight:600; padding:5px 10px; border-radius:7px; cursor:pointer; transition:color .15s var(--ease), background .15s var(--ease); }
+.fstor-b:hover{ color:var(--ink); }
+.fstor-b.on{ background:var(--surface3); color:var(--ink); }
+.fstor-plot{ display:flex; align-items:flex-end; gap:6px; overflow-x:auto; padding-bottom:4px; }
+.fstor-col{ flex:0 0 auto; width:52px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.fstor-v{ font-size:11px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.fstor-bar{ width:100%; height:96px; display:flex; align-items:flex-end;
+  background:linear-gradient(var(--surface2), transparent); border-radius:6px; }
+.fstor-bar i{ display:block; width:100%; border-radius:5px; background:var(--violet2); opacity:.85; min-height:3px; }
+.fstor-col.up .fstor-bar i{ background:var(--orange); }
+.fstor-col.dn .fstor-bar i{ background:var(--violet); opacity:.55; }
+.fstor-d{ font-size:10.5px; color:var(--faint); text-align:center; line-height:1.25; }
+.fstor-d b{ display:block; color:var(--text); font-weight:700; }
+.fstor-dl{ font-size:10.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+.fstor-dl.up{ color:var(--orange2); }
+.fstor-dl.dn{ color:var(--violet2); }
+.fstor-dl.eq{ color:var(--faint); }
+.fstor-note{ font-size:11.5px; color:var(--muted); margin:10px 0 0; }
+.fstor-note b{ color:var(--text); font-weight:600; }
 .fmonth + .fmonth{ margin-top:18px; }
 .fmonth-h{ display:flex; align-items:center; gap:10px; margin-bottom:11px; }
 .fmonth-h .m{ font-size:12px; font-weight:700; color:var(--text); text-transform:capitalize; white-space:nowrap; }
@@ -2573,6 +2603,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   /* ---- sedute salvate ---- */
   var schedState = { player:'all' };
+  /* cosa si guarda nello storico: serie di lavoro, volume (serie per
+     ripetizioni) oppure il tonnellaggio medio per atleta in kg */
+  var storState = { m:'ton' };
 
   /* ---- il filo fra costruttore e archivio -------------------------------
      Il costruttore tiene una bozza sola. Finche' quella bozza resta legata a
@@ -2739,6 +2772,103 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       + '</div>';
   }
 
+  /* ---------- storico e direzione del carico -----------------------------
+     Le schede da sole dicono cosa c'era in ogni seduta, non dove sta andando
+     il lavoro. Qui le sedute con una data si mettono in fila nel tempo, una
+     colonna a testa, e si legge la direzione: colonna arancione se rispetto
+     alla seduta prima si e' salito, viola smorzato se si e' scesi.
+     Tre letture dello stesso allenamento: le serie di lavoro, il volume
+     (serie per ripetizioni) e il tonnellaggio, cioe' i kg davvero sollevati in
+     media da una atleta. Il tonnellaggio e' l'unico che tiene conto del
+     massimale, quindi e' quello che dice se la seduta era pesante.
+     Le serie di avvicinamento restano fuori da tutti e tre: sono la salita al
+     carico, non il lavoro. --------------------------------------------- */
+  var STOR_M = [
+    { k:'ton',   lab:'Tonnellaggio' },
+    { k:'vol',   lab:'Volume' },
+    { k:'serie', lab:'Serie' }
+  ];
+  /* kg medi per atleta di una seduta: si sommano serie per ripetizioni per
+     kg su ogni riga che ha un carico, poi si divide per quante la fanno. */
+  function storTon(s){
+    var rows = kgRows(s.rows || []);
+    if(!rows.length) return 0;
+    var team = audience(s);
+    if(!team.length) return 0;
+    var tot = 0;
+    team.forEach(function(name){
+      rows.forEach(function(r){
+        var kg = fzKg(s, name, r); if(!kg) return;
+        var se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0;
+        if(se > 0 && rp > 0) tot += se * rp * kg.v;
+      });
+    });
+    return tot / team.length;
+  }
+  function storVal(s, m){
+    var st = statsOf((s.rows || []).filter(hasEx));
+    if(m === 'serie') return st.serie;
+    if(m === 'vol') return st.vol;
+    return storTon(s);
+  }
+  function storNum(v, m){
+    if(m === 'ton') return (v >= 1000) ? (Math.round(v / 100) / 10 + 't') : (Math.round(v) + '');
+    return Math.round(v) + '';
+  }
+  function fbStorico(list){
+    var m = storState.m;
+    /* senza data una seduta non ha un posto nella fila del tempo */
+    var seq = (list || []).filter(function(s){ return !!s.date && (s.rows || []).filter(hasEx).length; });
+    seq.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.ts||0)-(b.ts||0); });
+    if(seq.length < 2) return '';
+    var vals = seq.map(function(s){ return storVal(s, m); });
+    var max = vals.reduce(function(a,v){ return v > a ? v : a; }, 0);
+    if(!max) return '';
+    var cols = '';
+    seq.forEach(function(s, i){
+      var v = vals[i], prec = i ? vals[i-1] : null;
+      var seg = '', dl = '<span class="fstor-dl eq">-</span>';
+      if(prec != null && prec > 0){
+        var dp = Math.round((v - prec) / prec * 100);
+        if(dp >= 3){ seg = ' up'; dl = '<span class="fstor-dl up">+'+dp+'%</span>'; }
+        else if(dp <= -3){ seg = ' dn'; dl = '<span class="fstor-dl dn">'+dp+'%</span>'; }
+        else dl = '<span class="fstor-dl eq">'+(dp>0?'+':'')+dp+'%</span>';
+      }
+      var d = parseISO(s.date);
+      var gg = d ? d.getDate() : '-';
+      var mm = d ? MON3.format(d).replace('.','') : '';
+      var h = Math.max(3, Math.round(v / max * 96));
+      cols += '<div class="fstor-col'+seg+'" title="'+esc((s.title||'Seduta')+' - '+fmtDay(s.date))+'">'
+        + '<span class="fstor-v">'+esc(storNum(v, m))+'</span>'
+        + '<span class="fstor-bar"><i style="height:'+h+'px"></i></span>'
+        + dl
+        + '<span class="fstor-d"><b>'+gg+'</b>'+esc(mm)+'</span>'
+        + '</div>';
+    });
+    var sw = STOR_M.map(function(o){
+      return '<button type="button" class="fstor-b'+(o.k===m?' on':'')+'" data-stor="'+o.k+'">'+o.lab+'</button>';
+    }).join('');
+    /* la direzione complessiva: dalla prima all'ultima seduta della fila */
+    var primo = vals[0], ultimo = vals[vals.length-1], dir = '';
+    if(primo > 0){
+      var tot = Math.round((ultimo - primo) / primo * 100);
+      dir = (Math.abs(tot) < 3)
+        ? 'Dalla prima all\'ultima seduta il carico e\' rimasto <b>fermo</b>.'
+        : ('Dalla prima all\'ultima seduta il carico e\' <b>'+(tot>0?'salito':'sceso')+' del '+Math.abs(tot)+'%</b>.');
+    }
+    var spieg = (m === 'ton')
+      ? 'Tonnellaggio: kg medi sollevati da una atleta in quella seduta, massimali e correzioni a mano compresi.'
+      : (m === 'vol'
+        ? 'Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.'
+        : 'Serie di lavoro della seduta, senza contare le serie di avvicinamento.');
+    return '<div class="fstor">'
+      + '<div class="fstor-top"><span class="fstor-cap">Storico e direzione del carico</span>'
+      +   '<span class="fstor-sw" role="group" aria-label="Cosa mostrare nello storico">'+sw+'</span></div>'
+      + '<div class="fstor-plot">'+cols+'</div>'
+      + '<p class="fstor-note">'+spieg+' '+dir+'</p>'
+      + '</div>';
+  }
+
   function renderSched(){
     var host = document.getElementById('fsched'); if(!host) return;
     var list = sessLoad();
@@ -2793,7 +2923,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           + '<div class="fs-grid">'+cards+'</div></div>';
       });
     }
-    host.innerHTML = head + body;
+    /* lo storico segue il filtro: se guardi una sola atleta, la direzione del
+       carico e' la sua, non quella della squadra */
+    host.innerHTML = head + fbStorico(filtered) + body;
   }
 
   /* ---------- i due fogli di stampa della seduta ----------------------------
@@ -3403,6 +3535,13 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(e.target && e.target.id==='fs-player'){ schedState.player = e.target.value; renderSched(); }
       });
       fsched.addEventListener('click', function(e){
+        /* l'interruttore dello storico: serie, volume o tonnellaggio */
+        var sb = e.target.closest ? e.target.closest('.fstor-b') : null;
+        if(sb){
+          var mk = sb.getAttribute('data-stor');
+          if(mk && mk !== storState.m){ storState.m = mk; renderSched(); }
+          return;
+        }
         var b = e.target.closest ? e.target.closest('.fs-btn') : null; if(!b) return;
         var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
         if(act==='del'){ deleteSession(id); return; }
