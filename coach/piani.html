@@ -2152,18 +2152,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return out;
   }
+  /* Giorni dall inizio della stagione, per spaziare il grafico sul tempo vero
+     (punto 75). dOrd mette i mesi da luglio in avanti in centinaia: qui la
+     stessa cosa diventa una distanza in giorni, trenta per mese. */
+  function dDay(d){
+    const o = dOrd(d);
+    if(!o) return null;
+    return Math.floor(o/100) * 30 + (o % 100);
+  }
   // sparkline: linea piena la misura dell atleta, tratteggiata la media della squadra
   function sparkSvg(cells){
     const W = 132, H = 36, P = 4, n = cells.length;
+    /* I punti si mettono dove cadono nel calendario e non uno accanto all
+       altro: due prove a una settimana di distanza e due a cinque mesi non
+       possono avere la stessa pendenza, se no la riga dice che si e' migliorato
+       in fretta quando ci e' voluto mezzo campionato. Se le date non si
+       leggono si torna alla spaziatura per posizione, che e' meglio di niente. */
+    let xs = cells.map(c=> dDay(c.d));
+    const okx = xs.every(x=> x != null) && (Math.max.apply(null, xs) - Math.min.apply(null, xs)) > 0;
+    if(!okx) xs = cells.map((c,i)=> i);
+    const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
     const pts = [], avg = [];
     let lo = Infinity, hi = -Infinity;
     cells.forEach((c,i)=>{
-      if(c.v != null){ pts.push([i, c.v]); if(c.v<lo) lo=c.v; if(c.v>hi) hi=c.v; }
-      if(c.a != null){ avg.push([i, c.a]); if(c.a<lo) lo=c.a; if(c.a>hi) hi=c.a; }
+      if(c.v != null){ pts.push([xs[i], c.v]); if(c.v<lo) lo=c.v; if(c.v>hi) hi=c.v; }
+      if(c.a != null){ avg.push([xs[i], c.a]); if(c.a<lo) lo=c.a; if(c.a>hi) hi=c.a; }
     });
     if(pts.length < 2 || n < 2) return '<svg class="tr-spark" viewBox="0 0 '+W+' '+H+'" aria-hidden="true"></svg>';
     if(hi - lo < 0.0001){ hi = lo + 1; lo = lo - 1; }
-    const px = i=> nx(P + i*(W-2*P)/(n-1));
+    const px = i=> nx(P + (i-x0)*(W-2*P)/((x1-x0) || 1));
     const py = v=> nx(H - P - (v-lo)*(H-2*P)/(hi-lo));
     const path = a=> a.map((p,j)=> (j?'L':'M')+px(p[0])+' '+py(p[1])).join(' ');
     let h = '<svg class="tr-spark" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">';
