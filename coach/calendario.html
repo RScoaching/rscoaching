@@ -1018,10 +1018,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
     interval:       { l:'Intervallato', k:'training' },
     priming:        { l:'Priming pre-gara', k:'training' },
     rec:            { l:'Recupero / Rigenerante', k:'training' },
+    test:           { l:'Test', k:'training' },
     riposo:         { l:'Riposo', k:'riposo' },
     gara:           { l:'Gara', k:'match' }
   };
-  const SES_ORDER = ['attivazione','rondo','possesso','passing','ssg','transizioni','finalizzazione','palleinattive','duelli','tecnica','squadra','forza','sprint','plyo','z2','interval','priming','rec','gara','riposo'];
+  const SES_ORDER = ['attivazione','rondo','possesso','passing','ssg','transizioni','finalizzazione','palleinattive','duelli','tecnica','squadra','forza','sprint','plyo','z2','interval','priming','rec','test','gara','riposo'];
 
   // fasi/blocchi per il costruttore visuale della seduta
   const SES_SHORT = {
@@ -1029,9 +1030,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
     ssg:'Partita a tema', transizioni:'Transizioni', finalizzazione:'Finalizzazione', palleinattive:'Palle inattive',
     duelli:'Duelli 1v1', tecnica:'Tecnica', squadra:'Squadra', forza:'Forza', sprint:'Sprint',
     plyo:'Pliometria', z2:'Aerobico Z2', interval:'Intervallato', priming:'Priming', rec:'Defaticamento',
-    riposo:'Riposo', gara:'Gara'
+    test:'Test', riposo:'Riposo', gara:'Gara'
   };
-  const PHASE_TYPES = ['attivazione','rondo','possesso','passing','ssg','transizioni','finalizzazione','palleinattive','duelli','tecnica','forza','sprint','plyo','rec'];
+  /* Le fasi del costruttore sono anche le famiglie con cui la pagina
+     Esercitazioni ordina i lavori dei fogli GPS: una parola sola per la stessa
+     cosa, se no il confronto fra programma e dati parlerebbe due lingue.
+     Aerobico, intervallato e test ci sono perche' nei fogli ci sono. */
+  const PHASE_TYPES = ['attivazione','rondo','possesso','passing','ssg','transizioni','finalizzazione','palleinattive','duelli','tecnica','forza','sprint','plyo','z2','interval','rec','test'];
   const PHASE_QUICK = ['attivazione','rondo','possesso','passing','ssg','finalizzazione','palleinattive','forza','rec'];
   function sesShort(t){ return SES_SHORT[t] || (SES[t] ? SES[t].l : t); }
   function phNorm(p){ return { t:(SES[p&&p.t]?p.t:'possesso'), m:Math.max(0,Math.min(240, Math.round(Number(p&&p.m)||0))), n:String(p&&p.n||'').slice(0,80) }; }
@@ -2785,29 +2790,38 @@ window.RS_ROSTER = window.RS_ROSTER || [
      per li'. Ma e' l'unica cosa che vale la pena far vedere, perche' in mezzo
      ai numeri una fase mancante non si nota. */
   const XC_WORDS = {
-    attivazione:   ['attivazione','riscaldamento','activation'],
-    rondo:         ['rondo'],
-    possesso:      ['possesso','possessi'],
-    passing:       ['passing','giro palla','circuito passaggi'],
-    ssg:           ['partita a tema','ssg','partitina','partita libera'],
+    test:          ['test'],
+    attivazione:   ['attivazione','attivaz','riscaldamento','activation'],
+    rondo:         ['rondo','rondos'],
+    possesso:      ['possesso','possessi','costruzion'],
     transizioni:   ['transizion'],
-    finalizzazione:['finalizzazione','conclusion','tiri in porta'],
+    ssg:           ['partita','contrapposiz','amichevole','ssg','partitina'],
+    finalizzazione:['finalizzazione','finishing','conclusion','tiri in porta','combinazion'],
+    passing:       ['passing','giro palla','circuito passaggi'],
     palleinattive: ['palle inattive','calci piazzati','corner','punizioni','inattive'],
     duelli:        ['duell','1c1','1v1','uno contro uno'],
-    tecnica:       ['tecnic'],
+    sprint:        ['sprint','velocit','accelerazion','navette','rsa','ripetute'],
+    z2:            ['aerobic','resistenza'],
+    interval:      ['intervallato','interval'],
     forza:         ['forza','palestra','sala pesi'],
-    sprint:        ['sprint','velocit','accelerazion','navette'],
     plyo:          ['pliometr','balzi','salti','plyo'],
-    rec:           ['rigenerante','scarico','defaticamento','recupero attivo']
+    rec:           ['rigenerante','scarico','defaticamento','recupero attivo'],
+    tecnica:       ['tecnic','tattic','reparto','drill','skill']
   };
+  /* L'ordine e' la priorita', e non e' quello del costruttore: vince la prima
+     famiglia che corrisponde. "Test Aerobico Gacon" deve restare un test e non
+     diventare aerobico, "attivazione tecnica" deve restare attivazione,
+     "possesso tattico" deve restare possesso. */
+  const XC_ORDER = ['test','attivazione','rondo','possesso','transizioni','ssg','finalizzazione',
+    'passing','palleinattive','duelli','sprint','z2','interval','forza','plyo','rec','tecnica'];
   /* Quello che si fa in palestra il GPS non lo vede: segnalarlo come mancante
      sarebbe un allarme falso ogni volta che c'e' forza in programma. */
   const XC_NOGPS = { forza:1, plyo:1, rec:1 };
   function xcType(txt){
     const t = String(txt || '').toLowerCase();
     if(!t) return '';
-    for(let i=0;i<PHASE_TYPES.length;i++){
-      const k = PHASE_TYPES[i], w = XC_WORDS[k] || [];
+    for(let i=0;i<XC_ORDER.length;i++){
+      const k = XC_ORDER[i], w = XC_WORDS[k] || [];
       for(let j=0;j<w.length;j++){ if(t.indexOf(w[j]) >= 0) return k; }
     }
     return '';
