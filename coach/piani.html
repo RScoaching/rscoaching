@@ -179,8 +179,11 @@ a{ color:inherit; text-decoration:none; }
 .lb-main{ flex:1 1 auto; min-width:0; }
 .lb-name{ font-size:14px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .lb-role{ font-size:11px; color:var(--muted); }
-.lb-bar{ flex:1 1 auto; min-width:60px; max-width:340px; height:9px; border-radius:999px;
+.lb-bar{ position:relative; flex:1 1 auto; min-width:60px; max-width:340px; height:9px; border-radius:999px;
   background:var(--surface3); border:1px solid var(--border2); overflow:hidden; }
+/* il trattino della mediana: un riferimento fisso sulla pista, se no una barra
+   lunga non dice se si e' sopra o sotto la squadra */
+.lb-med, .tb-med{ position:absolute; top:0; bottom:0; width:1px; background:var(--text); opacity:.5; }
 .lb-fill{ height:100%; width:0; border-radius:999px;
   background:linear-gradient(90deg, var(--orange), var(--orange2)); transition: width .8s var(--ease); }
 .lb-fill.vi{ background:linear-gradient(90deg, var(--violet), var(--violet2)); }
@@ -292,7 +295,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   color:var(--orange2); background:var(--ember-bg); border:1px solid var(--ember-border);
   border-radius:999px; padding:2px 8px; flex:0 0 auto; }
 .tb-right{ flex:0 0 auto; display:flex; align-items:center; gap:10px; }
-.tb-bar{ flex:0 0 120px; height:8px; border-radius:999px; background:var(--surface3);
+.tb-bar{ position:relative; flex:0 0 120px; height:8px; border-radius:999px; background:var(--surface3);
   border:1px solid var(--border2); overflow:hidden; }
 .tb-barfill{ height:100%; width:0; border-radius:999px;
   background:linear-gradient(90deg, var(--violet), var(--violet2)); transition: width .7s var(--ease); }
@@ -2649,6 +2652,43 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     )).join('');
   }
 
+  /* ---- la scala delle barre (P6) ---------------------------------------
+     Le barre della classifica GPS e della batteria test partivano da zero:
+     la lunghezza era il valore diviso il migliore. Ma nessuna di queste
+     misure parte da zero. Nessuna atleta corre a zero all'ora e nessuna
+     salta zero centimetri, quindi le barre uscivano tutte fra il settanta e
+     il cento per cento e la classifica sembrava un blocco unico. Un grafico
+     che schiaccia le differenze non e' un grafico, e' una decorazione.
+     Adesso la barra confronta dentro il gruppo: il fondo della scala sta un
+     po' sotto la peggiore del gruppo, cosi' anche l'ultima ha una barra che
+     si vede, e il resto della corsa e' la distanza vera fra le atlete. Il
+     numero scritto accanto resta quello assoluto, quindi non si perde niente.
+     Sulla pista c'e' il trattino della mediana: senza un riferimento fisso
+     una barra lunga non dice se si e' sopra o sotto la squadra, e la mediana
+     regge meglio della media, che una sola prestazione fuori misura sposta.
+     Dove il migliore e' il valore piu' basso, come sui tempi di sprint, la
+     scala si rovescia: la barra piu' lunga resta quella di chi va meglio. */
+  function barScale(vals, dir){
+    const g = v => (dir === 'low' ? -v : v);
+    const a = (vals || []).filter(v => v != null && isFinite(v)).map(g).sort((x, y) => x - y);
+    if(!a.length) return null;
+    const lo = a[0], hi = a[a.length - 1], span = hi - lo;
+    const med = a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+    const base = span > 0 ? lo - span * 0.35 : lo;
+    const to = v => {
+      if(v == null || !isFinite(v)) return 0;
+      if(span <= 0) return 60;
+      return Math.max(6, Math.min(100, Math.round((g(v) - base) / (hi - base) * 100)));
+    };
+    return { w: to, med: (span > 0 ? Math.round((med - base) / (hi - base) * 100) : 0), one: span <= 0 };
+  }
+  /* il trattino della mediana si disegna solo quando le atlete sono almeno
+     tre e i valori non sono tutti uguali: sotto non separa niente */
+  function medTick(sc, n, cls){
+    if(!sc || sc.one || n < 3) return '';
+    return '<i class="' + cls + '" style="left:' + sc.med + '%" aria-hidden="true"></i>';
+  }
+
   function renderGps(){
     const chips = document.getElementById('gps-chips');
     chips.innerHTML =
@@ -2662,8 +2702,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       holder.innerHTML = '<div class="lb-empty">Nessun dato GPS disponibile nel monitoraggio del carico.</div>';
       return;
     }
-    // la scala delle barre usa il migliore valore plausibile, per non appiattire il grafico
-    const max = (topSmax && topSmax.smax) ? topSmax.smax : (ranked[0].smax || 1);
+    // la scala confronta dentro il gruppo invece di partire da zero, se no le
+    // punte massime finiscono tutte fra il settanta e il cento per cento
+    const sc = barScale(ranked.map(p => p.smax), 'high');
     const shown = gpsAll ? ranked : ranked.slice(0, GPS_LIM);
     const rest  = ranked.length - GPS_LIM;
     holder.innerHTML = shown.map((p,i)=>{
@@ -2681,7 +2722,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
             (p.susp?' <span class="lb-flag">da verificare</span>':'')+'</div>'+
           '<div class="lb-role">'+(p.role?esc(p.role):'')+
             (sl?(p.role?' &#183; ':'')+'<span class="lb-sess">'+esc(sl)+'</span>':'')+'</div></div>'+
-        '<div class="lb-bar"><div class="lb-fill'+fillCls+'" data-w="'+Math.max(6,Math.min(100,Math.round(p.smax/max*100)))+'"></div></div>'+
+        '<div class="lb-bar" title="Barra confrontata dentro il gruppo, il trattino e' + "'" + ' la mediana della squadra">'+
+          '<div class="lb-fill'+fillCls+'" data-w="'+(sc?sc.w(p.smax):6)+'"></div>'+
+          medTick(sc, ranked.length, 'lb-med')+
+        '</div>'+
         '<div class="lb-val'+(rk>1&&rk<=3?' vi':'')+'">'+NF1.format(p.smax)+'<small>km/h</small></div>'+
         '<svg class="lb-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'+
         (href? '</a>' : '</div>');
@@ -2972,6 +3016,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
 
     const best = st.best;
+    // stessa scala di gruppo della classifica GPS: dal fondo del gruppo al
+    // migliore, non da zero, perche' nessuna di queste prove parte da zero
+    const bsc = (!sem && !neu) ? barScale(ordered.map(e=> e.v), def.dir) : null;
+    const bn  = ordered.filter(e=> e.v != null).length;
     const rows = ordered.map(e=>{
       const isBest = (!sem && !neu && e.v!=null && best!=null && e.v===best);
       const s = sem ? semOf(e.v) : null;
@@ -2981,12 +3029,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       } else if(neu){
         mid = '<span class="tb-lev"></span>';
       } else {
-        let w = 0;
-        if(e.v!=null && best!=null && best>0){
-          w = def.dir==='high' ? (e.v/best*100) : (best/e.v*100);
-          w = Math.max(6, Math.min(100, w));
-        }
-        mid = '<div class="tb-bar"><div class="tb-barfill" data-w="'+(e.v!=null?Math.round(w):0)+'"></div></div>';
+        const w = (e.v != null && bsc) ? bsc.w(e.v) : 0;
+        mid = '<div class="tb-bar" title="Barra confrontata dentro il gruppo, il trattino e' + "'" + ' la mediana della squadra">'+
+          '<div class="tb-barfill" data-w="'+w+'"></div>'+
+          medTick(bsc, bn, 'tb-med')+
+        '</div>';
       }
       // il testo originale del foglio vale solo dove non e' gia' la lettera del semaforo:
       // sul Faber il fisio ha scritto "ok" e quel 9 non e' una misura vera.
