@@ -481,6 +481,14 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   transition:color .16s var(--ease), background .16s var(--ease); }
 .pl-phz-clipb:hover{ color:var(--ink); background:var(--surface2); }
 .pl-phz-empty{ font-size:11.5px; color:var(--faint); line-height:1.45; padding:2px 0; }
+/* Il carico atteso non e' un dato misurato ma una stima ricavata dallo storico:
+   sta in un riquadro suo, sotto la durata, e lo dice a parole. */
+.pl-phz-exp{ margin-top:2px; padding:8px 10px; border:1px solid var(--border2); border-radius:10px;
+  background:var(--surface2); font-size:11.5px; line-height:1.5; color:var(--muted); }
+.pl-phz-exp .h{ display:block; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--faint); margin-bottom:3px; }
+.pl-phz-exp b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+.pl-phz-exp .nb{ display:block; margin-top:3px; color:var(--faint); font-size:11px; }
 .pl-phz-quick{ display:flex; flex-wrap:wrap; gap:5px; }
 .pl-phz-qc{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:600; color:var(--muted);
   padding:4px 9px; border-radius:999px; border:1px dashed var(--border2); background:transparent;
@@ -846,6 +854,10 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
           <button type="button" class="btn pl-phz-add" id="pl-ephz-add">+ Fase</button>
           <span class="pl-phz-tot" id="pl-ephz-tot"></span>
         </div>
+        <!-- carico atteso: quanto vale, in metri per atleta, la seduta che si
+             sta scrivendo, secondo quello che quelle stesse fasi hanno reso
+             nei GPS delle sedute gia' fatte -->
+        <div class="pl-phz-exp" id="pl-ephz-exp" hidden></div>
       </div>
     </div>
     <div class="pl-drow">
@@ -2524,6 +2536,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const tot = document.getElementById('pl-ephz-tot'); if(!tot) return;
     const tm = phasesTotal(plEditPhases);
     tot.innerHTML = plEditPhases.length ? ('Durata totale <b>'+tm+'</b> min &#183; '+plEditPhases.length+' fasi') : '';
+    // il carico atteso si rifa a ogni tocco, cosi' cambiando i minuti si vede
+    // subito quanto sposta (punto 68)
+    expRender(plEditPhases);
   }
   function plAddPhase(t){ plEditPhases.push({ t:(SES[t]?t:'possesso'), m:0, n:'' }); plRenderPhases(); }
   function plBindPhases(){
@@ -2543,7 +2558,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       });
       host.addEventListener('change', function(e){
         const el=e.target; const i=+el.getAttribute('data-i'); if(isNaN(i)||!plEditPhases[i]) return;
-        if(el.classList.contains('pl-phz-t')){ plEditPhases[i].t = SES[el.value]?el.value:'possesso'; }
+        // cambiando attivita' cambia anche la stima, non solo i minuti
+        if(el.classList.contains('pl-phz-t')){ plEditPhases[i].t = SES[el.value]?el.value:'possesso'; plUpdatePhaseTot(); }
       });
       host.addEventListener('click', function(e){
         const x=e.target.closest('.pl-phz-x'); if(x){ e.preventDefault(); const i=+x.getAttribute('data-i'); if(!isNaN(i)){ plEditPhases.splice(i,1); plRenderPhases(); } return; }
@@ -2825,6 +2841,95 @@ window.RS_ROSTER = window.RS_ROSTER || [
       for(let j=0;j<w.length;j++){ if(t.indexOf(w[j]) >= 0) return k; }
     }
     return '';
+  }
+
+  // ---------- carico atteso delle fasi (punto 68) ----------
+  /* Nel costruttore si scrivevano attivita' e minuti e finiva li': quanto
+     pesasse davvero la seduta si scopriva il giorno dopo, leggendo i GPS. Ma
+     lo storico quella risposta ce l'ha gia': un rondo di dieci minuti ha reso
+     tante volte piu' o meno lo stesso, e un possesso pure. Da quando le
+     famiglie di Esercitazioni sono le stesse fasi del costruttore (punto 67)
+     il collegamento si puo' fare: si prende ogni esercitazione registrata, si
+     guarda a che famiglia appartiene e quanto ha reso al minuto, e quel numero
+     torna indietro come stima mentre la seduta si sta ancora scrivendo. */
+  const EXP_MIN_N = 3;           // sotto tre esercitazioni non e' una media, e' un caso
+  let EXP_TAB = null;            // si costruisce alla prima richiesta e resta li'
+  /* La mediana e non la media: una sola giornata storta, un GPS partito tardi o
+     un'esercitazione interrotta sposterebbero la media di parecchio, la mediana
+     quasi per niente. */
+  function expMed(a){
+    if(!a.length) return 0;
+    const v = a.slice().sort(function(x,y){ return x-y; });
+    const h = v.length >> 1;
+    return v.length % 2 ? v[h] : (v[h-1] + v[h]) / 2;
+  }
+  function expBuild(){
+    const acc = {};
+    function add(E){
+      const ss = (E && Array.isArray(E.sessions)) ? E.sessions : [];
+      ss.forEach(function(s){
+        (s.drills || []).forEach(function(d){
+          // le righe doppie sono lo stesso lavoro contato due volte
+          if(!d || d.dup) return;
+          const k = xcType(d.descrizione);
+          if(!k || XC_NOGPS[k]) return;
+          const L = d.load || {};
+          const min = Number(L['Minuti']) || 0;
+          const dist = Number(L['Dist tot']) || 0;
+          /* Sotto i due minuti il rapporto metri su minuto non e' piu' un ritmo:
+             e' il GPS acceso o spento un attimo prima. */
+          if(min < 2 || dist <= 0) return;
+          const o = acc[k] || (acc[k] = { d:[], p:[], a:[] });
+          o.d.push(dist / min);
+          o.p.push((Number(L['D>20 W/kg']) || 0) / min);
+          o.a.push(Number(L['N az. int. /min']) || 0);
+        });
+      });
+    }
+    add(window.ESERC);
+    add(window.ESERC_2627);
+    const tab = {};
+    Object.keys(acc).forEach(function(k){
+      const o = acc[k];
+      if(o.d.length < EXP_MIN_N) return;
+      tab[k] = { n:o.d.length, d:expMed(o.d), p:expMed(o.p), a:expMed(o.a) };
+    });
+    return tab;
+  }
+  function expTab(){ if(!EXP_TAB) EXP_TAB = expBuild(); return EXP_TAB; }
+  /* Somma la stima delle fasi che hanno uno storico e tiene da parte le altre:
+     i minuti di palestra e quelli di una fase mai registrata non vanno mescolati
+     con i metri, se no il totale direbbe una cosa che non e' stata misurata. */
+  function expCalc(phases){
+    const tab = expTab();
+    const r = { min:0, dist:0, hp:0, az:0, sconosciute:[], palestra:0 };
+    (Array.isArray(phases) ? phases : []).forEach(function(p){
+      const m = Number(p && p.m) || 0;
+      if(m <= 0) return;
+      const t = p.t;
+      if(XC_NOGPS[t]){ r.palestra += m; return; }
+      const e = tab[t];
+      if(!e){ if(r.sconosciute.indexOf(t) < 0) r.sconosciute.push(t); return; }
+      r.min += m; r.dist += e.d * m; r.hp += e.p * m; r.az += e.a * m;
+    });
+    return r;
+  }
+  /* Si arrotonda a cinquanta metri e a cinque azioni: una stima scritta al metro
+     si farebbe leggere come una misura, e non lo e'. */
+  function expRound(v, step){ return Math.round(v / step) * step; }
+  function expRender(phases){
+    const box = document.getElementById('pl-ephz-exp'); if(!box) return;
+    const r = expCalc(phases);
+    if(!r.min){ box.hidden = true; box.innerHTML = ''; return; }
+    const nb = [];
+    if(r.palestra) nb.push(r.palestra + ' min di lavoro che il GPS non vede (palestra, pliometria, rigenerante) restano fuori dal conto.');
+    if(r.sconosciute.length) nb.push('Senza storico: ' + r.sconosciute.map(sesShort).join(', ') + '.');
+    box.hidden = false;
+    box.innerHTML = '<span class="h">Carico atteso per atleta</span>'+
+      'Circa <b>' + NF0.format(expRound(r.dist, 50)) + ' m</b> su <b>' + r.min + '</b> min di campo, '+
+      'di cui <b>' + NF0.format(expRound(r.hp, 50)) + ' m</b> ad alta potenza e <b>' + NF0.format(expRound(r.az, 5)) + '</b> azioni intense. '+
+      'Stima dalle sedute gia\' registrate, non una misura.'+
+      (nb.length ? '<span class="nb">' + esc(nb.join(' ')) + '</span>' : '');
   }
   /* Le fasi del giorno. Un blocco aggiunto a mano le ha addosso; una giornata
      registrata no, quindi si cerca il blocco del planner che sta nello stesso
