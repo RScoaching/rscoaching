@@ -3003,6 +3003,88 @@ window.FORZA = window.FORZA || { roster:[] };
     return out;
   }
 
+  /* La strada di ritorno (punto 73). Il tasto Salva teneva la seduta solo qui, e
+     il Calendario restava fermo al programma scritto giorni prima: il confronto
+     fra quello che si voleva fare e quello che si e' fatto non partiva, perche'
+     il secondo lato non arrivava mai. Adesso Salva scrive anche il blocco del
+     giorno, con le fasi della seduta vera. */
+  const CAL_KEYW = [
+    ['attivazione', ['attivazion','riscaldam','risveglio','warm']],
+    ['rec',         ['defaticam','scarico','rigenerant','stretch','allungam','mobilit','cool']],
+    ['rondo',       ['rondo','torello']],
+    ['possesso',    ['possess','mantenim','conservazion']],
+    ['passing',     ['passing','passagg']],
+    ['tecnica',     ['tecnic','guida palla','conduzion','controllo','dominio']],
+    ['finalizzazione', ['finalizzaz','tiro','tiri','cross','conclusion']],
+    ['palleinattive',  ['palle inattiv','calci piazzat','corner','punizion']],
+    ['transizioni', ['transizion','ripartenz','contropied','riaggression']],
+    ['duelli',      ['duell','1c1','uno contro uno']],
+    ['ssg',         ['partita','partitell','a tema','sfida','amichevol']],
+    ['forza',       ['forza','palestra','pesi','prevenzion','core','stabilit','propriocett']],
+    ['plyo',        ['pliometr','balzi','salti','hop']],
+    ['sprint',      ['velocit','sprint','accelerazion','navett','cambi di direzion','agilit','scatti']],
+    ['interval',    ['intermittent','ripetut','rsa','fartlek','navette']],
+    ['z2',          ['aerobic','resistenz','corsa','endurance']],
+    ['test',        ['test','gacon','yoyo']],
+    ['tecnica',     ['tattic','pressing','reparto','schemi','situazion','sviluppi','individual','differenziat']]
+  ];
+  /* Vince la prima regola che corrisponde, come in Esercitazioni: l'ordine e'
+     l'ordine di priorita', se no "attivazione tecnica" finirebbe in tecnica e
+     "partita a tema" in tecnica invece che in partita. */
+  function calPhaseKey(name){
+    const t = wrNorm(name);
+    for(let i = 0; i < CAL_KEYW.length; i++){
+      const k = CAL_KEYW[i];
+      for(let j = 0; j < k[1].length; j++){ if(t.indexOf(k[1][j]) >= 0) return k[0]; }
+    }
+    return 'possesso';
+  }
+  function calSaveToday(bl){
+    if(!Array.isArray(bl) || !bl.length) return '';
+    let st = null;
+    try{ st = JSON.parse(localStorage.getItem(CAL_KEY) || 'null'); }catch(e){ return ''; }
+    if(!st || typeof st !== 'object') st = {};
+    if(!Array.isArray(st.manual)) st.manual = [];
+    const phases = bl.map(function(b){
+      return { t: calPhaseKey(b.name), m: Math.max(0, Math.min(240, Math.round(b.min||0))),
+        n: String(b.note || b.name || '').slice(0,80) };
+    }).filter(function(p){ return p.m > 0 || p.n; });
+    if(!phases.length) return '';
+    /* Il blocco di oggi si riscrive, non si aggiunge: se ogni Salva creasse una
+       riga nuova, il giorno finirebbe con cinque sedute uguali e il carico del
+       giorno contato cinque volte. La gara e il riposo non si toccano. */
+    let m = null;
+    for(let i = 0; i < st.manual.length; i++){
+      const x = st.manual[i];
+      if(x && x.data === TSTR && x.type !== 'gara' && x.type !== 'riposo'){ m = x; break; }
+    }
+    const nuovo = !m;
+    if(nuovo){
+      m = { id: 'm'+Date.now()+Math.random().toString(36).slice(2,6),
+        data: TSTR, slot:'PM', kind:'training', title:'', type:'possesso',
+        pct:null, load:null, note:'', svolto:false, group:'', diff:'',
+        phases:[], players:[], comp_gara:'' };
+      st.manual.push(m);
+    }
+    m.phases = phases;
+    /* Il tipo del blocco e' la fase che ha piu' minuti, cioe' quello che quel
+       giorno si e' fatto davvero: e' l'etichetta che si legge sul calendario
+       senza aprire niente. */
+    const somma = {};
+    let best = phases[0].t, bm = -1;
+    phases.forEach(function(p){
+      if(p.t === 'attivazione' || p.t === 'rec') return;
+      somma[p.t] = (somma[p.t] || 0) + p.m;
+      if(somma[p.t] > bm){ bm = somma[p.t]; best = p.t; }
+    });
+    m.type = best;
+    /* Salvata dalla pagina Oggi vuol dire fatta, non prevista: e' il giorno
+       stesso e i blocchi sono quelli che si sono scritti guardando il campo. */
+    m.svolto = true;
+    try{ localStorage.setItem(CAL_KEY, JSON.stringify(st)); }catch(e){ return ''; }
+    return nuovo ? 'nuovo' : 'agg';
+  }
+
   function buildWriter(){
     const ta = document.getElementById('wr-in');
     let saved = '';
@@ -4385,7 +4467,12 @@ window.FORZA = window.FORZA || { roster:[] };
       if(i >= 0){ s.id = list[i].id; list[i] = s; } else { list.push(s); }
       while(list.length > 40) list.shift();
       sessSave(list); renderSaved();
-      toast(i >= 0 ? 'Seduta di oggi aggiornata' : 'Seduta salvata');
+      /* La stessa seduta va anche nel giorno del Calendario: e' li' che si guarda
+         la settimana, e un giorno vuoto in mezzo a due pieni si legge come un
+         riposo che non c'e' stato. */
+      const cal = calSaveToday(s.blocks);
+      toast((i >= 0 ? 'Seduta di oggi aggiornata' : 'Seduta salvata')+
+        (cal ? (cal === 'nuovo' ? ', scritta anche nel calendario' : ', aggiornata anche nel calendario') : ''));
     });
 
     const bp = document.getElementById('bld-print');
