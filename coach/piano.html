@@ -2733,16 +2733,42 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // metri quadri a testa: e' il numero che spiega perche' lo stesso esercizio,
   // a parita' di minuti, un giorno corre e un giorno picchia
+  /* Quante ne ho oggi (punto 72). La rosa del giorno sta gia' nella scheda sopra,
+     con gli stessi stati della pagina Atlete: chi e' assente, chi e' dal
+     fisioterapista e chi si allena su in prima squadra oggi in campo non c'e'.
+     Il parziale e il differenziato invece ci sono, fanno meno ma occupano spazio,
+     e nello spazio a testa contano come tutte le altre. */
+  function wrInCampo(){
+    let n = 0;
+    if(typeof ROSTER === 'undefined' || !Array.isArray(ROSTER)) return 0;
+    ROSTER.forEach(function(p){
+      const st = avSt(p.name);
+      if(st === 'assente' || st === 'fisico' || st === 'ft') return;
+      n++;
+    });
+    return n;
+  }
+  /* Se la riga non dice quante atlete, si usano quelle che oggi ci sono davvero
+     invece di lasciare il conto in bianco: il numero e' li' a due schede di
+     distanza e riscriverlo a mano su ogni blocco non lo rende piu' vero. */
+  function wrPl(b){
+    if(b && b.pl > 0) return b.pl;
+    return wrInCampo();
+  }
   function wrMq(b){
-    return (b && b.w > 0 && b.l > 0 && b.pl > 0) ? (b.w*b.l)/b.pl : 0;
+    const pl = wrPl(b);
+    return (b && b.w > 0 && b.l > 0 && pl > 0) ? (b.w*b.l)/pl : 0;
   }
   function wrMqHtml(b){
     const mq = wrMq(b);
     if(!mq) return '<span class="mq-e">Metti larghezza, lunghezza e quante atlete: '+
       'qui esce lo spazio a testa, quello che cambia il carico a parita\' di minuti.</span>';
+    const pl = wrPl(b);
+    const dal = (!b.pl || b.pl <= 0);
     return '<span class="mq-v">'+NF1.format(mq)+'</span>'+
       '<span class="mq-l">mq per atleta</span>'+
-      '<span class="mq-t">'+NF.format(b.w*b.l)+' mq di campo su '+b.pl+' atlete. '+
+      '<span class="mq-t">'+NF.format(b.w*b.l)+' mq di campo su '+pl+' atlete'+
+      (dal ? ', quelle in campo oggi secondo la rosa' : '')+'. '+
       'Sopra i 100 si corre, sotto i 40 si va di duelli e cambi di direzione.</span>';
   }
   function wrCmpHtml(b){
@@ -2828,8 +2854,14 @@ window.FORZA = window.FORZA || { roster:[] };
       vs = '<span class="ws"><span class="ws-l">Vs atteso</span>'+
            '<span class="ws-v '+c+'">'+(d>0?'+':'')+d+'%</span></span>';
     }
+    /* Chi c'e' oggi sta nel riepilogo della seduta e non solo nella scheda della
+       rosa: e' il numero che decide se il possesso scritto ieri sta ancora in
+       piedi, e va letto mentre si scrive la seduta, non dopo. */
+    const inc = wrInCampo();
+    const wc = inc ? ('<span class="ws"><span class="ws-l">In campo</span>'+
+      '<span class="ws-v">'+inc+'</span></span>') : '';
     sum.hidden = false;
-    sum.innerHTML =
+    sum.innerHTML = wc+
       '<span class="ws"><span class="ws-l">Blocchi</span><span class="ws-v">'+bl.length+'</span></span>'+
       '<span class="ws"><span class="ws-l">Minuti</span><span class="ws-v">'+NF.format(tm)+'</span></span>'+
       '<span class="ws load"><span class="ws-l">Carico</span><span class="ws-v">'+NF.format(tl)+'</span></span>'+
@@ -4147,6 +4179,10 @@ window.FORZA = window.FORZA || { roster:[] };
     renderRosa(); rosaSum(); rosaNotes(); rosaRes(); rosaPre();
     // chi si allena oggi decide anche l'elenco degli obiettivi per atleta
     if(typeof renderAtlete === 'function') renderAtlete();
+    /* e decide anche lo spazio a testa della seduta che si sta scrivendo: se
+       spostare un'atleta in assenti non ricalcolasse i metri quadri, il numero
+       resterebbe quello di prima e nessuno se ne accorgerebbe */
+    if(typeof renderWriter === 'function' && document.getElementById('wr-prev')) renderWriter();
   }
 
   function aggFromInput(){
