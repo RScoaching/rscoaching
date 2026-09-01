@@ -471,6 +471,18 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
 
 /* ---------- gestione rosa nella scheda ---------- */
 .rost-btns{ display:flex; flex-wrap:wrap; gap:8px; margin-top:11px; }
+/* Gruppo dell'atleta: due scelte una accanto all'altra, quella accesa e' come
+   sta adesso. Chi va sotto "Aggregate" nelle altre pagine si decide qui. */
+.grp-lab{ display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--faint); margin-top:14px; }
+.grp-seg{ display:inline-flex; gap:0; margin-top:7px; border:1px solid var(--border2); border-radius:9px; overflow:hidden; }
+.grp-seg button{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); background:transparent; border:0; padding:8px 14px;
+  transition:color .15s var(--ease), background .15s var(--ease); }
+.grp-seg button + button{ border-left:1px solid var(--border2); }
+.grp-seg button:hover{ color:var(--ink); background:var(--surface2); }
+.grp-seg button.on{ color:var(--ink); background:var(--surface3); }
+.grp-note{ margin:8px 0 0; font-size:12px; color:var(--muted); }
 .btn.red{ color:oklch(74% 0.17 25); background:oklch(62% 0.22 25 / 0.10); border-color:oklch(62% 0.22 25 / 0.32); }
 .btn.red:hover{ color:oklch(80% 0.15 25); background:oklch(62% 0.22 25 / 0.17); border-color:oklch(62% 0.22 25 / 0.52); }
 
@@ -919,7 +931,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
       const snapRole = normRole(p.role || rp.role || '');
       const custom = rp.tipo==='manuale' || Object.prototype.hasOwnProperty.call(customPlayers, name);
-      return { name, snapRole, min, dist, sedute, partite, custom };
+      return { name, snapRole, min, dist, sedute, partite, custom, tipo: rp.tipo || '' };
     });
     return result.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
   }
@@ -1523,6 +1535,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
       toast(b.off ? disp(pl.name) + ' fuori dalla rosa operativa' : disp(pl.name) + ' reintegrata');
     });
+    // gruppo negli elenchi: si scrive nell'anagrafica e le altre pagine se ne
+    // accorgono subito con l'avviso fio:agg, senza ricaricare niente
+    function setGrp(v){
+      // La scelta si scrive sempre, anche quando coincide con quella dei
+      // fogli: da li' in avanti comanda quella scritta a mano e un dato nuovo
+      // non la ribalta piu'. Il messaggio invece esce solo se cambia davvero.
+      const era = pl.tipo === 'sporadica';
+      b.agg = v;
+      saveBio();
+      rebuildPlayers();
+      renderSheetBody();
+      renderKPIs(); renderPills(); renderGrid(); renderAvail(); renderSubtitle();
+      try{ document.dispatchEvent(new CustomEvent('fio:agg', { detail:{ nome: pl.name, aggregata: v } })); }catch(e){}
+      if(era !== v) toast(v ? disp(pl.name) + ' fra le aggregate' : disp(pl.name) + ' nel gruppo squadra');
+    }
+    const gCore = document.getElementById('grp-core');
+    if(gCore) gCore.addEventListener('click', ()=> setGrp(false));
+    const gAgg = document.getElementById('grp-agg');
+    if(gAgg) gAgg.addEventListener('click', ()=> setGrp(true));
+
     const delBtn = document.getElementById('sh-delete-player');
     if(delBtn) delBtn.addEventListener('click', ()=>{
       if(!window.confirm('Eliminare definitivamente ' + disp(pl.name) + '?')) return;
@@ -1784,7 +1816,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         (pl.custom ? '<button class="btn red" id="sh-delete-player">Elimina definitivamente</button>' : '')+
       '</div>'+
       (isOff ? '<p style="margin:8px 0 0;font-size:12px;color:var(--muted)">Fuori dalla rosa operativa. Resta nello storico.</p>' : '')+
+      grpBlock(pl)+
     '</section>';
+  }
+  // Dove sta questo nome negli elenchi delle altre pagine: nel gruppo squadra
+  // oppure sotto "Aggregate". Prima lo decidevano i fogli, che segnano
+  // sporadica chi ha pochi dati, e cosi' finivano fra le aggregate i portieri,
+  // che aggregate non sono. Adesso lo si dice qui, atleta per atleta.
+  function grpBlock(pl){
+    const agg = pl.tipo === 'sporadica';
+    return '<span class="grp-lab">Gruppo negli elenchi</span>'+
+      '<div class="grp-seg" role="group" aria-label="Gruppo dell\'atleta">'+
+        '<button type="button" id="grp-core" class="'+(agg ? '' : 'on')+'" aria-pressed="'+(agg ? 'false' : 'true')+'">Gruppo squadra</button>'+
+        '<button type="button" id="grp-agg" class="'+(agg ? 'on' : '')+'" aria-pressed="'+(agg ? 'true' : 'false')+'">Aggregata</button>'+
+      '</div>'+
+      '<p class="grp-note">'+(agg
+        ? 'Compare sotto Aggregate in Forza e in Prevenzione.'
+        : 'Compare con le altre nel gruppo squadra.')+'</p>';
   }
 
   // ---------- pannello disponibilita' ----------

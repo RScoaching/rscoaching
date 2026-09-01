@@ -736,6 +736,19 @@ window.fioRosterFull = function() {
   var C = window.fioCustom();
   Object.keys(C).sort(function(a, b) { return a.localeCompare(b, 'it'); })
     .forEach(function(n) { add(n, C[n], 'manuale'); });
+  // Chi sta sotto "Aggregate" lo decide il preparatore in Atlete, non il tipo
+  // scritto nei fogli: quello dice solo chi ha pochi dati, e finiva per mettere
+  // fra le aggregate i portieri, che aggregate non sono. Il campo "agg"
+  // dell'anagrafica comanda su tutto: acceso porta il nome fra le aggregate,
+  // spento lo riporta nel gruppo squadra. Chi in Atlete non e' stato toccato
+  // resta come dicono i fogli.
+  var B = window.fioBio();
+  out.forEach(function(p) {
+    var b = B[p.name];
+    if (!b || b.agg === undefined || b.agg === null) return;
+    if (b.agg) p.tipo = 'sporadica';
+    else if (p.tipo === 'sporadica') p.tipo = '';
+  });
   return out;
 };
 
