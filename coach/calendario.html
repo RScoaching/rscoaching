@@ -557,6 +557,26 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-dmeta span.hot{ background:var(--ember-bg); border-color:var(--ember-border); color:var(--orange2); }
 .pl-dempty{ font-size:12.5px; color:var(--muted); line-height:1.5; padding:12px; border-radius:10px;
   border:1px dashed var(--border2); background:var(--surface2); }
+/* La seduta di forza dentro il dettaglio del giorno. Il blocco diceva solo
+   "Scheda forza": per sapere che cosa c'era dentro bisognava aprire il
+   costruttore. Qui si legge e basta, la scheda si modifica dove si crea. */
+.pl-fzl{ list-style:none; margin:0; padding:0; }
+.pl-fzl li{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px;
+  padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+.pl-fzl li:last-child{ border-bottom:0; }
+.pl-fzl .n{ flex:0 0 26px; font-size:10.5px; font-weight:700; color:var(--faint);
+  font-variant-numeric:tabular-nums; }
+.pl-fzl .x{ flex:1 1 auto; min-width:130px; color:var(--ink); font-weight:600; }
+.pl-fzl .s{ color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.pl-fzl .p{ font-size:9.5px; font-weight:700; letter-spacing:.04em; white-space:nowrap;
+  padding:2px 8px; border-radius:999px; background:var(--ember-bg);
+  border:1px solid var(--ember-border); color:var(--orange2); }
+.pl-fznote{ display:block; width:100%; margin-left:34px; font-size:11.5px; color:var(--faint); }
+.pl-fzsum{ font-size:12.5px; color:var(--muted); margin-bottom:8px; }
+.pl-fzsum b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+.pl-fzgo{ display:inline-block; margin-top:9px; font-size:11.5px; font-weight:700;
+  color:var(--violet2); text-decoration:none; }
+.pl-fzgo:hover{ color:var(--ink); }
 /* "Svolto" e la nota del giorno: stanno qui perche' il dettaglio e' l'unico
    posto dove si apre una seduta, da quando la lista in fondo alla pagina
    non c'e' piu'. Il bottone e il campo sono gli stessi atomi di prima. */
@@ -2650,6 +2670,103 @@ window.RS_ROSTER = window.RS_ROSTER || [
      quello che il GPS ha registrato quel giorno, le esercitazioni una per una,
      chi ha fatto cosa e chi non c'era, senza uscire dalla griglia. */
   const plDet = document.getElementById('pl-det');
+
+  /* ---- la scheda di forza del giorno ----
+     Le schede le salva la pagina Forza, qui si leggono e basta. La chiave
+     porta dentro la stagione, quindi si rilegge ogni volta invece di
+     fissarla all'avvio: cambiando stagione cambia l'archivio. */
+  function fzStoreKey(){
+    try{ return window.fioKey ? window.fioKey('rs_fio_forza_sessions') : 'rs_fio_forza_sessions'; }
+    catch(e){ return 'rs_fio_forza_sessions'; }
+  }
+  function fzSessions(){
+    try{
+      const a = JSON.parse(localStorage.getItem(fzStoreKey()) || '[]');
+      return Array.isArray(a) ? a : [];
+    }catch(e){ return []; }
+  }
+  /* Il legame vero e' l'id salvato nel blocco. Senza id si guarda la data, ma
+     solo su un blocco che dice gia' di essere forza: altrimenti la scheda
+     finirebbe attaccata alla seduta di campo dello stesso giorno. */
+  function fzOf(s){
+    if(!s || s.only_fix) return null;
+    const list = fzSessions();
+    if(!list.length) return null;
+    let hit = null;
+    if(s.fz){
+      for(let i=0;i<list.length;i++){ if(String(list[i].id) === String(s.fz)){ hit = list[i]; break; } }
+    }
+    if(!hit && s.type === 'forza' && s.data){
+      for(let i=0;i<list.length;i++){ if(list[i].date === s.data){ hit = list[i]; break; } }
+    }
+    return hit || null;
+  }
+  function fzHasEx(r){ return !!(r && r.ex && String(r.ex).trim()); }
+  /* Le etichette dicono che cosa si fa di seguito: 1, poi 2a e 2b attaccati,
+     poi 3. Il legame sta nel campo `link` della riga che viene dopo. */
+  function fzLabels(rows){
+    const out = [], blocks = [];
+    let cur = null;
+    rows.forEach(function(r, i){
+      if(i === 0 || !r.link){ cur = [i]; blocks.push(cur); }
+      else cur.push(i);
+    });
+    blocks.forEach(function(b, bi){
+      b.forEach(function(idx, k){
+        out[idx] = (bi + 1) + (b.length > 1 ? String.fromCharCode(97 + (k % 26)) : '');
+      });
+    });
+    return out;
+  }
+  function fzWu(v){
+    const n = parseInt(String(v == null ? '' : v).replace(/[^0-9]/g, ''), 10);
+    return (isFinite(n) && n > 0) ? n : 0;
+  }
+  function fzSerie(r){
+    const w = fzWu(r && r.wu);
+    return (w ? (w + ' avv. + ') : '') + ((r && r.serie) || '-') + ' x ' + ((r && r.rip) || '-');
+  }
+  function fzPanel(f){
+    if(!f) return '';
+    const rows = (f.rows || []).filter(fzHasEx);
+    if(!rows.length) return '';
+    const lab = fzLabels(rows);
+    /* Le serie di avvicinamento non entrano nel conto: non sono carico
+       allenante, servono a prendere confidenza col bilanciere. */
+    let serie = 0, vol = 0;
+    rows.forEach(function(r){
+      const se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0;
+      serie += se;
+      if(se > 0 && rp > 0) vol += se * rp;
+    });
+    const nAt = Array.isArray(f.players) ? f.players.length : 0;
+    const bits = [];
+    bits.push('<b>' + rows.length + '</b> ' + (rows.length === 1 ? 'esercizio' : 'esercizi'));
+    if(serie > 0) bits.push('<b>' + NF0.format(serie) + '</b> serie');
+    if(vol > 0) bits.push('<b>' + NF0.format(vol) + '</b> ripetizioni');
+    if(nAt) bits.push('<b>' + nAt + '</b> ' + (nAt === 1 ? 'atleta' : 'atlete'));
+    if(f.groupName) bits.push(esc(f.groupName));
+    const li = rows.map(function(r, i){
+      const pct = String(r.pct == null ? '' : r.pct).trim();
+      const nota = String(r.note == null ? '' : r.note).trim();
+      return '<li>' +
+        '<span class="n">' + esc(lab[i]) + '</span>' +
+        '<span class="x">' + esc(r.ex) + '</span>' +
+        '<span class="s">' + esc(fzSerie(r)) + '</span>' +
+        (pct ? '<span class="p">' + esc(pct) + '%</span>' : '') +
+        (nota ? '<span class="pl-fznote">' + esc(nota) + '</span>' : '') +
+        '</li>';
+    }).join('');
+    return '<div class="sdet">' +
+      '<h4>Seduta di forza' + (f.title ? ' &#183; ' + esc(f.title) : '') + '</h4>' +
+      '<div class="blk">' +
+        '<div class="pl-fzsum">' + bits.join(' &#183; ') + '</div>' +
+        '<ul class="pl-fzl">' + li + '</ul>' +
+        '<a class="pl-fzgo" href="./forza.html">Apri la pagina Forza</a>' +
+      '</div>' +
+    '</div>';
+  }
+
   function plDetBody(s){
     let h = '';
     if(s.fix){
@@ -2699,12 +2816,19 @@ window.RS_ROSTER = window.RS_ROSTER || [
         }).join('')+
       '</div></div>';
     }
+    /* La forza va prima delle esercitazioni GPS: e' quello che si e' deciso,
+       il GPS e' quello che poi e' successo in campo. */
+    const fzh = fzPanel(fzOf(s));
+    h += fzh;
     const ex = s.only_fix ? null : exOf(s);
     if(exHasDetail(ex)) h += exPanel(ex);
     else if(s.only_fix) h += '<div class="pl-dempty">'+
       (s.svolto ? 'Nessun dato registrato per questa gara.'
                 : 'Gara in programma. Quando i dati arriveranno, qui ci saranno le esercitazioni della giornata e chi era in campo.')+'</div>';
-    else h += '<div class="pl-dempty">Nessuna esercitazione registrata per questa seduta.</div>';
+    /* Se la scheda di forza c'e', il dialogo ha gia' detto che cosa si fa quel
+       giorno: aggiungere "nessuna esercitazione" suonerebbe come una seduta
+       vuota, che non e'. */
+    else if(!fzh) h += '<div class="pl-dempty">Nessuna esercitazione registrata per questa seduta.</div>';
     return h;
   }
   function plOpenDet(id){
