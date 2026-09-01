@@ -592,6 +592,14 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
         <div class="pills" id="tpills" role="tablist" aria-label="Filtro tipologia"></div>
       </div>
 
+      <!-- filtro per quante atlete erano dentro l'esercitazione: un rondo a
+           sei e una partita a undici sono due lavori diversi anche quando il
+           nome nel foglio si somiglia -->
+      <div class="tbar reveal" style="--i:1">
+        <span class="tl">Atlete</span>
+        <div class="pills" id="npills" role="tablist" aria-label="Filtro numero di atlete"></div>
+      </div>
+
       <!-- add form -->
       <form class="addform reveal" id="addform" style="--i:2" autocomplete="off">
         <div class="fg">
@@ -691,7 +699,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   // ath e per sono il filtro per calciatrice: quale e su quanti giorni indietro
   // tipo e' la famiglia dell'esercitazione (possesso, rondos, partita...)
-  const state = { slot:'all', tipo:'all', q:'', ath:'', per:7 };
+  // nat e' la fascia di quante atlete stavano dentro l'esercitazione
+  const state = { slot:'all', tipo:'all', nat:'all', q:'', ath:'', per:7 };
 
   // ---------- tipologia ricavata dal nome dell'esercitazione ----------
   // Le famiglie non sono inventate: escono dalle parole che il mister usa
@@ -717,6 +726,35 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const t = String(desc||'').toLowerCase();
     for(let i=0;i<TIPI.length;i++){ if(TIPI[i].re.test(t)) return TIPI[i].k; }
     return 'altro';
+  }
+
+  // ---------- fasce per numero di atlete ----------
+  // Il nome dell'esercitazione non dice quante ne stavano dentro: "possesso"
+  // puo' essere un 4v4 come un 10v10, e il carico non e' lo stesso. Il numero
+  // vero e' quello dei GPS, quindi le fasce si tagliano dove il lavoro cambia
+  // davvero: piccolo gruppo, mezza squadra, squadra intera.
+  const NAT = [
+    { k:'p', lbl:'Fino a 8',    lo:1,  hi:8 },
+    { k:'m', lbl:'Da 9 a 14',   lo:9,  hi:14 },
+    { k:'g', lbl:'15 e oltre',  lo:15, hi:Infinity },
+  ];
+  const NAT_LBL = { nd:'Senza dati' };
+  NAT.forEach(function(n){ NAT_LBL[n.k] = n.lbl; });
+
+  function nAthOf(d){
+    if(!d) return 0;
+    if(d.atlete) return Object.keys(d.atlete).length;
+    const n = parseInt(d.n, 10);
+    return (isFinite(n) && n > 0) ? n : 0;
+  }
+  /* Un'esercitazione senza nemmeno un nome nei GPS non e' una fascia: e' un
+     dato che manca. Sta nella sua pillola, cosi' si vede quante sono senza
+     mescolarle con le altre. */
+  function natOf(d){
+    const n = nAthOf(d);
+    if(!n) return 'nd';
+    for(let i=0;i<NAT.length;i++){ if(n >= NAT[i].lo && n <= NAT[i].hi) return NAT[i].k; }
+    return 'nd';
   }
 
   // seduta aperta da calendario o da oggi: esercitazioni.html?d=2026-08-10&s=AM&e=3
@@ -909,6 +947,11 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         drills = drills.filter(d=> tipoOf(d.descrizione)===state.tipo);
         if(!drills.length) return null;
       }
+      // stessa regola per il numero di atlete: taglia le righe, non le sedute
+      if(state.nat!=='all'){
+        drills = drills.filter(d=> natOf(d)===state.nat);
+        if(!drills.length) return null;
+      }
       if(q){ drills = drills.filter(d=> d.descrizione.toLowerCase().includes(q)); if(!drills.length) return null; }
       return Object.assign({}, s, { drills });
     }).filter(Boolean);
@@ -985,6 +1028,39 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
       const k = b.getAttribute('data-t');
       state.tipo = (state.tipo===k ? 'all' : k);
+      render();
+    }));
+  }
+
+  // ---------- pillole numero di atlete ----------
+  function renderNat(all){
+    const host = document.getElementById('npills');
+    if(!host) return;
+    // come per la tipologia, i numeri si contano con questo filtro spento:
+    // altrimenti scegliendo una fascia le altre andrebbero tutte a zero
+    const save = state.nat;
+    state.nat = 'all';
+    const base = filtered(all);
+    state.nat = save;
+    const cnt = { all:0 };
+    base.forEach(s=> s.drills.forEach(d=>{
+      const k = natOf(d);
+      cnt[k] = (cnt[k]||0) + 1;
+      cnt.all++;
+    }));
+    const defs = [{ k:'all', lbl:'Tutte' }]
+      .concat(NAT.map(n=>({ k:n.k, lbl:n.lbl })))
+      .concat([{ k:'nd', lbl:'Senza dati' }]);
+    // le fasce vuote spariscono, quella accesa resta sempre: senno' non ci
+    // sarebbe piu' il modo di spegnerla
+    host.innerHTML = defs.filter(d=> d.k==='all' || cnt[d.k] || state.nat===d.k).map(d=>
+      '<button class="pill sm'+(state.nat===d.k?' on':'')+'" data-n="'+d.k+'" role="tab"'+
+      ' aria-selected="'+(state.nat===d.k)+'">'+esc(d.lbl)+
+      ' <span class="cnt">'+(cnt[d.k]||0)+'</span></button>'
+    ).join('');
+    host.querySelectorAll('.pill').forEach(b=> b.addEventListener('click', ()=>{
+      const k = b.getAttribute('data-n');
+      state.nat = (state.nat===k ? 'all' : k);
       render();
     }));
   }
@@ -1443,6 +1519,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       // di mezzo le righe, e va dato il modo di spegnerli tutti in un colpo
       const attivi = [];
       if(state.tipo!=='all') attivi.push('tipologia ' + (TIPO_LBL[state.tipo]||state.tipo).toLowerCase());
+      if(state.nat!=='all') attivi.push('atlete ' + (NAT_LBL[state.nat]||state.nat).toLowerCase());
       if(state.slot!=='all') attivi.push('slot ' + state.slot);
       if(state.q.trim()) attivi.push('ricerca ' + state.q.trim());
       if(!FOCUS && state.ath) attivi.push('calciatrice ' + disp(state.ath));
@@ -1457,7 +1534,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         '</div>';
       const cb = document.getElementById('clrflt');
       if(cb) cb.addEventListener('click', ()=>{
-        state.tipo = 'all'; state.slot = 'all'; state.q = '';
+        state.tipo = 'all'; state.nat = 'all'; state.slot = 'all'; state.q = '';
         if(!FOCUS) state.ath = '';
         const si = document.getElementById('search'); if(si) si.value = '';
         render();
@@ -2020,6 +2097,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       state.q = inp.value;
       const all = buildSessions();
       renderTipi(all);
+      renderNat(all);
       renderSessions(filtered(all));
     }, 120); });
   })();
@@ -2042,6 +2120,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderKPIs(all);
     renderPills(all);
     renderTipi(all);
+    renderNat(all);
     renderFocusBar(all);
     renderAthCard(all);
     renderSessions(filtered(all));
