@@ -359,14 +359,18 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 /* disegno stilizzato ricavato dal nome: nessun servizio esterno, solo il testo */
 .dgbox{ margin-bottom:12px; border:1px solid var(--border2); border-radius:var(--r); background:var(--surface2); padding:12px; }
 .dgbox .dgh{ font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:9px; }
-.dgbox svg{ display:block; width:100%; max-width:320px; height:auto; margin:0 auto; }
+.dgbox svg{ display:block; width:100%; max-width:400px; height:auto; margin:0 auto; }
 .dgbox .campo{ fill:var(--surface); stroke:var(--border3); stroke-width:1.5; }
-.dgbox .linea{ stroke:var(--border3); stroke-width:1; stroke-dasharray:4 4; fill:none; }
-.dgbox .porta{ stroke:var(--border3); stroke-width:2; fill:none; }
-.dgbox .ta{ fill:var(--violet); }
-.dgbox .tb{ fill:var(--orange); }
-.dgbox .tj{ fill:var(--green); }
-.dgbox .tp{ fill:var(--faint); }
+.dgbox .linea{ stroke:var(--border3); stroke-width:1; stroke-dasharray:5 5; fill:none; }
+/* le porticine, come le barrette chiare sui fogli del mister */
+.dgbox .porta{ stroke:oklch(75% 0.15 150); stroke-width:4; stroke-linecap:round; fill:none; }
+/* il bordo del colore del riquadro stacca le pedine vicine fra loro */
+.dgbox .pd{ stroke:var(--surface2); stroke-width:1.6; }
+.dgbox .ta{ fill:oklch(55% 0.20 280); }
+.dgbox .tb{ fill:oklch(55% 0.18 40); }
+.dgbox .tj{ fill:oklch(50% 0.13 150); }
+.dgbox .tp{ fill:oklch(46% 0.02 260); }
+.dgbox .nm{ fill:#fff; font-size:9.5px; font-weight:700; letter-spacing:-.02em; }
 .dgbox .dgl{ margin-top:10px; display:flex; flex-wrap:wrap; gap:5px 14px; font-size:11.5px; color:var(--muted); }
 .dgbox .dgl b{ color:var(--ink); font-weight:600; }
 .dgbox .dgl i{ font-style:normal; display:inline-flex; align-items:center; gap:6px; }
@@ -374,6 +378,14 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 .dgbox .dgl .ca{ color:var(--violet2); }
 .dgbox .dgl .cb{ color:var(--orange2); }
 .dgbox .dgl .cj{ color:var(--green); }
+/* il foglio del mister: la scansione della seduta cosi' come l'ha disegnata lui */
+.fmister{ margin:0; padding:14px 18px 4px; border-bottom:1px solid var(--border); background:var(--surface2); }
+.fmister img{ display:block; width:100%; max-width:760px; margin:0 auto; height:auto;
+  border:1px solid var(--border2); border-radius:var(--r-sm); background:#fff; }
+.fmister figcaption{ max-width:760px; margin:9px auto 12px; display:flex; align-items:center; gap:12px;
+  flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.fmister figcaption a{ color:var(--orange2); text-decoration:none; font-weight:600; }
+.fmister figcaption a:hover{ text-decoration:underline; }
 .badge.det{ background:var(--violet-bg); border:1px solid var(--violet-border); color:var(--violet2); }
 /* dice che aprendo la riga c'e' il disegno del campo, se no bisogna aprirle tutte */
 .badge.sch{ background:oklch(72% 0.16 150 / 0.13); border:1px solid oklch(72% 0.16 150 / 0.3); color:var(--green); }
@@ -1343,52 +1355,77 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return out;
   }
 
-  function dgPedine(pts, cls){
-    return pts.map(p=> '<circle class="'+cls+'" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="6.5"/>').join('');
+  /* Le pedine come le disegna il mister sui suoi fogli: il cerchio pieno col
+     numero dentro e un filo di bordo che le stacca quando si toccano. Il
+     numero e' progressivo dentro la squadra, J per i jolly, P per i portieri. */
+  function dgPedine(pts, cls, sigla){
+    return pts.map(function(p, i){
+      const cx = p.x.toFixed(1), cy = p.y.toFixed(1);
+      const t = sigla || String(i + 1);
+      return '<circle class="pd '+cls+'" cx="'+cx+'" cy="'+cy+'" r="9"/>'+
+        '<text class="nm" x="'+cx+'" y="'+cy+'" text-anchor="middle" dominant-baseline="central">'+t+'</text>';
+    }).join('');
   }
 
   function dgSVG(p, alt){
-    const W = 200;
-    let H = 130;
-    if(p.mis) H = Math.max(100, Math.min(165, Math.round(W * p.mis.h / p.mis.w)));
-    const x0 = 12, x1 = W - 12, y0 = 12, y1 = H - 12;
-    let g = '<rect class="campo" x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" rx="6"/>';
+    const W = 260;
+    let H = 168;
+    if(p.mis) H = Math.max(130, Math.min(215, Math.round(W * p.mis.h / p.mis.w)));
+    const x0 = 16, x1 = W - 16, y0 = 14, y1 = H - 14;
+    let g = '<rect class="campo" x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'" rx="3"/>';
     const na = p.sq ? p.sq.a : 0, nb = p.sq ? p.sq.b : 0;
 
     if(p.porte){
-      const py = (y0 + y1) / 2, ph = Math.min(34, (y1 - y0) * 0.34);
+      const py = (y0 + y1) / 2, ph = Math.min(44, (y1 - y0) * 0.34);
       g += '<path class="porta" d="M'+x0+' '+(py-ph/2)+' v'+ph+'"/>';
       g += '<path class="porta" d="M'+x1+' '+(py-ph/2)+' v'+ph+'"/>';
     }
 
     if(p.tondo && na){
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-      const rad = Math.min(x1 - x0, y1 - y0) / 2 - 14;
+      const rad = Math.min(x1 - x0, y1 - y0) / 2 - 18;
       g += '<circle class="linea" cx="'+cx+'" cy="'+cy+'" r="'+rad.toFixed(1)+'"/>';
       g += dgPedine(dgCerchio(na, cx, cy, rad), 'ta');
-      g += dgPedine(dgGriglia(nb, cx - 16, cx + 16, cy - 10, cy + 10), 'tb');
-      if(p.j) g += dgPedine(dgGriglia(p.j, cx - 14, cx + 14, cy + 22, cy + 22), 'tj');
+      g += dgPedine(dgGriglia(nb, cx - 20, cx + 20, cy - 12, cy + 12), 'tb');
+      if(p.j) g += dgPedine(dgGriglia(p.j, cx - 20, cx + 20, cy + 30, cy + 30), 'tj', 'J');
     }else{
       const mx = (x0 + x1) / 2;
-      const bx = 14, by = 16;
+      const bx = 18, by = 20;
       if(nb){
         // due squadre: la linea di mezzo dice che si sta una contro l'altra
         g += '<path class="linea" d="M'+mx+' '+y0+' v'+(y1-y0)+'"/>';
-        g += dgPedine(dgGriglia(na, x0 + bx, mx - 12, y0 + by, y1 - by), 'ta');
-        g += dgPedine(dgGriglia(nb, mx + 12, x1 - bx, y0 + by, y1 - by), 'tb');
+        g += dgPedine(dgGriglia(na, x0 + bx, mx - 16, y0 + by, y1 - by), 'ta');
+        g += dgPedine(dgGriglia(nb, mx + 16, x1 - bx, y0 + by, y1 - by), 'tb');
       }else if(na){
         // nessun avversario: si occupa tutto il campo, senza linea di mezzo
         g += dgPedine(dgGriglia(na, x0 + bx, x1 - bx, y0 + by, y1 - by), 'ta');
       }
-      if(p.j) g += dgPedine(dgGriglia(p.j, mx - 7, mx + 7, y0 + by, y1 - by), 'tj');
+      if(p.j) g += dgPedine(dgGriglia(p.j, mx - 9, mx + 9, y0 + by, y1 - by), 'tj', 'J');
     }
     if(p.gk){
       const cy = (y0 + y1) / 2;
       const meta = Math.ceil(p.gk / 2);
-      g += dgPedine(dgGriglia(meta, x0 - 1, x0 - 1, cy - 8, cy + 8), 'tp');
-      if(p.gk - meta > 0) g += dgPedine(dgGriglia(p.gk - meta, x1 + 1, x1 + 1, cy - 8, cy + 8), 'tp');
+      g += dgPedine(dgGriglia(meta, x0 - 2, x0 - 2, cy - 11, cy + 11), 'tp', 'P');
+      if(p.gk - meta > 0) g += dgPedine(dgGriglia(p.gk - meta, x1 + 2, x1 + 2, cy - 11, cy + 11), 'tp', 'P');
     }
     return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(alt)+'">'+g+'</svg>';
+  }
+
+  /* Le sedute per cui esiste la scansione del foglio del mister, quello con le
+     esercitazioni gia' disegnate. Il file sta in coach/prev/seduta-<data>-<slot>.jpg
+     e si carica solo quando si preme il tasto, per non appesantire la pagina. */
+  const FOGLI = ['2026-08-05-AM','2026-08-06-AM','2026-08-07-AM','2026-08-09-AM',
+    '2026-08-10-AM','2026-08-10-PM','2026-08-11-AM','2026-08-12-AM','2026-08-13-AM',
+    '2026-08-17-AM','2026-08-18-AM','2026-08-18-PM','2026-08-20-AM'];
+
+  function fogBox(key){
+    if(!key) return '';
+    const src = 'prev/seduta-'+key+'.jpg';
+    return '<figure class="fmister" id="fg-'+key+'" hidden>'+
+      '<img data-src="'+src+'" alt="Foglio della seduta del '+key+' disegnato dal mister">'+
+      '<figcaption>Il foglio della seduta come lo ha preparato il mister.'+
+      '<a href="'+src+'" target="_blank" rel="noopener">Apri a schermo intero</a></figcaption>'+
+    '</figure>';
   }
 
   // c'e' o no un disegno da vedere aprendo questa riga
@@ -1803,6 +1840,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         : (s.load ? '<div class="loadcap sum">Carico della giornata &#183; <b>somma delle esercitazioni</b></div>' : '');
       const tail = band ? (cap + loadStrip(band))
         : '<div class="nolink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>Seduta pianificata · nessun GPS collegato</div>';
+      // le sedute di cui esiste la scansione del foglio disegnato dal mister
+      const fogKey = esc(s.date)+'-'+(s.slot||'AM');
+      const hasFog = FOGLI.indexOf(fogKey) >= 0;
+      const fogBtn = hasFog
+        ? '<button class="btn sm fog" aria-pressed="false" data-f="'+fogKey+'"'+
+          ' title="Mostra il foglio disegnato dal mister per questa seduta">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+
+          '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="9" cy="8" r="1.4"/>'+
+          '</svg>Foglio</button>'
+        : '';
       // il PDF si stampa per seduta: e' il foglio che si porta al campo
       const pdfBtn = '<button class="btn sm pdf" data-d="'+esc(s.date)+'" data-s="'+esc(s.slot||'')+'"'+
         ' title="Stampa il foglio di questa seduta: esercitazioni, dettagli, dati, atlete e assenti">'+
@@ -1828,11 +1875,24 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           meta +
           (s.planned?'<span class="planned-tag">pianificata</span>':'')+
           ordTag +
-          '<span class="spacer"></span>'+ ordBtn + pdfBtn +
+          '<span class="spacer"></span>'+ ordBtn + fogBtn + pdfBtn +
         '</div>'+
-        '<div class="scard-body">'+ordBar+'<ul class="drills">'+drills+'</ul>'+tail+recapHTML(s)+'</div>'+
+        '<div class="scard-body">'+fogBox(hasFog?fogKey:'')+ordBar+'<ul class="drills">'+drills+'</ul>'+tail+recapHTML(s)+'</div>'+
       '</section>';
     }).join('');
+    // tasto foglio del mister: apre la scansione e la carica solo la prima volta
+    host.querySelectorAll('.btn.fog').forEach(b=> b.addEventListener('click', e=>{
+      e.stopPropagation();
+      const fig = host.querySelector('#fg-'+b.getAttribute('data-f'));
+      if(!fig) return;
+      const apri = fig.hidden;
+      if(apri){
+        const img = fig.querySelector('img');
+        if(img && !img.getAttribute('src')) img.setAttribute('src', img.getAttribute('data-src'));
+      }
+      fig.hidden = !apri;
+      b.setAttribute('aria-pressed', apri ? 'true' : 'false');
+    }));
     // tasto PDF della singola seduta
     host.querySelectorAll('.btn.pdf').forEach(b=> b.addEventListener('click', e=>{
       e.stopPropagation();
