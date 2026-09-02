@@ -1160,8 +1160,48 @@ window.RS_ROSTER = window.RS_ROSTER || [
         comp_gara: comp.comp_gara || ''
       });
     });
+    /* Una giornata gia' registrata e un blocco scritto a mano nello stesso
+       giorno sono la stessa seduta, non due: prima ne comparivano due una
+       sopra l'altra. Qui il blocco a mano entra dentro la giornata registrata
+       e le porta il programma, il gruppo e le atlete; i numeri restano quelli
+       veri del GPS. Si accoppiano solo se il giorno coincide, se la parte
+       della giornata non si contraddice e se sono la stessa cosa: una gara
+       scritta a mano non finisce dentro un allenamento registrato. */
+    const REG = out.slice();
+    function regDi(m){
+      // un riposo scritto sopra una giornata registrata resta li' a vista: e'
+      // una contraddizione da leggere, non una cosa da nascondere
+      if(m.type==='riposo' || m.kind==='riposo') return null;
+      const isM = (m.kind==='match' || m.kind==='amichevole');
+      for(let i=0; i<REG.length; i++){
+        const r = REG[i];
+        if(r.mid) continue;
+        if(r.data !== m.data) continue;
+        if(r.is_match !== isM) continue;
+        if(r.slot && m.slot && r.slot !== m.slot) continue;
+        return r;
+      }
+      return null;
+    }
     store.manual.forEach(m=>{
       const kind = m.kind || 'training';
+      const hit = regDi(m);
+      if(hit){
+        hit.mid = m.id;
+        if(!hit.slot && m.slot) hit.slot = m.slot;
+        if(!hit.title && m.title) hit.title = m.title;
+        if(hit.pct==null && m.pct!=null) hit.pct = Number(m.pct);
+        if(!hit.note && m.note) hit.note = m.note;
+        if(!hit.comp_gara && m.comp_gara) hit.comp_gara = m.comp_gara;
+        // su una gara il nome resta quello della competizione, non il tipo
+        if(!hit.is_match) hit.type = m.type || '';
+        hit.group = m.group || '';
+        hit.diff = m.diff || '';
+        hit.players = Array.isArray(m.players) ? m.players.slice() : [];
+        hit.phases = Array.isArray(m.phases) ? m.phases.slice() : [];
+        hit.fz = m.fz || '';
+        return;
+      }
       out.push({
         id: m.id, key: null, manual: true,
         data: m.data, slot: m.slot||'', kind: kind, title: m.title||'',
@@ -1704,7 +1744,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         const meters = vuoto ? '-' : (NF0.format(Math.round(pct/100*SCALE))+' m');
         let act = esc(plTitle(s));
         if(s.fix) act += ' ('+(fixTeams(s.fix).casa ? 'casa' : 'trasferta')+')';
-        if(s.manual && s.group) act += ' ['+esc(s.group)+']';
+        if((s.manual || s.mid) && s.group) act += ' ['+esc(s.group)+']';
         const fasi = (Array.isArray(s.phases)?s.phases:[]).map(function(p){
           return sesShort(p.t) + (p.m ? ' '+p.m+"'" : '');
         }).join(', ');
@@ -2166,12 +2206,22 @@ window.RS_ROSTER = window.RS_ROSTER || [
   }
 
   // ---- mutazioni blocchi ----
+  /* Se quel giorno c'e' gia' una giornata registrata, il blocco nuovo nasce
+     nella sua stessa parte della giornata: cosi' entra dentro quella invece di
+     aggiungersi sopra, che era il modo in cui nascevano i doppioni. */
+  function plSlotDef(dateIso, type){
+    if(type==='gara' || type==='riposo') return '';
+    const hit = buildSessions().find(function(x){
+      return !x.manual && !x.mid && !x.is_match && x.data===dateIso && x.slot;
+    });
+    return hit ? hit.slot : 'PM';
+  }
   function plCreate(dateIso, type){
     const meta = SES[type] || SES.squadra;
     const s = loadStore();
     const rec = {
       id: 'm'+Date.now()+Math.random().toString(36).slice(2,6),
-      data: dateIso, slot: (type==='gara'||type==='riposo')?'':'PM',
+      data: dateIso, slot: plSlotDef(dateIso, type),
       kind: meta.k, title:'', type: type,
       pct: null, load: null, note:'', svolto:false,
       group: PL.group||'', diff:'', phases:[], players:[],
@@ -2216,6 +2266,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
   // ---- render chip ----
   function plChipHTML(s, compact){
     const manual = !!s.manual;
+    /* `mid` e' il blocco scritto a mano finito dentro una giornata registrata:
+       il cartellino resta quello della seduta vera, ma dice anche il gruppo,
+       le atlete e le fasi che il mister aveva scritto. */
+    const plan = manual || !!s.mid;
+    const pid = s.mid || s.id;
     const pct = pctOf(s);
     const isRiposo = (s.kind==='riposo' || s.type==='riposo');
     const isGara = !!s.is_match;
@@ -2224,8 +2279,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(s.fix) cls += ' fix';
     if(isGara) cls += ' gara'; else if(isRiposo) cls += ' riposo';
     let dim = false;
-    if(PL.group && manual && s.group && s.group!==PL.group) dim = true;
-    if(PL.player && manual && Array.isArray(s.players) && s.players.length && s.players.indexOf(PL.player)<0) dim = true;
+    if(PL.group && plan && s.group && s.group!==PL.group) dim = true;
+    if(PL.player && plan && Array.isArray(s.players) && s.players.length && s.players.indexOf(PL.player)<0) dim = true;
     if(dim) cls += ' other';
     let dot;
     if(isGara) dot = 'var(--orange)';
@@ -2234,16 +2289,16 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const slot = s.slot ? '<span class="pl-cslot">'+esc(s.slot)+'</span>' : '';
     let ttl = plTitle(s);
     let badges = '';
-    if(manual && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
-    if(manual && Array.isArray(s.players) && s.players.length){
+    if(plan && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
+    if(plan && Array.isArray(s.players) && s.players.length){
       const np = s.players.length;
       const lbl = compact ? String(np) : (np===1 ? plNome(s.players[0]) : (np+' giocatrici'));
       badges += '<span class="pl-plbadge">'+PL_PEOPLE_SVG+'<span>'+esc(lbl)+'</span></span>';
     }
-    if(manual && s.diff)  badges += '<span class="pl-diffbadge">Diff.</span>';
+    if(plan && s.diff)  badges += '<span class="pl-diffbadge">Diff.</span>';
     /* Il cartellino dice da dove arriva il lavoro: la scheda sta in Forza,
        con esercizi, serie e carichi, qui se ne vede solo il posto nel giorno. */
-    if(manual && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
+    if(plan && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
     /* Sul cartellino di una partita la prima cosa che conta e' che partita e':
        campionato, coppa o amichevole. In vista mese l'etichetta si accorcia,
        perche' li' il cartellino e' alto quanto una riga. */
@@ -2289,10 +2344,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }
     const note = (!compact && s.note) ? '<div class="pl-cnote">'+esc(s.note)+'</div>' : '';
     let actions = '';
-    if(manual){
+    if(plan){
+      /* Su una giornata registrata il cestino toglie solo il programma
+         scritto a mano: i dati arrivati dal GPS non si cancellano da qui. */
+      const dt = manual ? 'Elimina blocco' : 'Togli il programma';
       actions = '<div class="pl-cactions">'+
-        '<button class="pl-cbtn" type="button" data-act="copy" data-id="'+esc(s.id)+'" title="Copia blocco" aria-label="Copia blocco">'+PL_COPY_SVG+'</button>'+
-        '<button class="pl-cbtn del" type="button" data-act="del" data-id="'+esc(s.id)+'" title="Elimina blocco" aria-label="Elimina blocco">'+PL_TRASH_SVG+'</button>'+
+        '<button class="pl-cbtn" type="button" data-act="copy" data-id="'+esc(pid)+'" title="Copia blocco" aria-label="Copia blocco">'+PL_COPY_SVG+'</button>'+
+        '<button class="pl-cbtn del" type="button" data-act="'+(manual?'del':'delplan')+'" data-id="'+esc(pid)+'" title="'+dt+'" aria-label="'+dt+'">'+PL_TRASH_SVG+'</button>'+
       '</div>';
     }
     const tip = manual ? 'Apri per modificare il blocco'
@@ -2476,7 +2534,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const actBtn = e.target.closest('[data-act]');
       if(actBtn){
         const id = actBtn.getAttribute('data-id');
-        if(actBtn.getAttribute('data-act')==='copy'){ if(plCopyToClip(id)){ toast('Blocco copiato: apri un giorno e premi Incolla'); plRender(); } }
+        const act = actBtn.getAttribute('data-act');
+        if(act==='copy'){ if(plCopyToClip(id)){ toast('Blocco copiato: apri un giorno e premi Incolla'); plRender(); } }
+        else if(act==='delplan'){ delManual(id); plAfterMutate(); toast('Programma tolto, la seduta registrata resta'); }
         else{ delManual(id); plAfterMutate(); toast('Blocco eliminato'); }
         return;
       }
@@ -3014,6 +3074,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
      giorno e nella stessa parte della giornata. */
   function xcPhases(s){
     if(s.manual) return Array.isArray(s.phases) ? s.phases : [];
+    // giornata registrata che ha gia' preso dentro il blocco del planner
+    if(s.mid && Array.isArray(s.phases)) return s.phases;
     const st = loadStore();
     const hit = (st.manual || []).find(function(m){
       if(m.data !== s.data) return false;
@@ -3141,6 +3203,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
        e va letto prima di quello che poi e' successo in campo. */
     const pgh = pgPanel(s);
     h += pgh;
+    /* La giornata registrata ha preso dentro il blocco del planner: il
+       programma si corregge da qui, senza dover cercare un secondo cartellino
+       che adesso non esiste piu'. */
+    if(s.mid){
+      h += '<div class="pl-dedit"><button class="svbtn" type="button" id="pl-detplan">'+
+        '<span>'+(pgh ? 'Modifica il programma' : 'Scrivi il programma')+'</span></button></div>';
+    }
     /* La forza va prima delle esercitazioni GPS: e' quello che si e' deciso,
        il GPS e' quello che poi e' successo in campo. */
     const fzh = fzPanel(fzOf(s));
@@ -3196,6 +3265,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }
     /* Il cartellino dietro al dialogo si aggiorna subito: chi segna "svolto"
        vuole vedere il giorno cambiato quando richiude, non al prossimo giro. */
+    const pb = document.getElementById('pl-detplan');
+    if(pb){
+      pb.addEventListener('click', function(){
+        const mid = s.mid;
+        try{ plDet.close(); }catch(e){}
+        plOpenEdit(mid);
+      });
+    }
     const sv = document.getElementById('pl-detsv');
     if(sv){
       sv.addEventListener('click', function(){
