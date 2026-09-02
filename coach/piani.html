@@ -341,6 +341,30 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   border:1px dashed var(--border2); background:var(--surface2); font-size:12.5px; color:var(--muted); }
 .tb-void b{ color:var(--ink); font-weight:600; }
 
+/* ---------- standard di riferimento: il confronto con il valore giusto ---------- */
+.tb-nrm{ font-size:10.5px; font-weight:700; letter-spacing:.03em; border-radius:999px;
+  padding:2px 8px; flex:0 0 auto; white-space:nowrap; border:1px solid var(--border2);
+  color:var(--faint); background:var(--surface3); }
+.tb-nrm.warn{ color:var(--yellow); background:oklch(80% 0.15 75 / .12); border-color:oklch(80% 0.15 75 / .28); }
+.tb-nrm.bad{  color:var(--red);    background:oklch(62% 0.22 25 / .14); border-color:oklch(62% 0.22 25 / .32); }
+.nm-note{ font-size:12px; color:var(--faint); line-height:1.55; margin:0 0 14px; }
+.nm-note b{ color:var(--text); font-weight:650; }
+.nm-row{ display:flex; align-items:flex-start; gap:12px; padding:10px 2px;
+  border-top:1px solid var(--border); }
+.nm-row:first-of-type{ border-top:0; }
+.nm-who{ flex:0 0 148px; min-width:0; }
+.nm-name{ font-size:13.5px; font-weight:600; color:var(--ink); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.nm-role{ font-size:11px; color:var(--muted); margin-top:2px; }
+.nm-tags{ flex:1 1 220px; display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.nm-tag{ font-size:11.5px; font-weight:600; border-radius:999px; padding:4px 10px;
+  border:1px solid var(--border2); background:var(--surface3); color:var(--muted);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+.nm-tag.warn{ color:var(--yellow); background:oklch(80% 0.15 75 / .10); border-color:oklch(80% 0.15 75 / .26); }
+.nm-tag.bad{  color:var(--red);    background:oklch(62% 0.22 25 / .12); border-color:oklch(62% 0.22 25 / .30); }
+.nm-cnt{ flex:0 0 auto; font-size:11.5px; font-weight:700; color:var(--muted);
+  font-variant-numeric:tabular-nums; padding-top:4px; }
+
 /* ---------- test bilaterali: dx e sx sulla stessa riga ---------- */
 .tb-dual{ display:flex; align-items:center; gap:9px; }
 .tb-side{ display:inline-flex; align-items:center; gap:5px; }
@@ -680,6 +704,9 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   .tr-nm{ flex:0 0 150px; }
   .im-nm{ flex:0 0 150px; }
   .cm-pc{ display:none; }
+  /* lo standard va a capo sotto il nome invece di stringere le pastiglie */
+  .nm-who{ flex:1 1 100%; }
+  .nm-tags{ flex:1 1 100%; }
   /* il profilo va a capo: la figura sopra, le righe sotto, senza rimpicciolire le scritte */
   .rd-wrap{ gap:14px; }
   .rd-plot{ margin:0 auto; }
@@ -804,6 +831,20 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
           <div class="tb-dir" id="tb-dir"></div>
           <div class="tb-legend" id="tb-legend"></div>
           <div id="tb-list"></div>
+        </div>
+      </section>
+
+      <!-- Chi e' sotto il valore di riferimento del fisio, tutte le prove insieme -->
+      <section class="card reveal" id="nm-card" style="--i:2">
+        <div class="card-head">
+          <h2>Sotto lo standard</h2>
+          <span class="hint">confronto con i valori di riferimento del fisio, non con il gruppo</span>
+          <span class="spacer"></span>
+          <div class="head-chips" id="nm-chips"></div>
+        </div>
+        <div class="card-body">
+          <div class="nm-note" id="nm-note"></div>
+          <div id="nm-list"></div>
         </div>
       </section>
 
@@ -1222,6 +1263,68 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const r = Math.round(v);
     return SEM.find(s=> s.v===r) || null;
   }
+  // Lo standard assoluto. La classifica dice solo chi sta davanti e chi sta dietro
+  // dentro al gruppo: se la squadra intera e' bassa, un valore fuori norma sembra
+  // normale. Le prove del fisio hanno invece un valore di riferimento scritto sul
+  // foglio (slb e calf 15 ripetizioni, skater squat 19 in 30 secondi, faber sotto i
+  // 10 cm, FMS almeno 2 su 3) e quello va confrontato a parte, atleta per atleta.
+  function normLev(def, v){
+    if(!def || !def.norm || v==null || !isFinite(v)) return null;
+    const n = def.norm;
+    if(def.dir==='low'){
+      if(v <= n.ok)   return 'ok';
+      if(v <= n.warn) return 'warn';
+      return 'bad';
+    }
+    if(v >= n.ok)   return 'ok';
+    if(v >= n.warn) return 'warn';
+    return 'bad';
+  }
+  // come si legge il riferimento, con le parole del foglio del fisio
+  function normText(def){
+    if(!def || !def.norm) return '';
+    const u = def.unit==='pt' ? ' pt' : (def.unit ? ' '+def.unit : '');
+    return def.dir==='low'
+      ? ('riferimento sotto '+NF.format(def.norm.ok)+u)
+      : ('riferimento '+NF.format(def.norm.ok)+u);
+  }
+  // la pastiglia accanto al nome: si accende solo quando il valore e' sotto la norma
+  function normBadge(def, v){
+    const lev = normLev(def, v);
+    if(!lev || lev==='ok') return '';
+    const base = def.dir==='low' ? 'fuori dallo standard' : 'sotto lo standard';
+    const txt  = (lev==='bad' ? 'molto ' : '') + base;
+    return '<span class="tb-nrm '+lev+'" title="'+esc(normText(def))+'">'+esc(txt)+'</span>';
+  }
+  // la legenda dello standard, girata nel verso giusto: sul Faber e' la distanza dal
+  // lettino, quindi meno centimetri e' meglio, sulle altre prove piu' ripetizioni
+  function normLegend(def){
+    if(!def || !def.norm) return '';
+    const u = def.unit==='pt' ? ' pt' : (def.unit ? ' '+def.unit : '');
+    if(def.dir==='low'){
+      return '<span><i class="ok"></i>fino a '+NF.format(def.norm.ok)+u+', in norma</span>'+
+        '<span><i class="warn"></i>da '+NF.format(def.norm.ok)+' a '+NF.format(def.norm.warn)+u+', deficit lieve</span>'+
+        '<span><i class="bad"></i>oltre '+NF.format(def.norm.warn)+u+', deficit importante</span>';
+    }
+    return '<span><i class="ok"></i>da '+NF.format(def.norm.ok)+u+' in su, riferimento raggiunto</span>'+
+      '<span><i class="warn"></i>da '+NF.format(def.norm.warn)+' a '+NF.format(def.norm.ok)+u+', poco sotto</span>'+
+      '<span><i class="bad"></i>sotto '+NF.format(def.norm.warn)+u+', molto lontano dal riferimento</span>';
+  }
+  // stessa pastiglia sulle prove a due lati: si scrive quale lato e' sotto, perche'
+  // un polpaccio a 6 e l altro a 15 e' un dato diverso da tutti e due a 6
+  function normBadgePair(v, r){
+    if(!v.dx || !v.dx.norm) return '';
+    const ld = normLev(v.dx, r.d), ls = normLev(v.sx, r.s);
+    const bad = [ld, ls].filter(x=> x==='bad').length;
+    const low = [ld, ls].filter(x=> x==='bad' || x==='warn').length;
+    if(!low) return '';
+    const lev = bad ? 'bad' : 'warn';
+    const quale = (low===2) ? 'tutti e due i lati' :
+      (((ld==='bad'||ld==='warn') ? 'lato destro' : 'lato sinistro'));
+    const base = v.dx.dir==='low' ? 'fuori dallo standard, ' : 'sotto lo standard, ';
+    const txt  = (bad ? 'molto ' : '') + base + quale;
+    return '<span class="tb-nrm '+lev+'" title="'+esc(normText(v.dx))+'">'+esc(txt)+'</span>';
+  }
   const TESTS = [
     // salti verticali (cm)
     { key:'sj',       cat:'salti', label:'Squat Jump',          short:'SJ',        unit:'cm',   dir:'high', step:'0.5', ph:'es. 26',   note:'partenza da fermo a 90 gradi, senza contromovimento' },
@@ -1238,20 +1341,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { key:'triple_dx',cat:'oriz',  label:'Triplo broad destro',  short:'Triplo dx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  side:'dx', pair:'triple', note:'triplo salto monopodalico, arto destro' },
     { key:'triple_sx',cat:'oriz',  label:'Triplo broad sinistro',short:'Triplo sx', unit:'cm',  dir:'high', step:'1',   ph:'es. 520',  side:'sx', pair:'triple', note:'triplo salto monopodalico, arto sinistro' },
     // FMS: 7 schemi, punteggio 0-3. Cinque sono bilaterali e vanno segnati dx e sx.
-    { key:'fms_squat',      cat:'fms', label:'Deep Squat',            short:'Squat',      unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, note:'squat profondo a corpo libero con asta sopra la testa, punteggio 0-3' },
-    { key:'fms_hurdle_dx',  cat:'fms', label:'Hurdle Step dx',        short:'Hurdle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza destro, 0-3' },
-    { key:'fms_hurdle_sx',  cat:'fms', label:'Hurdle Step sx',        short:'Hurdle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza sinistro, 0-3' },
-    { key:'fms_lunge_dx',   cat:'fms', label:'In-Line Lunge dx',      short:'Affondo dx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_lunge', note:'affondo in linea con arto destro avanti, 0-3' },
-    { key:'fms_lunge_sx',   cat:'fms', label:'In-Line Lunge sx',      short:'Affondo sx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_lunge', note:'affondo in linea con arto sinistro avanti, 0-3' },
-    { key:'fms_shoulder_dx',cat:'fms', label:'Mobilita spalle dx',    short:'Spalle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_shoulder', note:'mano destra sopra, mani dietro la schiena, 0-3' },
-    { key:'fms_shoulder_sx',cat:'fms', label:'Mobilita spalle sx',    short:'Spalle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_shoulder', note:'mano sinistra sopra, mani dietro la schiena, 0-3' },
-    { key:'fms_aslr_dx',    cat:'fms', label:'Active SLR dx',         short:'ASLR dx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_aslr', note:'sollevamento arto teso destro da supino, 0-3' },
-    { key:'fms_aslr_sx',    cat:'fms', label:'Active SLR sx',         short:'ASLR sx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_aslr', note:'sollevamento arto teso sinistro da supino, 0-3' },
+    { key:'fms_squat',      cat:'fms', label:'Deep Squat',            short:'Squat',      unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, note:'squat profondo a corpo libero con asta sopra la testa, punteggio 0-3' },
+    { key:'fms_hurdle_dx',  cat:'fms', label:'Hurdle Step dx',        short:'Hurdle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'dx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza destro, 0-3' },
+    { key:'fms_hurdle_sx',  cat:'fms', label:'Hurdle Step sx',        short:'Hurdle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'sx', pair:'fms_hurdle', note:'passo sopra l ostacolo, arto che avanza sinistro, 0-3' },
+    { key:'fms_lunge_dx',   cat:'fms', label:'In-Line Lunge dx',      short:'Affondo dx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'dx', pair:'fms_lunge', note:'affondo in linea con arto destro avanti, 0-3' },
+    { key:'fms_lunge_sx',   cat:'fms', label:'In-Line Lunge sx',      short:'Affondo sx', unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'sx', pair:'fms_lunge', note:'affondo in linea con arto sinistro avanti, 0-3' },
+    { key:'fms_shoulder_dx',cat:'fms', label:'Mobilita spalle dx',    short:'Spalle dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'dx', pair:'fms_shoulder', note:'mano destra sopra, mani dietro la schiena, 0-3' },
+    { key:'fms_shoulder_sx',cat:'fms', label:'Mobilita spalle sx',    short:'Spalle sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'sx', pair:'fms_shoulder', note:'mano sinistra sopra, mani dietro la schiena, 0-3' },
+    { key:'fms_aslr_dx',    cat:'fms', label:'Active SLR dx',         short:'ASLR dx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'dx', pair:'fms_aslr', note:'sollevamento arto teso destro da supino, 0-3' },
+    { key:'fms_aslr_sx',    cat:'fms', label:'Active SLR sx',         short:'ASLR sx',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'sx', pair:'fms_aslr', note:'sollevamento arto teso sinistro da supino, 0-3' },
     { key:'fms_ankle_dx',   cat:'fms', label:'Clearing caviglia dx',  short:'Caviglia dx',unit:'sem',dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fms_ankle', note:'piede destro sulla tavoletta, flessione dorsale libera da dolore' },
     { key:'fms_ankle_sx',   cat:'fms', label:'Clearing caviglia sx',  short:'Caviglia sx',unit:'sem',dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fms_ankle', note:'piede sinistro sulla tavoletta, flessione dorsale libera da dolore' },
-    { key:'fms_pushup',     cat:'fms', label:'Trunk Push-up',         short:'Push-up',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, note:'controllo del tronco in piegamento sulle braccia, 0-3' },
-    { key:'fms_rotary_dx',  cat:'fms', label:'Rotary Stability dx',   short:'Rotary dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'dx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato destro, 0-3' },
-    { key:'fms_rotary_sx',  cat:'fms', label:'Rotary Stability sx',   short:'Rotary sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, side:'sx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato sinistro, 0-3' },
+    { key:'fms_pushup',     cat:'fms', label:'Trunk Push-up',         short:'Push-up',    unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, note:'controllo del tronco in piegamento sulle braccia, 0-3' },
+    { key:'fms_rotary_dx',  cat:'fms', label:'Rotary Stability dx',   short:'Rotary dx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'dx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato destro, 0-3' },
+    { key:'fms_rotary_sx',  cat:'fms', label:'Rotary Stability sx',   short:'Rotary sx',  unit:'pt', dir:'high', step:'1', ph:'0-3', max:3, fms:true, norm:{ ok:2, warn:1 }, side:'sx', pair:'fms_rotary', note:'stabilita rotatoria in quadrupedia, lato sinistro, 0-3' },
     // Y-balance arto inferiore: tre direzioni, ognuna dx e sx (reach in cm)
     { key:'yb_ant_dx', cat:'yb', label:'Y-bal anteriore dx',      short:'Ant dx', unit:'cm', dir:'high', step:'0.5', ph:'es. 62',  side:'dx', pair:'yb_ant', note:'reach anteriore in appoggio sull arto destro' },
     { key:'yb_ant_sx', cat:'yb', label:'Y-bal anteriore sx',      short:'Ant sx', unit:'cm', dir:'high', step:'0.5', ph:'es. 62',  side:'sx', pair:'yb_ant', note:'reach anteriore in appoggio sull arto sinistro' },
@@ -1263,16 +1366,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // segnate a colore usano la scala V G R, le altre contano ripetizioni o centimetri.
     { key:'fis_ankle_dx',  cat:'fisio', label:'Ankle clearing dx',      short:'Caviglia dx', unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fis_ankle', note:'flessione dorsale della caviglia destra, il fisio segna il colore' },
     { key:'fis_ankle_sx',  cat:'fisio', label:'Ankle clearing sx',      short:'Caviglia sx', unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fis_ankle', note:'flessione dorsale della caviglia sinistra, il fisio segna il colore' },
-    { key:'fis_slb_dx',    cat:'fisio', label:'Single leg bridge dx',   short:'Bridge dx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'dx', pair:'fis_slb', note:'ponte su appoggio destro, ripetizioni fino a cedimento: resistenza dei flessori' },
-    { key:'fis_slb_sx',    cat:'fisio', label:'Single leg bridge sx',   short:'Bridge sx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'sx', pair:'fis_slb', note:'ponte su appoggio sinistro, ripetizioni fino a cedimento: resistenza dei flessori' },
-    { key:'fis_faber_dx',  cat:'fisio', label:'Faber dx',               short:'Faber dx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'dx', pair:'fis_faber', note:'distanza del ginocchio destro dal lettino, meno centimetri vuol dire anca piu libera' },
-    { key:'fis_faber_sx',  cat:'fisio', label:'Faber sx',               short:'Faber sx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'sx', pair:'fis_faber', note:'distanza del ginocchio sinistro dal lettino, meno centimetri vuol dire anca piu libera' },
+    { key:'fis_slb_dx',    cat:'fisio', label:'Single leg bridge dx',   short:'Bridge dx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'dx', pair:'fis_slb', norm:{ ok:15, warn:12 }, note:'ponte su appoggio destro, ripetizioni fino a cedimento: resistenza dei flessori' },
+    { key:'fis_slb_sx',    cat:'fisio', label:'Single leg bridge sx',   short:'Bridge sx',   unit:'rip', dir:'high', step:'1', ph:'es. 22', side:'sx', pair:'fis_slb', norm:{ ok:15, warn:12 }, note:'ponte su appoggio sinistro, ripetizioni fino a cedimento: resistenza dei flessori' },
+    { key:'fis_faber_dx',  cat:'fisio', label:'Faber dx',               short:'Faber dx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'dx', pair:'fis_faber', norm:{ ok:10, warn:15 }, note:'distanza del ginocchio destro dal lettino, meno centimetri vuol dire anca piu libera' },
+    { key:'fis_faber_sx',  cat:'fisio', label:'Faber sx',               short:'Faber sx',    unit:'cm', dir:'low',  step:'0.5', ph:'es. 6', side:'sx', pair:'fis_faber', norm:{ ok:10, warn:15 }, note:'distanza del ginocchio sinistro dal lettino, meno centimetri vuol dire anca piu libera' },
     { key:'fis_thomas_dx', cat:'fisio', label:'Thomas test dx',         short:'Thomas dx',   unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'dx', pair:'fis_thomas', note:'retrazione del flessore dell anca destra, il fisio segna il colore' },
     { key:'fis_thomas_sx', cat:'fisio', label:'Thomas test sx',         short:'Thomas sx',   unit:'sem', dir:'high', step:'1', ph:'V G R', max:2, scale:'sem', side:'sx', pair:'fis_thomas', note:'retrazione del flessore dell anca sinistra, il fisio segna il colore' },
-    { key:'fis_calf_dx',   cat:'fisio', label:'Calf raises dx',         short:'Calf dx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'dx', pair:'fis_calf', note:'sollevamenti sul polpaccio destro fino a cedimento' },
-    { key:'fis_calf_sx',   cat:'fisio', label:'Calf raises sx',         short:'Calf sx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'sx', pair:'fis_calf', note:'sollevamenti sul polpaccio sinistro fino a cedimento' },
-    { key:'fis_skater_dx', cat:'fisio', label:'Skater squat dx',        short:'Skater dx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'dx', pair:'fis_skater', note:'squat monopodalico controllato su appoggio destro' },
-    { key:'fis_skater_sx', cat:'fisio', label:'Skater squat sx',        short:'Skater sx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'sx', pair:'fis_skater', note:'squat monopodalico controllato su appoggio sinistro' },
+    { key:'fis_calf_dx',   cat:'fisio', label:'Calf raises dx',         short:'Calf dx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'dx', pair:'fis_calf', norm:{ ok:15, warn:12 }, note:'sollevamenti sul polpaccio destro fino a cedimento' },
+    { key:'fis_calf_sx',   cat:'fisio', label:'Calf raises sx',         short:'Calf sx',     unit:'rip', dir:'high', step:'1', ph:'es. 25', side:'sx', pair:'fis_calf', norm:{ ok:15, warn:12 }, note:'sollevamenti sul polpaccio sinistro fino a cedimento' },
+    { key:'fis_skater_dx', cat:'fisio', label:'Skater squat dx',        short:'Skater dx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'dx', pair:'fis_skater', norm:{ ok:19, warn:15 }, note:'squat monopodalico controllato su appoggio destro' },
+    { key:'fis_skater_sx', cat:'fisio', label:'Skater squat sx',        short:'Skater sx',   unit:'rip', dir:'high', step:'1', ph:'es. 10', side:'sx', pair:'fis_skater', norm:{ ok:19, warn:15 }, note:'squat monopodalico controllato su appoggio sinistro' },
     { key:'fis_peso',      cat:'fisio', label:'Peso corporeo',          short:'Peso',        unit:'kg', dir:'high', step:'0.1', ph:'es. 58', neutral:true, note:'peso rilevato dal fisio, serve a rapportare i carichi di forza' },
     { key:'fis_ckcuest',   cat:'fisio', label:'CKCUEST',                short:'CKCUEST',     unit:'tocchi', dir:'high', step:'1', ph:'es. 24', note:'closed kinetic chain upper extremity stability test, tocchi in 15 secondi: prova da portiere' },
     // VBT: dal foglio arriva una velocita' sola per esercizio, quindi il massimale
@@ -3087,10 +3190,85 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       document.getElementById('tb-strip').innerHTML = '';
       leg.innerHTML = '';
       list.innerHTML = '<div class="lb-empty">Nessuna atleta nel roster.</div>';
+      renderNorms();
       return;
     }
     if(v.kind==='pair') renderPair(v, list, leg);
     else                renderSingle(v, list, leg);
+    renderNorms();
+  }
+
+  /* Sotto lo standard.
+     La batteria test mette in fila le atlete fra loro: chi sta davanti e chi sta
+     dietro. Su alcune prove del fisio quel confronto non basta, perche' il protocollo
+     si ferma a 15 ripetizioni e quasi tutte arrivano al tetto: il gruppo si appiattisce
+     e chi ne fa 6 sembra solo l ultima invece che un caso da recuperare. Qui il
+     confronto e' con il numero scritto sul foglio del fisio, una riga per atleta con
+     tutte le prove fuori norma, cosi' non serve aprire una scheda per volta. */
+  function renderNorms(){
+    const card = document.getElementById('nm-card');
+    if(!card) return;
+    const note  = document.getElementById('nm-note');
+    const list  = document.getElementById('nm-list');
+    const chips = document.getElementById('nm-chips');
+    const defs  = TESTS.filter(d=> d.norm);
+
+    const per = {};
+    let nBad = 0, nWarn = 0, letti = 0;
+    defs.forEach(def=>{
+      entriesFor(def.key).forEach(e=>{
+        if(e.v==null) return;
+        letti++;
+        const lev = normLev(def, e.v);
+        if(lev!=='warn' && lev!=='bad') return;
+        if(lev==='bad') nBad++; else nWarn++;
+        (per[e.name] = per[e.name] || []).push({ def, v:e.v, lev });
+      });
+    });
+
+    const quando = curSess ? ('nella rilevazione di '+curSess) : 'in questa stagione';
+    chips.innerHTML =
+      '<div class="mchip sr"><span class="ml">Molto sotto</span><b>'+nBad+'</b></div>'+
+      '<div class="mchip sy"><span class="ml">Poco sotto</span><b>'+nWarn+'</b></div>'+
+      '<div class="mchip"><span class="ml">Misure lette</span><b>'+letti+'</b></div>';
+
+    if(!letti){
+      note.innerHTML = 'Nessuna misura sulle prove con un valore di riferimento '+esc(quando)+'.';
+      list.innerHTML = '<div class="lb-empty">Niente da confrontare.</div>';
+      return;
+    }
+    note.innerHTML = 'Riferimenti presi dal foglio del fisio: <b>single leg bridge</b> e '+
+      '<b>calf raises</b> 15 ripetizioni, <b>skater squat</b> 19 in 30 secondi, '+
+      '<b>Faber</b> sotto i 10 cm dal lettino, <b>FMS</b> almeno 2 su 3. '+
+      'Il confronto e' + "'" + ' con questi numeri, non con la media della squadra.';
+
+    const names = Object.keys(per).sort((a,b)=>{
+      const ba = per[a].filter(x=> x.lev==='bad').length, bb = per[b].filter(x=> x.lev==='bad').length;
+      if(ba!==bb) return bb-ba;
+      if(per[a].length!==per[b].length) return per[b].length-per[a].length;
+      return dispSort(a, b);
+    });
+
+    if(!names.length){
+      list.innerHTML = '<div class="lb-empty">Tutte le misure scritte '+esc(quando)+
+        ' sono dentro il riferimento del fisio.</div>';
+      return;
+    }
+
+    list.innerHTML = names.map(n=>{
+      const tags = per[n]
+        .sort((a,b)=> (a.lev===b.lev ? 0 : (a.lev==='bad' ? -1 : 1)))
+        .map(x=> '<span class="nm-tag '+x.lev+'" title="'+esc(normText(x.def))+'">'+
+          esc(x.def.short+' '+fmtNum(x.v, x.def))+'</span>').join('');
+      return '<div class="nm-row">'+
+        '<div class="nm-who">'+
+          '<div class="nm-name">'+esc(disp(n))+'</div>'+
+          '<div class="nm-role">'+esc(roleOf(n)||'')+'</div>'+
+        '</div>'+
+        '<div class="nm-tags">'+tags+'</div>'+
+        '<div class="nm-cnt">'+per[n].length+'</div>'+
+      '</div>';
+    }).join('');
   }
 
   // "sem" non e' una unita' di misura, e' una scala di colori: sotto la casella non
@@ -3185,6 +3363,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="mchip"><span class="ml">Compilati</span><b>'+st.n+'</b><span class="ml">/'+roster.length+'</span></div>';
     }
 
+    // il confronto con il valore di riferimento del fisio, che non dipende dal gruppo
+    if(def.norm){
+      const sotto = entries.filter(e=>{ const l = normLev(def, e.v); return l==='warn' || l==='bad'; }).length;
+      document.getElementById('tb-strip').innerHTML +=
+        '<div class="mchip'+(sotto?' sr':'')+'"><span class="ml">Fuori standard</span><b>'+sotto+'</b>'+
+        '<span class="ml">rif. '+NF.format(def.norm.ok)+'</span></div>';
+      leg.innerHTML += normLegend(def);
+    }
+
     let ordered;
     if(neu){
       // il peso non ha un migliore: si legge in ordine alfabetico come un elenco
@@ -3225,10 +3412,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const ctx  = ctxLine(def, e);
       const tag  = (!sem && !def.ctxKey && e.t) ? '<span class="tb-tag">'+esc(e.t)+'</span>' : '';
       const nota = (def.cat==='fisio') ? physioNote(e.name) : '';
+      const nrm  = normBadge(def, e.v);
       return '<div class="tb-row'+(isBest?' best':'')+'">'+
         '<div class="tb-nm col">'+
           '<span class="tb-nmline"><span class="tb-name">'+esc(disp(e.name))+'</span>'+
-            (isBest?'<span class="tb-best-tag">top</span>':'')+tag+'</span>'+
+            (isBest?'<span class="tb-best-tag">top</span>':'')+nrm+tag+'</span>'+
           ctx+
           (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
         '</div>'+
@@ -3303,6 +3491,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<span><i class="bad"></i>oltre '+NF1.format(v.bad)+' '+un+', lavoro compensativo</span>';
     }
 
+    // anche qui lo standard del foglio del fisio, contato lato per lato
+    if(v.dx && v.dx.norm){
+      let lati = 0;
+      st.rows.forEach(r=>{
+        [normLev(v.dx, r.d), normLev(v.sx, r.s)].forEach(l=>{ if(l==='warn'||l==='bad') lati++; });
+      });
+      document.getElementById('tb-strip').innerHTML +=
+        '<div class="mchip'+(lati?' sr':'')+'"><span class="ml">Fuori standard</span><b>'+lati+'</b>'+
+        '<span class="ml">lati, rif. '+NF.format(v.dx.norm.ok)+'</span></div>';
+      leg.innerHTML += normLegend(v.dx);
+    }
+
     // ordino per gravita dell asimmetria, poi chi ha un solo lato, poi i vuoti
     const rows = st.rows.slice();
     const rank = r => (r.amt!=null ? 0 : ((r.d!=null||r.s!=null) ? 1 : 2));
@@ -3322,9 +3522,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const dt  = r.dd || r.ds || '';
       const tag = (!sem && (r.td || r.ts)) ? '<span class="tb-tag">'+esc(r.td || r.ts)+'</span>' : '';
       const nota = (v.cat==='fisio') ? physioNote(r.name) : '';
+      const nrm  = normBadgePair(v, r);
       return '<div class="tb-row'+cls+'">'+
         '<div class="tb-nm col">'+
-          '<span class="tb-nmline"><span class="tb-name">'+esc(disp(r.name))+'</span>'+tag+'</span>'+
+          '<span class="tb-nmline"><span class="tb-name">'+esc(disp(r.name))+'</span>'+nrm+tag+'</span>'+
           (nota?'<span class="tb-nota">'+esc(nota)+'</span>':'')+
         '</div>'+
         '<div class="tb-right">'+
