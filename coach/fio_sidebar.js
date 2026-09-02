@@ -700,14 +700,23 @@ window.fioAggSet = function(on) {
 // questa lista non la mostrano piu'. Sulla 25/26 resta la rosa storica.
 // In coda, sempre, le atlete aggiunte a mano in Atlete.
 window.fioRosterFull = function() {
-  var out = [], seen = {};
+  var out = [], seen = Object.create(null);
+  // I doppioni non si cercano sul nome lettera per lettera ma sulla chiave
+  // dell'atleta: un cognome scritto in due modi resta una riga sola, e il ruolo
+  // di chi arriva dopo riempie la casella se prima era vuota.
   function add(n, r, t) {
     n = String(n == null ? '' : n).trim();
-    if (!n || seen[n]) return;
+    if (!n) return;
     r = String(r == null ? '' : r).trim();
     if (r.toLowerCase() === 'nan') r = '';
-    seen[n] = 1;
-    out.push({ name: n, role: r, tipo: String(t == null ? '' : t) });
+    var k = window.fioChiaveAtleta(n);
+    if (seen[k]) {
+      if (r && !seen[k].role) seen[k].role = r;
+      return;
+    }
+    var p = { name: n, role: r, tipo: String(t == null ? '' : t) };
+    seen[k] = p;
+    out.push(p);
   }
   if (window.getStagione() === '26-27') {
     var R = window.ROSTER_2627;
@@ -966,6 +975,41 @@ window.fioCognome = function(name) {
 // legge: chiave a sinistra in minuscolo, forma giusta a destra.
 window.FIO_ORTOGRAFIA = {
   'oberparlaiter': 'Oberparleiter'
+};
+
+// Le scritture diverse dello stesso cognome. A sinistra la variante in
+// minuscolo, a destra il cognome pulito con cui l'atleta e' una sola. Serve
+// perche' il cognome scritto a mano in Atlete puo' non coincidere con la chiave
+// dei dati: senza questa tabella la stessa ragazza comparirebbe due volte in
+// rosa, una per come sta nei fogli e una per come l'ha scritta il preparatore.
+window.FIO_VARIANTI = {
+  'oberparlaiter': 'oberparlaiter',
+  'oberparleiter': 'oberparlaiter',
+  'oberparlater': 'oberparlaiter',
+  'oberpalaiter': 'oberparlaiter',
+  'operparleiter': 'oberparlaiter',
+  'operpalaiter': 'oberparlaiter',
+  'operpaleiter': 'oberparlaiter',
+  'operpaleter': 'oberparlaiter'
+};
+
+// La chiave che dice se due nomi sono la stessa atleta. Di regola conta il nome
+// intero ripulito, cosi' "Faggioli" e "Faggioli Federica" restano due voci
+// distinte e non si uniscono due ragazze che hanno lo stesso cognome. Se pero'
+// il cognome sta fra le varianti conosciute, allora comanda solo il cognome:
+// li' sappiamo che l'atleta e' una sola e il nome di battesimo scritto accanto
+// non deve creare un doppione.
+function fioPulisci(s) {
+  var t = String(s == null ? '' : s).toLowerCase();
+  if (t.normalize) t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return t.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+window.fioChiaveAtleta = function(name) {
+  var cog = fioPulisci(window.fioCognome(name)).replace(/\s+/g, '');
+  if (Object.prototype.hasOwnProperty.call(window.FIO_VARIANTI, cog)) {
+    return window.FIO_VARIANTI[cog];
+  }
+  return fioPulisci(name).replace(/\s+/g, ' ');
 };
 
 // Riscrive parola per parola: cosi' vale sia per il cognome da solo sia per
