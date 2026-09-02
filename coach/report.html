@@ -445,8 +445,102 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   *{ transition:none !important; }
 }
 
+/* ---------- il documento di stampa del report giornaliero ----------
+   La pagina a schermo e il foglio stampato hanno bisogni diversi: a schermo si
+   scorre, sul foglio no. Finche' si e' provato a piegare la pagina con le sole
+   regole di stampa il conto delle facciate non tornava mai, perche' dipendeva
+   da quanto era lunga una sezione. Qui invece il documento si costruisce a
+   parte, foglio per foglio, e ogni foglio viene misurato e rimpicciolito
+   quanto basta per stare dentro l'altezza di un A4: le pagine sono quelle che
+   si dicono, non una di piu'. A schermo il documento sta fuori dallo schermo
+   ma dentro l'impaginazione, altrimenti non si potrebbe misurare. */
+#rprint{ position:fixed; left:-30000px; top:0; width:182mm; z-index:-1;
+  pointer-events:none; background:#fff; color:#141414;
+  font-family:'Manrope',system-ui,sans-serif; }
+#rprint .psheet{ width:182mm; overflow:hidden; background:#fff; }
+#rprint .pfit{ transform-origin:top left; width:100%; }
+#rprint .ph{ display:flex; align-items:center; gap:12px;
+  border-bottom:1.5px solid #141414; padding-bottom:11px; margin-bottom:17px; }
+#rprint .ph .pmark{ width:31px; height:31px; object-fit:contain; }
+#rprint .ph h2{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:23px;
+  letter-spacing:.5px; color:#141414; margin:0; line-height:1; }
+#rprint .ph .psub{ font-size:11.5px; color:#555; margin-top:4px; }
+#rprint .ph .psub b{ color:#141414; }
+#rprint .ph .pno{ margin-left:auto; text-align:right; font-size:9.5px; color:#8a847c;
+  letter-spacing:.1em; text-transform:uppercase; line-height:1.7; }
+#rprint .pfoot{ margin-top:14px; padding-top:9px; border-top:1px solid #e2ddd6;
+  display:flex; justify-content:space-between; font-size:9.5px; color:#8a847c; }
+/* il foglio del mister riempie la facciata, l'altezza e' fissa cosi' la misura
+   non dipende da quando finisce di caricarsi l'immagine */
+#rprint .pfog img{ display:block; width:100%; height:222mm; object-fit:contain;
+  border:1px solid #e2ddd6; background:#fff; }
+#rprint .pcap{ font-size:10px; color:#666; margin-top:8px; }
+/* i sei numeri della seduta: una riga di testa chiusa da due filetti */
+#rprint .pkpis{ display:grid; grid-template-columns:repeat(6,1fr);
+  border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6; margin-bottom:18px; }
+#rprint .pkpi{ padding:10px 10px 11px; border-left:1px solid #e2ddd6; }
+#rprint .pkpi:first-child{ border-left:0; padding-left:0; }
+#rprint .pkpi .kl{ font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:#666; }
+#rprint .pkpi .kv{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:26px;
+  letter-spacing:.4px; color:#141414; margin-top:5px; line-height:1;
+  font-variant-numeric:tabular-nums; }
+#rprint .pkpi .kv small{ font-family:'Manrope',system-ui,sans-serif; font-size:10px;
+  font-weight:600; color:#8a847c; margin-left:3px; letter-spacing:0; }
+#rprint .pkpi .ks{ font-size:9px; color:#8a847c; margin-top:3px; }
+#rprint .psec{ margin-bottom:16px; }
+#rprint .psec:last-child{ margin-bottom:0; }
+#rprint .psec-h{ display:flex; align-items:baseline; gap:12px;
+  border-bottom:1px solid #e2ddd6; padding-bottom:7px; margin-bottom:11px; }
+#rprint .psec-h h3{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:15px;
+  letter-spacing:.6px; color:#141414; margin:0; }
+#rprint .psec-h span{ font-size:9.5px; color:#8a847c; margin-left:auto; text-align:right; }
+#rprint .pdesc{ font-size:11px; color:#333; line-height:1.55; margin:0; white-space:pre-wrap; }
+#rprint .pvoid{ font-size:11px; color:#8a847c; margin:0; }
+/* le tabelle: filetti sottili e niente riquadro, come in un referto */
+#rprint .tbl-wrap{ border:0; border-top:1px solid #141414; border-bottom:1px solid #141414;
+  border-radius:0; overflow:visible; }
+#rprint table.dt{ width:100%; border-collapse:collapse; font-size:10.5px; }
+#rprint table.dt thead th{ background:transparent; color:#666; font-weight:600; font-size:8.5px;
+  text-transform:uppercase; letter-spacing:.06em; text-align:right; padding:6px 8px;
+  border-bottom:1px solid #e2ddd6; white-space:nowrap; }
+#rprint table.dt thead th:first-child{ text-align:left; }
+#rprint table.dt tbody td{ padding:5px 8px; border-bottom:1px solid #ece7e0; text-align:right;
+  font-variant-numeric:tabular-nums; color:#222; white-space:nowrap; }
+#rprint table.dt tbody td:first-child{ text-align:left; color:#111; font-weight:600; white-space:normal; }
+#rprint table.dt tbody tr:last-child td{ border-bottom:0; }
+#rprint table.dt tbody tr.row-media td, #rprint table.dt tbody tr.row-tot td{
+  background:#f4f1ec; color:#111; font-weight:700; border-top:1px solid #d8d2c8; }
+#rprint .v{ display:inline-flex; align-items:center; gap:4px; justify-content:flex-end; font-weight:600; }
+#rprint .v.eq{ color:#222; font-weight:500; }
+#rprint .v.up{ color:#1f7a37; }
+#rprint .v.dn{ color:#a32b28; }
+#rprint .mu, #rprint .v .mu{ color:#8a847c; font-size:9px; font-weight:600; margin-left:2px; }
+#rprint .cell-na{ color:#b6afa6; }
+#rprint .ex-slot{ font-size:9.5px; text-transform:uppercase; letter-spacing:.09em;
+  color:#666; margin:10px 0 5px; }
+#rprint .ex-slot:first-child{ margin-top:0; }
+#rprint .ex-i{ display:inline-block; min-width:15px; color:#b6afa6; font-weight:700; font-size:9px; }
+#rprint .ex-n{ color:#111; font-weight:600; }
+#rprint .ex-d{ display:block; font-size:9.5px; color:#555; margin-top:2px; }
+#rprint .ex-nt{ display:block; font-size:9.5px; color:#8a847c; margin-top:1px; }
+#rprint .dr-legend{ display:flex; flex-wrap:wrap; gap:14px; margin-top:8px;
+  font-size:9.5px; color:#666; }
+#rprint .dr-legend .lg{ display:inline-flex; align-items:center; gap:6px; }
+#rprint .dr-legend .tri{ width:0; height:0; }
+#rprint .dr-legend .tri.up{ border-left:4px solid transparent; border-right:4px solid transparent;
+  border-bottom:6px solid #2f9e4f; }
+#rprint .dr-legend .tri.dn{ border-left:4px solid transparent; border-right:4px solid transparent;
+  border-top:6px solid #cf3b38; }
+
 /* ---------- print (PDF) : tema chiaro, solo il report ---------- */
 @media print{
+  /* Quando si stampa il report giornaliero comanda il documento costruito a
+     parte: la pagina a schermo esce di scena tutta intera. */
+  body.pstampa .rdoc, body.pstampa .foot-note{ display:none !important; }
+  #rprint{ position:static !important; left:auto !important; top:auto !important;
+    width:100% !important; z-index:auto !important; }
+  #rprint .psheet{ width:100% !important; break-after:page; break-inside:avoid; }
+  #rprint .psheet:last-child{ break-after:auto; }
   @page{ margin:14mm; }
   body{ background:#fff !important; color:#1a1a1a !important; }
   body::before{ display:none !important; }
@@ -1872,6 +1966,124 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return out;
   }
 
+  /* I sei numeri della seduta, gli stessi delle colonne della tabella: minuti,
+     distanza, le due fasce di velocita' e i due conteggi di accelerazioni e
+     decelerazioni. Il conteggio delle atlete non c'e' piu': si legge dalla
+     tabella e sul foglio rubava una casella a un numero che invece dice com'e'
+     andata la seduta. Li usano sia la pagina sia il documento di stampa, quindi
+     stanno scritti una volta sola. */
+  function dayKpiVoci(m){
+    const out = [
+      { l:'Minuti medi',    v:NF0.format(Math.round(m.minAvg||0)), u:'min', s:'media squadra' },
+      { l:'Distanza media', v:fmtKm(m.distAvg||0),                 u:'km',  s:'media squadra' }
+    ];
+    function agg2(l, val, u){
+      if(val==null || Number.isNaN(val)) return;
+      out.push({ l:l, v:NF0.format(Math.round(val)), u:u, s:'media squadra' });
+    }
+    agg2('20-23 km/h',    m.avg2023, 'm');
+    agg2('Oltre 23 km/h', m.avg23,   'm');
+    agg2('Acc oltre 3',   m.avgAcc,  'n');
+    agg2('Dec sotto -3',  m.avgDec,  'n');
+    return out;
+  }
+
+  /* ---------- il documento di stampa ----------
+     Tre facciate e finisce li': il foglio del mister, i numeri della seduta con
+     le esercitazioni, il carico di tutte le atlete. Senza il foglio del mister
+     sono due. Ogni facciata si misura da sola e, se sfora, si rimpicciolisce
+     quel tanto che basta per stare dentro un A4: e' l'unico modo perche' il
+     numero delle pagine non dipenda da quante esercitazioni ha la seduta. */
+  const PG_MM = 96 / 25.4;          // millimetri in pixel CSS
+  const PG_H  = 258 * PG_MM;        // altezza utile di un A4 con i margini da 14 mm
+  function printHost(){
+    let el = document.getElementById('rprint');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'rprint';
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function pSheet(testa, corpo, piede){
+    return '<section class="psheet"><div class="pfit">'+testa+
+      '<div class="pbody">'+corpo+'</div>'+piede+'</div></section>';
+  }
+  function pSecHTML(titolo, nota, corpo){
+    return '<div class="psec"><div class="psec-h"><h3>'+esc(titolo)+'</h3>'+
+      (nota ? '<span>'+esc(nota)+'</span>' : '')+'</div>'+corpo+'</div>';
+  }
+  /* La misura si fa a schermo, dove il documento e' largo quanto la parte
+     stampabile del foglio. Se e' troppo alto si stringe: la larghezza cresce
+     dell'inverso della scala cosi' dopo il rimpicciolimento il testo torna a
+     riempire la riga invece di lasciare una fascia bianca a destra. Due o tre
+     passaggi bastano, la scala non scende sotto 0,55 perche' piu' piccolo di
+     cosi' non si leggerebbe. */
+  function pAdatta(host){
+    Array.prototype.forEach.call(host.querySelectorAll('.psheet'), function(sec){
+      const fit = sec.querySelector('.pfit');
+      if(!fit) return;
+      let s = 1;
+      for(let k=0; k<4; k++){
+        fit.style.width = (100/s).toFixed(3)+'%';
+        fit.style.transform = (s===1) ? 'none' : ('scale('+s.toFixed(4)+')');
+        const h = fit.getBoundingClientRect().height;
+        if(h <= PG_H || s <= 0.55) break;
+        s = Math.max(0.55, s * (PG_H/h) * 0.99);
+      }
+      sec.style.height = Math.ceil(fit.getBoundingClientRect().height)+'px';
+    });
+  }
+  function buildPrintDaily(){
+    const host = printHost();
+    const m = dailyModel();
+    if(!m){ host.innerHTML = ''; return false; }
+    const genTxt   = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
+    const sessLine = [m.meta.wd, m.meta.dateStr, m.meta.parte].filter(Boolean).join(' · ')
+      || periodLabel(m.monthKey);
+    const fk = fogKey(m);
+
+    const corpi = [];
+    if(fk){
+      const src = 'prev/seduta-'+fk+'.jpg';
+      corpi.push('<figure class="pfog"><img src="'+src+'" alt="Foglio della seduta del '+
+        esc(fk)+' disegnato dal mister">'+
+        '<figcaption class="pcap">Il foglio della seduta come lo ha preparato il mister.</figcaption></figure>');
+    }
+    const kpi = '<div class="pkpis">'+dayKpiVoci(m).map(function(k){
+      return '<div class="pkpi"><div class="kl">'+esc(k.l)+'</div>'+
+        '<div class="kv">'+esc(k.v)+'<small>'+esc(k.u)+'</small></div>'+
+        '<div class="ks">'+esc(k.s)+'</div></div>';
+    }).join('')+'</div>';
+    const desc = String(dailyDesc||'').trim();
+    const sess = exSessioni(cfIso(m.meta.dateStr), m.meta.ap || '');
+    const exBody = sess.length
+      ? sess.map(exTableHTML).join('')
+      : '<p class="pvoid">Per questa seduta non ci sono esercitazioni registrate.</p>';
+    corpi.push(kpi+
+      (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
+      pSecHTML('Le esercitazioni', 'nome, serie e metraggi come sono scritti in Esercitazioni', exBody));
+    corpi.push(pSecHTML('Carico per atleta', 'squadra in cima, poi le singole a confronto con la media',
+      dailyTableHTML(m.rows, m.media, m.cols)));
+
+    const tot = corpi.length;
+    host.innerHTML = corpi.map(function(c, i){
+      const testa = '<div class="ph">'+
+        '<img class="pmark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
+        '<div><h2>Report giornaliero</h2>'+
+          '<div class="psub"><b>'+esc(sessLine)+'</b> · Fiorentina Primavera U19W</div></div>'+
+        '<div class="pno">Pagina '+(i+1)+' di '+tot+'<br>Stagione '+esc(SEASON)+'</div>'+
+      '</div>';
+      const piede = '<div class="pfoot"><span>Fiorentina Primavera U19W · '+esc(sessLine)+'</span>'+
+        '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
+      return pSheet(testa, c, piede);
+    }).join('');
+    pAdatta(host);
+    return true;
+  }
+
   function renderDaily(){
     const host = document.getElementById('rdoc');
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
@@ -1906,26 +2118,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return;
     }
 
-    /* I sei numeri della seduta, gli stessi delle colonne della tabella:
-       minuti, distanza, le due fasce di velocita' e i due conteggi di
-       accelerazioni e decelerazioni. Il conteggio delle atlete non c'e' piu':
-       si legge dalla tabella qui sotto e sul foglio rubava una casella a un
-       numero che invece dice com'e' andata la seduta. */
-    const kpiVoci = [
-      { l:'Minuti medi',   v:NF0.format(Math.round(m.minAvg||0))+'<small>min</small>', s:'media squadra' },
-      { l:'Distanza media',v:fmtKm(m.distAvg||0)+'<small>km</small>',       s:'media squadra' }
-    ];
-    if(m.avg2023!=null && !Number.isNaN(m.avg2023))
-      kpiVoci.push({ l:'20-23 km/h', v:NF0.format(Math.round(m.avg2023))+'<small>m</small>', s:'media squadra' });
-    if(m.avg23!=null && !Number.isNaN(m.avg23))
-      kpiVoci.push({ l:'Oltre 23 km/h', v:NF0.format(Math.round(m.avg23))+'<small>m</small>', s:'media squadra' });
-    if(m.avgAcc!=null && !Number.isNaN(m.avgAcc))
-      kpiVoci.push({ l:'Acc oltre 3', v:NF0.format(Math.round(m.avgAcc))+'<small>n</small>', s:'media squadra' });
-    if(m.avgDec!=null && !Number.isNaN(m.avgDec))
-      kpiVoci.push({ l:'Dec sotto -3', v:NF0.format(Math.round(m.avgDec))+'<small>n</small>', s:'media squadra' });
+    const kpiVoci = dayKpiVoci(m);
     const kpis = '<div class="rkpis k'+kpiVoci.length+'">'+kpiVoci.map(function(k){
       return '<div class="rkpi"><div class="k-label">'+esc(k.l)+'</div>'+
-        '<div class="k-val tnum">'+k.v+'</div><div class="k-sub">'+esc(k.s)+'</div></div>';
+        '<div class="k-val tnum">'+k.v+'<small>'+esc(k.u)+'</small></div>'+
+        '<div class="k-sub">'+esc(k.s)+'</div></div>';
     }).join('')+'</div>';
 
     const descBlock =
@@ -2278,7 +2475,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('sel-session').addEventListener('change', render);
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
-  document.getElementById('btn-print').addEventListener('click', function(){ window.print(); });
+  /* Nel report del giorno si stampa il documento costruito a parte, non la
+     pagina. Il documento si prepara subito prima di aprire la stampa cosi'
+     porta l'ultima descrizione scritta, e si smonta appena la stampa e' finita
+     per non lasciarlo in giro. Il gancio sta anche su beforeprint perche' la
+     stampa si puo' chiamare anche dalla scorciatoia del sistema. */
+  function stampaPronta(){
+    if(mode === 'giorno' && buildPrintDaily()) document.body.classList.add('pstampa');
+    else document.body.classList.remove('pstampa');
+  }
+  function stampaFinita(){
+    document.body.classList.remove('pstampa');
+    const el = document.getElementById('rprint');
+    if(el) el.innerHTML = '';
+  }
+  document.getElementById('btn-print').addEventListener('click', function(){
+    stampaPronta();
+    window.print();
+  });
+  window.addEventListener('beforeprint', stampaPronta);
+  window.addEventListener('afterprint', stampaFinita);
   document.getElementById('btn-png').addEventListener('click', makeImage);
 
   document.getElementById('btn-metrics').addEventListener('click', function(){ document.getElementById('dlg-metrics').showModal(); });
