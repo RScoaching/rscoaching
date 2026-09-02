@@ -165,6 +165,11 @@ a{ color:inherit; text-decoration:none; }
   border:1px solid var(--border2); border-radius:var(--r); overflow:hidden; margin-bottom:32px; }
 .rkpis.k3{ grid-template-columns:repeat(3, 1fr); }
 .rkpis.k5{ grid-template-columns:repeat(5, 1fr); }
+/* sei numeri stanno in riga solo stringendo un po' cifre e riquadri */
+.rkpis.k6{ grid-template-columns:repeat(6, 1fr); }
+.rkpis.k6 .rkpi{ padding:14px 12px 15px; }
+.rkpis.k6 .rkpi .k-val{ font-size:29px; margin-top:7px; }
+.rkpis.k6 .rkpi .k-val small{ font-size:11px; margin-left:3px; }
 .rkpi{ padding:16px 18px 17px; border-left:1px solid var(--border2); min-width:0; }
 .rkpi:first-child{ border-left:0; }
 .rkpi .k-label{ font-size:10.5px; color:var(--muted); font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
@@ -539,9 +544,24 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .dr-desc label{ color:#666 !important; }
   .rsec{ break-inside:avoid; }
   .rkpis{ break-inside:avoid; }
-  /* Il foglio del mister e' la prima pagina della stampa: sta da solo, alto
-     quanto basta per restare leggibile senza traboccare sulla seconda. Dopo di
-     lui si cambia foglio e comincia il referto vero e proprio. */
+  /* La riga della squadra e' la prima della tabella: sul foglio deve leggersi
+     come le altre, chiara e con il numero nero. Senza questa regola si portava
+     dietro il fondino scuro del tema e in stampa usciva una fascia nera. */
+  table.dt tbody tr.row-media td{ background:#f4f1ec !important;
+    color:#111 !important; border-top:1px solid #d8d2c8 !important; }
+  table.dt tbody tr.row-media td .v, table.dt tbody tr.row-media td:first-child{ color:#111 !important; }
+  .v.up{ color:#1f7a37 !important; }
+  .v.dn{ color:#a32b28 !important; }
+  .dr-legend{ color:#555 !important; margin-top:8px; font-size:10px; }
+  .dr-legend .tri.up{ border-bottom-color:#2f9e4f !important; }
+  .dr-legend .tri.dn{ border-top-color:#cf3b38 !important; }
+
+  /* ---- impaginazione del report giornaliero: tre fogli e basta ----
+     Prima il foglio del mister, poi i numeri della seduta con le
+     esercitazioni, poi il carico di tutte le atlete. Cosa si e' fatto e il
+     grafico restano a schermo ma non si stampano: sono la stessa seduta
+     raccontata due volte e da soli valevano quattro pagine in piu'. */
+  .rsec-cf, .rsec-chart{ display:none !important; }
   .rfog{ margin:0 !important; break-inside:avoid; }
   .rfog img{ border:1px solid #e2ddd6 !important; max-width:100% !important;
     max-height:224mm; object-fit:contain; }
@@ -549,19 +569,20 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .rfog figcaption a{ display:none !important; }
   .has-fog .rfog{ break-after:page; }
   .has-fog .rbody{ padding-top:14px !important; }
-  /* Con il foglio davanti il resto deve stare in due pagine: i dati sulla
-     seconda, il contenuto della seduta e il grafico sulla terza. */
-  .has-fog .rsec-cf{ break-before:page; }
-  .has-fog .rsec{ margin-top:20px; }
-  .has-fog .rkpis{ margin-bottom:16px; }
-  .has-fog .rkpi .k-val{ font-size:21px; margin-top:4px; }
-  .has-fog .rkpi{ padding:8px 10px 9px; }
-  .has-fog .dr-desc{ margin-bottom:14px; }
-  .has-fog table.dt{ font-size:11px; }
-  .has-fog table.dt tbody td{ padding:6px 9px; }
-  .has-fog table.dt thead th{ padding-top:5px; padding-bottom:5px; }
-  .has-fog .cf-list{ gap:9px; }
-  .has-fog .dc-chart{ gap:6px; }
+  /* il carico per atleta e' un foglio suo: la lista intera senza spezzarsi */
+  .rsec-tbl{ break-before:page; break-inside:auto; }
+  .rdoc .rsec{ margin-top:22px; }
+  .rdoc .rkpis{ margin-bottom:18px; }
+  .rkpis.k6 .rkpi{ padding:9px 8px 10px; }
+  .rkpis.k6 .rkpi .k-val{ font-size:22px; margin-top:4px; }
+  .rkpi .k-label{ font-size:9px; }
+  .rkpi .k-sub{ font-size:9.5px; margin-top:2px; }
+  .dr-desc{ margin-bottom:16px !important; }
+  .rsec-ex table.dt, .rsec-tbl table.dt{ font-size:10.5px; }
+  .rsec-ex table.dt tbody td, .rsec-tbl table.dt tbody td{ padding:5px 8px; }
+  .rsec-ex table.dt thead th, .rsec-tbl table.dt thead th{ padding-top:5px; padding-bottom:5px; }
+  .ex-d, .ex-nt{ font-size:10px; }
+  .ex-slot{ margin:11px 0 6px; }
   .rdoc-foot{ margin-top:14px; padding-top:10px; border-top:1px solid #e2ddd6; font-size:10px; color:#8a847c; display:flex !important; justify-content:space-between; }
   *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
@@ -782,8 +803,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   const IDX_2023 = idxDi(/20\s*-\s*23/);
   const IDX_23   = idxDi(/^\s*>\s*23/);
-  // in modalita' giorno bastano i quattro numeri che il mister guarda davvero
-  const DAY_COLS = [IDX_MIN, IDX_DIST, IDX_2023, IDX_23]
+  const IDX_ACC  = idxDi(/^\s*ACC/i);
+  const IDX_DEC  = idxDi(/^\s*DEC/i);
+  /* In modalita' giorno restano i sei numeri che il mister guarda davvero:
+     minuti, distanza, le due fasce di velocita' e i due conteggi di
+     accelerazioni e decelerazioni. Sono anche le colonne della stampa. */
+  const DAY_COLS = [IDX_MIN, IDX_DIST, IDX_2023, IDX_23, IDX_ACC, IDX_DEC]
     .filter(function(i){ return i>=0 && i<MS.length; });
 
   // reparti tattici (3-5-2): mappa ruolo -> reparto
@@ -1368,7 +1393,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       minAvg:agg(allV, IDX_MIN).mean,
       distAvg:agg(allV, IDX_DIST).mean,
       avg2023:(IDX_2023>=0 ? agg(allV, IDX_2023).mean : null),
-      avg23:(IDX_23>=0 ? agg(allV, IDX_23).mean : null)
+      avg23:(IDX_23>=0 ? agg(allV, IDX_23).mean : null),
+      avgAcc:(IDX_ACC>=0 ? agg(allV, IDX_ACC).mean : null),
+      avgDec:(IDX_DEC>=0 ? agg(allV, IDX_DEC).mean : null)
     };
   }
   /* Colore solo quando lo scarto conta davvero. Con la vecchia soglia del 3%
@@ -1414,7 +1441,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<span class="lg"><span class="tri dn"></span>Sotto del 20% sulla media di squadra</span>'+
       '<span class="lg" style="margin-left:auto;color:var(--faint)">Confronto sulla singola seduta</span>'+
     '</div>';
-    return '<div class="tbl-wrap tbl-scroll"><table class="dt">'+head+'<tbody>'+body+mediaRow+'</tbody></table></div>'+legend;
+    /* La squadra sta in cima e le singole sotto: prima si legge il dato della
+       seduta, poi si vede chi sta sopra e chi sotto. In fondo alla lista quella
+       riga si perdeva, e sul foglio stampato finiva pure in un'altra pagina. */
+    return '<div class="tbl-wrap tbl-scroll"><table class="dt">'+head+'<tbody>'+mediaRow+body+'</tbody></table></div>'+legend;
   }
 
   /* Il mini grafico della seduta: una barra per atleta sulla metrica scelta,
@@ -1876,12 +1906,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return;
     }
 
-    /* I cinque numeri della seduta. Prima erano quattro e uno diceva solo
-       quante colonne c'erano in tabella: informazione inutile sul foglio.
-       Adesso ci sono le due fasce di velocita', che sono quelle che decidono
-       se la seduta e' stata intensa o solo lunga. */
+    /* I sei numeri della seduta, gli stessi delle colonne della tabella:
+       minuti, distanza, le due fasce di velocita' e i due conteggi di
+       accelerazioni e decelerazioni. Il conteggio delle atlete non c'e' piu':
+       si legge dalla tabella qui sotto e sul foglio rubava una casella a un
+       numero che invece dice com'e' andata la seduta. */
     const kpiVoci = [
-      { l:'Atlete',        v:NF0.format(m.rows.length),                     s:'con dati nella seduta' },
       { l:'Minuti medi',   v:NF0.format(Math.round(m.minAvg||0))+'<small>min</small>', s:'media squadra' },
       { l:'Distanza media',v:fmtKm(m.distAvg||0)+'<small>km</small>',       s:'media squadra' }
     ];
@@ -1889,6 +1919,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       kpiVoci.push({ l:'20-23 km/h', v:NF0.format(Math.round(m.avg2023))+'<small>m</small>', s:'media squadra' });
     if(m.avg23!=null && !Number.isNaN(m.avg23))
       kpiVoci.push({ l:'Oltre 23 km/h', v:NF0.format(Math.round(m.avg23))+'<small>m</small>', s:'media squadra' });
+    if(m.avgAcc!=null && !Number.isNaN(m.avgAcc))
+      kpiVoci.push({ l:'Acc oltre 3', v:NF0.format(Math.round(m.avgAcc))+'<small>n</small>', s:'media squadra' });
+    if(m.avgDec!=null && !Number.isNaN(m.avgDec))
+      kpiVoci.push({ l:'Dec sotto -3', v:NF0.format(Math.round(m.avgDec))+'<small>n</small>', s:'media squadra' });
     const kpis = '<div class="rkpis k'+kpiVoci.length+'">'+kpiVoci.map(function(k){
       return '<div class="rkpi"><div class="k-label">'+esc(k.l)+'</div>'+
         '<div class="k-val tnum">'+k.v+'</div><div class="k-sub">'+esc(k.s)+'</div></div>';
@@ -1898,11 +1932,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<div class="dr-desc"><label for="dr-text">Descrizione seduta</label>'+
         '<textarea id="dr-text" placeholder="Obiettivo e contenuti della seduta (es. attivazione, forza, partita a tema, rondo)...">'+esc(dailyDesc)+'</textarea></div>';
 
-    const tbl = '<div class="rsec"><div class="rsec-head"><h3>Carico per atleta</h3>'+
-      '<span class="rsec-n">valori a confronto con la media di squadra della seduta</span></div>'+
+    const tbl = '<div class="rsec rsec-tbl"><div class="rsec-head"><h3>Carico per atleta</h3>'+
+      '<span class="rsec-n">squadra in cima, poi le singole a confronto con la media della seduta</span></div>'+
       dailyTableHTML(m.rows, m.media, m.cols)+'</div>';
 
-    const chart = '<div class="rsec"><div class="rsec-head"><h3>Il grafico della seduta</h3>'+
+    const chart = '<div class="rsec rsec-chart"><div class="rsec-head"><h3>Il grafico della seduta</h3>'+
       '<span class="rsec-n">chi ha fatto di piu\' e chi di meno, metrica per metrica</span></div>'+
       '<div id="dc-wrap">'+dailyChartHTML(m)+'</div></div>';
 
