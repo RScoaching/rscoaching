@@ -461,6 +461,40 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .tr-d.down{ color:var(--red);    background:oklch(62% 0.22 25  / .12); border-color:oklch(62% 0.22 25  / .30); }
 .tr-d.flat{ color:var(--muted); }
 
+/* ---------- profilo dell atleta: una figura sola invece di un elenco ---------- */
+.rd-note{ font-size:12px; color:var(--faint); line-height:1.5; margin:0 0 14px; }
+.rd-note b{ color:var(--text); font-weight:650; }
+.rd-wrap{ display:flex; gap:22px; align-items:flex-start; flex-wrap:wrap; }
+.rd-plot{ flex:0 0 auto; padding:10px 6px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:var(--r); }
+.rd-svg{ display:block; width:288px; height:288px; overflow:visible; }
+.rd-svg .ring{ fill:none; stroke:var(--border2); stroke-width:1; }
+.rd-svg .ring.mid{ stroke:var(--violet2); stroke-dasharray:3 4; opacity:.75; }
+.rd-svg .spoke{ stroke:var(--border2); stroke-width:1; }
+.rd-svg .area{ fill:oklch(68% 0.19 42 / .20); stroke:var(--orange); stroke-width:2;
+  stroke-linejoin:round; }
+.rd-svg .pt{ fill:var(--orange2); }
+.rd-svg .lab{ font-size:10.5px; font-weight:650; fill:var(--text); }
+.rd-svg .val{ font-size:9.5px; fill:var(--faint); }
+.rd-side{ flex:1 1 240px; min-width:0; }
+.rd-row{ display:flex; align-items:center; gap:12px; padding:8px 11px; border-radius:var(--r-sm);
+  border-top:1px solid var(--border); }
+.rd-row:first-of-type{ border-top:0; }
+.rd-nm{ flex:1 1 auto; min-width:0; }
+.rd-name{ font-size:13.5px; font-weight:600; color:var(--ink); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.rd-sub{ font-size:11px; color:var(--muted); margin-top:2px; }
+.rd-bar{ position:relative; flex:0 0 96px; height:8px; border-radius:999px; background:var(--surface3);
+  border:1px solid var(--border2); overflow:hidden; }
+.rd-fill{ height:100%; width:0; border-radius:999px; background:linear-gradient(90deg, var(--orange), var(--orange2)); }
+.rd-med{ position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--text); opacity:.5; }
+.rd-sc{ flex:0 0 auto; min-width:64px; text-align:center; font-size:11.5px; font-weight:700;
+  padding:4px 9px; border-radius:999px; border:1px solid var(--border2); color:var(--muted);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+.rd-sc.ok{   color:var(--green);  background:oklch(70% 0.18 152 / .10); border-color:oklch(70% 0.18 152 / .24); }
+.rd-sc.warn{ color:var(--yellow); background:oklch(80% 0.15 75  / .10); border-color:oklch(80% 0.15 75  / .26); }
+.rd-sc.bad{  color:var(--red);    background:oklch(62% 0.22 25  / .12); border-color:oklch(62% 0.22 25  / .30); }
+
 /* ---------- calcolatore del lavoro intermittente ---------- */
 .im-note{ font-size:12px; color:var(--faint); line-height:1.5; margin:2px 0 14px; }
 .im-note b{ color:var(--text); font-weight:650; }
@@ -646,6 +680,11 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
   .tr-nm{ flex:0 0 150px; }
   .im-nm{ flex:0 0 150px; }
   .cm-pc{ display:none; }
+  /* il profilo va a capo: la figura sopra, le righe sotto, senza rimpicciolire le scritte */
+  .rd-wrap{ gap:14px; }
+  .rd-plot{ margin:0 auto; }
+  .rd-svg{ width:252px; height:252px; }
+  .rd-side{ flex:1 1 100%; }
 }
 @media (max-width:560px){
   .kpis{ grid-template-columns:1fr; }
@@ -849,8 +888,22 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
         </div>
       </section>
 
+      <!-- Profilo: la stessa atleta letta come una figura sola, non come un elenco di prove -->
+      <section class="card reveal" id="rd-card" style="--i:2">
+        <div class="card-head">
+          <h2>Profilo</h2>
+          <span class="hint">dove sta rispetto alla squadra, una punta per famiglia di test</span>
+          <span class="spacer"></span>
+          <div class="head-chips" id="rd-chips"></div>
+        </div>
+        <div class="card-body">
+          <p class="rd-note" id="rd-note"></p>
+          <div class="rd-wrap" id="rd-wrap"></div>
+        </div>
+      </section>
+
       <!-- Indici calcolati dalla batteria test -->
-      <section class="card reveal" id="ix-card" style="--i:2">
+      <section class="card reveal" id="ix-card" style="--i:3">
         <div class="card-head">
           <h2>Indici</h2>
           <span class="hint">deficit elastico, simmetria degli arti, FMS e Y-balance &#183; calcolati dai test inseriti</span>
@@ -2249,6 +2302,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       note.textContent = '';
       list.innerHTML = '<div class="lb-empty">Compila la batteria test o importa lo storico: qui compare, test per test, '+
         'come cambiano i valori di una singola atleta da una rilevazione all' + "'" + ' altra.</div>';
+      renderRadar();
       return;
     }
     if(names.indexOf(curAtl) < 0) curAtl = names[0];
@@ -2275,6 +2329,135 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h += '<div class="rc-group"><p class="rc-gt">'+esc(c.label)+'</p>'+rs.map(trendRow).join('')+'</div>';
     });
     list.innerHTML = h || '<div class="lb-empty">Nessun test compilato per questa atleta.</div>';
+    renderRadar();
+  }
+
+  /* ================= PROFILO DELL ATLETA (punto 81) =================
+     Andamento risponde a "come va nel tempo", Confronto a "dove sta su questa
+     prova". Mancava la domanda piu' semplice di tutte: che atleta e'. Trenta
+     righe di numeri non la dicono, perche' un centimetro di salto e un punto di
+     FMS non si sommano. Quello che si puo' confrontare e' la posizione: su ogni
+     prova si guarda quante compagne stanno dietro, e la percentuale che ne esce
+     e' uguale per tutti i test. Le percentuali di una stessa famiglia si fanno
+     una media, e le famiglie diventano le punte della figura. Cinquanta e' il
+     centro del gruppo, cento vuol dire prima di tutte. L atleta e' quella scelta
+     in Andamento qui sopra: la figura la segue. */
+  const RD_LAB = { salti:'Verticali', oriz:'Orizzontali', fms:'FMS', fisio:'Fisio',
+                   yb:'Y-balance', vbt:'Forza', campo:'Campo' };
+  /* Posizione nel gruppo su una singola prova, da 0 a 100. Si contano le compagne
+     che stanno dietro, meta' peso a chi sta pari. Sotto le tre compagne misurate
+     non si calcola: con due valori la percentuale direbbe solo 0 o 100. */
+  function rdPct(name, key, dir){
+    const mine = lastVal(name, key);
+    if(mine == null) return null;
+    let worse = 0, same = 0, oth = 0;
+    roster.forEach(n=>{
+      if(n === name) return;
+      const v = lastVal(n, key);
+      if(v == null) return;
+      oth++;
+      if(v === mine){ same++; return; }
+      const better = (dir === 'low') ? (v < mine) : (v > mine);
+      if(!better) worse++;
+    });
+    if(oth < 3) return null;
+    return 100 * (worse + 0.5*same) / oth;
+  }
+  /* Le punte della figura. Il peso corporeo resta fuori: pesare di piu' non e'
+     ne' meglio ne' peggio, e in una media di posizioni farebbe solo rumore. */
+  function rdAxes(name){
+    return CATS.map(c=>{
+      const ps = [];
+      TESTS.forEach(t=>{
+        if(t.cat !== c.key || t.ctx || t.neutral) return;
+        const p = rdPct(name, t.key, t.dir);
+        if(p != null) ps.push(p);
+      });
+      const sc = ps.length ? ps.reduce((a,b)=> a+b, 0) / ps.length : null;
+      return { key:c.key, label:RD_LAB[c.key] || c.label, full:c.label, n:ps.length, sc:sc };
+    }).filter(a=> a.sc != null);
+  }
+  function rdLev(sc){ return sc >= 60 ? 'ok' : (sc <= 40 ? 'bad' : ''); }
+  function rdSvg(axes){
+    const C = 144, R = 96, k = axes.length;
+    const ang = i=> (-90 + i*360/k) * Math.PI/180;
+    const px  = (i, r)=> nx(C + Math.cos(ang(i))*r);
+    const py  = (i, r)=> nx(C + Math.sin(ang(i))*r);
+    let h = '<svg class="rd-svg" viewBox="0 0 288 288" role="img" aria-label="Profilo dell atleta rispetto alla squadra">';
+    [0.25, 0.5, 0.75, 1].forEach(f=>{
+      const pts = axes.map((a,i)=> px(i, R*f)+','+py(i, R*f)).join(' ');
+      h += '<polygon class="ring'+(f===0.5 ? ' mid' : '')+'" points="'+pts+'"/>';
+    });
+    axes.forEach((a,i)=>{
+      h += '<line class="spoke" x1="'+C+'" y1="'+C+'" x2="'+px(i,R)+'" y2="'+py(i,R)+'"/>';
+    });
+    const area = axes.map((a,i)=> px(i, R*a.sc/100)+','+py(i, R*a.sc/100)).join(' ');
+    h += '<polygon class="area" points="'+area+'"/>';
+    axes.forEach((a,i)=>{
+      h += '<circle class="pt" cx="'+px(i, R*a.sc/100)+'" cy="'+py(i, R*a.sc/100)+'" r="2.6"/>';
+    });
+    /* Le scritte stanno fuori dall ultimo anello e si allineano da che parte
+       cadono, se no a destra e a sinistra si appoggiano sopra la figura. */
+    axes.forEach((a,i)=>{
+      const cx = Math.cos(ang(i)), cy = Math.sin(ang(i));
+      const anc = cx > 0.3 ? 'start' : (cx < -0.3 ? 'end' : 'middle');
+      const x = nx(C + cx*(R+14)), y = nx(C + cy*(R+14) + (cy > 0.3 ? 10 : (cy < -0.3 ? -2 : 4)));
+      h += '<text class="lab" x="'+x+'" y="'+y+'" text-anchor="'+anc+'">'+esc(a.label)+'</text>'+
+           '<text class="val" x="'+x+'" y="'+nx(y+12)+'" text-anchor="'+anc+'">'+NF.format(Math.round(a.sc))+'</text>';
+    });
+    return h + '</svg>';
+  }
+  function rdRow(a){
+    const sc = Math.round(a.sc);
+    const tit = a.full + ': media di ' + a.n + (a.n===1 ? ' prova' : ' prove') +
+                ', posizione nel gruppo ' + NF.format(sc) + ' su 100';
+    return '<div class="rd-row">'+
+      '<div class="rd-nm"><div class="rd-name">'+esc(a.full)+'</div>'+
+        '<div class="rd-sub">'+a.n+(a.n===1 ? ' prova contata' : ' prove contate')+'</div></div>'+
+      '<div class="rd-bar" title="'+esc(tit)+'"><div class="rd-fill" style="width:'+nx(sc)+'%"></div>'+
+        '<span class="rd-med"></span></div>'+
+      '<span class="rd-sc '+rdLev(a.sc)+'">'+NF.format(sc)+'</span>'+
+    '</div>';
+  }
+  function renderRadar(){
+    const wrap  = document.getElementById('rd-wrap');
+    const note  = document.getElementById('rd-note');
+    const chips = document.getElementById('rd-chips');
+    if(!wrap) return;
+    const names = atlWithData();
+    if(!names.length || !curAtl){
+      chips.innerHTML = '';
+      note.textContent = '';
+      wrap.innerHTML = '<div class="lb-empty">Compila la batteria test: qui compare il profilo dell atleta, '+
+        'una punta per famiglia di prove.</div>';
+      return;
+    }
+    const axes = rdAxes(curAtl);
+    const tot  = axes.reduce((a,b)=> a + b.n, 0);
+    chips.innerHTML =
+      '<div class="mchip em"><span class="ml">Famiglie</span><b>'+axes.length+'</b><span class="ml">/'+CATS.length+'</span></div>'+
+      '<div class="mchip vi"><span class="ml">Prove contate</span><b>'+tot+'</b></div>';
+    if(!axes.length){
+      note.textContent = '';
+      wrap.innerHTML = '<div class="lb-empty">Di '+esc(disp(curAtl))+' non ci sono ancora prove confrontabili: '+
+        'serve almeno mezza squadra misurata sullo stesso test.</div>';
+      return;
+    }
+    const forte = axes.slice().sort((a,b)=> b.sc - a.sc)[0];
+    const debol = axes.slice().sort((a,b)=> a.sc - b.sc)[0];
+    note.innerHTML = 'Ogni punta e&#39; la posizione di <b>'+esc(disp(curAtl))+'</b> dentro la squadra su quella famiglia di prove, '+
+      'da 0 a 100. L&#39;anello tratteggiato e&#39; il 50, cioe&#39; il centro del gruppo: fuori vuol dire sopra la media delle compagne, '+
+      'dentro vuol dire sotto. Non e&#39; un voto sul valore assoluto, e&#39; la posizione fra chi si allena con lei.'+
+      (axes.length > 1
+        ? (' Oggi sta meglio su <b>'+esc(forte.full)+'</b> e piu&#39; indietro su <b>'+esc(debol.full)+'</b>.')
+        : '')+
+      ' L&#39;atleta e&#39; quella scelta in Andamento qui sopra.';
+    /* Con meno di tre punte la figura non si chiude: resta l elenco, che dice
+       la stessa cosa senza far finta di essere un radar. */
+    const plot = axes.length >= 3
+      ? '<div class="rd-plot">'+rdSvg(axes)+'</div>'
+      : '';
+    wrap.innerHTML = plot + '<div class="rd-side">'+axes.map(rdRow).join('')+'</div>';
   }
   function stepAtl(step){
     const names = atlWithData();
