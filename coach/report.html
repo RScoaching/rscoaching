@@ -305,6 +305,15 @@ dialog.picker[open] .picker-card{ animation:pk .26s var(--ease); }
   background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:12px 14px; box-sizing:border-box; }
 .dr-desc textarea::placeholder{ color:var(--faint); }
 .dr-desc textarea:focus{ outline:none; border-color:var(--orange); box-shadow:0 0 0 3px var(--ember-bg); }
+/* il foglio del mister: la scansione della seduta cosi' come l'ha disegnata lui.
+   In stampa diventa la prima pagina, i dati vanno sulla seconda. */
+.rfog{ margin:0 0 22px; }
+.rfog img{ display:block; width:100%; max-width:760px; margin:0 auto; height:auto;
+  border:1px solid var(--border2); border-radius:var(--r-sm); background:#fff; }
+.rfog figcaption{ max-width:760px; margin:9px auto 0; display:flex; align-items:center; gap:12px;
+  flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.rfog figcaption a{ color:var(--orange2); text-decoration:none; font-weight:600; }
+.rfog figcaption a:hover{ text-decoration:underline; }
 .v{ display:inline-flex; align-items:center; gap:5px; justify-content:flex-end; font-variant-numeric:tabular-nums; font-weight:600; }
 .v .mu{ color:var(--faint); font-size:11px; font-weight:600; }
 .v i{ width:0; height:0; flex:0 0 auto; }
@@ -530,6 +539,29 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .dr-desc label{ color:#666 !important; }
   .rsec{ break-inside:avoid; }
   .rkpis{ break-inside:avoid; }
+  /* Il foglio del mister e' la prima pagina della stampa: sta da solo, alto
+     quanto basta per restare leggibile senza traboccare sulla seconda. Dopo di
+     lui si cambia foglio e comincia il referto vero e proprio. */
+  .rfog{ margin:0 !important; break-inside:avoid; }
+  .rfog img{ border:1px solid #e2ddd6 !important; max-width:100% !important;
+    max-height:224mm; object-fit:contain; }
+  .rfog figcaption{ color:#666 !important; font-size:10px; margin-top:7px; }
+  .rfog figcaption a{ display:none !important; }
+  .has-fog .rfog{ break-after:page; }
+  .has-fog .rbody{ padding-top:14px !important; }
+  /* Con il foglio davanti il resto deve stare in due pagine: i dati sulla
+     seconda, il contenuto della seduta e il grafico sulla terza. */
+  .has-fog .rsec-cf{ break-before:page; }
+  .has-fog .rsec{ margin-top:20px; }
+  .has-fog .rkpis{ margin-bottom:16px; }
+  .has-fog .rkpi .k-val{ font-size:21px; margin-top:4px; }
+  .has-fog .rkpi{ padding:8px 10px 9px; }
+  .has-fog .dr-desc{ margin-bottom:14px; }
+  .has-fog table.dt{ font-size:11px; }
+  .has-fog table.dt tbody td{ padding:6px 9px; }
+  .has-fog table.dt thead th{ padding-top:5px; padding-bottom:5px; }
+  .has-fog .cf-list{ gap:9px; }
+  .has-fog .dc-chart{ gap:6px; }
   .rdoc-foot{ margin-top:14px; padding-top:10px; border-top:1px solid #e2ddd6; font-size:10px; color:#8a847c; display:flex !important; justify-content:space-between; }
   *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
@@ -1029,6 +1061,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const scope = document.getElementById('sel-scope').value || TEAM;
     const monthKey = document.getElementById('sel-month').value || '';
     const host = document.getElementById('rdoc');
+    host.classList.remove('has-fog');
     const lab = scopeLabel(scope);
     const per = periodLabel(monthKey);
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
@@ -1454,6 +1487,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const p = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dateStr||''));
     return p ? (p[3]+'-'+p[2]+'-'+p[1]) : '';
   }
+  /* Le sedute per cui esiste la scansione del foglio del mister, la stessa
+     lista che usa la pagina Esercitazioni. Il file sta in
+     coach/prev/seduta-<data>-<slot>.jpg */
+  const FOGLI = ['2026-08-05-AM','2026-08-06-AM','2026-08-07-AM','2026-08-09-AM',
+    '2026-08-10-AM','2026-08-10-PM','2026-08-11-AM','2026-08-12-AM','2026-08-13-AM',
+    '2026-08-17-AM','2026-08-18-AM','2026-08-18-PM','2026-08-20-AM','2026-08-21-AM',
+    '2026-08-24-AM','2026-08-25-AM','2026-08-28-AM','2026-08-31-AM','2026-09-01-AM',
+    '2026-09-02-AM'];
+  function fogKey(m){
+    const iso = cfIso(m && m.meta ? m.meta.dateStr : '');
+    if(!iso) return '';
+    const k = iso+'-'+((m.meta.ap || 'AM'));
+    return FOGLI.indexOf(k) >= 0 ? k : '';
+  }
+  /* In stampa questa figura e' la prima pagina, quindi l'immagine si carica
+     subito: se fosse dietro un tasto non finirebbe sul foglio. */
+  function fogHTML(key){
+    if(!key) return '';
+    const src = 'prev/seduta-'+key+'.jpg';
+    return '<figure class="rfog">'+
+      '<img src="'+src+'" loading="lazy" alt="Foglio della seduta del '+esc(key)+' disegnato dal mister">'+
+      '<figcaption>Il foglio della seduta come lo ha preparato il mister.'+
+      '<a href="'+src+'" target="_blank" rel="noopener">Apri a schermo intero</a></figcaption>'+
+    '</figure>';
+  }
   function cfCal(){
     try{
       const o = JSON.parse(localStorage.getItem(CF_CAL_KEY) || '{}');
@@ -1577,7 +1635,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const corpo = parti.length
       ? '<div class="cf-list">'+parti.join('')+'</div>'
       : '<p class="cf-void">Per questa data non ci sono blocchi nel calendario ne\' schede di forza. Il contenuto della seduta si scrive nel planner o nella pagina Forza e compare qui da solo.</p>';
-    return '<div class="rsec"><div class="rsec-head"><h3>Cosa si e\' fatto</h3>'+
+    return '<div class="rsec rsec-cf"><div class="rsec-head"><h3>Cosa si e\' fatto</h3>'+
       '<span class="rsec-n">blocchi e minuti presi dal calendario e dalle schede di forza di quel giorno</span></div>'+
       corpo+'</div>';
   }
@@ -1758,7 +1816,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const corpo = sess.length
       ? sess.map(exTableHTML).join('')
       : '<p class="cf-void">Per questa data non ci sono esercitazioni registrate. Si scrivono nella pagina Esercitazioni e compaiono qui da sole.</p>';
-    return '<div class="rsec"><div class="rsec-head"><h3>Le esercitazioni</h3>'+
+    return '<div class="rsec rsec-ex"><div class="rsec-head"><h3>Le esercitazioni</h3>'+
       '<span class="rsec-n">nome, serie e metraggi presi dalla pagina Esercitazioni, nello stesso ordine</span></div>'+
       corpo+'</div>';
   }
@@ -1804,6 +1862,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '</div>';
 
     const m = dailyModel();
+    host.classList.remove('has-fog');
     if(!m){
       const why = (!mk || !label)
         ? 'Scegli un mese e una seduta per generare il report.'
@@ -1850,7 +1909,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const foot = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(sessLine)+'</span>'+
       '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
 
-    host.innerHTML = headHTML + '<div class="rbody">'+kpis+descBlock+exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
+    /* Se la seduta ha il foglio del mister apre lui il documento e in stampa si
+       prende la prima pagina: la classe accende le regole di impaginazione. */
+    const fk  = fogKey(m);
+    host.classList.toggle('has-fog', !!fk);
+    host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
+      exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
     // le pillole cambiano solo il grafico: ridisegnare tutta la pagina farebbe
