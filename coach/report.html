@@ -472,7 +472,7 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   display:flex; justify-content:space-between; font-size:9.5px; color:#8a847c; }
 /* il foglio del mister riempie la facciata, l'altezza e' fissa cosi' la misura
    non dipende da quando finisce di caricarsi l'immagine */
-#rprint .pfog img{ display:block; width:100%; height:222mm; object-fit:contain;
+#rprint .pfog img{ display:block; width:100%; height:214mm; object-fit:contain;
   border:1px solid #e2ddd6; background:#fff; }
 #rprint .pcap{ font-size:10px; color:#666; margin-top:8px; }
 /* i sei numeri della seduta: una riga di testa chiusa da due filetti */
@@ -532,11 +532,41 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint .dr-legend .tri.dn{ border-left:4px solid transparent; border-right:4px solid transparent;
   border-top:6px solid #cf3b38; }
 
+/* ---------- rifiniture del documento stampato ----------
+   Il foglio era corretto ma spoglio: righe tutte uguali, titoli senza peso, il
+   numero di pagina perso in un angolo. Qui si aggiunge solo quello che aiuta a
+   leggere: il viola della societa' come firma sotto la testata, una riga di
+   fondo chiara ogni due nelle tabelle per non perdere la riga con l'occhio, i
+   titoli di sezione con il quadrettino davanti, il numero di pagina dentro un
+   riquadro. Niente fondini pieni, niente colore inutile: resta un referto. */
+#rprint .ph{ position:relative; }
+#rprint .ph::after{ content:''; position:absolute; left:0; bottom:-1.5px;
+  width:44mm; height:1.5px; background:#4b1e78; }
+#rprint .ph .pno{ border:1px solid #e2ddd6; border-radius:3px; padding:5px 8px;
+  line-height:1.5; letter-spacing:.08em; }
+#rprint .psec-h{ border-bottom:1px solid #141414; }
+#rprint .psec-h h3{ position:relative; padding-left:9px; }
+#rprint .psec-h h3::before{ content:''; position:absolute; left:0; top:2px; bottom:2px;
+  width:3px; background:#4b1e78; }
+#rprint table.dt tbody tr:nth-child(even) td{ background:#faf9f7; }
+#rprint table.dt tbody tr.row-media td{ background:#efeae2; }
+#rprint .ex-slot{ display:inline-block; background:#f4f1ec; border-radius:3px;
+  padding:2px 7px; color:#555; }
+#rprint .pkpi .kl{ color:#4b1e78; }
+
 /* ---------- print (PDF) : tema chiaro, solo il report ---------- */
 @media print{
   /* Quando si stampa il report giornaliero comanda il documento costruito a
      parte: la pagina a schermo esce di scena tutta intera. */
   body.pstampa .rdoc, body.pstampa .foot-note{ display:none !important; }
+  /* Le due facciate bianche in testa venivano da qui: a schermo il corpo e il
+     riquadro dell'app sono alti almeno quanto la finestra, e in stampa una
+     finestra e' una facciata. Nascosta la pagina resta il vuoto, che si porta
+     via due fogli prima ancora che cominci il documento. In stampa quelle
+     altezze non servono: il documento si misura da solo. */
+  body.pstampa, body.pstampa .app, body.pstampa .main, body.pstampa .wrap{
+    min-height:0 !important; height:auto !important; }
+  body.pstampa .app{ display:block !important; }
   #rprint{ position:static !important; left:auto !important; top:auto !important;
     width:100% !important; z-index:auto !important; }
   /* Il tetto in millimetri e' la rete di sicurezza: se la misura fatta a
@@ -1475,6 +1505,47 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return out;
   }
+  /* Le sedute fuori squadra della stessa giornata. Nel foglio del carico una
+     riga come "20AM diff" e' il lavoro differenziato di quell'atleta e "12AM FT"
+     l'allenamento con la prima squadra: non entrano nella media di squadra,
+     percio' stanno in una tabella loro sotto il carico e senza confronto con la
+     media, che li' non vorrebbe dire niente. */
+  const SG_LAB = { diff:'Differenziato', FT:'Prima squadra' };
+  function dayExtra(mk, label){
+    const out = [];
+    const base = String(label||'').trim();
+    if(!base) return out;
+    Object.keys(PLAYERS).forEach(function(name){
+      if(!selAthletes.has(name)) return;
+      const p = PLAYERS[name];
+      const months = (p && Array.isArray(p.months)) ? p.months : [];
+      const mo = months.find(function(m){ return m.key===mk; });
+      if(!mo) return;
+      (mo.rows||[]).forEach(function(r){
+        if(r.type!=='day' || !Array.isArray(r.v)) return;
+        const m = /^(.*\S)\s+(FT|diff)$/.exec(String(r.label||'').trim());
+        if(!m || m[1] !== base) return;
+        out.push({ name:name, role:roleOf(name), v:r.v, sg:m[2] });
+      });
+    });
+    out.sort(function(a,b){
+      if(a.sg !== b.sg) return a.sg==='diff' ? -1 : 1;
+      return dispSort(a.name, b.name);
+    });
+    return out;
+  }
+  function extraTableHTML(rows, cols){
+    if(!rows.length) return '';
+    const head = '<thead><tr><th style="text-align:left">Atleta</th><th style="text-align:left">Lavoro</th>'+
+      cols.map(function(i){ return '<th>'+esc(MS[i]||'')+'</th>'; }).join('')+'</tr></thead>';
+    const body = rows.map(function(r){
+      const tds = cols.map(function(idx){ return dvCell(r.v[idx], null, MU[idx]||''); }).join('');
+      return '<tr><td style="text-align:left">'+esc(disp(r.name))+
+        (r.role?' <span class="mu">'+esc(r.role)+'</span>':'')+'</td>'+
+        '<td style="text-align:left">'+esc(SG_LAB[r.sg] || r.sg)+'</td>'+tds+'</tr>';
+    }).join('');
+    return '<div class="tbl-wrap tbl-scroll"><table class="dt">'+head+'<tbody>'+body+'</tbody></table></div>';
+  }
   function dailyModel(){
     const mk = document.getElementById('sel-month').value || '';
     const label = document.getElementById('sel-session').value || '';
@@ -1487,6 +1558,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const media = cols.map(function(idx){ return agg(allV, idx).mean; });
     return {
       monthKey:mk, label:label, cols:cols, media:media, rows:rows,
+      extra:dayExtra(mk, label),
       meta:sessionMeta(mk, label),
       minAvg:agg(allV, IDX_MIN).mean,
       distAvg:agg(allV, IDX_DIST).mean,
@@ -2074,7 +2146,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
       pSecHTML('Le esercitazioni', 'nome, serie e metraggi come sono scritti in Esercitazioni', exBody));
     corpi.push(pSecHTML('Carico per atleta', 'squadra in cima, poi le singole a confronto con la media',
-      dailyTableHTML(m.rows, m.media, m.cols)));
+      dailyTableHTML(m.rows, m.media, m.cols))+
+      (m.extra && m.extra.length
+        ? pSecHTML('Fuori dal carico squadra', 'lavoro differenziato e prima squadra, stessa giornata',
+            extraTableHTML(m.extra, m.cols))
+        : ''));
 
     const tot = corpi.length;
     host.innerHTML = corpi.map(function(c, i){
@@ -2139,7 +2215,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
     const tbl = '<div class="rsec rsec-tbl"><div class="rsec-head"><h3>Carico per atleta</h3>'+
       '<span class="rsec-n">squadra in cima, poi le singole a confronto con la media della seduta</span></div>'+
-      dailyTableHTML(m.rows, m.media, m.cols)+'</div>';
+      dailyTableHTML(m.rows, m.media, m.cols)+'</div>'+
+      (m.extra && m.extra.length
+        ? '<div class="rsec rsec-tbl"><div class="rsec-head"><h3>Fuori dal carico squadra</h3>'+
+          '<span class="rsec-n">lavoro differenziato e prima squadra nella stessa giornata, senza confronto con la media</span></div>'+
+          extraTableHTML(m.extra, m.cols)+'</div>'
+        : '');
 
     const chart = '<div class="rsec rsec-chart"><div class="rsec-head"><h3>Il grafico della seduta</h3>'+
       '<span class="rsec-n">chi ha fatto di piu\' e chi di meno, metrica per metrica</span></div>'+
