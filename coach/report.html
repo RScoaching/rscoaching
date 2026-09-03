@@ -457,8 +457,15 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint{ position:fixed; left:-30000px; top:0; width:182mm; z-index:-1;
   pointer-events:none; background:#fff; color:#141414;
   font-family:'Manrope',system-ui,sans-serif; }
+/* Ogni facciata e' alta esattamente quanto un A4 utile e il contenuto e' una
+   colonna: la testata in cima, il corpo che si allarga a riempire quello che
+   resta, il piede appoggiato in fondo. Prima l'altezza era quella del
+   contenuto, quindi su una seduta corta il piede restava a meta' pagina e il
+   bianco sotto sembrava un errore di impaginazione. */
 #rprint .psheet{ width:182mm; overflow:hidden; background:#fff; }
-#rprint .pfit{ transform-origin:top left; width:100%; }
+#rprint .pfit{ transform-origin:top left; width:100%;
+  display:flex; flex-direction:column; }
+#rprint .pbody{ flex:1 1 auto; min-height:0; }
 #rprint .ph{ display:flex; align-items:center; gap:12px;
   border-bottom:1.5px solid #141414; padding-bottom:11px; margin-bottom:17px; }
 #rprint .ph .pmark{ width:31px; height:31px; object-fit:contain; }
@@ -470,11 +477,14 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   letter-spacing:.1em; text-transform:uppercase; line-height:1.7; }
 #rprint .pfoot{ margin-top:14px; padding-top:9px; border-top:1px solid #e2ddd6;
   display:flex; justify-content:space-between; font-size:9.5px; color:#8a847c; }
-/* il foglio del mister riempie la facciata, l'altezza e' fissa cosi' la misura
-   non dipende da quando finisce di caricarsi l'immagine */
-#rprint .pfog img{ display:block; width:100%; height:214mm; object-fit:contain;
-  border:1px solid #e2ddd6; background:#fff; }
-#rprint .pcap{ font-size:10px; color:#666; margin-top:8px; }
+/* Il foglio del mister prende tutto lo spazio che avanza tra testata e piede.
+   Non ha piu' un'altezza in millimetri decisa a mano: e' la colonna a dargli
+   la misura, quindi non dipende da quando l'immagine finisce di caricarsi e
+   non puo' sforare la facciata. */
+#rprint .pfog{ display:flex; flex-direction:column; height:100%; margin:0; }
+#rprint .pfog img{ display:block; width:100%; flex:1 1 auto; min-height:0;
+  height:auto; object-fit:contain; border:1px solid #e2ddd6; background:#fff; }
+#rprint .pcap{ flex:0 0 auto; font-size:10px; color:#666; margin-top:8px; }
 /* i sei numeri della seduta: una riga di testa chiusa da due filetti */
 #rprint .pkpis{ display:grid; grid-template-columns:repeat(6,1fr);
   border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6; margin-bottom:18px; }
@@ -554,6 +564,24 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   padding:2px 7px; color:#555; }
 #rprint .pkpi .kl{ color:#4b1e78; }
 
+/* Le tabelle erano leggibili ma piatte: intestazioni grigie sospese nel nulla e
+   righe strette. Adesso l'intestazione e' una fascia chiara chiusa da un
+   filetto scuro, cosi' si vede dove comincia la lettura, le righe respirano un
+   millimetro in piu' e il nome dell'atleta e' l'unica cosa in nero pieno. Sul
+   foglio del carico il senso della riga si segue da sinistra a destra: nomi a
+   sinistra, numeri incolonnati con le cifre della stessa larghezza. */
+#rprint table.dt thead th{ background:#f4f1ec; color:#4a443c; padding:7px 9px;
+  border-bottom:1px solid #141414; }
+#rprint table.dt tbody td{ padding:6px 9px; }
+#rprint table.dt tbody tr.row-media td{ font-weight:700; color:#141414; }
+#rprint .pkpis{ border-bottom:1.5px solid #141414; }
+#rprint .pkpi .ks{ color:#8a847c; }
+/* Il piede sta in fondo alla facciata e chiude il foglio con un filetto pieno:
+   e' l'unico segno che dice "la pagina finisce qui". */
+#rprint .pfoot{ flex:0 0 auto; margin-top:16px; padding-top:8px;
+  border-top:1.5px solid #141414; letter-spacing:.02em; }
+#rprint .pfoot span:last-child{ color:#b0a99f; }
+
 /* ---------- print (PDF) : tema chiaro, solo il report ---------- */
 @media print{
   /* Quando si stampa il report giornaliero comanda il documento costruito a
@@ -575,7 +603,15 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   #rprint .psheet{ width:100% !important; max-height:258mm; overflow:hidden;
     break-after:page; break-inside:avoid; }
   #rprint .psheet:last-child{ break-after:auto; }
-  @page{ margin:14mm; }
+  /* Qui stava il motivo vero delle cinque pagine. Nella finestra di stampa il
+     layout era su Orizzontale: in orizzontale un A4 e' alto 210 mm, meno i
+     margini restano 182 mm, mentre ogni facciata del documento e' costruita e
+     misurata su 258 mm. Ogni foglio sforava di settanta millimetri e si
+     trascinava dietro mezza pagina, percio' tre fogli diventavano cinque
+     facciate mezze vuote. Chiedendo qui il verticale il documento e il foglio
+     tornano ad avere la stessa misura e il menu del layout si spegne da solo:
+     non si puo' piu' sbagliare per distrazione. */
+  @page{ size:A4 portrait; margin:14mm; }
   body{ background:#fff !important; color:#1a1a1a !important; }
   body::before{ display:none !important; }
   #sidebar-mount, .sidebar, .sb-mob-bar, .sb-mob-overlay,
@@ -2097,22 +2133,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
      passaggi bastano, la scala non scende sotto 0,55 perche' piu' piccolo di
      cosi' non si leggerebbe. */
   function pAdatta(host){
+    const PG = Math.floor(PG_H);
     Array.prototype.forEach.call(host.querySelectorAll('.psheet'), function(sec){
       const fit = sec.querySelector('.pfit');
       if(!fit) return;
+      /* Prima si misura il contenuto libero, alla larghezza vera della parte
+         stampabile e senza rimpicciolimenti: e' l'altezza che vorrebbe. */
+      fit.style.height = 'auto';
+      fit.style.width = '100%';
+      fit.style.transform = 'none';
+      const nat = fit.getBoundingClientRect().height;
+      /* Poi si stringe quel tanto che basta perche' ci stia. Il margine dello
+         0,5 per cento copre le differenze fra il testo a schermo e quello del
+         motore di stampa; sotto 0,55 non si scende perche' piu' piccolo non si
+         leggerebbe. */
       let s = 1;
-      for(let k=0; k<6; k++){
-        fit.style.width = (100/s).toFixed(3)+'%';
-        fit.style.transform = (s===1) ? 'none' : ('scale('+s.toFixed(4)+')');
-        const h = fit.getBoundingClientRect().height;
-        if(!h) break;
-        if(h <= PG_H || s <= 0.55) break;
-        s = Math.max(0.55, s * (PG_H/h) * 0.985);
-      }
-      /* Se la misura torna zero il foglio non e' ancora impaginato: meglio
-         lasciarlo libero che bloccarlo su un'altezza sbagliata. */
-      const fin = fit.getBoundingClientRect().height;
-      sec.style.height = fin ? (Math.ceil(Math.min(fin, PG_H))+'px') : 'auto';
+      if(nat > PG) s = Math.max(0.55, (PG / nat) * 0.995);
+      /* Infine si fissa: l'altezza del contenuto e' quella di una facciata
+         divisa per la scala, cosi' dopo il rimpicciolimento torna esatta. Il
+         foglio e' sempre alto una facciata, mai di piu' e mai di meno: e' il
+         motivo per cui il numero delle pagine non puo' cambiare. */
+      fit.style.width = (100/s).toFixed(3)+'%';
+      fit.style.transform = (s===1) ? 'none' : ('scale('+s.toFixed(4)+')');
+      fit.style.height = nat ? ((PG/s).toFixed(2)+'px') : 'auto';
+      sec.style.height = nat ? (PG+'px') : 'auto';
     });
   }
   function buildPrintDaily(){
