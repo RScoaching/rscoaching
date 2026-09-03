@@ -539,7 +539,11 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   body.pstampa .rdoc, body.pstampa .foot-note{ display:none !important; }
   #rprint{ position:static !important; left:auto !important; top:auto !important;
     width:100% !important; z-index:auto !important; }
-  #rprint .psheet{ width:100% !important; break-after:page; break-inside:avoid; }
+  /* Il tetto in millimetri e' la rete di sicurezza: se la misura fatta a
+     schermo sbaglia di poco, il foglio non puo' comunque sfondare la facciata e
+     trascinarsi dietro una pagina in piu'. Al massimo taglia l'ultima riga. */
+  #rprint .psheet{ width:100% !important; max-height:258mm; overflow:hidden;
+    break-after:page; break-inside:avoid; }
   #rprint .psheet:last-child{ break-after:auto; }
   @page{ margin:14mm; }
   body{ background:#fff !important; color:#1a1a1a !important; }
@@ -2025,14 +2029,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const fit = sec.querySelector('.pfit');
       if(!fit) return;
       let s = 1;
-      for(let k=0; k<4; k++){
+      for(let k=0; k<6; k++){
         fit.style.width = (100/s).toFixed(3)+'%';
         fit.style.transform = (s===1) ? 'none' : ('scale('+s.toFixed(4)+')');
         const h = fit.getBoundingClientRect().height;
+        if(!h) break;
         if(h <= PG_H || s <= 0.55) break;
-        s = Math.max(0.55, s * (PG_H/h) * 0.99);
+        s = Math.max(0.55, s * (PG_H/h) * 0.985);
       }
-      sec.style.height = Math.ceil(fit.getBoundingClientRect().height)+'px';
+      /* Se la misura torna zero il foglio non e' ancora impaginato: meglio
+         lasciarlo libero che bloccarlo su un'altezza sbagliata. */
+      const fin = fit.getBoundingClientRect().height;
+      sec.style.height = fin ? (Math.ceil(Math.min(fin, PG_H))+'px') : 'auto';
     });
   }
   function buildPrintDaily(){
@@ -2143,6 +2151,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* Se la seduta ha il foglio del mister apre lui il documento e in stampa si
        prende la prima pagina: la classe accende le regole di impaginazione. */
     const fk  = fogKey(m);
+    /* Il tasto dice quante facciate escono davvero: tre quando la seduta ha il
+       foglio del mister, due quando non ce l'ha. Cosi' il conto sul tasto e il
+       conto nell'anteprima di stampa sono lo stesso numero. */
+    const bp = document.getElementById('btn-print');
+    if(bp && bp.lastChild) bp.lastChild.nodeValue = fk ? ' Stampa 3 pagine ' : ' Stampa 2 pagine ';
     host.classList.toggle('has-fog', !!fk);
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
       exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
