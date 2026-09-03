@@ -140,6 +140,12 @@ a{ color:inherit; text-decoration:none; }
 .pg-btn .pn{ font-variant-numeric:tabular-nums; color:var(--faint); font-weight:700; font-size:12px; }
 .pg-btn.active .pn{ color:oklch(24% 0.06 40 / 0.72); }
 .pg-pane[hidden]{ display:none; }
+/* la riga che spiega quale card non e' venuta su: si vede solo quando serve */
+.pg-warn{
+  margin:0 0 22px; padding:12px 15px; border-radius:12px;
+  background:oklch(80% 0.15 75 / 0.10); border:1px solid oklch(80% 0.15 75 / 0.32);
+  color:var(--yellow); font-size:13px; line-height:1.5;
+}
 
 /* ---------- cards ---------- */
 .card{
@@ -1987,18 +1993,51 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   refreshSubtitle();
   document.getElementById('gen-txt').textContent = SNAP.generato ? ('dati '+SNAP.generato) : 'dati non disponibili';
 
-  renderKpis();
-  renderRecords();
-  renderGps();
-  renderSessBar();
-  buildCats();
-  buildTabs();
-  renderBattery();
-  renderIndici();
-  renderTrend();
-  renderConfronto();
-  renderIntermittente();
-  renderPrint();
+  /* I disegni della pagina si chiamano uno dopo l'altro. Finche' stavano in fila
+     nuda bastava un valore storto dentro una sola card per fermare tutto il resto
+     della pagina: le schermate restavano chiuse e sotto la barra si vedeva il
+     vuoto. Adesso ogni disegno va per conto suo, chi si rompe si ferma da solo e
+     lascia lavorare gli altri, e in cima compare la riga che dice quale card non
+     e' venuta su e perche'. Cosi' la pagina resta usabile e l'errore si legge
+     senza aprire la console. */
+  const guasti = [];
+  function disegna(nome, fn){
+    try{ fn(); }
+    catch(e){
+      guasti.push(nome+': '+(e && e.message ? e.message : e));
+      if(window.console && console.error) console.error('Test, '+nome, e);
+    }
+  }
+  function avvisaGuasti(){
+    const vecchio = document.getElementById('pg-guasti');
+    if(vecchio) vecchio.remove();
+    if(!guasti.length) return;
+    const nav = document.getElementById('pg-nav');
+    if(!nav) return;
+    const box = document.createElement('p');
+    box.id = 'pg-guasti';
+    box.className = 'pg-warn';
+    box.textContent = (guasti.length === 1 ? 'Una parte della pagina non si e\' caricata. ' :
+      'Alcune parti della pagina non si sono caricate. ') + guasti.join(' | ');
+    nav.insertAdjacentElement('afterend', box);
+  }
+  function disegnaTutto(){
+    guasti.length = 0;
+    disegna('riepilogo in testa', renderKpis);
+    disegna('record di squadra', renderRecords);
+    disegna('velocita dai GPS', renderGps);
+    disegna('barra delle rilevazioni', renderSessBar);
+    disegna('gruppi di test', buildCats);
+    disegna('batteria test', buildTabs);
+    disegna('valori della batteria', renderBattery);
+    disegna('indici', renderIndici);
+    disegna('andamento', renderTrend);
+    disegna('confronto', renderConfronto);
+    disegna('intermittente', renderIntermittente);
+    disegna('stampa', renderPrint);
+    avvisaGuasti();
+  }
+  disegnaTutto();
 
   document.getElementById('pr-spog').addEventListener('click', ()=>{ buildSpog(); prPage(false); window.print(); });
   document.getElementById('pr-pano').addEventListener('click', ()=>{ buildPano(); prPage(true);  window.print(); });
@@ -2067,20 +2106,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     REG = loadReg();
     curSess = '';
     curAtl = '';
-    refreshSubtitle();
-    renderKpis();
-    renderRecords();
-    renderSessBar();
-    buildCats();
-    buildTabs();
-    renderBattery();
-    renderIndici();
-    renderTrend();
-    renderConfronto();
-    renderIntermittente();
-    renderPrint();
-    renderSeedBar();
-    renderPaneNav();
+    guasti.length = 0;
+    disegna('sottotitolo', refreshSubtitle);
+    disegna('riepilogo in testa', renderKpis);
+    disegna('record di squadra', renderRecords);
+    disegna('barra delle rilevazioni', renderSessBar);
+    disegna('gruppi di test', buildCats);
+    disegna('batteria test', buildTabs);
+    disegna('valori della batteria', renderBattery);
+    disegna('indici', renderIndici);
+    disegna('andamento', renderTrend);
+    disegna('confronto', renderConfronto);
+    disegna('intermittente', renderIntermittente);
+    disegna('stampa', renderPrint);
+    disegna('barra dei dati caricati', renderSeedBar);
+    disegna('conteggio in barra', renderPaneNav);
+    avvisaGuasti();
   });
 
   /* ---------- andamento: scelta dell atleta ---------- */
