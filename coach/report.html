@@ -477,14 +477,19 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   letter-spacing:.1em; text-transform:uppercase; line-height:1.7; }
 #rprint .pfoot{ margin-top:14px; padding-top:9px; border-top:1px solid #e2ddd6;
   display:flex; justify-content:space-between; font-size:9.5px; color:#8a847c; }
-/* Il foglio del mister prende tutto lo spazio che avanza tra testata e piede.
-   Non ha piu' un'altezza in millimetri decisa a mano: e' la colonna a dargli
-   la misura, quindi non dipende da quando l'immagine finisce di caricarsi e
-   non puo' sforare la facciata. */
-#rprint .pfog{ display:flex; flex-direction:column; height:100%; margin:0; }
-#rprint .pfog img{ display:block; width:100%; flex:1 1 auto; min-height:0;
-  height:auto; object-fit:contain; border:1px solid #e2ddd6; background:#fff; }
-#rprint .pcap{ flex:0 0 auto; font-size:10px; color:#666; margin-top:8px; }
+/* Il foglio del mister sta al centro della facciata e il filetto gli sta
+   addosso. Prima la cornice era alta quanto tutta la colonna e l'immagine, che
+   e' piu' larga che alta, ci galleggiava dentro: sopra e sotto restavano due
+   fasce bianche dentro il bordo e sembrava una tabella vuota invece che una
+   figura. Adesso l'immagine tiene le sue proporzioni, il bordo la segue e il
+   bianco che avanza sta fuori, dove il bianco non da' fastidio. */
+#rprint .pfog{ display:flex; flex-direction:column; justify-content:center;
+  height:100%; margin:0; }
+#rprint .pfog img{ display:block; margin:0 auto; flex:0 1 auto; min-height:0;
+  width:auto; max-width:100%; height:auto; max-height:calc(100% - 26px);
+  border:1px solid #e2ddd6; background:#fff; }
+#rprint .pcap{ flex:0 0 auto; font-size:10px; color:#666; margin-top:8px;
+  text-align:center; }
 /* i sei numeri della seduta: una riga di testa chiusa da due filetti */
 #rprint .pkpis{ display:grid; grid-template-columns:repeat(6,1fr);
   border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6; margin-bottom:18px; }
@@ -570,10 +575,22 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
    millimetro in piu' e il nome dell'atleta e' l'unica cosa in nero pieno. Sul
    foglio del carico il senso della riga si segue da sinistra a destra: nomi a
    sinistra, numeri incolonnati con le cifre della stessa larghezza. */
-#rprint table.dt thead th{ background:#f4f1ec; color:#4a443c; padding:7px 9px;
-  border-bottom:1px solid #141414; }
-#rprint table.dt tbody td{ padding:6px 9px; }
+#rprint table.dt thead th{ background:#f4f1ec; color:#4a443c; padding:8px;
+  font-size:9px; border-bottom:1px solid #141414; }
+#rprint table.dt tbody td{ padding:7px 8px; }
 #rprint table.dt tbody tr.row-media td{ font-weight:700; color:#141414; }
+/* Un corpo piu' grande di un punto: il foglio si legge da fermo, in mano, non a
+   schermo, e in mezzo alla seduta i numeri vanno presi al volo. Lo spazio in
+   larghezza c'e', le colonne sono strette di cifre e larghe di margine. */
+#rprint table.dt{ font-size:11.5px; }
+/* Il blocco nero in mezzo alle atlete era il passaggio del mouse: la riga sotto
+   il puntatore prendeva il fondo scuro del tema a schermo e nel foglio bianco
+   diventava una fascia nera con il nome dentro, illeggibile. Un documento da
+   stampare non ha un puntatore sopra: qui dentro il passaggio del mouse non
+   esiste e il fondo resta quello della riga. */
+#rprint table.dt tbody tr:hover td{ background:inherit; }
+#rprint table.dt tbody tr:nth-child(even):hover td{ background:#faf9f7; }
+#rprint table.dt tbody tr.row-media:hover td{ background:#efeae2; }
 #rprint .pkpis{ border-bottom:1.5px solid #141414; }
 #rprint .pkpi .ks{ color:#8a847c; }
 /* Il piede sta in fondo alla facciata e chiude il foglio con un filetto pieno:
@@ -949,8 +966,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   let mode        = 'sintesi';
   let dayColsFatto = false;
   let KEYI        = KEY_DEFAULT.slice();
+  /* Nel report del giorno le colonne escono nell'ordine in cui si leggono i
+     numeri di una seduta: prima quanto si e' corso, poi a che velocita', poi
+     quante volte si e' cambiato ritmo. L'ordine naturale delle colonne del GPS
+     mette la fascia 20-23 dopo le decelerazioni, e in stampa si ritrovava in
+     fondo, staccata dalla sorella sopra i 23: lo stesso dato compariva in due
+     punti diversi del foglio a seconda della tabella. Le sei voci della seduta
+     vanno sempre in quest'ordine, le eventuali metriche in piu' seguono dopo. */
   function syncMetrics(){
     const a = Array.from(selMetrics).filter(function(i){ return i>=0 && i<MS.length; }).sort(function(x,y){ return x-y; });
+    if(mode==='giorno' && DAY_COLS.length){
+      const testa = DAY_COLS.filter(function(i){ return a.indexOf(i)>=0; });
+      const coda  = a.filter(function(i){ return DAY_COLS.indexOf(i)<0; });
+      KEYI = testa.concat(coda);
+      if(!KEYI.length) KEYI = KEY_DEFAULT.slice();
+      return;
+    }
     KEYI = a.length ? a : KEY_DEFAULT.slice();
   }
   const TEAM_MONTHS = (S.team && Array.isArray(S.team.months)) ? S.team.months : [];
@@ -1945,11 +1976,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const EX_LS_ADD = 'rs_fio_eserc';       // esercitazioni aggiunte a mano
   const EX_LS_DET = 'rs_fio_eserc_det';   // dettagli: serie, metraggi, recupero
   const EX_LS_ORD = 'rs_fio_eserc_ord';   // ordine scelto per la seduta
+  /* Sei numeri per esercitazione, gli stessi sei della fascia in cima al foglio:
+     minuti, distanza, le due fasce di velocita' e i due conteggi di
+     accelerazioni e decelerazioni. Prima ne uscivano quattro e le due colonne
+     dei conteggi restavano solo nella media di squadra: leggendo la seduta non
+     si capiva da quale esercitazione arrivassero gli strappi. */
   const EX_COLS = [
-    { c:'Minuti',          l:'Minuti',   u:'min', dec:0 },
-    { c:'Dist tot',        l:'Dist tot', u:'m',   dec:0 },
-    { c:'Dist 20-23 Km/h', l:'20-23',    u:'m',   dec:0 },
-    { c:'DIST > 23km/h',   l:'oltre 23', u:'m',   dec:0 }
+    { c:'Minuti',            l:'Minuti',   u:'min', dec:0 },
+    { c:'Dist tot',          l:'Dist tot', u:'m',   dec:0 },
+    { c:'Dist 20-23 Km/h',   l:'20-23',    u:'m',   dec:0 },
+    { c:'DIST > 23km/h',     l:'oltre 23', u:'m',   dec:0 },
+    { c:'N ACC > 3 m/s^2',   l:'acc>3',    u:'n',   dec:0 },
+    { c:'N DEC < -3 m/s^2',  l:'dec<-3',   u:'n',   dec:0 }
   ];
   // le chiavi sono le stesse, senza prefisso, che usa la pagina Esercitazioni
   function exLS(k){
