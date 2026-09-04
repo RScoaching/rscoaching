@@ -1976,9 +1976,19 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     return out;
   }
+  /* La casella W la si compila come viene: un numero, la sola lettera W, la
+     vecchia scrittura "1W+3". Prima si tenevano tutte le cifre attaccate, cosi'
+     "1W+3" diventava "13 avv." e una W scritta a lettere spariva del tutto dal
+     foglio. Adesso vale il primo numero che compare, una scritta senza cifre
+     vale una serie di avvicinamento sola, e sopra le nove non si sale perche'
+     una seduta con dieci avvicinamenti non esiste: e' un errore di battitura. */
   function wuNum(v){
-    var n = parseInt(String(v == null ? '' : v).replace(/[^0-9]/g, ''), 10);
-    return (isFinite(n) && n > 0) ? n : 0;
+    var s = String(v == null ? '' : v).trim();
+    if(!s || !/[0-9a-zA-Z]/.test(s)) return 0;
+    var m = s.match(/[0-9]+/);
+    var n = m ? parseInt(m[0], 10) : 1;
+    if(!isFinite(n) || n < 1) return 0;
+    return Math.min(n, 9);
   }
   /* Serie e ripetizioni come si leggono: "2 avv. + 4 x 3". */
   function serieTxt(r){
@@ -3342,8 +3352,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
        lungo del foglio, cosi' nessun pezzo finisce sopra a quello dopo */
     + p+'.fz-li{ display:grid; grid-template-columns:var(--fzc, minmax(0,1fr) 46mm 30mm);'
     +   ' align-items:baseline; gap:var(--fzg, 5mm); }'
-    + p+'.fz-x{ font-weight:800; letter-spacing:.01em; text-transform:uppercase; white-space:nowrap;'
-    +   ' overflow:hidden; text-overflow:ellipsis; }'
+    + p+'.fz-x{ min-width:0; display:flex; flex-direction:column; align-items:flex-start; }'
+    + p+'.fz-nm{ max-width:100%; font-weight:800; letter-spacing:.01em; text-transform:uppercase;'
+    +   ' white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }'
+    /* la nota sta sotto al nome, minuscola e in grigio: si legge da vicino
+       quando serve e non ruba la scena a serie, carico e recupero */
+    + p+'.fz-nt{ max-width:100%; font-size:'+FZ_EM_N+'em; font-weight:600; color:#5f5768;'
+    +   ' line-height:1.25; letter-spacing:.01em; white-space:nowrap; overflow:hidden;'
+    +   ' text-overflow:ellipsis; }'
     /* serie, carico e recupero restano proporzionali al nome: cosi' il nome puo'
        crescere senza che i numeri escano dalle loro colonne */
     + p+'.fz-s{ font-weight:800; text-align:center; white-space:nowrap; font-size:.82em; }'
@@ -3413,6 +3429,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function fzW(len, em, fs){ return 0.6 * len * em * fs; }
   /* quanto e' alto, in em, ogni pezzo della riga rispetto al nome dell'esercizio */
   var FZ_EM_S = 0.82, FZ_EM_K = 0.72, FZ_EM_R = 0.62;
+  /* la nota va sotto al nome, piu' piccola: e' un appunto, non un titolo */
+  var FZ_EM_N = 0.56;
   var FZ_GAPM = 5;                       /* spazio fra le colonne, in mm */
   var FZ_ROWW = 933;                     /* larghezza utile di una riga, in px */
 
@@ -3431,6 +3449,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var cells = rows.map(function(r, i){
       return {
         x: (lab[i] || (i + 1)) + ') ' + String(r.ex || ''),
+        /* la nota scritta in costruzione seduta finiva solo a video: sul foglio
+           che va in campo non arrivava niente, e il modo di eseguire un
+           esercizio e' proprio la cosa che serve leggere li' */
+        n: String((r && r.note) || '').trim(),
         /* il carico uguale per tutte ha la sua colonna: non merita una colonna
            nel foglio dei carichi, il numero e' uno solo, ma qui deve respirare */
         s: serieTxt(r)
@@ -3439,9 +3461,12 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         r: r.rec ? ('rec ' + r.rec + ' s') : ''
       };
     });
-    var mx = 0, ms = 0, mk = 0, mr = 0;
+    var mx = 0, ms = 0, mk = 0, mr = 0, nn = 0;
     cells.forEach(function(c){
       if(c.x.length > mx) mx = c.x.length;
+      /* la nota sta nella stessa colonna del nome: se e' piu' lunga, e' lei a
+         decidere quanto larga deve essere quella colonna */
+      if(c.n){ nn++; if(c.n.length * FZ_EM_N > mx) mx = Math.ceil(c.n.length * FZ_EM_N); }
       if(c.s.length > ms) ms = c.s.length;
       if(c.k.length > mk) mk = c.k.length;
       if(c.r.length > mr) mr = c.r.length;
@@ -3452,7 +3477,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     /* il carattere di respiro di ogni colonna va messo nel conto qui, se no il
        nome dell'esercizio se lo ritrova sottratto e finisce troncato */
     var need = 0.6 * (mx + FZ_EM_S * (ms + 1) + FZ_EM_K * (mk ? mk + 1 : 0) + FZ_EM_R * (mr + 1));
-    var fsH = n ? (150 - (n - 1) * gap) / n / (1.3 * PX_MM) : 36;
+    /* ogni riga alta una riga e tre, piu' una riga corta in piu' per quelle che
+       hanno la nota: se non si conta, le note fanno sfondare il foglio */
+    var righe = 1.3 * n + 1.25 * FZ_EM_N * nn;
+    var fsH = n ? (150 - (n - 1) * gap) / PX_MM / righe : 36;
     var fsW2 = need ? (FZ_ROWW - gaps) / need : 36;
     var fs  = Math.max(13, Math.min(36, Math.floor(Math.min(fsH, fsW2))));
 
@@ -3469,7 +3497,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     } else {
       cells.forEach(function(c){
         inner += '<div class="fz-li">'
-          + '<span class="fz-x">'+esc(c.x)+'</span>'
+          + '<span class="fz-x">'
+          +   '<span class="fz-nm">'+esc(c.x)+'</span>'
+          +   (c.n ? '<span class="fz-nt">'+esc(c.n)+'</span>' : '')
+          + '</span>'
           + '<span class="fz-s">'+esc(c.s).replace(' x ', ' &#215; ')+'</span>'
           + (ck ? '<span class="fz-k">'+esc(c.k)+'</span>' : '')
           + '<span class="fz-r">'+esc(c.r)+'</span>'
