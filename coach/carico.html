@@ -152,6 +152,10 @@ select.picker:hover{ border-color:var(--border3); }
 .mpill:hover{ color:var(--text); border-color:var(--border3); }
 .mpill:active{ transform:scale(.96); }
 .mpill.on{ background:var(--violet-bg); color:var(--violet2); border-color:var(--violet-border); }
+/* L'ultima pastiglia non e' un mese ma una finestra che si muove: il bordo tratteggiato
+   lo dice senza doverlo scrivere, cosi' non si confonde con i mesi che la precedono. */
+.mpill-mic{ border-style:dashed; margin-left:6px; }
+.mpill-mic.on{ border-style:solid; }
 
 /* ---------- indice delle sezioni ---------- */
 /* La pagina e' lunga: l'indice resta agganciato sotto l'intestazione, dice cosa c'e'
@@ -1550,10 +1554,66 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const p = S.players && S.players[state.player];
     return (p && p.months) || [];
   }
+  /* Il foglio taglia la stagione a mesi, ma un microciclo non guarda il calendario:
+     la settimana che chiude il 5 di ottobre sta nel blocco di ottobre insieme a quattro
+     giorni di settembre. Chi chiede "gli ultimi due microcicli" li vuole e basta, anche
+     se uno e' di agosto e l'altro di settembre: finche' si restava dentro un mese solo,
+     ai primi di settembre ne usciva fuori uno. Qui i microcicli di tutti i mesi si
+     mettono in fila e si tengono gli ultimi, poi si costruisce un mese finto che ha
+     dentro solo quelli. Ogni riga si porta appresso la chiave del suo mese vero (mk):
+     serve a ritrovare la data, l'RPE e i minuti del portiere, perche' due mesi diversi
+     hanno tutti e due una seduta scritta "27PM". */
+  const MICRO_KEY = '@micro';
+  const MICRO_DEF = 4;
+  let MICRO_N = MICRO_DEF;
+  function microBlocks(){
+    const out = [];
+    currentMonths().forEach(m=>{
+      let cur = null;
+      (m.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ cur = { mk:m.key, head:r, rows:[] }; out.push(cur); return; }
+        if(!cur) return;
+        // i totali del mese parlerebbero di settimane che qui non ci sono piu'
+        if(r.type==='tot_month' || r.type==='valmatch_month') return;
+        cur.rows.push(r);
+      });
+    });
+    // un microciclo senza nemmeno una seduta non conta: sarebbe un posto sprecato
+    return out.filter(b=> b.rows.some(r=> r.type==='day' || r.type==='match'));
+  }
+  function microMonth(n){
+    const use = microBlocks().slice(-Math.max(1, n|0));
+    if(!use.length) return null;
+    const rows = [], days = [];
+    let d0 = null, d1 = null;
+    use.forEach(b=>{
+      rows.push(Object.assign({}, b.head, { mk:b.mk }));
+      b.rows.forEach(r=>{
+        const c = Object.assign({}, r, { mk:b.mk });
+        rows.push(c);
+        if(c.type!=='day' && c.type!=='match') return;
+        days.push(c);
+        const d = rowDate(c, b.head.label||'', b.mk);
+        if(!d) return;
+        if(!d0 || d < d0) d0 = d;
+        if(!d1 || d > d1) d1 = d;
+      });
+    });
+    rows.push({ label:'TOT PERIODO', type:'tot_month', wd:'', v:sumRows(days),
+                mk:use[use.length-1].mk });
+    return { key:MICRO_KEY, micro:use.length, rows:rows,
+             title:'Ultimi ' + use.length + (use.length===1 ? ' microciclo' : ' microcicli'),
+             span:(d0 && d1) ? (shortD(d0) + ' - ' + shortD(d1)) : '' };
+  }
   function activeMonth(){
     const ms = currentMonths();
+    if(state.monthKey === MICRO_KEY){
+      const mm = microMonth(MICRO_N);
+      if(mm) return mm;
+    }
     return ms.find(m=> m.key===state.monthKey) || ms[ms.length-1] || null;
   }
+  function isMicro(){ return state.monthKey === MICRO_KEY; }
   function monthCode(title){ return (title||'').trim().split(/\s+/)[0].slice(0,3).toUpperCase(); }
 
   // ---------- logo ----------
@@ -1625,12 +1685,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const host = document.getElementById('months');
     const ms = currentMonths();
     if(!ms.length){ host.innerHTML=''; return; }
-    if(!ms.some(m=> m.key===state.monthKey)) state.monthKey = ms[ms.length-1].key;
+    const mic = isMicro();
+    if(!mic && !ms.some(m=> m.key===state.monthKey)) state.monthKey = ms[ms.length-1].key;
     host.innerHTML = ms.map(m=>
       '<button class="mpill'+(m.key===state.monthKey?' on':'')+'" data-k="'+esc(m.key)+'" role="tab" aria-selected="'+(m.key===state.monthKey)+'">'+esc(m.title)+'</button>'
-    ).join('');
+    ).join('')
+    /* L'ultima pastiglia non e' un mese: tiene sempre gli ultimi quattro microcicli,
+       anche quando stanno a cavallo di due mesi, e si sposta da sola. Quando ne parte
+       uno nuovo il piu' vecchio esce e restano sempre gli ultimi quattro. */
+    + '<button class="mpill mpill-mic'+(mic?' on':'')+'" data-k="'+esc(MICRO_KEY)+'" role="tab"'
+    + ' aria-selected="'+(mic?'true':'false')+'"'
+    + ' title="Gli ultimi '+MICRO_DEF+' microcicli con dati, anche a cavallo di due mesi">'
+    + 'Ultimi '+MICRO_DEF+' microcicli</button>';
     host.querySelectorAll('.mpill').forEach(b=> b.addEventListener('click', ()=>{
       state.monthKey = b.getAttribute('data-k'); state.chartWeek = null;
+      if(state.monthKey === MICRO_KEY) MICRO_N = MICRO_DEF;
       viewSave();
       renderMonths(); renderKPIs(); renderGrid();
       if(state.chartScope==='micro' || state.chartScope==='month') renderChart();
@@ -2176,9 +2245,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const blk = wks.find(b=> b.week===state.chartWeek) || wks[wks.length-1];
       if(!blk) return pts;
       blk.rows.forEach(r=>{
-        const info = mdOf(mon.key, r.label);
+        // negli ultimi microcicli la riga arriva dal suo mese, non da quello aperto
+        const rmk = r.mk || mon.key;
+        const info = mdOf(rmk, r.label);
         const md = r.type==='match' ? 0 : (info ? info.md : null);
-        const lb = dayLabel(r, rowDate(r, blk.week, mon.key));
+        const lb = dayLabel(r, rowDate(r, blk.week, rmk));
         pts.push({
           value: vAt(r, idx), group:null, barLabel:(r.wd||lb),
           kind:(r.type==='match'?'match':'train'),
@@ -2853,13 +2924,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       body += pad+'</tr>';
     }
     const wks = weekLabels(mon);
+    const mic = !!mon.micro;
     let wkNow = '';
     (mon.rows||[]).forEach(r=>{
+      /* Nella vista degli ultimi microcicli le righe arrivano da mesi diversi e ognuna
+         si porta appresso la sua chiave: senza, l'RPE di "27PM" di settembre finirebbe
+         addosso al "27PM" di agosto. Nei mesi veri mk non c'e' e vale la chiave del mese. */
+      const rmk = r.mk || mon.key;
       if(r.type==='wk_header'){
         wkNow = r.label||'';
         aT = { min:0, tl:0 }; aW = { min:0, tl:0 };
         body += '<tr class="wkband" data-wk="'+esc(wkNow)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
-                '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span></td></tr>';
+                (mic ? '' : '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span>')+'</td></tr>';
         body += wkHeadHTML(V, wkNow);
         return;
       }
@@ -2869,12 +2945,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // con cui confrontarla, quindi resta un'etichetta e basta
       const clickable = (r.type==='day' || r.type==='match') && !sg;
       // il testo mostra sempre il giorno, il data-l resta l'etichetta originale del foglio
-      const txt = clickable ? dayLabel(r, rowDate(r, wkNow, mon.key)) : r.label;
+      const txt = clickable ? dayLabel(r, rowDate(r, wkNow, rmk)) : r.label;
       let lb = clickable
-        ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(txt)+'</button>'
+        ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(txt)+'</button>'
         : '<span class="lb">'+esc(soloBase(txt))+soloTag(sg)+(r.recalc?'<span class="lb-recalc">ricalcolato</span>':'')+'</span>';
       let trCls = cls, extra = '';
-      if(clickable){
+      /* Spostare una seduta da un microciclo all'altro si fa nel mese: qui i microcicli
+         sono di mesi diversi e il vicino di sopra potrebbe stare in un altro blocco. */
+      if(clickable && !mic){
         const home = r.wk0 || wkNow;
         const at = wks.indexOf(wkNow);
         const up = (at>0) ? wks[at-1] : '';
@@ -2895,10 +2973,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const gkEdit = gkOn() && (r.type==='day' || r.type==='match');
       V.forEach(i=>{
         if(gkEdit && i===MIN_IDX){
-          const own = gkMinOf(state.player, mon.key, r.label);
+          const own = gkMinOf(state.player, rmk, r.label);
           const mv = rv[i];
           body += '<td class="num rpe-c"><input class="rpe-in'+(own==null && mv!=null ? ' borrowed' : '')+
                   '" type="number" min="0" max="200" step="0.5" inputmode="decimal" data-gk="'+esc(r.label)+
+                  '" data-mk="'+esc(rmk)+
                   '" value="'+(mv==null ? '' : mv)+'" aria-label="Minuti del portiere nella seduta '+esc(txt)+'"'+
                   (own==null && mv!=null ? ' title="Presi dai minuti della squadra"' : '')+'></td>';
           return;
@@ -2911,7 +2990,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           nSed++;
           const mv = rv[RPE_MIN_IDX];
           const mn = (typeof mv==='number' && isFinite(mv)) ? mv : null;
-          const got = rpeOf(mon.key, r.label);
+          const got = rpeOf(rmk, r.label);
           const tl = (mn!=null && got.v!=null) ? mn*got.v : null;
           if(got.v!=null) nRpe++;
           if(tl!=null){
@@ -2920,6 +2999,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           }
           body += '<td class="num rpe-c"><input class="rpe-in'+(got.v!=null && !got.own ? ' borrowed' : '')+
                   '" type="number" min="0" max="10" step="0.5" inputmode="decimal" data-l="'+esc(r.label)+
+                  '" data-mk="'+esc(rmk)+
                   '" value="'+(got.v==null ? '' : got.v)+'" aria-label="RPE della seduta '+esc(txt)+'"'+
                   (got.v!=null && !got.own ? ' title="Preso dall\'RPE scritto sulla squadra"' : '')+'></td>'+
                   '<td class="num tnum rpe-c key">'+(tl==null ? '-' : fmtLoad(tl))+'</td>';
@@ -2934,35 +3014,41 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     body += '</tbody>';
     host.innerHTML = '<table class="grid">'+headHTML()+body+'</table>';
     const mk = mon.key;
-    host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> { location.href='hybrid.html?m='+encodeURIComponent(mk)+'&l='+encodeURIComponent(b.getAttribute('data-l')); }));
-    bindMoveUI(host, mk);
-    const rb = document.getElementById('mv-reset'); if(rb) rb.hidden = !moveN();
+    // ogni riga sa da quale mese arriva: negli ultimi microcicli non e' detto sia questo
+    const rowMk = el=> (el && el.getAttribute('data-mk')) || mk;
+    host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> { location.href='hybrid.html?m='+encodeURIComponent(rowMk(b))+'&l='+encodeURIComponent(b.getAttribute('data-l')); }));
+    if(!mic) bindMoveUI(host, mk);
+    const rb = document.getElementById('mv-reset'); if(rb) rb.hidden = mic || !moveN();
+    // negli ultimi microcicli si legge il periodo per intero, il mese resta scritto solo qui
+    const dove = mic ? 'nel periodo' : 'nel mese';
     if(!on){
       if(note) note.textContent = 'Nei dati non c\'e\' la colonna dei minuti: senza minuti il TL non si calcola, quindi le colonne RPE e TL restano fuori.';
       return;
     }
     host.querySelectorAll('.rpe-in[data-l]').forEach(inp=>{
-      inp.addEventListener('input', ()=>{ rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value)); });
+      inp.addEventListener('input', ()=>{ rpeSet(rowMk(inp), inp.getAttribute('data-l'), rpeNum(inp.value)); });
       inp.addEventListener('change', ()=>{
-        rpeSet(mk, inp.getAttribute('data-l'), rpeNum(inp.value));
+        rpeSet(rowMk(inp), inp.getAttribute('data-l'), rpeNum(inp.value));
         renderGrid();
       });
     });
     // minuti del portiere: si salvano e si rifanno i totali del mese
     host.querySelectorAll('.rpe-in[data-gk]').forEach(inp=>{
       inp.addEventListener('change', ()=>{
-        gkMinSet(state.player, mk, inp.getAttribute('data-gk'), gkNum(inp.value));
+        gkMinSet(state.player, rowMk(inp), inp.getAttribute('data-gk'), gkNum(inp.value));
         gkSeed(state.player);
         applyMoves();
         renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
       });
     });
-    if(clr) clr.hidden = !(rpeOwnCount(mk) || (gkOn() && gkOwnCount(state.player, mk)));
+    // il tasto cancella lavora su un mese solo: negli ultimi microcicli i mesi sono piu' di uno
+    if(clr) clr.hidden = mic || !(rpeOwnCount(mk) || (gkOn() && gkOwnCount(state.player, mk)));
     if(note && gkOn()){
       note.innerHTML = '<b>'+esc(disp(state.player||''))+'</b> non porta il GPS: qui restano solo i minuti, l\'RPE e il TL. '+
         'I minuti col bordo tratteggiato sono quelli della seduta di squadra: scrivici sopra il tempo vero del portiere, '+
         'poi metti l\'RPE da 0 a 10 e il <b>TL</b> (minuti per RPE) si fa da solo, riga per riga e sui totali. '+
-        'Minuti corretti a mano in questo mese: '+gkOwnCount(state.player, mk)+'. Sedute nel mese: '+nSed+', con RPE: '+nRpe+
+        (mic ? '' : 'Minuti corretti a mano in questo mese: '+gkOwnCount(state.player, mk)+'. ')+
+        'Sedute '+dove+': '+nSed+', con RPE: '+nRpe+
         '. I numeri restano su questo dispositivo e non toccano i file dei dati.';
       return;
     }
@@ -2972,7 +3058,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         (state.level==='team'
           ? 'Sei sulla squadra: quello che scrivi qui vale anche per ogni atleta che non ha un numero suo.'
           : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(disp(state.player||''))+'.')+
-        ' Sedute nel mese: '+nSed+', con RPE: '+nRpe+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
+        ' Sedute '+dove+': '+nSed+', con RPE: '+nRpe+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
     }
   }
 
@@ -3402,6 +3488,25 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.querySelectorAll('.print-split').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     document.querySelectorAll('.print-hidden').forEach(n=> n.classList.remove('print-hidden'));
   }
+  /* Chiedere "ultimi due microcicli" e ricevere solo quelli del mese aperto era il
+     difetto vecchio: ai primi di settembre l'ultimo microciclo di agosto spariva. Adesso
+     quando si stampa con un periodo scelto la pagina passa per un attimo alla finestra
+     mobile, che i mesi li attraversa, e a stampa finita torna dove stava. A schermo non
+     si vede niente: si esce dalla stampa con la stessa pastiglia di prima. */
+  let printMk = null;
+  function printMonthPush(keep){
+    if(keep < 1 || state.monthKey === MICRO_KEY) return;
+    printMk = state.monthKey;
+    MICRO_N = keep;
+    state.monthKey = MICRO_KEY;
+    renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+  }
+  function printMonthPop(){
+    if(printMk === null) return;
+    state.monthKey = printMk; printMk = null;
+    MICRO_N = MICRO_DEF;
+    renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+  }
   function clearPrintSheets(){
     clearLiveSheets();
     const old = document.getElementById('print-head');
@@ -3410,6 +3515,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(mul && mul.parentNode) mul.parentNode.removeChild(mul);
     document.body.classList.remove('multi-print');
     pdfClear();
+    printMonthPop();
     sheetsOn = false;
   }
   /* Intestazione del foglio. Prima il nome dell'atleta era una riga piccola accanto al
@@ -3439,7 +3545,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     if(S.stagione) bits.push('Stagione ' + esc(S.stagione));
     const m = activeMonth();
-    if(m) bits.push(esc(m.title));
+    /* Nei mesi veri si scrive il nome del mese. Negli ultimi microcicli il titolo direbbe
+       "Ultimi 4 microcicli" e subito dopo lo ripeterebbe la voce del periodo: meglio le
+       due date, che dicono da quando a quando si sta guardando. */
+    if(m) bits.push(esc((m.micro && m.span) ? m.span : m.title));
     const keep = PDF_PERS[sel.per] || 0;
     if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
     const box = document.createElement('div');
@@ -3459,7 +3568,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     bits.push('Fiorentina Primavera U19W');
     if(S.stagione) bits.push('Stagione ' + esc(S.stagione));
     const m = activeMonth();
-    if(m) bits.push(esc(m.title));
+    // come nell'intestazione generale: negli ultimi microcicli si scrivono le due date
+    if(m) bits.push(esc((m.micro && m.span) ? m.span : m.title));
     const keep = PDF_PERS[sel.per] || 0;
     if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
     const box = document.createElement('div');
@@ -3477,7 +3587,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(sheetsOn) return;
     clearPrintSheets();
     sheetsOn = true;
-    const names = pdfRead().who;
+    const sel = pdfRead();
+    // il periodo scelto vale sulla stagione intera, non solo sul mese aperto
+    printMonthPush(PDF_PERS[sel.per] || 0);
+    const names = sel.who;
     if(names.length >= 2){ buildMultiSheets(names); return; }
     pdfApply();
     printHeadTag();
@@ -4124,7 +4237,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     (mon && mon.rows || []).forEach(r=>{
       if(r.type==='wk_header'){ wkCsv = r.label||''; rows.push([r.label]); return; }
       const isSess = (r.type==='day' || r.type==='match');
-      const label = (r.wd ? r.wd+' ' : '') + (isSess ? dayLabel(r, rowDate(r, wkCsv, mon.key)) : (r.label||''));
+      // r.mk c'e' solo nella vista degli ultimi microcicli, dove le righe cambiano mese
+      const label = (r.wd ? r.wd+' ' : '') + (isSess ? dayLabel(r, rowDate(r, wkCsv, r.mk || mon.key)) : (r.label||''));
       const rv = r.v||[];
       rows.push([label, ...V.map(i=> rawIt(rv[i]))]);
     });
@@ -4184,7 +4298,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(r.type==='wk_header'){ wkXls = r.label||''; h += '<tr class="week"><td class="lbl" colspan="'+ncol+'">'+esc(r.label)+'</td></tr>'; return; }
       const rc = r.type==='match'?'match' : r.type==='tot_month'?'month' : (r.type==='tot_week'||r.type==='tot_train')?'week':'';
       const isSess = (r.type==='day' || r.type==='match');
-      const label = (r.wd?r.wd+' ':'')+(isSess ? dayLabel(r, rowDate(r, wkXls, mon.key)) : (r.label||''));
+      // come nel CSV: negli ultimi microcicli ogni riga porta la chiave del suo mese
+      const label = (r.wd?r.wd+' ':'')+(isSess ? dayLabel(r, rowDate(r, wkXls, r.mk || mon.key)) : (r.label||''));
       const rv = r.v||[];
       h += '<tr'+(rc?' class="'+rc+'"':'')+'><td class="lbl">'+esc(label)+'</td>'+
         V.map(i=>'<td'+(KEY.has(i)?' class="key"':'')+'>'+xlsNum(rv[i])+'</td>').join('') +'</tr>';
