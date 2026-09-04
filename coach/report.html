@@ -465,7 +465,14 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint .psheet{ width:182mm; overflow:hidden; background:#fff; }
 #rprint .pfit{ transform-origin:top left; width:100%;
   display:flex; flex-direction:column; }
-#rprint .pbody{ flex:1 1 auto; min-height:0; }
+/* Il corpo della facciata e' a sua volta una colonna. Le tabelle e la fascia dei
+   numeri chiedono l'altezza che gli serve e non si lasciano stringere; il foglio
+   del mister invece prende quello che resta, ed e' cosi' che la prima facciata
+   riesce a tenere insieme la scansione e le esercitazioni: piu' esercitazioni
+   ci sono, piu' la scansione si alza, senza che nessuno debba dare una misura
+   fissa che poi sbaglia sulla seduta dopo. */
+#rprint .pbody{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
+#rprint .pbody > *{ flex:0 0 auto; }
 #rprint .ph{ display:flex; align-items:center; gap:12px;
   border-bottom:1.5px solid #141414; padding-bottom:11px; margin-bottom:17px; }
 #rprint .ph .pmark{ width:31px; height:31px; object-fit:contain; }
@@ -483,8 +490,9 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
    fasce bianche dentro il bordo e sembrava una tabella vuota invece che una
    figura. Adesso l'immagine tiene le sue proporzioni, il bordo la segue e il
    bianco che avanza sta fuori, dove il bianco non da' fastidio. */
-#rprint .pfog{ display:flex; flex-direction:column; justify-content:center;
-  height:100%; margin:0; }
+#rprint .pfog{ display:flex; flex-direction:column; justify-content:flex-start;
+  flex:1 1 auto; min-height:0; margin:0 0 17px; }
+#rprint .pfog:last-child{ justify-content:center; margin-bottom:0; }
 #rprint .pfog img{ display:block; margin:0 auto; flex:0 1 auto; min-height:0;
   width:auto; max-width:100%; height:auto; max-height:calc(100% - 26px);
   border:1px solid #e2ddd6; background:#fff; }
@@ -2207,13 +2215,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       || periodLabel(m.monthKey);
     const fk = fogKey(m);
 
+    /* Due facciate, non tre. Il foglio del mister da solo su una pagina lasciava
+       mezza facciata bianca sotto la figura, e la seduta finiva spezzata su tre
+       pagine quando ne bastano due: sopra come si e' allenata la squadra, sotto
+       chi ha corso quanto. Adesso la prima facciata tiene la scansione del
+       mister e sotto i numeri delle esercitazioni, la seconda tutto il carico,
+       squadra in cima e differenziate sotto. La scansione non ha una misura
+       fissa: e' l'elemento elastico della colonna, quindi si alza da sola quel
+       tanto che serve a far entrare le esercitazioni di quella seduta. */
     const corpi = [];
-    if(fk){
-      const src = 'prev/seduta-'+fk+'.jpg';
-      corpi.push('<figure class="pfog"><img src="'+src+'" alt="Foglio della seduta del '+
-        esc(fk)+' disegnato dal mister">'+
-        '<figcaption class="pcap">Il foglio della seduta come lo ha preparato il mister.</figcaption></figure>');
-    }
+    const fog = fk
+      ? ('<figure class="pfog"><img src="prev/seduta-'+fk+'.jpg" alt="Foglio della seduta del '+
+         esc(fk)+' disegnato dal mister">'+
+         '<figcaption class="pcap">Il foglio della seduta come lo ha preparato il mister.</figcaption></figure>')
+      : '';
     const kpi = '<div class="pkpis">'+dayKpiVoci(m).map(function(k){
       return '<div class="pkpi"><div class="kl">'+esc(k.l)+'</div>'+
         '<div class="kv">'+esc(k.v)+'<small>'+esc(k.u)+'</small></div>'+
@@ -2224,7 +2239,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const exBody = sess.length
       ? sess.map(exTableHTML).join('')
       : '<p class="pvoid">Per questa seduta non ci sono esercitazioni registrate.</p>';
-    corpi.push(kpi+
+    corpi.push(fog+kpi+
       (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
       pSecHTML('Le esercitazioni', 'nome, serie e metraggi come sono scritti in Esercitazioni', exBody));
     corpi.push(pSecHTML('Carico per atleta', 'squadra in cima, poi le singole a confronto con la media',
@@ -2314,11 +2329,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* Se la seduta ha il foglio del mister apre lui il documento e in stampa si
        prende la prima pagina: la classe accende le regole di impaginazione. */
     const fk  = fogKey(m);
-    /* Il tasto dice quante facciate escono davvero: tre quando la seduta ha il
-       foglio del mister, due quando non ce l'ha. Cosi' il conto sul tasto e il
-       conto nell'anteprima di stampa sono lo stesso numero. */
+    /* Il tasto dice quante facciate escono davvero, e adesso sono sempre due:
+       la seduta sopra, il carico sotto. Il foglio del mister non fa piu' pagina
+       per conto suo, quindi il conto non dipende piu' dal fatto che ci sia. */
     const bp = document.getElementById('btn-print');
-    if(bp && bp.lastChild) bp.lastChild.nodeValue = fk ? ' Stampa 3 pagine ' : ' Stampa 2 pagine ';
+    if(bp && bp.lastChild) bp.lastChild.nodeValue = ' Stampa 2 pagine ';
     host.classList.toggle('has-fog', !!fk);
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
       exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
@@ -2380,17 +2395,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.querySelectorAll('.only-giorno').forEach(function(el){ el.classList.toggle('is-hidden', !giorno); });
     document.querySelectorAll('.only-sintesi').forEach(function(el){ el.classList.toggle('is-hidden', giorno); });
     document.getElementById('lab-month').textContent = giorno ? 'Mese' : 'Periodo';
-    /* Nel report del giorno la stampa e' il documento vero: tre fogli, il primo
-       con la scansione del mister. Il tasto diventa quello in evidenza e
-       l'immagine torna secondaria, altrimenti si finisce per esportare il PNG
-       e non si vede mai l'impaginazione. */
+    /* Nel report del giorno la stampa e' il documento vero: due fogli, il primo
+       con la scansione del mister e i numeri delle esercitazioni. Il tasto
+       diventa quello in evidenza e l'immagine torna secondaria, altrimenti si
+       finisce per esportare il PNG e non si vede mai l'impaginazione. */
     const bPrint = document.getElementById('btn-print');
     const bPng   = document.getElementById('btn-png');
     if(bPrint){
       bPrint.classList.toggle('primary', giorno);
-      bPrint.lastChild.nodeValue = giorno ? ' Stampa 3 pagine ' : ' PDF ';
+      bPrint.lastChild.nodeValue = giorno ? ' Stampa 2 pagine ' : ' PDF ';
       bPrint.title = giorno
-        ? 'Stampa: foglio del mister, dati della seduta, carico per atleta'
+        ? 'Stampa: foglio del mister con le esercitazioni, poi il carico per atleta'
         : 'Stampa il report';
     }
     if(bPng) bPng.classList.remove('primary');
