@@ -297,6 +297,12 @@ dialog.picker[open] .picker-card{ animation:pk .26s var(--ease); }
 .mrow .mr-name{ font-size:13.5px; color:var(--text); font-weight:500; }
 .mrow .mr-unit{ margin-left:auto; font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
 .mrow:hover .mr-name{ color:var(--ink); }
+/* La seduta aperta a schermo entra sempre in stampa: la sua riga si vede ma non
+   si tocca, cosi' e' chiaro che c'e' e non si perde tempo a cercare perche' la
+   spunta non si toglie. */
+.mrow:has(input:disabled){ cursor:default; opacity:.72; }
+.mrow input:disabled{ cursor:default; }
+.picker-list .lvoid{ font-size:12.5px; color:var(--faint); margin:14px 4px; }
 .picker-foot{ display:flex; align-items:center; gap:8px; padding:13px 18px; border-top:1px solid var(--border); }
 .picker-foot .lnk{ appearance:none; cursor:pointer; background:transparent; border:0; font-family:inherit; font-size:12.5px; font-weight:600;
   color:var(--muted); padding:7px 9px; border-radius:7px; transition: color .16s var(--ease), background .16s var(--ease); }
@@ -879,6 +885,13 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
             <label for="sel-session">Seduta</label>
             <select id="sel-session"></select>
           </div>
+          <div class="fg only-giorno is-hidden" id="fg-days">
+            <label for="btn-days">Giornate in stampa</label>
+            <button class="btn" id="btn-days" type="button" aria-haspopup="dialog">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 13h2M11 13h2M15 13h2M7 17h2M11 17h2"/></svg>
+              <span id="lbl-days">Solo questa</span> <span class="cnt" id="cnt-days">1</span>
+            </button>
+          </div>
           <div class="fg" id="fg-metrics">
             <label for="btn-metrics">Metriche</label>
             <button class="btn" id="btn-metrics" type="button" aria-haspopup="dialog">
@@ -943,6 +956,24 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   </div>
 </dialog>
 
+<!-- picker: giornate da stampare insieme -->
+<dialog class="picker" id="dlg-days" aria-label="Selezione giornate da stampare">
+  <div class="picker-card">
+    <div class="picker-head">
+      <div><h3>Giornate in stampa</h3><div class="ph-sub">Piu' sedute nello stesso documento, in ordine di data, due facciate per giornata</div></div>
+      <button class="x" type="button" data-close aria-label="Chiudi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="picker-list" id="list-days"></div>
+    <div class="picker-foot">
+      <button class="lnk" type="button" data-week>Settimana</button>
+      <button class="lnk" type="button" data-month>Mese</button>
+      <button class="lnk" type="button" data-none>Solo questa</button>
+      <span class="sp"></span>
+      <button class="btn primary" type="button" data-close>Fatto</button>
+    </div>
+  </div>
+</dialog>
+
 <!-- anteprima immagine -->
 <dialog class="imgmodal" id="dlg-img" aria-label="Anteprima immagine">
   <div class="imgmodal-card">
@@ -1001,6 +1032,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     .filter(function(i){ return i>=0 && i<MS.length; });
   let selMetrics  = new Set(KEY_DEFAULT);
   let selAthletes = new Set(Object.keys((S.players && typeof S.players==='object') ? S.players : {}));
+  /* Le giornate in piu' da mettere nella stessa stampa. Vuoto vuol dire "solo la
+     seduta scelta in alto", che e' come si e' sempre comportata la pagina: chi
+     non apre il selettore non si accorge di niente. Le chiavi sono
+     "<mese>|<etichetta seduta>" perche' l'etichetta da sola si ripete da un mese
+     all'altro. */
+  let selDays     = new Set();
   let dailyDesc   = '';
   let dailyChart  = null;   // metrica scelta per il mini grafico della seduta
   let mode        = 'sintesi';
@@ -1561,13 +1598,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ==========================================================
   const CREST_ERR = 'onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'rh-mark-fb\',textContent:\'ACF\'}))"';
 
-  // sedute (righe 'day') di un mese, dalla squadra
+  /* Sedute (righe 'day') di un mese, dalla squadra. Nel foglio del carico la
+     stessa seduta puo' comparire in due blocchi di settimana, quindi la stessa
+     riga arriva qui due volte: nella tendina si vedeva il giorno ripetuto e
+     nella stampa di piu' giorni sarebbero uscite due volte le stesse facciate.
+     Il confronto tiene dentro anche il giorno della settimana, non la sola
+     etichetta: a ottobre "30PM" compare due volte ma sono due sedute diverse,
+     il martedi' 30 settembre finito nel blocco di ottobre perche' il microciclo
+     scavalca il mese e il giovedi' 30 ottobre. Stessa etichetta e stesso giorno
+     della settimana e' una copia; stessa etichetta e giorno diverso no. */
   function sessionsForMonth(mk){
     const mt = TEAM_MONTHS.find(function(m){ return m.key===mk; });
     if(!mt) return [];
     const out = [];
+    const visti = Object.create(null);
     (mt.rows||[]).forEach(function(r){
-      if(r.type==='day' && r.label){ out.push({ label:String(r.label), wd:(r.wd||'') }); }
+      if(r.type!=='day' || !r.label) return;
+      const lab = String(r.label), wd = String(r.wd||'');
+      const k = wd+'|'+lab;
+      if(visti[k]) return;
+      visti[k] = true;
+      out.push({ label:lab, wd:wd });
     });
     return out;
   }
@@ -1666,9 +1717,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }).join('');
     return '<div class="tbl-wrap tbl-scroll"><table class="dt">'+head+'<tbody>'+body+'</tbody></table></div>';
   }
-  function dailyModel(){
-    const mk = document.getElementById('sel-month').value || '';
-    const label = document.getElementById('sel-session').value || '';
+  /* Il modello si costruisce per la seduta che gli si passa. Senza argomenti
+     resta quella scelta nelle tendine in alto, che e' il caso di tutta la
+     pagina a schermo; la stampa di piu' giorni invece gliele passa una per una. */
+  function dailyModel(mkArg, labelArg){
+    const mk = (mkArg != null) ? String(mkArg) : (document.getElementById('sel-month').value || '');
+    const label = (labelArg != null) ? String(labelArg) : (document.getElementById('sel-session').value || '');
     if(!mk || !label) return null;
     let rows = dayData(mk, label);
     if(!rows.length) return null;
@@ -1687,6 +1741,78 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       avgAcc:(IDX_ACC>=0 ? agg(allV, IDX_ACC).mean : null),
       avgDec:(IDX_DEC>=0 ? agg(allV, IDX_DEC).mean : null)
     };
+  }
+
+  // ---------- piu' giorni nella stessa stampa ----------
+  /* Tutte le sedute della stagione in fila, non quelle di un mese solo. Un
+     microciclo scavalca il mese quasi sempre, quindi una settimana di lavoro sta
+     mezza in agosto e mezza in settembre: se l'elenco si fermasse al mese scelto
+     non si riuscirebbe a stampare una settimana intera. L'ordine e' quello del
+     calendario, calcolato sulla data vera della seduta e non sull'etichetta, che
+     nel foglio del carico puo' finire nel blocco del mese sbagliato. */
+  /* Nella chiave entra anche il giorno della settimana, per lo stesso motivo
+     per cui ci entra nel confronto delle copie: due sedute con la stessa
+     etichetta dentro lo stesso blocco di mese sono giorni diversi e devono
+     poter essere spuntate una senza l'altra. */
+  function dayKey(mk, wd, label){ return String(mk)+'|'+String(wd||'')+'|'+String(label); }
+  function allSessions(){
+    const out = [];
+    TEAM_MONTHS.forEach(function(mt){
+      sessionsForMonth(mt.key).forEach(function(s){
+        const meta = sessionMeta(mt.key, s.label);
+        out.push({ mk: mt.key, label: s.label, meta: meta,
+                   iso: cfIso(meta.dateStr), key: dayKey(mt.key, s.wd, s.label) });
+      });
+    });
+    out.sort(function(a, b){
+      if(a.iso !== b.iso) return a.iso < b.iso ? -1 : 1;
+      const oa = (a.meta.ap === 'PM') ? 1 : 0, ob = (b.meta.ap === 'PM') ? 1 : 0;
+      return oa - ob;
+    });
+    return out;
+  }
+  // il lunedi' della settimana di una data ISO, per il tasto "settimana"
+  function isoLunedi(iso){
+    const p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));
+    if(!p) return '';
+    const d = new Date(+p[1], +p[2]-1, +p[3]);
+    d.setDate(d.getDate() - ((d.getDay()+6) % 7));
+    const mm = d.getMonth()+1, dd = d.getDate();
+    return d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd;
+  }
+  // la seduta scelta nelle tendine: e' sempre inclusa nella stampa
+  function currentDay(){
+    const mk = document.getElementById('sel-month').value || '';
+    const label = document.getElementById('sel-session').value || '';
+    if(!mk || !label) return null;
+    const meta = sessionMeta(mk, label);
+    return { mk:mk, label:label, meta:meta, iso:cfIso(meta.dateStr),
+             key:dayKey(mk, meta.wd, label) };
+  }
+  /* Le giornate che finiscono sul foglio, in ordine di calendario. La seduta
+     aperta a schermo c'e' sempre: cosi' il tasto stampa non puo' mai produrre un
+     documento vuoto, nemmeno se il selettore delle giornate resta senza segni. */
+  function printDays(){
+    const cur = currentDay();
+    if(!selDays.size) return cur ? [cur] : [];
+    const scelte = allSessions().filter(function(d){ return selDays.has(d.key); });
+    if(cur && !selDays.has(cur.key)){
+      scelte.push(cur);
+      scelte.sort(function(a, b){
+        if(a.iso !== b.iso) return a.iso < b.iso ? -1 : 1;
+        const oa = (a.meta.ap === 'PM') ? 1 : 0, ob = (b.meta.ap === 'PM') ? 1 : 0;
+        return oa - ob;
+      });
+    }
+    return scelte;
+  }
+  /* Il foglio del mister in stampa si legge da FOG_OK, che risponde subito ma
+     solo se l'immagine e' gia' stata provata almeno una volta. A schermo la
+     prova la fa il report della seduta aperta; le altre giornate della stampa
+     nessuno le ha mai guardate, quindi si chiedono qui appena vengono scelte.
+     Senza questo passaggio la stampa di una settimana uscirebbe senza scansioni. */
+  function scaldaFogli(list){
+    (list||[]).forEach(function(d){ fogCerca(fogKey({ meta:d.meta })); });
   }
   /* Colore solo quando lo scarto conta davvero. Con la vecchia soglia del 3%
      si accendeva quasi ogni cella e il colore non voleva dire piu' niente:
@@ -2270,34 +2396,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       sec.style.height = nat ? (PG+'px') : 'auto';
     });
   }
-  function buildPrintDaily(){
-    const host = printHost();
-    const m = dailyModel();
-    if(!m){ host.innerHTML = ''; return false; }
-    const genTxt   = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
-    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
-    const sessLine = [m.meta.wd, m.meta.dateStr, m.meta.parte].filter(Boolean).join(' · ')
-      || periodLabel(m.monthKey);
-    const fk = fogKey(m);
-
-    /* Due facciate, non tre. Il foglio del mister da solo su una pagina lasciava
-       mezza facciata bianca sotto la figura, e la seduta finiva spezzata su tre
-       pagine quando ne bastano due: sopra come si e' allenata la squadra, sotto
-       chi ha corso quanto. Adesso la prima facciata tiene la scansione del
-       mister e sotto i numeri delle esercitazioni, la seconda tutto il carico,
-       squadra in cima e differenziate sotto. La scansione non ha una misura
-       fissa: e' l'elemento elastico della colonna, quindi si alza da sola quel
-       tanto che serve a far entrare le esercitazioni di quella seduta. */
-    /* Sul foglio si tolgono le scritte che spiegano quello che gia' si vede. La
-       didascalia sotto la scansione diceva che quella figura e' il foglio del
-       mister, e si capisce guardandola; le note di fianco ai titoli ripetevano
-       da dove arrivano i numeri, che serve a chi costruisce il report, non a chi
-       lo legge in campo. Meno righe grigie, piu' spazio per la figura e per i
-       numeri. */
-    /* La figura entra solo se il file esiste davvero: la pagina lo ha gia'
-       chiesto quando ha disegnato il report, quindi qui la risposta e' pronta e
-       non si rischia di stampare un riquadro vuoto al posto della scansione. */
-    const corpi = [];
+  /* Due facciate per giornata, non tre. Il foglio del mister da solo su una
+     pagina lasciava mezza facciata bianca sotto la figura, e la seduta finiva
+     spezzata su tre pagine quando ne bastano due: sopra come si e' allenata la
+     squadra, sotto chi ha corso quanto. La prima facciata tiene la scansione del
+     mister e sotto i numeri delle esercitazioni, la seconda tutto il carico,
+     squadra in cima e differenziate sotto. La scansione non ha una misura fissa:
+     e' l'elemento elastico della colonna, quindi si alza da sola quel tanto che
+     serve a far entrare le esercitazioni di quella seduta. */
+  /* Sul foglio si tolgono le scritte che spiegano quello che gia' si vede. La
+     didascalia sotto la scansione diceva che quella figura e' il foglio del
+     mister, e si capisce guardandola; le note di fianco ai titoli ripetevano da
+     dove arrivano i numeri, che serve a chi costruisce il report, non a chi lo
+     legge in campo. Meno righe grigie, piu' spazio per la figura e per i numeri. */
+  function dayCorpi(d, conDesc){
+    const m = dailyModel(d.mk, d.label);
+    const meta = m ? m.meta : d.meta;
+    const cols = m ? m.cols : KEYI.slice();
+    const fk = fogKey({ meta:meta });
+    /* La figura entra solo se il file esiste davvero: la risposta e' gia' in
+       memoria perche' le giornate scelte si vanno a cercare appena si spuntano,
+       quindi qui non si rischia di stampare un riquadro vuoto. */
     const fog = (fk && FOG_OK[fk] === true)
       ? ('<figure class="pfog"><img src="'+fogSrc(fk)+'" alt="Foglio della seduta del '+
          esc(fk)+' disegnato dal mister"></figure>')
@@ -2307,29 +2426,63 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        seconda pagina ci sono gia' tutti, riga per riga e atleta per atleta. Tolta
        di li', la scansione si prende quell'altezza: e' la cosa che sul foglio si
        guarda per prima ed e' anche l'unica che, se resta piccola, non si legge. */
-    const desc = String(dailyDesc||'').trim();
-    const sess = exSessioni(cfIso(m.meta.dateStr), m.meta.ap || '');
+    /* La descrizione e' una sola casella per tutta la pagina, non una per
+       seduta: finisce quindi sul foglio della giornata aperta a schermo, che e'
+       quella a cui si riferisce, e non si ripete su tutte le altre. */
+    const desc = conDesc ? String(dailyDesc||'').trim() : '';
+    const sess = exSessioni(cfIso(meta.dateStr), meta.ap || '');
     const exBody = sess.length
       ? sess.map(exTableHTML).join('')
       : '<p class="pvoid">Per questa seduta non ci sono esercitazioni registrate.</p>';
-    corpi.push(fog+
-      (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
-      pSecHTML('Le esercitazioni', '', exBody));
-    corpi.push(pSecHTML('Carico per atleta', '', dailyTableHTML(m.rows, m.media, m.cols))+
-      (m.extra && m.extra.length
-        ? pSecHTML('Fuori dal carico squadra', '', extraTableHTML(m.extra, m.cols))
-        : ''));
+    const carico = (m && m.rows.length)
+      ? (pSecHTML('Carico per atleta', '', dailyTableHTML(m.rows, m.media, m.cols))+
+         (m.extra && m.extra.length
+           ? pSecHTML('Fuori dal carico squadra', '', extraTableHTML(m.extra, cols))
+           : ''))
+      : pSecHTML('Carico per atleta', '',
+          '<p class="pvoid">Nessuna delle atlete selezionate ha dati registrati in questa seduta.</p>');
+    return [
+      fog+
+        (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
+        pSecHTML('Le esercitazioni', '', exBody),
+      carico
+    ];
+  }
+  /* Il ciclo sta attorno alla costruzione delle facciate, non dentro: ogni
+     facciata si misura e si rimpicciolisce da sola in pAdatta, quindi le
+     giornate si possono accodare senza che una influenzi l'impaginazione
+     dell'altra. La numerazione in testata conta su tutto il documento, non sul
+     singolo giorno: chi ha in mano il fascicolo vede "Pagina 3 di 8" e sa dove
+     si trova. */
+  function buildPrintDaily(){
+    const host = printHost();
+    const giorni = printDays();
+    if(!giorni.length){ host.innerHTML = ''; return false; }
+    const cur = currentDay();
+    const curKey = cur ? cur.key : '';
+    const genTxt   = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
 
-    const tot = corpi.length;
-    host.innerHTML = corpi.map(function(c, i){
+    const facciate = [];
+    giorni.forEach(function(d){
+      const linea = [d.meta.wd, d.meta.dateStr, d.meta.parte].filter(Boolean).join(' · ')
+        || periodLabel(d.mk);
+      dayCorpi(d, d.key === curKey).forEach(function(c){
+        facciate.push({ corpo:c, linea:linea });
+      });
+    });
+    if(!facciate.length){ host.innerHTML = ''; return false; }
+
+    const tot = facciate.length;
+    host.innerHTML = facciate.map(function(f, i){
       const testa = '<div class="ph">'+
         '<img class="pmark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
         '<div><h2>Report giornaliero</h2>'+
-          '<div class="psub"><b>'+esc(sessLine)+'</b> · Fiorentina Primavera U19W</div></div>'+
+          '<div class="psub"><b>'+esc(f.linea)+'</b> · Fiorentina Primavera U19W</div></div>'+
         '<div class="pno">Pagina '+(i+1)+' di '+tot+'<br>Stagione '+esc(SEASON)+'</div>'+
       '</div>';
       const piede = '<div class="pfoot"><span>'+esc(genTxt)+'</span></div>';
-      return pSheet(testa, c, piede);
+      return pSheet(testa, f.corpo, piede);
     }).join('');
     pAdatta(host);
     return true;
@@ -2399,11 +2552,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* Se la seduta ha il foglio del mister apre lui il documento e in stampa si
        prende la prima pagina: la classe accende le regole di impaginazione. */
     const fk  = fogKey(m);
-    /* Il tasto dice quante facciate escono davvero, e adesso sono sempre due:
-       la seduta sopra, il carico sotto. Il foglio del mister non fa piu' pagina
-       per conto suo, quindi il conto non dipende piu' dal fatto che ci sia. */
-    const bp = document.getElementById('btn-print');
-    if(bp && bp.lastChild) bp.lastChild.nodeValue = ' Stampa 2 pagine ';
+    daysCambiate();
     host.classList.toggle('has-fog', !!fk);
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
       exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
@@ -2472,17 +2621,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        finisce per esportare il PNG e non si vede mai l'impaginazione. */
     const bPrint = document.getElementById('btn-print');
     const bPng   = document.getElementById('btn-png');
-    if(bPrint){
-      bPrint.classList.toggle('primary', giorno);
-      bPrint.lastChild.nodeValue = giorno ? ' Stampa 2 pagine ' : ' PDF ';
-      bPrint.title = giorno
-        ? 'Stampa: foglio del mister con le esercitazioni, poi il carico per atleta'
-        : 'Stampa il report';
-    }
+    if(bPrint) bPrint.classList.toggle('primary', giorno);
     if(bPng) bPng.classList.remove('primary');
     refreshMonthOptions();
     if(giorno) fillSessions();
+    daysCambiate();
     render();
+  }
+  /* Il tasto dice quante facciate escono davvero: due per ogni giornata scelta,
+     la seduta sopra e il carico sotto. Il foglio del mister non fa pagina per
+     conto suo, quindi il conto non dipende dal fatto che la scansione ci sia. */
+  function aggiornaTastoStampa(){
+    const b = document.getElementById('btn-print');
+    if(!b || !b.lastChild) return;
+    if(mode !== 'giorno'){
+      b.lastChild.nodeValue = ' PDF ';
+      b.title = 'Stampa il report';
+      return;
+    }
+    const giorni = printDays();
+    const pag = giorni.length * 2;
+    b.lastChild.nodeValue = pag ? (' Stampa '+pag+' pagine ') : ' Stampa ';
+    b.title = (giorni.length > 1)
+      ? ('Stampa '+giorni.length+' giornate in ordine di data, due facciate per giornata')
+      : 'Stampa: foglio del mister con le esercitazioni, poi il carico per atleta';
   }
 
   // ---------- picker metriche / atlete ----------
@@ -2512,6 +2674,47 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     document.getElementById('cnt-athletes').textContent = String(n);
     const lbl = document.getElementById('lbl-athletes');
     if(lbl) lbl.textContent = (total>0 && n>=total) ? 'Tutte' : 'Alcune';
+  }
+  /* La seduta aperta a schermo compare gia' spuntata e non si puo' togliere: e'
+     quella che il report sta mostrando, toglierla vorrebbe dire stampare un
+     documento che non c'entra con quello che si sta guardando. Le altre si
+     aggiungono e si tolgono a piacere. L'elenco parte dalla piu' recente perche'
+     e' quella che serve quasi sempre, ma la stampa resta in ordine di calendario. */
+  function buildDayList(){
+    const host = document.getElementById('list-days');
+    if(!host) return;
+    const cur = currentDay();
+    const curKey = cur ? cur.key : '';
+    const list = allSessions().slice().reverse();
+    if(!list.length){
+      host.innerHTML = '<p class="lvoid">Non ci sono sedute registrate.</p>';
+      return;
+    }
+    host.innerHTML = list.map(function(d){
+      const fisso = (d.key === curKey);
+      const on = (fisso || selDays.has(d.key)) ? ' checked' : '';
+      const nome = [d.meta.wd, d.meta.dateStr].filter(Boolean).join(' · ') || d.label;
+      const unit = fisso ? 'seduta aperta' : (d.meta.parte || '');
+      return '<label class="mrow"><input type="checkbox" data-k="'+esc(d.key)+'"'+on+
+        (fisso ? ' disabled' : '')+'>'+
+        '<span class="mr-name">'+esc(nome)+'</span>'+
+        '<span class="mr-unit">'+esc(unit)+'</span></label>';
+    }).join('');
+  }
+  function updateDayBadge(){
+    const n = printDays().length;
+    const c = document.getElementById('cnt-days');
+    const l = document.getElementById('lbl-days');
+    if(c) c.textContent = String(n);
+    if(l) l.textContent = (n > 1) ? 'Piu\' giorni' : 'Solo questa';
+  }
+  /* Quando cambia la scelta si rifa' tutto quello che dipende da lei: il conto
+     sul tasto, l'etichetta, e la ricerca dei fogli del mister delle giornate
+     nuove, che in stampa si legge da una risposta gia' pronta. */
+  function daysCambiate(){
+    scaldaFogli(printDays());
+    updateDayBadge();
+    aggiornaTastoStampa();
   }
   function wireDialog(id, onClose){
     const dlg = document.getElementById(id);
@@ -2731,8 +2934,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('mode-sintesi').addEventListener('click', function(){ setMode('sintesi'); });
   document.getElementById('mode-giorno').addEventListener('click', function(){ setMode('giorno'); });
   document.getElementById('sel-scope').addEventListener('change', render);
-  document.getElementById('sel-month').addEventListener('change', function(){ if(mode==='giorno') fillSessions(); render(); });
-  document.getElementById('sel-session').addEventListener('change', render);
+  document.getElementById('sel-month').addEventListener('change', function(){ if(mode==='giorno') fillSessions(); daysCambiate(); render(); });
+  document.getElementById('sel-session').addEventListener('change', function(){ daysCambiate(); render(); });
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
   /* Nel report del giorno si stampa il documento costruito a parte, non la
@@ -2759,6 +2962,39 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   document.getElementById('btn-metrics').addEventListener('click', function(){ document.getElementById('dlg-metrics').showModal(); });
   document.getElementById('btn-athletes').addEventListener('click', function(){ document.getElementById('dlg-athletes').showModal(); });
+  document.getElementById('btn-days').addEventListener('click', function(){ buildDayList(); document.getElementById('dlg-days').showModal(); });
+
+  /* I tre tasti in fondo al selettore delle giornate. "Settimana" prende il
+     lunedi'-domenica della seduta aperta e non il mese: un microciclo scavalca
+     quasi sempre il cambio di mese, e la settimana di lavoro va stampata
+     intera. "Mese" prende tutte le sedute del blocco scelto in alto. */
+  const dlgD = document.getElementById('dlg-days');
+  dlgD.querySelector('[data-week]').addEventListener('click', function(){
+    const cur = currentDay();
+    const lun = cur ? isoLunedi(cur.iso) : '';
+    selDays = new Set();
+    if(lun){
+      allSessions().forEach(function(d){ if(isoLunedi(d.iso) === lun) selDays.add(d.key); });
+    }
+    buildDayList(); daysCambiate();
+  });
+  dlgD.querySelector('[data-month]').addEventListener('click', function(){
+    const mk = document.getElementById('sel-month').value || '';
+    selDays = new Set();
+    allSessions().forEach(function(d){ if(d.mk === mk) selDays.add(d.key); });
+    buildDayList(); daysCambiate();
+  });
+  dlgD.querySelector('[data-none]').addEventListener('click', function(){
+    selDays = new Set();
+    buildDayList(); daysCambiate();
+  });
+  document.getElementById('list-days').addEventListener('change', function(e){
+    const cb = e.target; if(!cb || cb.type!=='checkbox') return;
+    const k = cb.getAttribute('data-k');
+    if(cb.checked) selDays.add(k); else selDays.delete(k);
+    daysCambiate();
+  });
+  wireDialog('dlg-days');
 
   const dlgM = document.getElementById('dlg-metrics');
   dlgM.querySelector('[data-all]').addEventListener('click', function(){ selMetrics = new Set(MS.map(function(_,i){ return i; })); buildMetricList(); updateMetricBadge(); });
@@ -2808,6 +3044,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   fillControls();
   buildMetricList(); updateMetricBadge();
   buildAthleteList(); updateAthleteBadge();
+  updateDayBadge();
   setMode('sintesi');
 })();
 </script>
