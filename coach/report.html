@@ -1622,8 +1622,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return out;
   }
-  // metadati di una seduta: giorno, parte (Mattino/Pomeriggio), data, giorno settimana
-  function sessionMeta(mk, label){
+  // le sigle del giorno della settimana come le scrive il mister, in ordine
+  // di getDay(): 0 e' la domenica
+  var WD_SIGLE = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  function wdSigla(anno, mese, giorno){
+    if(!anno || !mese || !giorno) return '';
+    const d = new Date(anno, mese-1, giorno);
+    if(isNaN(d.getTime())) return '';
+    if(d.getDate() !== giorno) return '';   // giorno che in quel mese non esiste
+    return WD_SIGLE[d.getDay()];
+  }
+  /* metadati di una seduta: giorno, parte (Mattino/Pomeriggio), data, giorno
+     settimana. Il giorno della settimana va passato: nel foglio del carico due
+     sedute possono avere la stessa etichetta dentro lo stesso blocco di mese, e
+     senza la sigla non si distinguono. */
+  function sessionMeta(mk, label, wdArg){
     const ym = /^(\d{4})-(\d{2})$/.exec(String(mk||''));
     const yy = ym ? ym[1] : '';
     const mm = ym ? ym[2] : '';
@@ -1644,15 +1657,41 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let annoN = +yy, meseN = +mm;
     const ultimoG = (annoN && meseN) ? new Date(annoN, meseN, 0).getDate() : 31;
     if(+day > ultimoG){ meseN -= 1; if(meseN < 1){ meseN = 12; annoN -= 1; } }
+    let wd = String(wdArg==null ? '' : wdArg);
+    if(!wd){
+      const s = sessionsForMonth(mk).find(function(x){ return x.label===String(label); });
+      if(s) wd = s.wd || '';
+    }
+    /* Il giorno oltre l'ultimo del mese e' il caso lampante, ma non l'unico: nel
+       blocco di ottobre la prima riga e' "Mar 30PM" ed e' il martedi' 30
+       settembre, finito li' perche' il microciclo scavalca il mese. Il 30 ottobre
+       esiste, quindi il controllo di prima non lo prende: e' la sigla scritta dal
+       mister a dire di che mese si tratta. Se non torna con la data calcolata ma
+       torna con lo stesso numero del mese prima, la data si riporta li'. */
+    if(wd && annoN && meseN && +day){
+      if(wdSigla(annoN, meseN, +day) !== wd){
+        let aP = annoN, mP = meseN - 1;
+        if(mP < 1){ mP = 12; aP -= 1; }
+        if(wdSigla(aP, mP, +day) === wd){ annoN = aP; meseN = mP; }
+      }
+    }
     const mm2 = meseN ? (meseN<10 ? ('0'+meseN) : String(meseN)) : mm;
     const dateStr = (dd && mm && yy) ? (dd+'/'+mm2+'/'+String(annoN||yy)) : '';
-    let wd = '';
-    const s = sessionsForMonth(mk).find(function(x){ return x.label===String(label); });
-    if(s) wd = s.wd || '';
     return { day:day, ap:ap, parte:parte, dateStr:dateStr, wd:wd };
   }
+  /* Il valore della voce nella tendina identifica la riga, non la sola etichetta:
+     nello stesso blocco "30PM" puo' comparire due volte con due giorni della
+     settimana diversi, e con il solo "30PM" come valore le due voci sarebbero
+     indistinguibili e la seconda non si potrebbe nemmeno scegliere. */
+  function sessValue(s){ return String(s.wd||'')+'|'+String(s.label); }
+  function sessParse(v){
+    const t = String(v||'');
+    const i = t.indexOf('|');
+    if(i < 0) return { wd:'', label:t };
+    return { wd:t.slice(0,i), label:t.slice(i+1) };
+  }
   function sessOptLabel(mk, s){
-    const meta = sessionMeta(mk, s.label);
+    const meta = sessionMeta(mk, s.label, s.wd);
     const parts = [];
     if(meta.wd) parts.push(meta.wd);
     parts.push(meta.dateStr || s.label);
@@ -1720,9 +1759,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   /* Il modello si costruisce per la seduta che gli si passa. Senza argomenti
      resta quella scelta nelle tendine in alto, che e' il caso di tutta la
      pagina a schermo; la stampa di piu' giorni invece gliele passa una per una. */
-  function dailyModel(mkArg, labelArg){
+  function dailyModel(mkArg, labelArg, wdArg){
     const mk = (mkArg != null) ? String(mkArg) : (document.getElementById('sel-month').value || '');
-    const label = (labelArg != null) ? String(labelArg) : (document.getElementById('sel-session').value || '');
+    const sel = sessParse(document.getElementById('sel-session').value || '');
+    const label = (labelArg != null) ? String(labelArg) : sel.label;
+    const wd = (wdArg != null) ? String(wdArg) : ((labelArg != null) ? '' : sel.wd);
     if(!mk || !label) return null;
     let rows = dayData(mk, label);
     if(!rows.length) return null;
@@ -1733,7 +1774,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return {
       monthKey:mk, label:label, cols:cols, media:media, rows:rows,
       extra:dayExtra(mk, label),
-      meta:sessionMeta(mk, label),
+      meta:sessionMeta(mk, label, wd),
       minAvg:agg(allV, IDX_MIN).mean,
       distAvg:agg(allV, IDX_DIST).mean,
       avg2023:(IDX_2023>=0 ? agg(allV, IDX_2023).mean : null),
@@ -1759,8 +1800,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const out = [];
     TEAM_MONTHS.forEach(function(mt){
       sessionsForMonth(mt.key).forEach(function(s){
-        const meta = sessionMeta(mt.key, s.label);
-        out.push({ mk: mt.key, label: s.label, meta: meta,
+        const meta = sessionMeta(mt.key, s.label, s.wd);
+        out.push({ mk: mt.key, label: s.label, wd: s.wd, meta: meta,
                    iso: cfIso(meta.dateStr), key: dayKey(mt.key, s.wd, s.label) });
       });
     });
@@ -1783,11 +1824,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // la seduta scelta nelle tendine: e' sempre inclusa nella stampa
   function currentDay(){
     const mk = document.getElementById('sel-month').value || '';
-    const label = document.getElementById('sel-session').value || '';
+    const sel = sessParse(document.getElementById('sel-session').value || '');
+    const label = sel.label;
     if(!mk || !label) return null;
-    const meta = sessionMeta(mk, label);
-    return { mk:mk, label:label, meta:meta, iso:cfIso(meta.dateStr),
-             key:dayKey(mk, meta.wd, label) };
+    const meta = sessionMeta(mk, label, sel.wd);
+    return { mk:mk, label:label, wd:sel.wd, meta:meta, iso:cfIso(meta.dateStr),
+             key:dayKey(mk, sel.wd, label) };
   }
   /* Le giornate che finiscono sul foglio, in ordine di calendario. La seduta
      aperta a schermo c'e' sempre: cosi' il tasto stampa non puo' mai produrre un
@@ -2410,7 +2452,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
      dove arrivano i numeri, che serve a chi costruisce il report, non a chi lo
      legge in campo. Meno righe grigie, piu' spazio per la figura e per i numeri. */
   function dayCorpi(d, conDesc){
-    const m = dailyModel(d.mk, d.label);
+    const m = dailyModel(d.mk, d.label, d.wd || (d.meta && d.meta.wd) || '');
     const meta = m ? m.meta : d.meta;
     const cols = m ? m.cols : KEYI.slice();
     const fk = fogKey({ meta:meta });
@@ -2493,8 +2535,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
     const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
     const mk = document.getElementById('sel-month').value || '';
-    const label = document.getElementById('sel-session').value || '';
-    const meta = sessionMeta(mk, label);
+    const sel = sessParse(document.getElementById('sel-session').value || '');
+    const label = sel.label;
+    const meta = sessionMeta(mk, label, sel.wd);
     const per = periodLabel(mk);
     const sessLine = [meta.wd, meta.dateStr, meta.parte].filter(Boolean).join(' · ') || per;
     const headHTML =
@@ -2595,8 +2638,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const ss = document.getElementById('sel-session');
     const mk = document.getElementById('sel-month').value || '';
     const list = sessionsForMonth(mk);
-    ss.innerHTML = list.map(function(s){ return '<option value="'+esc(s.label)+'">'+esc(sessOptLabel(mk, s))+'</option>'; }).join('');
-    if(list.length) ss.value = list[list.length-1].label;
+    ss.innerHTML = list.map(function(s){ return '<option value="'+esc(sessValue(s))+'">'+esc(sessOptLabel(mk, s))+'</option>'; }).join('');
+    if(list.length) ss.value = sessValue(list[list.length-1]);
   }
   function setMode(next){
     mode = (next==='giorno') ? 'giorno' : 'sintesi';
