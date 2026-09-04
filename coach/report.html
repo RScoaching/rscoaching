@@ -493,12 +493,19 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint .pfog{ display:flex; flex-direction:column; justify-content:flex-start;
   flex:1 1 auto; min-height:0; margin:0 0 17px; }
 #rprint .pfog:last-child{ justify-content:center; margin-bottom:0; }
+/* Il tetto dell'immagine teneva da parte ventisei pixel per la didascalia. La
+   didascalia non c'e' piu' e quello spazio tornava utile alla figura, che e' la
+   cosa che sul foglio si guarda per prima: adesso la scansione si prende tutta
+   l'altezza che le lascia la colonna. */
 #rprint .pfog img{ display:block; margin:0 auto; flex:0 1 auto; min-height:0;
-  width:auto; max-width:100%; height:auto; max-height:calc(100% - 26px);
+  width:auto; max-width:100%; height:auto; max-height:100%;
   border:1px solid #e2ddd6; background:#fff; }
-#rprint .pcap{ flex:0 0 auto; font-size:10px; color:#666; margin-top:8px;
-  text-align:center; }
-/* i sei numeri della seduta: una riga di testa chiusa da due filetti */
+/* i sei numeri della seduta: una riga di testa chiusa da due filetti, con una
+   sola riga sopra che dice che sono medie. Prima ogni casella si portava dietro
+   la scritta "media squadra": sei volte la stessa cosa sotto sei numeri diversi,
+   che e' rumore, non informazione. */
+#rprint .pkpis-t{ font-size:9px; text-transform:uppercase; letter-spacing:.1em;
+  color:#8a847c; text-align:right; margin-bottom:5px; }
 #rprint .pkpis{ display:grid; grid-template-columns:repeat(6,1fr);
   border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6; margin-bottom:18px; }
 #rprint .pkpi{ padding:10px 10px 11px; border-left:1px solid #e2ddd6; }
@@ -509,7 +516,6 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   font-variant-numeric:tabular-nums; }
 #rprint .pkpi .kv small{ font-family:'Manrope',system-ui,sans-serif; font-size:10px;
   font-weight:600; color:#8a847c; margin-left:3px; letter-spacing:0; }
-#rprint .pkpi .ks{ font-size:9px; color:#8a847c; margin-top:3px; }
 #rprint .psec{ margin-bottom:16px; }
 #rprint .psec:last-child{ margin-bottom:0; }
 #rprint .psec-h{ display:flex; align-items:baseline; gap:12px;
@@ -600,12 +606,15 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint table.dt tbody tr:nth-child(even):hover td{ background:#faf9f7; }
 #rprint table.dt tbody tr.row-media:hover td{ background:#efeae2; }
 #rprint .pkpis{ border-bottom:1.5px solid #141414; }
-#rprint .pkpi .ks{ color:#8a847c; }
 /* Il piede sta in fondo alla facciata e chiude il foglio con un filetto pieno:
-   e' l'unico segno che dice "la pagina finisce qui". */
+   e' l'unico segno che dice "la pagina finisce qui". Dentro non c'e' piu' niente
+   di quello che c'e' gia' in testata: la squadra, la data e la parte della
+   giornata erano scritte due volte sulla stessa facciata, e la firma dello
+   studio in fondo non serve a chi legge la seduta. Resta la data del dato, che
+   e' l'unica cosa che il foglio non dice da nessun'altra parte. */
 #rprint .pfoot{ flex:0 0 auto; margin-top:16px; padding-top:8px;
-  border-top:1.5px solid #141414; letter-spacing:.02em; }
-#rprint .pfoot span:last-child{ color:#b0a99f; }
+  justify-content:flex-end; border-top:1.5px solid #141414; letter-spacing:.02em;
+  color:#b0a99f; }
 
 /* ---------- print (PDF) : tema chiaro, solo il report ---------- */
 @media print{
@@ -1684,7 +1693,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const legend = '<div class="dr-legend">'+
       '<span class="lg"><span class="tri up"></span>Sopra del 20% sulla media di squadra</span>'+
       '<span class="lg"><span class="tri dn"></span>Sotto del 20% sulla media di squadra</span>'+
-      '<span class="lg" style="margin-left:auto;color:var(--faint)">Confronto sulla singola seduta</span>'+
     '</div>';
     /* La squadra sta in cima e le singole sotto: prima si legge il dato della
        seduta, poi si vede chi sta sopra e chi sotto. In fondo alla lista quella
@@ -2223,17 +2231,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        squadra in cima e differenziate sotto. La scansione non ha una misura
        fissa: e' l'elemento elastico della colonna, quindi si alza da sola quel
        tanto che serve a far entrare le esercitazioni di quella seduta. */
+    /* Sul foglio si tolgono le scritte che spiegano quello che gia' si vede. La
+       didascalia sotto la scansione diceva che quella figura e' il foglio del
+       mister, e si capisce guardandola; le note di fianco ai titoli ripetevano
+       da dove arrivano i numeri, che serve a chi costruisce il report, non a chi
+       lo legge in campo. Meno righe grigie, piu' spazio per la figura e per i
+       numeri. */
     const corpi = [];
     const fog = fk
       ? ('<figure class="pfog"><img src="prev/seduta-'+fk+'.jpg" alt="Foglio della seduta del '+
-         esc(fk)+' disegnato dal mister">'+
-         '<figcaption class="pcap">Il foglio della seduta come lo ha preparato il mister.</figcaption></figure>')
+         esc(fk)+' disegnato dal mister"></figure>')
       : '';
-    const kpi = '<div class="pkpis">'+dayKpiVoci(m).map(function(k){
-      return '<div class="pkpi"><div class="kl">'+esc(k.l)+'</div>'+
-        '<div class="kv">'+esc(k.v)+'<small>'+esc(k.u)+'</small></div>'+
-        '<div class="ks">'+esc(k.s)+'</div></div>';
-    }).join('')+'</div>';
+    const kpi = '<div class="pkpis-t">Medie di squadra</div><div class="pkpis">'+
+      dayKpiVoci(m).map(function(k){
+        return '<div class="pkpi"><div class="kl">'+esc(k.l)+'</div>'+
+          '<div class="kv">'+esc(k.v)+'<small>'+esc(k.u)+'</small></div></div>';
+      }).join('')+'</div>';
     const desc = String(dailyDesc||'').trim();
     const sess = exSessioni(cfIso(m.meta.dateStr), m.meta.ap || '');
     const exBody = sess.length
@@ -2241,12 +2254,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       : '<p class="pvoid">Per questa seduta non ci sono esercitazioni registrate.</p>';
     corpi.push(fog+kpi+
       (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
-      pSecHTML('Le esercitazioni', 'nome, serie e metraggi come sono scritti in Esercitazioni', exBody));
-    corpi.push(pSecHTML('Carico per atleta', 'squadra in cima, poi le singole a confronto con la media',
-      dailyTableHTML(m.rows, m.media, m.cols))+
+      pSecHTML('Le esercitazioni', '', exBody));
+    corpi.push(pSecHTML('Carico per atleta', '', dailyTableHTML(m.rows, m.media, m.cols))+
       (m.extra && m.extra.length
-        ? pSecHTML('Fuori dal carico squadra', 'lavoro differenziato e prima squadra, stessa giornata',
-            extraTableHTML(m.extra, m.cols))
+        ? pSecHTML('Fuori dal carico squadra', '', extraTableHTML(m.extra, m.cols))
         : ''));
 
     const tot = corpi.length;
@@ -2257,8 +2268,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           '<div class="psub"><b>'+esc(sessLine)+'</b> · Fiorentina Primavera U19W</div></div>'+
         '<div class="pno">Pagina '+(i+1)+' di '+tot+'<br>Stagione '+esc(SEASON)+'</div>'+
       '</div>';
-      const piede = '<div class="pfoot"><span>Fiorentina Primavera U19W · '+esc(sessLine)+'</span>'+
-        '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
+      const piede = '<div class="pfoot"><span>'+esc(genTxt)+'</span></div>';
       return pSheet(testa, c, piede);
     }).join('');
     pAdatta(host);
