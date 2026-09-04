@@ -1681,9 +1681,33 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   })();
 
   // ---------- month pills ----------
+  /* Le voci dell'indice dicono "del mese" perche' quasi sempre si guarda un mese.
+     Sulla finestra mobile degli ultimi microcicli il mese non c'e': leggere
+     "Riepilogo del mese" sopra quattro settimane a cavallo di agosto e settembre
+     e' una bugia piccola ma fastidiosa, quindi la parola diventa "del periodo". */
+  const SECNAV_WORDS = {
+    kpis:        ['Riepilogo del mese', 'Riepilogo del periodo',
+                  'Minuti, distanza, sedute e partite del mese',
+                  'Minuti, distanza, sedute e partite del periodo'],
+    'grid-card': ['Griglia del mese', 'Griglia del periodo',
+                  'La griglia del mese, giorno per giorno, con RPE e TL',
+                  'La griglia del periodo, giorno per giorno, con RPE e TL']
+  };
+  function syncSecNavWords(){
+    const mic = isMicro();
+    Object.keys(SECNAV_WORDS).forEach(function(id){
+      const b = document.querySelector('#secnav .snav[data-sec="'+id+'"]');
+      if(!b) return;
+      const w = SECNAV_WORDS[id];
+      b.textContent = mic ? w[1] : w[0];
+      b.title       = mic ? w[3] : w[2];
+    });
+  }
+
   function renderMonths(){
     const host = document.getElementById('months');
     const ms = currentMonths();
+    syncSecNavWords();
     if(!ms.length){ host.innerHTML=''; return; }
     const mic = isMicro();
     if(!mic && !ms.some(m=> m.key===state.monthKey)) state.monthKey = ms[ms.length-1].key;
@@ -2173,7 +2197,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     } else if(scope==='month'){
       if(t) t.textContent = 'Carico settimanale';
       if(hint) hint.textContent = (mon?mon.title:'') + ' · totali per settimana';
-      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media mese</span>';
+      // sulla finestra mobile la media non e' di un mese ma delle settimane mostrate
+      if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media '+((mon&&mon.micro)?'periodo':'mese')+'</span>';
     } else if(scope==='last4' || scope==='range'){
       const days = dayRows();
       const win = days.length ? chartWindow(days) : null;
@@ -3705,6 +3730,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { id:'acwr-card',  lbl:'Rischio carico ACWR', txt:'Rapporto acuto/cronico, monotonia, strain e i tre grafici.', def:true },
     { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno, con RPE e TL nelle ultime due colonne. Il corpo si adatta da solo per far stare tutti i parametri in larghezza e mette due microcicli per pagina, senza mai tagliare una settimana a meta\'.', def:true }
   ];
+  /* Le etichette parlano di mese perche' e' il caso normale. Con la finestra mobile
+     degli ultimi microcicli, o quando si stampano solo le ultime due settimane, il
+     mese non e' piu' il periodo stampato: la parola cambia insieme al foglio. */
+  function pdfWord(s){
+    const sel = pdfRead();
+    const fuoriMese = isMicro() || (PDF_PERS[sel.per] > 0);
+    return fuoriMese ? s.replace(/del mese scelto/g,'del periodo scelto').replace(/del mese/g,'del periodo') : s;
+  }
   // taglio del foglio: "completo" e' quello di sempre, "nazionale" e' il foglio che esce di qui
   // e va fuori dalla societa', quindi senza confronti interni
   const PDF_MODES = ['full','naz'];
@@ -3767,7 +3800,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     PDF_BLOCKS.forEach(b=>{
       const on = !!sel[b.id];
       h += '<label class="pdf-row'+(on?'':' off')+'"><input type="checkbox" data-pdf="'+b.id+'"'+(on?' checked':'')+'>'+
-           '<span class="pdf-txt">'+esc(b.lbl)+'<small>'+esc(b.txt)+'</small></span></label>';
+           '<span class="pdf-txt">'+esc(pdfWord(b.lbl))+'<small>'+esc(pdfWord(b.txt))+'</small></span></label>';
     });
     list.innerHTML = h;
     const mseg = document.getElementById('pdf-mode-seg');
