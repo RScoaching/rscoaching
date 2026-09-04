@@ -605,6 +605,23 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint table.dt tbody tr:hover td{ background:inherit; }
 #rprint table.dt tbody tr:nth-child(even):hover td{ background:#faf9f7; }
 #rprint table.dt tbody tr.row-media:hover td{ background:#efeae2; }
+
+/* Il viola della societa' sta gia' sotto la testata e davanti ai titoli: le
+   tabelle lo prendevano da nessuna parte e restavano tre grigi diversi messi
+   uno sopra l'altro, il filetto nero in cima, l'intestazione beige, la fascia
+   della media beige piu' scuro. Adesso il segno e' uno solo e torna dove serve
+   leggere: una riga viola piena dice dove comincia la tabella, l'intestazione
+   e' una fascia chiarissima con le parole in viola, e la media di squadra sta
+   subito sotto chiusa da un filetto viola. Quella riga e' il metro con cui si
+   guardano tutte le altre, e adesso si vede da lontano che le atlete cominciano
+   li' sotto. I nomi e i numeri restano neri: il colore non entra mai nel dato. */
+#rprint .tbl-wrap{ border-top:1.5px solid #4b1e78; }
+#rprint table.dt thead th{ background:#f7f4fa; color:#4b1e78;
+  border-bottom:1px solid #ddd5e6; }
+#rprint table.dt tbody tr.row-media td,
+#rprint table.dt tbody tr.row-media:hover td{ background:#f3edf9; border-top:0;
+  border-bottom:1.2px solid #4b1e78; }
+#rprint table.dt tbody tr.row-media td:first-child{ color:#4b1e78; }
 #rprint .pkpis{ border-bottom:1.5px solid #141414; }
 /* Il piede sta in fondo alla facciata e chiude il foglio con un filetto pieno:
    e' l'unico segno che dice "la pagina finisce qui". Dentro non c'e' piu' niente
@@ -1369,8 +1386,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const trSec = tr ? '<div class="rsec"><div class="rsec-head"><h3>Andamento mensile</h3>'+
       '<span class="rsec-n">distanza totale per mese</span></div>'+tr+'</div>' : '';
 
+    /* Il piede del documento porta solo quello che il documento non dice gia'
+       da nessun'altra parte: chi e' la squadra, che periodo si guarda, di quando
+       sono i dati. La firma dello studio non serve a chi legge il report. */
     const foot = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(lab.name)+' · '+esc(per)+'</span>'+
-      '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
+      '<span>'+esc(genTxt)+'</span></div>';
 
     host.innerHTML = headHTML + '<div class="rbody">'+kpis+keyTbl+repSec+mbmSec+trSec+foot+'</div>';
   }
@@ -1558,7 +1578,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const ap  = (lm && lm[2]) ? lm[2].toUpperCase() : '';
     const parte = ap==='AM' ? 'Mattino' : (ap==='PM' ? 'Pomeriggio' : '');
     const dd = (day.length<2 ? ('0'+day) : day);
-    const dateStr = (dd && mm && yy) ? (dd+'/'+mm+'/'+yy) : '';
+    /* Il mese lo da' il blocco del carico, il giorno lo da' l'etichetta della
+       seduta: quando il microciclo scavalca il mese le ultime sedute di agosto
+       finiscono nel blocco di settembre, e veniva fuori "31/09/2026", una data
+       che non esiste. Il 31 in un mese che ne ha 30 puo' essere solo il 31 del
+       mese prima: la data si riporta li'. Serve anche al foglio del mister e
+       alle esercitazioni, che si cercano per data e prima non si trovavano. */
+    let annoN = +yy, meseN = +mm;
+    const ultimoG = (annoN && meseN) ? new Date(annoN, meseN, 0).getDate() : 31;
+    if(+day > ultimoG){ meseN -= 1; if(meseN < 1){ meseN = 12; annoN -= 1; } }
+    const mm2 = meseN ? (meseN<10 ? ('0'+meseN) : String(meseN)) : mm;
+    const dateStr = (dd && mm && yy) ? (dd+'/'+mm2+'/'+String(annoN||yy)) : '';
     let wd = '';
     const s = sessionsForMonth(mk).find(function(x){ return x.label===String(label); });
     if(s) wd = s.wd || '';
@@ -1770,30 +1800,51 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const p = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dateStr||''));
     return p ? (p[3]+'-'+p[2]+'-'+p[1]) : '';
   }
-  /* Le sedute per cui esiste la scansione del foglio del mister, la stessa
-     lista che usa la pagina Esercitazioni. Il file sta in
-     coach/prev/seduta-<data>-<slot>.jpg */
-  const FOGLI = ['2026-08-05-AM','2026-08-06-AM','2026-08-07-AM','2026-08-09-AM',
-    '2026-08-10-AM','2026-08-10-PM','2026-08-11-AM','2026-08-12-AM','2026-08-13-AM',
-    '2026-08-17-AM','2026-08-18-AM','2026-08-18-PM','2026-08-20-AM','2026-08-21-AM',
-    '2026-08-24-AM','2026-08-25-AM','2026-08-28-AM','2026-08-31-AM','2026-09-01-AM',
-    '2026-09-02-AM'];
+  /* Il foglio del mister sta in coach/prev/seduta-<data>-<slot>.jpg. Prima qui
+     c'era la lista scritta a mano delle sedute che avevano la scansione: ogni
+     volta che arrivava un allenamento nuovo bisognava aprire il codice e
+     aggiungere una riga, e finche' non lo si faceva il foglio restava
+     invisibile anche se il file era gia' online. Adesso la pagina prova a
+     caricare l'immagine della seduta che sta guardando: se c'e' la mostra, se
+     non c'e' toglie la figura senza lasciare il buco. Per aggiungere una seduta
+     basta mettere il file in coach/prev/ e pubblicare, il codice non si tocca. */
+  const FOG_OK = Object.create(null);
   function fogKey(m){
     const iso = cfIso(m && m.meta ? m.meta.dateStr : '');
     if(!iso) return '';
-    const k = iso+'-'+((m.meta.ap || 'AM'));
-    return FOGLI.indexOf(k) >= 0 ? k : '';
+    return iso+'-'+((m.meta.ap || 'AM'));
+  }
+  function fogSrc(key){ return 'prev/seduta-'+key+'.jpg'; }
+  /* La risposta resta in memoria: la stessa seduta non si va a cercare due
+     volte, e la stampa sa gia' se la figura c'e' senza doverla aspettare. */
+  function fogCerca(key, poi){
+    if(!key){ if(poi) poi(false); return; }
+    if(FOG_OK[key] !== undefined){ if(poi) poi(FOG_OK[key]); return; }
+    const im = new Image();
+    im.onload  = function(){ FOG_OK[key] = true;  if(poi) poi(true); };
+    im.onerror = function(){ FOG_OK[key] = false; if(poi) poi(false); };
+    im.src = fogSrc(key);
   }
   /* In stampa questa figura e' la prima pagina, quindi l'immagine si carica
      subito: se fosse dietro un tasto non finirebbe sul foglio. */
   function fogHTML(key){
     if(!key) return '';
-    const src = 'prev/seduta-'+key+'.jpg';
-    return '<figure class="rfog">'+
-      '<img src="'+src+'" loading="lazy" alt="Foglio della seduta del '+esc(key)+' disegnato dal mister">'+
+    const src = fogSrc(key);
+    return '<figure class="rfog" data-fog="'+esc(key)+'">'+
+      '<img src="'+src+'" alt="Foglio della seduta del '+esc(key)+' disegnato dal mister">'+
       '<figcaption>Il foglio della seduta come lo ha preparato il mister.'+
       '<a href="'+src+'" target="_blank" rel="noopener">Apri a schermo intero</a></figcaption>'+
     '</figure>';
+  }
+  /* Quando la risposta arriva si aggiusta la pagina: via la figura se il foglio
+     non c'e', e la classe che regola l'impaginazione della stampa segue. */
+  function fogSistema(host, key){
+    fogCerca(key, function(ok){
+      if(!host || !host.isConnected) return;
+      const f = host.querySelector('.rfog[data-fog="'+key+'"]');
+      if(!ok && f) f.remove();
+      host.classList.toggle('has-fog', !!ok);
+    });
   }
   function cfCal(){
     try{
@@ -2237,9 +2288,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        da dove arrivano i numeri, che serve a chi costruisce il report, non a chi
        lo legge in campo. Meno righe grigie, piu' spazio per la figura e per i
        numeri. */
+    /* La figura entra solo se il file esiste davvero: la pagina lo ha gia'
+       chiesto quando ha disegnato il report, quindi qui la risposta e' pronta e
+       non si rischia di stampare un riquadro vuoto al posto della scansione. */
     const corpi = [];
-    const fog = fk
-      ? ('<figure class="pfog"><img src="prev/seduta-'+fk+'.jpg" alt="Foglio della seduta del '+
+    const fog = (fk && FOG_OK[fk] === true)
+      ? ('<figure class="pfog"><img src="'+fogSrc(fk)+'" alt="Foglio della seduta del '+
          esc(fk)+' disegnato dal mister"></figure>')
       : '';
     const kpi = '<div class="pkpis-t">Medie di squadra</div><div class="pkpis">'+
@@ -2334,7 +2388,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<div id="dc-wrap">'+dailyChartHTML(m)+'</div></div>';
 
     const foot = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(sessLine)+'</span>'+
-      '<span>RS Coaching · '+esc(genTxt)+'</span></div>';
+      '<span>'+esc(genTxt)+'</span></div>';
 
     /* Se la seduta ha il foglio del mister apre lui il documento e in stampa si
        prende la prima pagina: la classe accende le regole di impaginazione. */
@@ -2347,6 +2401,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.classList.toggle('has-fog', !!fk);
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
       exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
+    fogSistema(host, fk);
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
     // le pillole cambiano solo il grafico: ridisegnare tutta la pagina farebbe
@@ -2641,8 +2696,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = PC.faint; ctx.font = '400 11.5px Inter, sans-serif'; ctx.textAlign = 'left';
     ctx.fillText('Fiorentina Primavera U19W', P, H - 22);
-    ctx.textAlign = 'right'; ctx.fillText('RS Coaching', W - P, H - 22);
-    ctx.textAlign = 'left';
 
     try { return cv.toDataURL('image/png'); } catch(e){ return null; }
   }
