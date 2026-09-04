@@ -169,6 +169,44 @@ a{ color:inherit; text-decoration:none; }
 .btn.primary:hover{ background:var(--orange2); color:#1a0d05; }
 .btn.sm{ font-size:12px; padding:6px 11px; min-height:34px; gap:6px; }
 .btn.sm svg{ width:14px; height:14px; }
+.btn .cnt{ display:inline-grid; place-items:center; min-width:19px; height:18px; padding:0 5px; border-radius:999px;
+  background:var(--orange); color:#1a0d05; font-size:10.5px; font-weight:700; font-variant-numeric:tabular-nums; margin-left:1px; }
+
+/* ---------- picker delle giornate da stampare ---------- */
+/* Stesso selettore del report giornaliero, cosi' chi passa da una pagina
+   all'altra ritrova lo stesso gesto: si apre, si spuntano i giorni, la stampa
+   esce con un foglio per giornata in ordine di calendario. */
+dialog.picker{ border:0; padding:0; background:transparent; max-width:min(94vw,460px); width:100%; margin:auto; }
+dialog.picker::backdrop{ background:oklch(0% 0 0 / 0.55); backdrop-filter: blur(3px); }
+.picker-card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-md);
+  overflow:hidden; display:flex; flex-direction:column; max-height:82vh; }
+dialog.picker[open] .picker-card{ animation:pk .26s var(--ease); }
+@keyframes pk{ from{ opacity:0; transform:translateY(10px) scale(.98); } to{ opacity:1; transform:none; } }
+.picker-head{ display:flex; align-items:center; gap:11px; padding:16px 18px; border-bottom:1px solid var(--border); }
+.picker-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:21px; letter-spacing:.5px; color:var(--ink); line-height:1; }
+.picker-head .ph-sub{ font-size:11.5px; color:var(--muted); margin-top:3px; }
+.picker-head .x{ margin-left:auto; appearance:none; cursor:pointer; width:32px; height:32px; border-radius:8px; flex:0 0 32px;
+  border:1px solid var(--border2); background:var(--surface2); color:var(--muted); display:grid; place-items:center;
+  transition: color .16s var(--ease), border-color .16s var(--ease); }
+.picker-head .x:hover{ color:var(--ink); border-color:var(--border3); }
+.picker-head .x svg{ width:15px; height:15px; }
+.picker-list{ overflow-y:auto; padding:4px 18px; -webkit-overflow-scrolling:touch; }
+.mrow{ display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+.mrow:last-child{ border-bottom:0; }
+.mrow input{ accent-color:var(--orange); width:17px; height:17px; flex:0 0 17px; cursor:pointer; }
+.mrow .mr-name{ font-size:13.5px; color:var(--text); font-weight:500; }
+.mrow .mr-unit{ margin-left:auto; font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.mrow:hover .mr-name{ color:var(--ink); }
+/* La seduta che si sta stampando c'e' sempre: la riga si vede ma non si tocca,
+   cosi' e' chiaro perche' la spunta non si toglie. */
+.mrow:has(input:disabled){ cursor:default; opacity:.72; }
+.mrow input:disabled{ cursor:default; }
+.picker-list .lvoid{ font-size:12.5px; color:var(--faint); margin:14px 4px; }
+.picker-foot{ display:flex; align-items:center; gap:8px; padding:13px 18px; border-top:1px solid var(--border); }
+.picker-foot .lnk{ appearance:none; cursor:pointer; background:transparent; border:0; font-family:inherit; font-size:12.5px; font-weight:600;
+  color:var(--muted); padding:7px 9px; border-radius:7px; transition: color .16s var(--ease), background .16s var(--ease); }
+.picker-foot .lnk:hover{ color:var(--ink); background:var(--surface2); }
+.picker-foot .sp{ flex:1 1 auto; }
 
 /* ---------- add form ---------- */
 .addform{ display:none; gap:12px; flex-wrap:wrap; align-items:flex-end;
@@ -531,10 +569,15 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
   .app{ display:block !important; }
   .main{ padding:0 !important; }
   .wrap{ max-width:none !important; padding:0 !important; }
-  /* una pagina sola: la scatola e' alta quanto l'A4 e taglia il resto, la
-     scala di .ps-page la decide fitPrintSheet() misurando il contenuto */
-  #print-only{ display:block !important; box-sizing:border-box;
-    width:210mm; height:297mm; padding:11mm 12mm; overflow:hidden; }
+  /* una facciata per giornata: #print-only e' solo il contenitore, la scatola
+     A4 e' .ps-sheet, alta quanto la pagina e con il taglio a fine foglio. La
+     scala di ogni .ps-page la decide fitPrintSheet() misurandola per conto suo,
+     cosi' un giorno pieno si stringe senza portarsi dietro gli altri. */
+  #print-only{ display:block !important; }
+  #print-only .ps-sheet{ box-sizing:border-box;
+    width:210mm; height:297mm; padding:11mm 12mm; overflow:hidden;
+    break-after:page; page-break-after:always; }
+  #print-only .ps-sheet:last-child{ break-after:auto; page-break-after:auto; }
   #print-only .ps-page{ transform-origin:top left; }
   #print-only .ps-head, #print-only .ps-slot, #print-only .ftbox,
   #print-only table.petbl thead th{
@@ -583,7 +626,11 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           Aggiungi
         </button>
-        <button class="btn" id="btn-print" title="Stampa in PDF il foglio della seduta in cima alla lista. Per un altro giorno usa il tasto PDF della sua scheda">
+        <button class="btn" id="btn-days" type="button" aria-haspopup="dialog" title="Scegli quali giornate finiscono nella stessa stampa: un foglio per giorno, in ordine di data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 13h2M11 13h2M15 13h2M7 17h2M11 17h2"/></svg>
+          <span id="lbl-days">Solo questa</span> <span class="cnt" id="cnt-days">1</span>
+        </button>
+        <button class="btn" id="btn-print" title="Stampa in PDF il foglio della seduta in cima alla lista. Per un altro giorno usa il tasto PDF della sua scheda oppure il selettore Giornate">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           PDF
         </button>
@@ -636,9 +683,10 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
       <!-- sessions -->
       <div class="sessions reveal" id="sessions" style="--i:3"></div>
 
-      <!-- foglio solo-stampa: la seduta scelta, con dettagli, atlete, dati e assenti.
-           .ps-page si rimpicciolisce quel tanto che basta per stare in una pagina -->
-      <div id="print-only" aria-hidden="true"><div class="ps-page" id="ps-page"></div></div>
+      <!-- fogli solo-stampa: una facciata per giornata scelta, con dettagli,
+           atlete, dati e assenti. Ogni .ps-page si rimpicciolisce quel tanto che
+           basta per stare nella sua pagina -->
+      <div id="print-only" aria-hidden="true"></div>
     </div>
 
     <p class="foot-note">
@@ -650,6 +698,24 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- picker: giornate da stampare insieme -->
+<dialog class="picker" id="dlg-days" aria-label="Selezione giornate da stampare">
+  <div class="picker-card">
+    <div class="picker-head">
+      <div><h3>Giornate in stampa</h3><div class="ph-sub">Piu' sedute nello stesso documento, in ordine di data, un foglio per giornata</div></div>
+      <button class="x" type="button" data-close aria-label="Chiudi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="picker-list" id="list-days"></div>
+    <div class="picker-foot">
+      <button class="lnk" type="button" data-week>Settimana</button>
+      <button class="lnk" type="button" data-month>Mese</button>
+      <button class="lnk" type="button" data-none>Solo questa</button>
+      <span class="sp"></span>
+      <button class="btn primary" type="button" data-close>Fatto</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- snapshot esercitazioni (window.ESERC) -->
 <script src="./esercitazioni_data.js"></script>
@@ -1924,11 +1990,15 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return '<div class="lgrid">'+cells.join('')+'</div>';
   }
 
-  // ---------- foglio solo-stampa: una seduta sola ----------
+  // ---------- fogli solo-stampa: una facciata per giornata ----------
   // Il foglio che serve al campo e' quello del giorno, non l'elenco di tutta la
   // stagione. Si stampa la seduta scelta col suo tasto PDF; se non e' stato
-  // scelto niente vale la prima seduta a schermo, cioe' la piu' recente.
+  // scelto niente vale la prima seduta a schermo, cioe' la piu' recente. Col
+  // selettore Giornate se ne mettono piu' di una nello stesso documento: resta
+  // una facciata per giorno, in ordine di calendario.
   let PRINT_KEY = '';
+  let selDays = new Set();
+  function sesKey(s){ return s.date+'|'+s.slot; }
   function printTarget(all){
     const keys = [];
     if(PRINT_KEY) keys.push(PRINT_KEY);
@@ -1941,39 +2011,83 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return null;
   }
+  // il lunedi' della settimana di una data ISO, per il tasto "Settimana"
+  function isoLunedi(iso){
+    const d = parseDate(iso); if(!d) return '';
+    d.setDate(d.getDate() - ((d.getDay()+6) % 7));
+    const mm = d.getMonth()+1, dd = d.getDate();
+    return d.getFullYear()+'-'+(mm<10?'0':'')+mm+'-'+(dd<10?'0':'')+dd;
+  }
+  /* Le giornate che finiscono nel documento, in ordine di calendario. La seduta
+     di riferimento c'e' sempre: cosi' il tasto stampa non puo' produrre un
+     documento vuoto nemmeno se il selettore resta senza segni. buildSessions()
+     ordina dalla piu' recente perche' a schermo serve quella; sul foglio invece
+     il tempo deve andare avanti, quindi qui si rigira. */
+  function printDays(all){
+    const list = all || buildSessions();
+    const cur = printTarget(list);
+    const ck = cur ? sesKey(cur) : '';
+    return list.slice()
+      .filter(function(s){ return selDays.has(sesKey(s)) || sesKey(s)===ck; })
+      .sort(function(a, b){
+        if(a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return a.slot < b.slot ? -1 : (a.slot > b.slot ? 1 : 0);
+      });
+  }
 
-  // il foglio deve stare in una pagina sola. Si misura fuori schermo alla
+  // ogni giornata deve stare in una pagina sola. Si misura fuori schermo alla
   // larghezza vera di stampa e, se sfora, si stringe la scala di un passo per
   // volta: meglio un carattere un filo piu' piccolo che una seconda pagina con
   // due righe sopra. La larghezza cresce di pari passo (186/k) cosi' il testo
   // torna a riempire il foglio invece di lasciare la colonna bianca a destra.
+  // La misura e' per facciata: un giorno pieno si stringe da solo e non tira
+  // dietro gli altri, che di loro ci starebbero comodi.
   const PS_W = 186, PS_H = 275;   // area utile dentro l'A4, in millimetri
   const PS_STEPS = [1, .95, .9, .86, .82, .78, .74, .7, .66, .62, .58, .54, .5];
   function fitPrintSheet(){
     const host = document.getElementById('print-only');
-    const page = document.getElementById('ps-page');
-    if(!host || !page || !page.firstChild) return;
+    if(!host) return;
+    const sheets = Array.prototype.slice.call(host.querySelectorAll('.ps-sheet'));
+    if(!sheets.length) return;
     const maxH = PS_H / 25.4 * 96;
     const saved = host.getAttribute('style') || '';
     host.setAttribute('style', 'display:block;position:absolute;left:-20000px;top:0;'+
       'width:'+PS_W+'mm;padding:0;visibility:hidden;');
-    let k = 1;
-    for(let i=0; i<PS_STEPS.length; i++){
-      k = PS_STEPS[i];
-      page.style.width = (PS_W / k) + 'mm';
-      page.style.transform = 'scale('+k+')';
-      if(page.scrollHeight * k <= maxH) break;
-    }
+    // durante la misura la scatola A4 lascia libera l'altezza, senno'
+    // scrollHeight direbbe sempre 297mm e nessuna facciata si stringerebbe mai
+    sheets.forEach(function(sh){
+      sh.setAttribute('style', 'display:block;width:'+PS_W+'mm;height:auto;padding:0;overflow:visible;');
+    });
+    sheets.forEach(function(sh){
+      const page = sh.querySelector('.ps-page');
+      if(!page || !page.firstChild) return;
+      for(let i=0; i<PS_STEPS.length; i++){
+        const k = PS_STEPS[i];
+        page.style.width = (PS_W / k) + 'mm';
+        page.style.transform = 'scale('+k+')';
+        if(page.scrollHeight * k <= maxH) break;
+      }
+    });
+    sheets.forEach(function(sh){ sh.removeAttribute('style'); });
     if(saved) host.setAttribute('style', saved); else host.removeAttribute('style');
   }
   function preparePrint(){ buildPrintSheet(); fitPrintSheet(); }
 
+  // il documento intero: una .ps-sheet per giornata, che in stampa e' alta
+  // quanto l'A4 e taglia la pagina dopo di se'
   function buildPrintSheet(){
-    const host = document.getElementById('ps-page'); if(!host) return;
+    const host = document.getElementById('print-only'); if(!host) return;
     const all = buildSessions();
-    const s = printTarget(all);
-    if(!s){ host.innerHTML = ''; return; }
+    const giorni = printDays(all);
+    if(!giorni.length){ host.innerHTML = ''; return; }
     const dets = loadDet();
+    host.innerHTML = giorni.map(function(s){
+      return '<div class="ps-sheet"><div class="ps-page">'+sheetHTML(s, dets)+'</div></div>';
+    }).join('');
+  }
+
+  // la facciata di una giornata: intestazione, carico, esercitazioni, gruppi, assenti
+  function sheetHTML(s, dets){
     const dt = parseDate(s.date);
     let dLabel = dt ? DTFL.format(dt) : s.date;
     dLabel = dLabel.charAt(0).toUpperCase() + dLabel.slice(1);
@@ -2041,15 +2155,52 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         ? s.assenti.map(n=> '<b>'+esc(disp(n))+'</b>').join(', ')
         : 'Nessuna assente, rosa GPS al completo.')+'</div>';
 
-    host.innerHTML = h;
+    return h;
   }
 
-  // stampa della singola seduta, dal tasto PDF della sua scheda
+  // stampa della singola seduta, dal tasto PDF della sua scheda: quel tasto
+  // vuol dire "questa giornata", quindi azzera anche le altre eventualmente
+  // scelte nel selettore, senno' uscirebbero fogli che nessuno ha chiesto
   function printDay(date, slot){
     PRINT_KEY = date+'|'+slot;
+    selDays = new Set();
+    updateDayBadge();
     preparePrint();
     window.print();
   }
+
+  /* ---------- selettore delle giornate ---------- */
+  /* L'elenco parte dalla piu' recente perche' e' quella che serve quasi sempre,
+     ma la stampa resta in ordine di calendario. La seduta di riferimento si
+     vede spuntata e bloccata: e' quella che il tasto stampa userebbe comunque. */
+  function buildDayList(){
+    const host = document.getElementById('list-days'); if(!host) return;
+    const all = buildSessions();
+    if(!all.length){ host.innerHTML = '<p class="lvoid">Non ci sono sedute registrate.</p>'; return; }
+    const cur = printTarget(all);
+    const ck = cur ? sesKey(cur) : '';
+    host.innerHTML = all.map(function(s){
+      const k = sesKey(s);
+      const fisso = (k === ck);
+      const on = (fisso || selDays.has(k)) ? ' checked' : '';
+      const dt = parseDate(s.date);
+      let nome = dt ? DTFL.format(dt) : s.date;
+      nome = nome.charAt(0).toUpperCase() + nome.slice(1);
+      const unit = (s.slot||'') + (fisso ? ' · in stampa' : '');
+      return '<label class="mrow"><input type="checkbox" data-k="'+esc(k)+'"'+on+
+        (fisso ? ' disabled' : '')+'>'+
+        '<span class="mr-name">'+esc(nome)+'</span>'+
+        '<span class="mr-unit">'+esc(unit)+'</span></label>';
+    }).join('');
+  }
+  function updateDayBadge(){
+    const n = printDays().length;
+    const c = document.getElementById('cnt-days');
+    const l = document.getElementById('lbl-days');
+    if(c) c.textContent = String(n);
+    if(l) l.textContent = (n > 1) ? 'Piu\' giorni' : 'Solo questa';
+  }
+  function daysCambiate(){ buildPrintSheet(); updateDayBadge(); }
 
   // ---------- export Excel (.xls, colori viola, raggruppato per seduta) ----------
   function exportXLS(){
@@ -2166,6 +2317,46 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   });
   window.addEventListener('beforeprint', preparePrint);
 
+  // ---------- selettore delle giornate da stampare insieme ----------
+  (function(){
+    const dlg = document.getElementById('dlg-days'); if(!dlg) return;
+    document.getElementById('btn-days').addEventListener('click', ()=>{
+      buildDayList(); dlg.showModal();
+    });
+    dlg.addEventListener('click', e=>{ if(e.target===dlg) dlg.close(); });
+    dlg.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> dlg.close()));
+    /* "Settimana" prende il lunedi'-domenica della seduta di riferimento e non
+       il mese: un microciclo scavalca quasi sempre il cambio di mese e la
+       settimana di lavoro va stampata intera. "Mese" prende il mese di quella
+       stessa seduta. */
+    dlg.querySelector('[data-week]').addEventListener('click', ()=>{
+      const all = buildSessions();
+      const cur = printTarget(all);
+      const lun = cur ? isoLunedi(cur.date) : '';
+      selDays = new Set();
+      if(lun) all.forEach(s=>{ if(isoLunedi(s.date) === lun) selDays.add(sesKey(s)); });
+      buildDayList(); daysCambiate();
+    });
+    dlg.querySelector('[data-month]').addEventListener('click', ()=>{
+      const all = buildSessions();
+      const cur = printTarget(all);
+      const mk = cur ? String(cur.date).slice(0,7) : '';
+      selDays = new Set();
+      if(mk) all.forEach(s=>{ if(String(s.date).slice(0,7) === mk) selDays.add(sesKey(s)); });
+      buildDayList(); daysCambiate();
+    });
+    dlg.querySelector('[data-none]').addEventListener('click', ()=>{
+      selDays = new Set();
+      buildDayList(); daysCambiate();
+    });
+    document.getElementById('list-days').addEventListener('change', e=>{
+      const cb = e.target; if(!cb || cb.type!=='checkbox') return;
+      const k = cb.getAttribute('data-k');
+      if(cb.checked) selDays.add(k); else selDays.delete(k);
+      daysCambiate();
+    });
+  })();
+
   // ---------- sinottica ----------
   (function(){
     const el = document.getElementById('sinpick'); if(!el) return;
@@ -2223,6 +2414,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     renderAthCard(all);
     renderSessions(filtered(all));
     buildPrintSheet();
+    // i filtri cambiano quale seduta e' quella di riferimento, quindi il conto
+    // sul tasto Giornate va rifatto insieme al resto
+    updateDayBadge();
   }
   // Nome cambiato in Atlete, anche da un'altra scheda del browser: qui vanno
   // rilette tendina, scheda della calciatrice e righe delle sedute.
