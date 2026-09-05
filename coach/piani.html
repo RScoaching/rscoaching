@@ -673,27 +673,48 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 #print-only table.pt thead th.g{ background:#efe7f7; color:#5b2d90; }
 #print-only table.pt td.mut{ color:#8c8490; }
 
-/* foglio spogliatoio: caratteri grandi, si legge da lontano */
-#print-only .sp .pr-h{ font-size:30px; }
-#print-only .sp .pr-s{ font-size:11.5px; }
-#print-only .sp .pr-gt{ font-size:12.5px; }
-#print-only .sp table.pt{ font-size:13px; }
-#print-only .sp table.pt th, #print-only .sp table.pt td{ padding:5px 8px; }
-#print-only .sp tbody tr:nth-child(odd) td{ background:#faf8fd; }
-#print-only .sp td.rk{ text-align:center; font-weight:700; color:#5b2d90; }
-#print-only .sp td.big{ font-weight:700; color:#14110f; }
-#print-only .sp .fl{ color:#9f2f2d; font-style:italic; }
+/* foglio spogliatoio: caratteri grandi, si legge da lontano.
+   La classe `sp` la mette `buildSpog()` sul contenitore stesso, non su un figlio,
+   quindi il selettore va attaccato: `#print-only.sp` e non `#print-only .sp`.
+   Scritto staccato non ha mai agganciato niente, e in stampa uscivano i corpi
+   di base invece di questi: e' il motivo per cui il foglio si leggeva male. */
+#print-only.sp .pr-h{ font-size:30px; }
+#print-only.sp .pr-s{ font-size:11.5px; }
+#print-only.sp .pr-gt{ font-size:12.5px; }
+#print-only.sp table.pt{ font-size:13px; }
+#print-only.sp table.pt th, #print-only.sp table.pt td{ padding:5px 8px; }
+#print-only.sp tbody tr:nth-child(odd) td{ background:#faf8fd; }
+#print-only.sp td.rk{ text-align:center; font-weight:700; color:#5b2d90; }
+#print-only.sp td.big{ font-weight:700; color:#14110f; }
+#print-only.sp .fl{ color:#9f2f2d; font-style:italic; }
+/* La classifica della velocita e' una lista lunga e stretta: trentadue righe di
+   nome, ruolo e un numero. Da sola si prende un foglio intero e manda i record
+   sulla facciata dopo, che resta quasi vuota. Divisa in due mezze colonne
+   affiancate ci sta tutto su una pagina e la larghezza del foglio viene usata
+   davvero. Il taglio lo decide `prSpogVel()`, che affianca le due meta' solo
+   quando le righe sono abbastanza da valerne la pena. */
+#print-only .pr-duo{ display:flex; gap:6mm; align-items:flex-start;
+  break-inside:avoid; page-break-inside:avoid; }
+#print-only .pr-duo > div{ flex:1 1 0; min-width:0; }
+#print-only.sp .pr-duo table.pt th, #print-only.sp .pr-duo table.pt td{ padding:5px 6px; }
 
-/* foglio panoramica: tutto in una pagina, quindi caratteri minuscoli */
-#print-only .pn .pr-h{ font-size:22px; }
-#print-only .pn .pr-s{ font-size:9.5px; }
-#print-only .pn table.pt{ font-size:7px; }
-#print-only .pn table.pt th, #print-only .pn table.pt td{ padding:2px 1px; text-align:center;
-  word-break:break-word; }
-#print-only .pn table.pt th.l, #print-only .pn table.pt td.l{ text-align:left; padding-left:5px; }
-#print-only .pn table.pt thead th.g{ font-size:7.5px; letter-spacing:.04em; }
-#print-only .pn td.warn{ background:#fbf3db; color:#7a5200; font-weight:700; }
-#print-only .pn td.bad{ background:#fdebec; color:#9f2f2d; font-weight:700; }
+/* foglio panoramica: caratteri minuscoli, perche' ci sono cinquantuno colonne.
+   Anche qui la classe `pn` sta sul contenitore, quindi il selettore e' attaccato. */
+#print-only.pn .pr-h{ font-size:22px; }
+#print-only.pn .pr-s{ font-size:9.5px; }
+#print-only.pn table.pt{ font-size:7px; }
+#print-only.pn table.pt th, #print-only.pn table.pt td{ padding:2px 1px; text-align:center; }
+/* Le sigle dei test in cima possono andare a capo, tanto la riga di intestazione
+   e' una sola e l'altezza in piu' la paga una volta. I numeri sotto no: una
+   cella che va a capo raddoppia la sua riga, e trentadue righe raddoppiate sono
+   una facciata in piu' per niente. */
+#print-only.pn table.pt thead th{ word-break:break-word; }
+#print-only.pn table.pt tbody td{ white-space:nowrap; overflow:hidden; }
+#print-only.pn .pn-foglio + .pn-foglio{ break-before:page; page-break-before:always; }
+#print-only.pn table.pt th.l, #print-only.pn table.pt td.l{ text-align:left; padding-left:5px; }
+#print-only.pn table.pt thead th.g{ font-size:7.5px; letter-spacing:.04em; }
+#print-only.pn td.warn{ background:#fbf3db; color:#7a5200; font-weight:700; }
+#print-only.pn td.bad{ background:#fdebec; color:#9f2f2d; font-weight:700; }
 
 @media (max-width:900px){
   .kpis{ grid-template-columns:repeat(2, 1fr); }
@@ -1843,9 +1864,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // browser ci scrive di suo la riga con il titolo della pagina e
     // l'indirizzo del sito, in nero, sopra e sotto ogni foglio: sono le
     // scritte stampate che nessuno ha chiesto. Sotto i nove millimetri quella
-    // riga non ci sta piu' e il browser la lascia perdere. Ai lati il contorno
-    // resta quello di prima, li' non scrive niente.
-    st.textContent = '@page{ size:A4 '+(landscape?'landscape':'portrait')+'; margin:6mm '+(landscape?'9mm':'14mm')+'; }';
+    // riga non ci sta piu' e il browser la lascia perdere. Ai lati bastano otto
+    // millimetri: li' il browser non scrive niente e ogni millimetro in piu' e'
+    // larghezza che va ai nomi delle atlete, che sono la cosa da leggere.
+    st.textContent = '@page{ size:A4 '+(landscape?'landscape':'portrait')+'; margin:6mm '+(landscape?'9mm':'8mm')+'; }';
   }
   function prWhen(){ return curSess ? ('rilevazione di '+curSess) : 'tutte le rilevazioni'; }
   function prMeta(parts){ return parts.filter(Boolean).map(esc).join(' &#183; '); }
@@ -1858,16 +1880,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function prSpogVel(){
     const ranked = monitored.filter(p=> p.smax>0).slice().sort((a,b)=> (b.smax||0)-(a.smax||0));
     if(!ranked.length) return '';
-    const rows = ranked.map((p,i)=>
+    const riga = (p,i)=>
       '<tr><td class="rk">'+(i+1)+'</td>'+
       '<td class="l big">'+esc(disp(p.name))+(p.susp?' <span class="fl">da verificare</span>':'')+'</td>'+
       '<td class="l">'+esc(p.role||'')+'</td>'+
-      '<td class="big">'+NF1.format(p.smax)+'</td></tr>').join('');
-    return '<div class="pr-grp"><p class="pr-gt">Velocita massima &#183; km/h</p>'+
+      '<td class="big">'+NF1.format(p.smax)+'</td></tr>';
+    /* La colonna del ruolo si stringe quando le tabelle sono due affiancate: in
+       meta' foglio il nome dell'atleta ha bisogno di tutto quello che avanza. */
+    const tabella = (lista, da, stretta)=>
       '<table class="pt">'+
-      '<colgroup><col style="width:36px"><col><col style="width:26%"><col style="width:74px"></colgroup>'+
+      '<colgroup><col style="width:'+(stretta?'26px':'36px')+'"><col>'+
+      '<col style="width:'+(stretta?'22%':'26%')+'"><col style="width:'+(stretta?'54px':'74px')+'"></colgroup>'+
       '<thead><tr><th>#</th><th class="l">Atleta</th><th class="l">Ruolo</th><th>km/h</th></tr></thead>'+
-      '<tbody>'+rows+'</tbody></table></div>';
+      '<tbody>'+lista.map((p,i)=> riga(p, da+i)).join('')+'</tbody></table>';
+    const tit = '<p class="pr-gt">Velocita massima &#183; km/h</p>';
+    /* Sotto le quattordici righe la lista sta comoda in colonna sola e spezzarla
+       in due farebbe solo due mezze tabelle mozze. Sopra, il taglio e' a meta'
+       esatta: e' una classifica, il primo della seconda colonna e' il numero che
+       segue l'ultimo della prima e si legge di seguito. */
+    if(ranked.length < 14) return '<div class="pr-grp">'+tit+tabella(ranked, 1, false)+'</div>';
+    const meta = Math.ceil(ranked.length/2);
+    return '<div class="pr-grp">'+tit+
+      '<div class="pr-duo">'+
+        '<div>'+tabella(ranked.slice(0, meta), 1, true)+'</div>'+
+        '<div>'+tabella(ranked.slice(meta), meta+1, true)+'</div>'+
+      '</div></div>';
   }
   function prRecGroups(){
     const groups = [];
@@ -1943,6 +1980,47 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
            cell(l, l.has ? NF.format(l.val)+'%' : '')+
            cell(y, y.has ? NF1.format(y.val) : '');
   }
+  /* Il foglio orizzontale con sei millimetri sopra e sotto e nove ai lati e'
+     largo 1054 px (279 mm). La colonna dei nomi ne vuole 113 (30 mm): sotto quel
+     valore i cognomi vanno a capo, ogni riga raddoppia di altezza e la tabella
+     si allunga fino a passare la facciata. Per le colonne dei numeri il minimo
+     leggibile e' 21 px: `-12,5` a sette punti ne misura diciotto piu' due di
+     contorno. Da qui esce quante colonne ci stanno per foglio; le quattro degli
+     indici viaggiano sempre con l'ultimo. */
+  const PN_LARG = 1054, PN_NOME = 113, PN_MINCOL = 21;
+  function pnMaxCol(){ return Math.max(6, Math.floor((PN_LARG - PN_NOME) / PN_MINCOL) - 4); }
+  /* I test si tagliano per fogli tenendo insieme le categorie: una categoria
+     spezzata su due facciate obbliga il mister a girare il foglio per leggere
+     una riga sola. Se pero' una categoria da sola non ci sta, si spezza lei,
+     perche' l'alternativa e' una facciata illeggibile.
+     Il taglio non e' avido. Riempire il primo foglio fino al massimo lascia
+     quaranta colonne da ventiquattro pixel sulla prima facciata e quindici da
+     sessantatre sulla seconda: la prima si legge male e la seconda spreca
+     spazio. Prima si conta quante facciate servono davvero, poi si divide il
+     totale per quel numero e si tiene quella quota per foglio, cosi' le colonne
+     escono della stessa larghezza dappertutto. */
+  function pnFogli(cols){
+    const max = pnMaxCol(), fogli = [];
+    const tot = cols.reduce((a,g)=> a+g.tests.length, 0);
+    const quota = Math.ceil(tot / Math.max(1, Math.ceil(tot / max)));
+    let cur = [], n = 0;
+    cols.forEach(g=>{
+      let resto = g.tests;
+      while(resto.length){
+        /* Foglio gia' pieno per la sua quota, e quello che resta della categoria
+           ci sta tutto su una facciata nuova: si chiude qui e si ricomincia. */
+        if(n > 0 && (n >= quota || n + resto.length > max) && resto.length <= max){
+          fogli.push(cur); cur = []; n = 0;
+        }
+        const spazio = max - n;
+        if(spazio <= 0){ fogli.push(cur); cur = []; n = 0; continue; }
+        if(resto.length <= spazio){ cur.push({ cat:g.cat, tests:resto }); n += resto.length; resto = []; }
+        else { cur.push({ cat:g.cat, tests:resto.slice(0, spazio) }); n = max; resto = resto.slice(spazio); }
+      }
+    });
+    if(cur.length) fogli.push(cur);
+    return fogli.length ? fogli : [[]];
+  }
   function buildPano(){
     const host = document.getElementById('print-only');
     host.className = 'pn';
@@ -1952,30 +2030,48 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<p class="pr-empty">Nessun valore registrato per '+esc(prWhen())+'.</p>';
       return;
     }
-    let h1 = '<tr><th class="l" rowspan="2">Atleta</th>';
-    let h2 = '<tr>';
-    cols.forEach(g=>{
-      h1 += '<th colspan="'+g.tests.length+'">'+esc(g.cat)+'</th>';
-      g.tests.forEach(t=>{ h2 += '<th class="g">'+esc(t.short||t.label)+'</th>'; });
-    });
-    h1 += '<th colspan="4">Indici</th></tr>';
-    h2 += '<th class="g">EUR</th><th class="g">FMS</th><th class="g">LSI</th><th class="g">Y-bal</th></tr>';
-    const body = roster.map(name=>{
-      let tds = '<td class="l">'+esc(disp(name))+'</td>';
-      cols.forEach(g=>{
-        g.tests.forEach(t=>{
-          const v = valOf(REG[t.key]||{}, name);
-          tds += '<td'+(v==null?' class="mut"':'')+'>'+(v==null?'-':recNum(v, t.unit))+'</td>';
-        });
+    const fogli = pnFogli(cols);
+    const tavola = function(gruppi, indici){
+      const nTest = gruppi.reduce((a,g)=> a+g.tests.length, 0);
+      let h1 = '<tr><th class="l" rowspan="2">Atleta</th>';
+      let h2 = '<tr>';
+      /* Senza `colgroup` la larghezza fissa spartisce il foglio in parti uguali
+         e la colonna dei nomi finisce a diciotto pixel come quella di un numero:
+         i cognomi si tagliano. Qui i nomi hanno i loro 30 mm e le colonne dei
+         numeri si dividono quello che avanza. */
+      let cg = '<colgroup><col style="width:'+PN_NOME+'px">';
+      for(let i=0; i<nTest+(indici?4:0); i++) cg += '<col>';
+      cg += '</colgroup>';
+      gruppi.forEach(g=>{
+        h1 += '<th colspan="'+g.tests.length+'">'+esc(g.cat)+'</th>';
+        g.tests.forEach(t=>{ h2 += '<th class="g">'+esc(t.short||t.label)+'</th>'; });
       });
-      tds += prIxCells(name);
-      return '<tr>'+tds+'</tr>';
-    }).join('');
-    host.innerHTML = prHead('Panoramica test')+
-      '<table class="pt"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody></table>'+
-      '<p class="pr-note">EUR e' + "'" + ' quanto il CMJ guadagna sullo squat jump. FMS e' + "'" + ' il totale sul lato peggiore. '+
+      if(indici){
+        h1 += '<th colspan="4">Indici</th>';
+        h2 += '<th class="g">EUR</th><th class="g">FMS</th><th class="g">LSI</th><th class="g">Y-bal</th>';
+      }
+      h1 += '</tr>'; h2 += '</tr>';
+      const body = roster.map(name=>{
+        let tds = '<td class="l">'+esc(disp(name))+'</td>';
+        gruppi.forEach(g=>{
+          g.tests.forEach(t=>{
+            const v = valOf(REG[t.key]||{}, name);
+            tds += '<td'+(v==null?' class="mut"':'')+'>'+(v==null?'-':recNum(v, t.unit))+'</td>';
+          });
+        });
+        if(indici) tds += prIxCells(name);
+        return '<tr>'+tds+'</tr>';
+      }).join('');
+      return '<table class="pt">'+cg+'<thead>'+h1+h2+'</thead><tbody>'+body+'</tbody></table>';
+    };
+    const nota = '<p class="pr-note">EUR e' + "'" + ' quanto il CMJ guadagna sullo squat jump. FMS e' + "'" + ' il totale sul lato peggiore. '+
       'LSI e' + "'" + ' l' + "'" + 'arto debole diviso il forte. Y-bal e' + "'" + ' la differenza massima fra i due arti in centimetri. '+
       'Le caselle gialle sono da monitorare, quelle rosse chiedono lavoro compensativo. Il trattino vuol dire misura non registrata.</p>';
+    host.innerHTML = fogli.map(function(g, i){
+      const ultimo = (i === fogli.length-1);
+      const tit = fogli.length > 1 ? ('Panoramica test '+(i+1)+' di '+fogli.length) : 'Panoramica test';
+      return '<div class="pn-foglio">'+prHead(tit)+tavola(g, ultimo)+(ultimo ? nota : '')+'</div>';
+    }).join('');
   }
   function renderPrint(){
     const nCol = prCols().reduce((a,g)=> a+g.tests.length, 0);
