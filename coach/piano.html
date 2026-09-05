@@ -358,7 +358,12 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atc .st{ margin-left:auto; font-size:9.5px; font-weight:700; text-transform:uppercase;
   letter-spacing:.04em; padding:2px 8px; border-radius:999px; background:var(--surface3);
   border:1px solid var(--border2); color:var(--muted); white-space:nowrap; }
-.tg-atv{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:11px; }
+/* Le voci sono cinque: distanza, due fasce di velocita', accelerazioni e
+   decelerazioni. In una scheda larga 268 px cinque colonne fisse verrebbero
+   da quaranta pixel l'una e i numeri si spezzerebbero, quindi le colonne si
+   contano da sole e sotto una certa larghezza vanno a capo tre e due. */
+.tg-atv{ display:grid; grid-template-columns:repeat(auto-fit, minmax(70px, 1fr));
+  gap:8px 8px; margin-top:11px; }
 .tg-atv b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:25px;
   letter-spacing:.5px; line-height:1; color:var(--ink); }
 .tg-atv .key b{ color:var(--orange2); }
@@ -370,6 +375,10 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atb i.full{ background:var(--green); }
 .tg-att{ font-size:11.5px; color:var(--muted); margin-top:7px; }
 .tg-att b{ color:var(--text); font-weight:600; }
+/* la quota corsa fuori dal gruppo: sta sotto al conto della settimana e pesa meno,
+   perche' e' una precisazione su quel numero, non un numero nuovo */
+.tg-atd{ font-size:11px; color:var(--faint); margin-top:5px; }
+.tg-atd b{ color:var(--muted); font-weight:600; }
 .tg-atc .src{ font-size:10.5px; color:var(--faint); margin-top:6px; }
 
 /* quante volte la gara si vuole in settimana, voce per voce */
@@ -5170,9 +5179,15 @@ window.FORZA = window.FORZA || { roster:[] };
   // I giorni che compongono la settimana di lavoro. Sommando i loro pesi si ottiene
   // quanto il microciclo consegna rispetto a una gara, voce per voce.
   const TG_WK_DAYS = ['MD+1','MD+2','MD-4','MD-3','MD-2','MD-1'];
+  /* Le voci seguite atleta per atleta. Prima erano tre: alta velocita', fascia
+     20-23 e distanza totale. Accelerazioni e decelerazioni erano gia' nel
+     riferimento del ruolo e nei pesi del microciclo, ma non arrivavano fin qui,
+     e sono la parte del carico che spiega i guai al flessore e all'adduttore
+     meglio dei soli metri. */
+  const WK_MET = ['hi','mid','dist','acc','dec'];
   const TG_WK_MULT = (function(){
     const o = {};
-    ['hi','mid','dist'].forEach(function(k){
+    WK_MET.forEach(function(k){
       o[k] = TG_WK_DAYS.reduce(function(s, d){ return s + (TG_MD[d] ? (+TG_MD[d][k] || 0) : 0); }, 0);
     });
     return o;
@@ -5180,11 +5195,12 @@ window.FORZA = window.FORZA || { roster:[] };
   const TG_WK_SUM = TG_WK_MULT.hi;
 
   // Quante volte la gara si vuole in settimana. Il piano del ruolo ne consegna 2,45
-  // sopra i 23 km/h, 2,97 nella fascia 20-23 e 4,10 sul totale: il valore di partenza
-  // e' il gradino sotto, chi vuole di piu' lo alza a mano. WKX e' la scelta di squadra,
-  // WKX_P quella della singola atleta e la sua chiave e' il nome del foglio.
+  // sopra i 23 km/h, 2,97 nella fascia 20-23, 4,10 sul totale, 4,45 di accelerazioni
+  // e 4,22 di decelerazioni: il valore di partenza e' il gradino sotto, chi vuole di
+  // piu' lo alza a mano. WKX e' la scelta di squadra, WKX_P quella della singola
+  // atleta e la sua chiave e' il nome del foglio.
   const WKX_OPTS  = [1.5, 2, 2.5, 3, 3.5, 4];
-  const WKX_DEF   = { hi:2, mid:2.5, dist:3.5 };
+  const WKX_DEF   = { hi:2, mid:2.5, dist:3.5, acc:4, dec:4 };
   const WKX_KEY   = K('rs_fio_wkx_all');
   const WKX_P_KEY = K('rs_fio_wkx');
 
@@ -5202,7 +5218,8 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   const WKX = (function(){
-    const o = { hi:WKX_DEF.hi, mid:WKX_DEF.mid, dist:WKX_DEF.dist };
+    const o = {};
+    WK_MET.forEach(function(k){ o[k] = WKX_DEF[k]; });
     const v = wkxRead(WKX_KEY);
     Object.keys(o).forEach(function(k){ const n = wkxVal(v[k]); if(n) o[k] = n; });
     return o;
@@ -5215,7 +5232,7 @@ window.FORZA = window.FORZA || { roster:[] };
       const src = v[nome];
       if(!src || typeof src !== 'object') return;
       const o = {};
-      ['hi','mid','dist'].forEach(function(k){ const n = wkxVal(src[k]); if(n) o[k] = n; });
+      WK_MET.forEach(function(k){ const n = wkxVal(src[k]); if(n) o[k] = n; });
       if(Object.keys(o).length) out[nome] = o;
     });
     return out;
@@ -5369,51 +5386,102 @@ window.FORZA = window.FORZA || { roster:[] };
   // settimana arriva dai GPS gia' in pagina: per ogni seduta si legge la riga
   // Full Training dell'atleta, che e' la seduta intera; se in quel file non
   // compare si sommano le sue esercitazioni, saltando i file doppi.
+  // Le voci sono cinque. Accelerazioni e decelerazioni stanno gia' nei file GPS
+  // e nel riferimento del ruolo, ma qui non arrivavano: due colonne in meno per
+  // capire chi ha frenato troppo, che e' il carico che si sente sui flessori.
   const AT_MET = [
-    { k:'hi',   col:'DIST > 23km/h',   u:'m sopra 23', lbl:'Sopra i 23 km/h',    step:5,  key:true  },
-    { k:'mid',  col:'Dist 20-23 Km/h', u:'m 20-23',    lbl:'Tra 20 e 23 km/h',   step:5,  key:false },
-    { k:'dist', col:'Dist tot',        u:'m totali',   lbl:'Distanza totale',    step:50, key:false }
+    { k:'hi',   col:'DIST > 23km/h',    u:'m sopra 23', lbl:'Sopra i 23 km/h',    step:5,  key:true  },
+    { k:'mid',  col:'Dist 20-23 Km/h',  u:'m 20-23',    lbl:'Tra 20 e 23 km/h',   step:5,  key:false },
+    { k:'dist', col:'Dist tot',         u:'m totali',   lbl:'Distanza totale',    step:50, key:false },
+    { k:'acc',  col:'N ACC > 3 m/s^2',  u:'acc',        lbl:'Accelerazioni',      step:1,  key:false },
+    { k:'dec',  col:'N DEC < -3 m/s^2', u:'dec',        lbl:'Decelerazioni',      step:1,  key:false }
   ];
   const AT_ST = ['disponibile','parziale','differenziato'];
   let AT_WK   = null;
   let AT_OPEN = '';
 
+  function atZero(){
+    const o = { gg:{}, nx:0, dif:{} };
+    AT_MET.forEach(function(m){ o[m.k] = 0; o.dif[m.k] = 0; });
+    return o;
+  }
+
   // Somma della settimana in corso, dal lunedi' a oggi, per ogni atleta.
   function atWeek(){
     if(AT_WK) return AT_WK;
-    AT_WK = { n:0, lun:dstr(mondayOf(NOW)), p:{}, gg:{} };
+    AT_WK = { n:0, nx:0, lun:dstr(mondayOf(NOW)), p:{}, gg:{} };
+
     const E = window.ESERC;
     const cols = (E && Array.isArray(E.load_cols)) ? E.load_cols : [];
-    if(!E || !Array.isArray(E.sessions) || !cols.length) return AT_WK;
+    if(E && Array.isArray(E.sessions) && cols.length){
+      const ix = {};
+      AT_MET.forEach(function(m){ ix[m.k] = cols.indexOf(m.col); });
 
-    const ix = {};
-    AT_MET.forEach(function(m){ ix[m.k] = cols.indexOf(m.col); });
+      const add = function(name, arr, giorno){
+        if(!Array.isArray(arr)) return;
+        let p = AT_WK.p[name];
+        if(!p){ p = AT_WK.p[name] = atZero(); }
+        p.gg[giorno] = 1;
+        AT_MET.forEach(function(m){
+          const v = ix[m.k] >= 0 ? Number(arr[ix[m.k]]) : NaN;
+          if(!isNaN(v)) p[m.k] += v;
+        });
+      };
 
-    function add(name, arr, giorno){
-      if(!Array.isArray(arr)) return;
-      let p = AT_WK.p[name];
-      if(!p){ p = AT_WK.p[name] = { hi:0, mid:0, dist:0, gg:{} }; }
-      p.gg[giorno] = 1;
-      AT_MET.forEach(function(m){
-        const v = ix[m.k] >= 0 ? Number(arr[ix[m.k]]) : NaN;
-        if(!isNaN(v)) p[m.k] += v;
+      E.sessions.forEach(function(s){
+        const d = String(s.date || '');
+        if(d < AT_WK.lun || d > TSTR) return;
+        AT_WK.n++;
+        AT_WK.gg[d] = 1;
+        const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
+        const vis = {};
+        Object.keys(ft).forEach(function(n){ vis[n] = 1; add(n, ft[n], d); });
+        (s.drills || []).forEach(function(dr){
+          if(dr.dup) return;
+          const a = dr.atlete || {};
+          Object.keys(a).forEach(function(n){ if(!vis[n]) add(n, a[n], d); });
+        });
       });
     }
 
-    E.sessions.forEach(function(s){
-      const d = String(s.date || '');
-      if(d < AT_WK.lun || d > TSTR) return;
-      AT_WK.n++;
-      AT_WK.gg[d] = 1;
-      const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
-      const vis = {};
-      Object.keys(ft).forEach(function(n){ vis[n] = 1; add(n, ft[n], d); });
-      (s.drills || []).forEach(function(dr){
-        if(dr.dup) return;
-        const a = dr.atlete || {};
-        Object.keys(a).forEach(function(n){ if(!vis[n]) add(n, a[n], d); });
+    /* Il lavoro fuori squadra non sta nei file delle esercitazioni: chi corre a
+       parte o e' su in prima squadra non compare nella seduta di gruppo, e fino
+       a ieri per questa card era come se quel giorno non avesse fatto niente.
+       Nell'archivio del carico invece la sua riga c'e', e si chiama "4AM diff"
+       oppure "12AM FT". Sono metri e sprint corsi davvero: quattro chilometri di
+       differenziato il venerdi' sono quattro chilometri, e nel conto della
+       settimana ci vanno. Le righe senza sigla sono le sedute di squadra, gia'
+       lette qui sopra, e si saltano per non contarle due volte. */
+    const P  = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+    const MF = (window.SNAP && Array.isArray(window.SNAP.metrics_full)) ? window.SNAP.metrics_full : [];
+    if(P && MF.length){
+      const jx = {};
+      AT_MET.forEach(function(m){ jx[m.k] = MF.indexOf(m.col); });
+      Object.keys(P).forEach(function(nome){
+        const mesi = (P[nome] && P[nome].months) || [];
+        mesi.forEach(function(mo){
+          let wk = '';
+          (mo.rows || []).forEach(function(r){
+            if(r.type === 'wk_header'){ wk = r.label || ''; return; }
+            if(r.type !== 'day' || !Array.isArray(r.v)) return;
+            if(!SOLO_RE.test(String(r.label || '').trim())) return;
+            const dd = gpsRowDate(r, wk, mo.key);
+            if(!dd) return;
+            const k = dstr(dd);
+            if(k < AT_WK.lun || k > TSTR) return;
+            let p = AT_WK.p[nome];
+            if(!p){ p = AT_WK.p[nome] = atZero(); }
+            p.gg[k] = 1;
+            p.nx++;
+            AT_WK.nx++;
+            AT_MET.forEach(function(m){
+              const v = jx[m.k] >= 0 ? Number(r.v[jx[m.k]]) : NaN;
+              if(!isNaN(v)){ p[m.k] += v; p.dif[m.k] += v; }
+            });
+          });
+        });
       });
-    });
+    }
     return AT_WK;
   }
 
@@ -5424,6 +5492,7 @@ window.FORZA = window.FORZA || { roster:[] };
     const a   = TG_ATL[p.name];
     const sua = !!(a && a.hi > 0);
     return { hi: sua ? a.hi : (+ref.hi || 0), mid: +ref.mid || 0, dist: +ref.dist || 0,
+             acc: +ref.acc || 0, dec: +ref.dec || 0,
              sua:sua, n: a ? a.n : 0, rk:rk };
   }
 
@@ -5436,17 +5505,19 @@ window.FORZA = window.FORZA || { roster:[] };
       if(AT_ST.indexOf(st) < 0){ out.fuori.push({ name:p.name, st:st }); return; }
       const b = atBase(p);
       const w = wk.p[p.name] || null;
-      const t = {}, x = {}, need = {}, done = {}, rest = {};
+      const t = {}, x = {}, need = {}, done = {}, rest = {}, dif = {};
       AT_MET.forEach(function(m){
         t[m.k]    = tgRound(b[m.k] * TG_COEF[m.k], m.step);
         x[m.k]    = wkxOf(p.name, m.k);
         need[m.k] = tgRound(b[m.k] * x[m.k], m.step);
         done[m.k] = w ? Math.round(w[m.k]) : 0;
         rest[m.k] = Math.max(0, need[m.k] - done[m.k]);
+        dif[m.k]  = w ? Math.round(w.dif[m.k]) : 0;
       });
       out.rows.push({ name:p.name, role:p.role, st:st, base:b, t:t, x:x,
-                      need:need, done:done, rest:rest, sua:wkxSua(p.name),
-                      sed: w ? Object.keys(w.gg).length : 0, ha: !!w });
+                      need:need, done:done, rest:rest, dif:dif, sua:wkxSua(p.name),
+                      sed: w ? Object.keys(w.gg).length : 0, ha: !!w,
+                      nx: w ? w.nx : 0 });
     });
     out.rows.sort(function(r1, r2){ return r2.rest.hi - r1.rest.hi || plNomeSort(r1.name, r2.name); });
     return out;
@@ -5467,7 +5538,9 @@ window.FORZA = window.FORZA || { roster:[] };
         '<span class="s">'+g.rows.length+(g.rows.length === 1 ? ' atleta in gruppo' : ' atlete in gruppo')+'</span>'+
       '</div>'+
       '<div class="tg-at-n">Stessa seduta, obiettivi diversi: chi in gara corre di piu\' deve produrre di piu\'. '+
-        'Le barre sono la settimana in corso, dal lunedi\' a oggi, letta dai file GPS gia\' caricati.</div>'+
+        'Le barre sono la settimana in corso, dal lunedi\' a oggi, letta dai file GPS gia\' caricati. '+
+        'Dentro ci sono anche il lavoro differenziato e quello fatto su in prima squadra: '+
+        'sono metri e sprint corsi, e nel conto della settimana pesano come gli altri.</div>'+
       '<div class="tg-xw">'+
         '<div class="hh">'+
           '<b>Quante volte la gara in settimana</b>'+
@@ -5489,7 +5562,7 @@ window.FORZA = window.FORZA || { roster:[] };
         const apri = AT_OPEN === r.name;
 
         let txt;
-        if(!wk.n){
+        if(!wk.n && !wk.nx){
           txt = 'Nessuna seduta caricata questa settimana.';
         } else if(!r.ha){
           txt = 'Non risulta nei file di questa settimana.';
@@ -5518,6 +5591,21 @@ window.FORZA = window.FORZA || { roster:[] };
             '<div class="tg-atb"><i'+(ok ? ' class="full"' : '')+' style="width:'+pct+'%"></i></div>'+
           '</div>';
         }).join('');
+
+        /* Quanto di quel totale l'ha fatto fuori dal gruppo. Va detto: le barre
+           piene di una che si e' allenata a parte tutta la settimana non vogliono
+           dire che ha lavorato con la squadra, e senza questa riga il numero da'
+           una risposta giusta a una domanda sbagliata. */
+        let dfx = '';
+        if(r.nx){
+          const q = [];
+          AT_MET.forEach(function(m){
+            if(r.dif[m.k] > 0) q.push('<b>'+NF.format(r.dif[m.k])+'</b> '+esc(m.u));
+          });
+          dfx = '<div class="tg-atd tnum">Di cui fuori dal gruppo, in '+r.nx+
+            (r.nx === 1 ? ' seduta' : ' sedute')+
+            (q.length ? ': '+q.join(', ') : '')+'.</div>';
+        }
 
         const ed = apri
           ? '<div class="tg-atx">'+
@@ -5553,6 +5641,7 @@ window.FORZA = window.FORZA || { roster:[] };
             '</div>'+
             bars+
             '<div class="tg-att tnum">'+txt+'</div>'+
+            dfx+
             '<div class="src tnum">'+src+'</div>'+
           '</div>'+
           ed+
