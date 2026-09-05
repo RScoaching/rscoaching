@@ -537,11 +537,20 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
 
 /* ---------- tabella solo-stampa (PDF rosa per reparto) ---------- */
 #print-only{ display:none; }
-#print-only .proster-h{ font-size:12.5px; font-weight:700; color:#5b2d90; margin:2px 0 10px; }
-#print-only table.ptbl{ width:100%; border-collapse:collapse; font-size:11px; }
-#print-only table.ptbl th, #print-only table.ptbl td{ border:1px solid #d9d2e6; padding:5px 8px; text-align:right; }
+#print-only .proster-h{ font-size:12px; font-weight:700; color:#5b2d90; margin:2px 0 8px; }
+/* La rosa e' una lista lunga e stretta: da sola su una colonna riempiva un
+   foglio e mezzo, con il secondo foglio quasi vuoto e mezzo foglio di bianco
+   a destra. Le due colonne affiancate usano la larghezza che c'era gia' e
+   fanno stare tutta la rosa su una facciata sola. */
+#print-only .proster-cols{ display:flex; gap:6mm; align-items:flex-start; }
+#print-only .proster-cols > div{ flex:1 1 0; min-width:0; }
+#print-only table.ptbl{ width:100%; border-collapse:collapse; font-size:10px; table-layout:fixed; }
+#print-only table.ptbl th, #print-only table.ptbl td{ border:1px solid #d9d2e6; padding:3px 5px; text-align:right;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #print-only table.ptbl th.l, #print-only table.ptbl td.l{ text-align:left; }
-#print-only table.ptbl thead th{ background:#5b2d90; color:#fff; }
+#print-only table.ptbl thead th{ background:#5b2d90; color:#fff; font-weight:700; font-size:9px; }
+#print-only table.ptbl col.c-nome{ width:auto; }
+#print-only table.ptbl col.c-num{ width:13mm; }
 #print-only tr.rep td{ background:#efe7f7; color:#5b2d90; font-weight:700; text-align:left; }
 #print-only tr.na td.l{ color:#9f2f2d; font-style:italic; }
 
@@ -557,10 +566,11 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
      pagina e l'indirizzo del sito, in nero, sopra e sotto ogni foglio: sono le
      scritte che il mister vede stampate e che non ha mai chiesto. Sotto i nove
      millimetri quella riga non ci sta piu' e il browser la lascia perdere. Ai
-     lati i tredici restano, li' non scrive niente e la lista ha bisogno del suo
-     contorno. L'aria che si perde in testa la rimette la testata della prima
-     facciata, che e' l'unico punto dove serve davvero. */
-  @page{ size:A4 portrait; margin:6mm 13mm; }
+     lati bastano otto millimetri: li' il browser non scrive niente e ogni
+     millimetro in piu' e' larghezza che le due colonne della rosa si prendono.
+     L'aria che si perde in testa la rimette la testata della prima facciata,
+     che e' l'unico punto dove serve davvero. */
+  @page{ size:A4 portrait; margin:6mm 8mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .pills, .grid, .toast,
@@ -572,7 +582,12 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
   .title-wrap h1{ color:#14110f !important; }
   .title-wrap .sub, .title-wrap .sub b{ color:#3a332e !important; }
   .wrap{ max-width:none !important; padding:0 !important; }
-  .kpis{ margin:0 0 14px !important; }
+  /* I riquadri in cima sono cinque e a video si dispongono da soli. Sul foglio
+     la larghezza e' quella che e', e la disposizione automatica ne metteva
+     quattro in fila e uno da solo sotto, allungato per tutta la riga: due
+     centimetri di foglio buttati e un riquadro che sembra un errore. Cinque
+     colonne uguali li tengono su una riga sola. */
+  .kpis{ margin:0 0 12px !important; grid-template-columns:repeat(5, 1fr) !important; gap:8px !important; }
   .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; break-inside:avoid; }
   .kpi::before{ background:#5b2d90 !important; }
   .kpi .k-label{ color:#5a524c !important; }
@@ -1649,27 +1664,64 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const host = document.getElementById('print-only');
     if(!host) return;
     const { order, groups, none } = groupByReparto();
-    let rows='';
-    const emit = (label, arr, na)=>{
+    /* Prima si mette in fila quello che va stampato: una voce per ogni riga di
+       reparto e una per ogni atleta. Solo dopo si decide dove tagliare per fare
+       le due colonne, cosi' il taglio si sposta senza rifare la lista. */
+    const items = [];
+    const push = (label, arr, na)=>{
       if(!arr.length) return;
-      rows += '<tr class="rep"><td class="l" colspan="5">'+esc(label)+' &#183; '+arr.length+'</td></tr>';
-      arr.forEach(pl=>{
-        rows += '<tr'+(na?' class="na"':'')+'><td class="l">'+esc(disp(pl.name))+'</td>'+
-          '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
-          '<td>'+NF0.format(pl.sedute)+'</td>'+
-          '<td>'+NF0.format(pl.partite)+'</td>'+
-          '<td>'+NF1.format(pl.dist/1000)+'</td></tr>';
-      });
+      items.push({ t:'rep', label:label, n:arr.length });
+      arr.forEach(function(pl){ items.push({ t:'pl', pl:pl, na:na, rep:label, n:arr.length }); });
     };
-    order.forEach(r=> emit(r, groups[r], false));
-    emit(UNASSIGNED, none, true);
+    order.forEach(function(r){ push(r, groups[r], false); });
+    push(UNASSIGNED, none, true);
+
+    let taglio = Math.ceil(items.length/2);
+    /* Un'intestazione di reparto in fondo alla prima colonna, con le atlete
+       gia' nella seconda, resta li' da sola e non si capisce di chi parla:
+       in quel caso scende anche lei nella seconda colonna. */
+    if(taglio > 0 && taglio < items.length && items[taglio-1].t === 'rep') taglio -= 1;
+
+    const sx = items.slice(0, taglio);
+    const dx = items.slice(taglio);
+    /* Se il reparto e' spezzato a meta' fra le due colonne, in cima alla
+       seconda si riscrive la sua riga: senza, le atlete di sotto sembrano di
+       nessuno. */
+    if(dx.length && dx[0].t === 'pl'){
+      dx.unshift({ t:'rep', label:dx[0].rep, n:dx[0].n, segue:true });
+    }
+
+    const rigaHTML = function(it){
+      if(it.t === 'rep'){
+        return '<tr class="rep"><td class="l" colspan="5">'+esc(it.label)+' &#183; '+it.n+
+          (it.segue ? ' &#183; segue' : '')+'</td></tr>';
+      }
+      const pl = it.pl;
+      return '<tr'+(it.na?' class="na"':'')+'><td class="l">'+esc(disp(pl.name))+'</td>'+
+        '<td>'+NF0.format(Math.round(pl.min))+'</td>'+
+        '<td>'+NF0.format(pl.sedute)+'</td>'+
+        '<td>'+NF0.format(pl.partite)+'</td>'+
+        '<td>'+NF1.format(pl.dist/1000)+'</td></tr>';
+    };
+    const tabHTML = function(list){
+      if(!list.length) return '';
+      return '<table class="ptbl">'+
+        '<colgroup><col class="c-nome"><col class="c-num"><col class="c-num"><col class="c-num"><col class="c-num"></colgroup>'+
+        '<thead><tr><th class="l">Atleta</th><th>Minuti</th><th>Sedute</th><th>Partite</th><th>Km</th></tr></thead>'+
+        '<tbody>'+list.map(rigaHTML).join('')+'</tbody></table>';
+    };
+
     const tot = activeRoster().length;
     const assigned = tot - none.length;
     const gen = S.generato ? ('agg. '+esc(S.generato)) : 'anteprima';
+    /* Con una rosa cortissima il taglio puo' lasciare una colonna vuota: in quel
+       caso di colonne non ce ne vuole nessuna, si stampa una tabella sola. */
+    const corpo = (sx.length && dx.length)
+      ? '<div class="proster-cols"><div>'+tabHTML(sx)+'</div><div>'+tabHTML(dx)+'</div></div>'
+      : tabHTML(items);
     host.innerHTML =
       '<div class="proster-h">Rosa Fiorentina Primavera U19W &#183; '+tot+' atlete ('+assigned+' assegnate, '+none.length+' da assegnare) &#183; Stagione '+esc(S.stagione||'2025-26')+' &#183; '+gen+'</div>'+
-      '<table class="ptbl"><thead><tr><th class="l">Atleta</th><th>Min</th><th>Sedute</th><th>Partite</th><th>Km</th></tr></thead>'+
-      '<tbody>'+rows+'</tbody></table>';
+      corpo;
   }
 
   // ---------- export XLS (Excel vero, con colori, per reparto) ----------
