@@ -729,10 +729,11 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 @media print{
   /* foglio orizzontale: nell'A4 in verticale i parametri non ci stavano e la griglia
      ripartiva da capo pagina dopo pagina. Orizzontale ne fa entrare molti di piu'.
-     Il margine e' 7mm e non 10mm perche' data, ora, titolo e indirizzo del file che il
-     browser stampa in nero sopra e sotto al foglio hanno bisogno di almeno 9mm di margine:
-     sotto quella soglia il browser rinuncia a scriverli e il foglio resta pulito. */
-  @page{ size:A4 landscape; margin:7mm; }
+     Il margine del foglio e' zero perche' data, ora, titolo e indirizzo del file li
+     scrive il browser dentro quel margine: finche' c'e' spazio le stampa in nero sopra
+     e sotto la pagina. A zero quello spazio non esiste e il foglio resta pulito. Il
+     bordo bianco torna come riempimento dei blocchi, qui sotto. */
+  @page{ size:A4 landscape; margin:0; }
   /* i token del tema vengono ridefiniti in chiaro: cosi tutti i blocchi (parametri chiave,
      ACWR, grafici SVG che usano var(--...)) escono leggibili sul foglio bianco */
   :root{
@@ -758,7 +759,11 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   .print-off{ display:none !important; }
   #chart-card .chart-tools{ display:none !important; }
   .app{ display:block !important; }
-  .main{ padding:0 !important; }
+  /* il bordo bianco del foglio: con il margine della pagina a zero lo tiene il
+     contenuto. Destra e sinistra valgono su tutte le facciate perche' il riempimento
+     laterale di un blocco lungo si ripete su ogni pezzo; sopra vale sulla prima e le
+     altre lo ricevono dalla scheda o dal gruppo di microcicli che le apre. */
+  .main{ padding:7mm 7mm 6mm !important; }
   .topbar{ position:static !important; background:#fff !important; border-bottom:1px solid #ccc !important;
     backdrop-filter:none !important; padding:0 0 10px !important; margin-bottom:12px; }
   /* Il foglio esce dalla societa': chi lo riceve deve capire di chi si parla al primo
@@ -779,7 +784,8 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   body.multi-print .wrap{ display:none !important; }
   #print-multi{ display:block !important; }
   .print-wrap{ max-width:none !important; padding:0 !important; }
-  .print-atl{ break-after:page; page-break-after:always; }
+  /* ogni atleta apre una facciata sua: il riempimento sopra e sotto sta qui */
+  .print-atl{ break-after:page; page-break-after:always; padding:7mm 0 6mm; }
   .print-atl.last{ break-after:auto; page-break-after:auto; }
   .print-atl-head{ border-bottom:1px solid #ccc; padding-bottom:8px; margin:0 0 12px; }
   .print-atl-head .ph-name{ font-family:'Bebas Neue',sans-serif; font-size:30px; line-height:1.05;
@@ -791,7 +797,16 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
      ogni scheda, quindi in stampa la fila di pillole sparisce del tutto */
   .months{ display:none !important; }
   .card{ box-shadow:none !important; border:1px solid #ccc !important; background:#fff !important;
-    break-inside:avoid; margin-bottom:14px; }
+    break-inside:avoid; margin:0 0 14px; }
+  /* la scheda che finisce a capo pagina resta attaccata al bordo del foglio: lo spazio
+     sopra scritto come margine il browser lo taglia quando spezza la pagina. Il guscio
+     invece ha un riempimento, e il riempimento all'inizio di un blocco viene rispettato:
+     e' lui a tenere il bordo bianco in cima a ogni facciata aperta da una scheda. Non ha
+     bordo ne' sfondo, quindi a video non si vede e in stampa non aggiunge cornici. */
+  .pgw{ break-inside:avoid; page-break-inside:avoid; padding-top:6mm; }
+  /* la prima scheda il bordo lo prende gia' dal foglio, se no ne avrebbe due */
+  .pgw.pgw-top{ padding-top:0; }
+  .pgw:empty{ display:none !important; }
   .card-head h2{ color:#14110f !important; }
   .card-head .hint{ color:#5a524c !important; }
   .kpi{ box-shadow:none !important; border:1px solid #ccc !important; background:#fafafa !important; }
@@ -819,8 +834,10 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   .print-split table.grid td.col-day .wd{ display:inline !important; margin-right:6px !important; }
   .print-split table.grid td.col-day .mvfrom,
   .print-split table.grid td.col-day .lb-recalc{ display:inline !important; margin:0 0 0 6px !important; }
-  /* un gruppo di microcicli per pagina: le settimane non finiscono mai a meta' foglio */
-  .print-pg{ break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always; }
+  /* un gruppo di microcicli per pagina: le settimane non finiscono mai a meta' foglio.
+     Il riempimento sopra e sotto e' il bordo bianco della facciata che il gruppo apre */
+  .print-pg{ break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always;
+    padding:6mm 0; }
   .print-split .print-blk:last-child .print-pg:last-child{ break-after:auto; page-break-after:auto; }
   #grid-card, .pk-grid{ break-inside:auto !important; }
   table.grid thead{ display:table-header-group; }
@@ -888,14 +905,27 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   /* analisi carico: le tinte forti restano chiare, i testi tornano scuri */
   .acwr-stats{ grid-template-columns:1.35fr 1fr 1fr 1fr !important; }
   .acwr-hero, .acwr-tile, .acell, .acwr-block{ break-inside:avoid; page-break-inside:avoid; box-shadow:none !important; }
-  .agrid{ grid-template-columns:repeat(4, 1fr) !important; }
+  /* i riquadri dei grafici perdono cornice e fondino: sul foglio la scheda ha gia' il suo
+     bordo e un riquadro dentro l'altro fa solo confusione. Senza cornice il riempimento in
+     cima diventa bianco pulito, ed e' quello che tiene staccato dal bordo del foglio il
+     grafico che apre la facciata quando la scheda si spezza. */
+  .acwr-block{ background:none !important; border:none !important; padding:6mm 0 0 !important; }
   .ah-pill.z-ok, .ac-pill.z-ok{ color:#2f6b34 !important; }
   .ah-pill.z-low, .ac-pill.z-low{ color:#1f5b8a !important; }
   .ah-pill.z-warn, .ac-pill.z-warn{ color:#8a5a00 !important; }
   .ah-pill.z-high, .ac-pill.z-high{ color:#9f2f2d !important; }
   .at-val.dn{ color:#1f5b8a !important; }
-  .acwr-charts{ grid-template-columns:repeat(2, 1fr) !important; }
+  /* la scheda dell'analisi carico e' piu' alta di un foglio, quindi si spezza per forza.
+     I due punti in cui si spezza sono questi, prima della griglia delle settimane e prima
+     dei grafici: sono contenitori senza bordo, cosi' il riempimento in cima e' bianco che
+     tiene la facciata staccata dal bordo del foglio quando il taglio cade li'. */
+  .agrid{ grid-template-columns:repeat(4, 1fr) !important; padding-top:6mm; }
+  .acwr-charts{ grid-template-columns:repeat(2, 1fr) !important; padding-top:6mm; }
   .chart-wrap{ overflow:visible !important; }
+  /* i grafici nascono con la larghezza che avevano a video: sul foglio la colonna e'
+     un'altra e il disegno usciva oltre il bordo destro. Hanno tutti il viewBox, quindi
+     basta lasciargli prendere la larghezza della colonna e l'altezza si adegua da se'. */
+  svg.chart{ width:100% !important; height:auto !important; }
   .reveal{ opacity:1 !important; transform:none !important; animation:none !important; }
 }
 
@@ -3532,8 +3562,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     MICRO_N = MICRO_DEF;
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   }
+  /* Guscio di pagina. Una scheda che non ci sta piu' nel foglio passa a quello dopo e ci
+     arriva attaccata al bordo: lo spazio scritto come margine il browser lo taglia nel
+     punto in cui spezza. Il riempimento invece lo tiene, ma solo all'inizio del blocco,
+     e il blocco che apre la facciata e' la scheda stessa: mettendole intorno un guscio
+     senza bordo ne' sfondo, e' il guscio a portarsi dietro il bianco in cima. Vale solo
+     durante la stampa: subito dopo i gusci vengono tolti e la pagina torna com'era. */
+  function wrapCards(host){
+    if(!host) return;
+    let first = true;
+    Array.prototype.slice.call(host.children).forEach(function(el){
+      if(!el.classList || !el.classList.contains('card')) return;
+      if(el.classList.contains('print-off')) return;
+      const box = document.createElement('div');
+      box.className = 'pgw' + (first ? ' pgw-top' : '');
+      first = false;
+      host.insertBefore(box, el);
+      box.appendChild(el);
+    });
+  }
+  function unwrapCards(root){
+    (root || document).querySelectorAll('.pgw').forEach(function(box){
+      const p = box.parentNode; if(!p) return;
+      while(box.firstChild) p.insertBefore(box.firstChild, box);
+      p.removeChild(box);
+    });
+  }
   function clearPrintSheets(){
     clearLiveSheets();
+    unwrapCards(document);
     const old = document.getElementById('print-head');
     if(old && old.parentNode) old.parentNode.removeChild(old);
     const mul = document.getElementById('print-multi');
@@ -3620,6 +3677,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     pdfApply();
     printHeadTag();
     buildGridSheets();
+    wrapCards(document.querySelector('.wrap'));
   }
   /* Report unico su piu' atlete. La pagina viene ricalcolata una atleta per volta e di
      ogni giro si tiene una copia gia' impaginata: e' l'unico modo per avere le tabelle
@@ -3663,6 +3721,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         if(x.closest && x.closest('svg')) return;
         x.removeAttribute('id');
       });
+      /* i gusci si mettono qui, sulla copia gia' ripulita: cosi' non ne resta nessuno
+         intorno alle schede che sono state tolte dal foglio */
+      wrapCards(copy);
       sec.appendChild(copy);
       host.appendChild(sec);
       clearLiveSheets();
