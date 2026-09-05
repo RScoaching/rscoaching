@@ -347,6 +347,18 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-at-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 10px; }
 .tg-at-h .t{ font-size:13.5px; font-weight:700; color:var(--ink); }
 .tg-at-h .s{ font-size:12px; color:var(--muted); }
+/* l'interruttore delle aggregate: sta in fondo alla riga del titolo perche' cambia
+   quante schede si vedono, non cosa c'e' scritto dentro */
+.tg-agb{
+  margin-left:auto; appearance:none; cursor:pointer; font-family:inherit;
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--muted); background:var(--surface3); border:1px solid var(--border2);
+  border-radius:999px; padding:4px 10px; min-height:26px; white-space:nowrap;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease);
+}
+.tg-agb:hover{ color:var(--ink); border-color:var(--border3); }
+.tg-agb:active{ transform:scale(.96); }
+.tg-agb.on{ color:#1a0d05; background:var(--orange); border-color:transparent; }
 .tg-at-n{ font-size:12px; color:var(--muted); margin-top:7px; max-width:70ch; }
 .tg-at-g{ display:grid; grid-template-columns:repeat(auto-fit, minmax(268px, 1fr)); gap:10px; margin-top:14px; }
 .tg-atc{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r);
@@ -5400,6 +5412,25 @@ window.FORZA = window.FORZA || { roster:[] };
   let AT_WK   = null;
   let AT_OPEN = '';
 
+  // I portieri qui non ci stanno: il riferimento gara e' quello dei ruoli di
+  // movimento, e a loro verrebbe assegnato quello di squadra, cioe' un obiettivo
+  // di metri ad alta velocita' che il portiere non deve fare. Wenin e Agostini
+  // nei file GPS non compaiono nemmeno.
+  function atPortiere(role){
+    return String(role || '').trim().toLowerCase().indexOf('portier') === 0;
+  }
+  // Le aggregate sono le U17 che salgono per una seduta e le sporadiche dei fogli.
+  // A interruttore spento restano fuori dalle schede: sono una ventina di atlete
+  // in rosa, se ci si aggiungono tutte quelle di passaggio le schede diventano
+  // troppe per leggerle prima di scendere in campo. L'interruttore e' lo stesso
+  // di Elenco e Forza, la chiave 'rs_fio_agg_on' di fio_sidebar.js.
+  function atAggregata(p){
+    return p.tipo === 'agg' || p.tipo === 'sporadica';
+  }
+  function atAggOn(){
+    return (typeof window.fioAggOn === 'function') ? !!window.fioAggOn() : false;
+  }
+
   function atZero(){
     const o = { gg:{}, nx:0, dif:{} };
     AT_MET.forEach(function(m){ o[m.k] = 0; o.dif[m.k] = 0; });
@@ -5497,10 +5528,16 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   function atRows(){
-    const out = { rows:[], fuori:[] };
+    const out = { rows:[], fuori:[], agg:0, gk:0 };
     const wk  = atWeek();
+    const aggOn = atAggOn();
     ROSTER.forEach(function(p){
       if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
+      if(atPortiere(p.role)){ out.gk++; return; }
+      if(atAggregata(p)){
+        out.agg++;
+        if(!aggOn) return;
+      }
       const st = avSt(p.name);
       if(AT_ST.indexOf(st) < 0){ out.fuori.push({ name:p.name, st:st }); return; }
       const b = atBase(p);
@@ -5528,19 +5565,27 @@ window.FORZA = window.FORZA || { roster:[] };
     if(!box) return;
     const g  = atRows();
     const wk = atWeek();
-    if(!g.rows.length && !g.fuori.length){ box.innerHTML = ''; return; }
+    if(!g.rows.length && !g.fuori.length && !g.agg){ box.innerHTML = ''; return; }
 
-    const ngg = Object.keys(wk.gg).length;
+    const ngg   = Object.keys(wk.gg).length;
+    const aggOn = atAggOn();
+    const agb   = g.agg
+      ? '<button type="button" class="tg-agb'+(aggOn ? ' on' : '')+'" data-agb="1"'+
+          ' aria-pressed="'+(aggOn ? 'true' : 'false')+'">'+
+          'Aggregate '+(aggOn ? 'si' : 'no')+' ('+g.agg+')</button>'
+      : '';
 
     let html = '<div class="tg-at">'+
       '<div class="tg-at-h">'+
         '<span class="t">Oggi atleta per atleta</span>'+
         '<span class="s">'+g.rows.length+(g.rows.length === 1 ? ' atleta in gruppo' : ' atlete in gruppo')+'</span>'+
+        agb+
       '</div>'+
       '<div class="tg-at-n">Stessa seduta, obiettivi diversi: chi in gara corre di piu\' deve produrre di piu\'. '+
         'Le barre sono la settimana in corso, dal lunedi\' a oggi, letta dai file GPS gia\' caricati. '+
         'Dentro ci sono anche il lavoro differenziato e quello fatto su in prima squadra: '+
-        'sono metri e sprint corsi, e nel conto della settimana pesano come gli altri.</div>'+
+        'sono metri e sprint corsi, e nel conto della settimana pesano come gli altri. '+
+        'I portieri non ci sono: il riferimento gara e\' quello dei ruoli di movimento.</div>'+
       '<div class="tg-xw">'+
         '<div class="hh">'+
           '<b>Quante volte la gara in settimana</b>'+
@@ -5651,16 +5696,16 @@ window.FORZA = window.FORZA || { roster:[] };
       html += '<div class="tg-ok">Nessuna atleta in gruppo oggi con il filtro attivo.</div>';
     }
 
-    if(g.fuori.length){
-      const cnt = {};
-      g.fuori.forEach(function(x){ cnt[x.st] = (cnt[x.st] || 0) + 1; });
-      const parti = [];
-      AV_STATES.forEach(function(s){
-        if(AT_ST.indexOf(s.k) >= 0 || !cnt[s.k]) return;
-        parti.push('<b>'+cnt[s.k]+'</b> '+esc(s.s));
-      });
-      if(parti.length) html += '<div class="tg-ok">Fuori dall\'elenco: '+parti.join(', ')+'.</div>';
-    }
+    const cnt = {};
+    g.fuori.forEach(function(x){ cnt[x.st] = (cnt[x.st] || 0) + 1; });
+    const parti = [];
+    AV_STATES.forEach(function(s){
+      if(AT_ST.indexOf(s.k) >= 0 || !cnt[s.k]) return;
+      parti.push('<b>'+cnt[s.k]+'</b> '+esc(s.s));
+    });
+    if(g.gk) parti.push('<b>'+g.gk+'</b> '+(g.gk === 1 ? 'portiere' : 'portieri'));
+    if(g.agg && !aggOn) parti.push('<b>'+g.agg+'</b> '+(g.agg === 1 ? 'aggregata' : 'aggregate'));
+    if(parti.length) html += '<div class="tg-ok">Fuori dall\'elenco: '+parti.join(', ')+'.</div>';
 
     box.innerHTML = html + '</div>';
   }
@@ -5841,6 +5886,13 @@ window.FORZA = window.FORZA || { roster:[] };
         return;
       }
 
+      const ag = t.closest('.tg-agb');
+      if(ag){
+        if(typeof window.fioAggSet === 'function') window.fioAggSet(!atAggOn());
+        renderAtlete();
+        return;
+      }
+
       const ob = t.closest('.xb');
       if(ob){
         const n = ob.getAttribute('data-xo');
@@ -5849,6 +5901,10 @@ window.FORZA = window.FORZA || { roster:[] };
         renderAtlete();
       }
     });
+
+    // se l'interruttore viene girato altrove, per esempio in Elenco aperto in
+    // un'altra scheda dello stesso giro, qui le schede si rifanno da sole
+    document.addEventListener('fio:agg', function(){ renderAtlete(); });
   }
 
   buildBuilder();
