@@ -662,14 +662,43 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 #print-only table.pctbl{ width:100%; border-collapse:collapse; font-size:10.5px; margin-bottom:2px; }
 #print-only table.pctbl th, #print-only table.pctbl td{ border:1px solid #d9d2e6; padding:4px 7px; text-align:center; vertical-align:top; }
 #print-only table.pctbl th.l, #print-only table.pctbl td.l{ text-align:left; }
-#print-only table.pctbl thead th{ background:#5b2d90; color:#fff; }
+#print-only table.pctbl thead th{ background:#5b2d90; color:#fff; font-size:9px; }
+/* La tabella delle sedute ha nove colonne e in larghezza automatica se le
+   spartiva sbagliate: le colonne dei numeri si prendevano lo spazio che
+   chiedeva la loro intestazione (`Carico m` e `Sigla` a 92 px l'una) e la
+   colonna delle note, l'unica dove il mister scrive davvero, restava a 60 px.
+   A larghezza fissa i numeri stanno nel loro, e quello che avanza se lo
+   dividono `Tipo` e `Note`. */
+#print-only table.pctbl.sed{ table-layout:fixed; }
+#print-only table.pctbl.sed col.c-data{ width:16mm; }
+#print-only table.pctbl.sed col.c-slot{ width:10mm; }
+#print-only table.pctbl.sed col.c-car{ width:14mm; }
+#print-only table.pctbl.sed col.c-int{ width:12mm; }
+/* La sigla della partita e' `FIO-SMR`, sette caratteri: sotto i diciannove
+   millimetri va a capo e la riga della partita diventa alta il doppio. */
+#print-only table.pctbl.sed col.c-sig{ width:19mm; }
+#print-only table.pctbl.sed col.c-ex{ width:12mm; }
+#print-only table.pctbl.sed col.c-fat{ width:13mm; }
+#print-only table.pctbl thead{ display:table-header-group; }
 #print-only tr.mon td{ background:#efe7f7; color:#5b2d90; font-weight:700; text-align:left; }
+/* Un titolo o una riga di mese in fondo alla facciata, con sotto il vuoto e le
+   righe che cominciano alla pagina dopo, e' una riga che non dice niente. */
+#print-only .pc-sec{ break-after:avoid; page-break-after:avoid; }
+#print-only tr.mon{ break-after:avoid; page-break-after:avoid; }
 #print-only tr.brk{ page-break-inside:avoid; }
 #print-only tr.exr td{ background:#f7f4fb; text-align:left; font-size:9.5px; color:#4a4450; line-height:1.5; }
 #print-only tr.exr b{ color:#5b2d90; }
-#print-only table.pctbl.big{ font-size:12px; }
-#print-only table.pctbl.big th, #print-only table.pctbl.big td{ padding:7px 9px; }
+#print-only table.pctbl.big{ font-size:12px; table-layout:fixed; }
+/* Il riempimento verticale non e' scritto qui: lo decide `weekFill()`, che
+   misura la facciata e alza il passo finche' il foglio non e' pieno. */
+#print-only table.pctbl.big th, #print-only table.pctbl.big td{ padding:var(--wk-pad, 7px) 9px; }
+#print-only table.pctbl.big thead th{ font-size:10.5px; }
 #print-only table.pctbl.big td.n{ font-weight:700; }
+#print-only table.pctbl.big col.c-gio{ width:22mm; }
+#print-only table.pctbl.big col.c-md{ width:14mm; }
+#print-only table.pctbl.big col.c-slot{ width:12mm; }
+#print-only table.pctbl.big col.c-int{ width:22mm; }
+#print-only table.pctbl.big col.c-met{ width:22mm; }
 #print-only .pc-load{ display:inline-flex; align-items:center; gap:6px; }
 #print-only .pc-load .pc-dot{ width:9px; height:9px; border-radius:999px; display:inline-block; }
 
@@ -686,10 +715,11 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
      pagina e l'indirizzo del sito, in nero, sopra e sotto ogni foglio: sono le
      scritte che il mister vede stampate e che non ha mai chiesto. Sotto i nove
      millimetri quella riga non ci sta piu' e il browser la lascia perdere. Ai
-     lati i tredici restano, li' non scrive niente e la tabella ha bisogno del
-     suo contorno. L'aria che si perde in testa la rimette la testata della
-     prima facciata, che e' l'unico punto dove serve davvero. */
-  @page{ size:A4 portrait; margin:6mm 13mm; }
+     lati bastano otto millimetri: li' il browser non scrive niente e ogni
+     millimetro in piu' e' larghezza che va alla colonna delle note. L'aria che
+     si perde in testa la rimette la testata della prima facciata, che e'
+     l'unico punto dove serve davvero. */
+  @page{ size:A4 portrait; margin:6mm 8mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .addform,
@@ -1579,7 +1609,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
     host.innerHTML =
       '<div class="pc-h">Calendario Fiorentina Primavera U19W &#183; '+nTrain+' allenamenti &#183; '+nMatch+' partite giocate &#183; Stagione '+esc(C.stagione||'2025-26')+' &#183; '+gen+'</div>'+
       '<div class="pc-sec">Sedute e allenamenti</div>'+
-      '<table class="pctbl"><thead><tr><th class="l">Data</th><th>Slot</th><th class="l">Tipo</th><th>Carico m</th><th>Int %</th><th>Sigla</th><th>Eserc</th><th>Svolto</th><th class="l">Note</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<table class="pctbl sed">'+
+      '<colgroup><col class="c-data"><col class="c-slot"><col><col class="c-car"><col class="c-int"><col class="c-sig"><col class="c-ex"><col class="c-fat"><col></colgroup>'+
+      '<thead><tr><th class="l">Data</th><th>Slot</th><th class="l">Tipo</th><th>Carico m</th><th>Int %</th><th>Sigla</th><th>Eserc</th><th>Svolto</th><th class="l">Note</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div class="pc-sec">Calendario partite</div>'+
       '<table class="pctbl"><thead><tr><th class="l">Data</th><th>Campo</th><th class="l">Casa</th><th class="l">Trasferta</th><th>Stato</th></tr></thead><tbody>'+frows+'</tbody></table>';
   }
@@ -1776,7 +1808,39 @@ window.RS_ROSTER = window.RS_ROSTER || [
 
     host.innerHTML =
       '<div class="pc-h">Settimana '+esc(range)+' &#183; '+nSed+(nSed===1?' seduta':' sedute')+' &#183; Fiorentina Primavera U19W</div>'+
-      '<table class="pctbl big"><thead><tr><th class="l">Giorno</th><th>MD</th><th>Slot</th><th class="l">Attivita</th><th>Intensita</th><th>Metri stim.</th><th class="l">Note</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      '<table class="pctbl big">'+
+      '<colgroup><col class="c-gio"><col class="c-md"><col class="c-slot"><col><col class="c-int"><col class="c-met"><col></colgroup>'+
+      '<thead><tr><th class="l">Giorno</th><th>MD</th><th>Slot</th><th class="l">Attivita</th><th>Intensita</th><th>Metri stim.</th><th class="l">Note</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    weekFill(host);
+  }
+  /* Il piano della settimana e' sette righe su un foglio A4: da solo occupa un
+     quarto della facciata e lascia il resto bianco, che stampato sembra un
+     foglio sbagliato. L'altezza che avanza si da' alle righe, cosi' il foglio si
+     riempie e da lontano, in campo, le righe si leggono meglio. Il passo si
+     misura davvero: il blocco viene messo fuori schermo alla larghezza vera del
+     foglio e si tiene il valore piu' alto che ci sta ancora dentro. */
+  const WK_PAD = [7, 10, 13, 17, 21, 26, 31, 37, 44];
+  function weekFill(host){
+    const tab = host.querySelector('table.pctbl.big');
+    if(!tab) return;
+    host.style.setProperty('--wk-pad', WK_PAD[0]+'px');
+    /* La facciata A4 con sei millimetri di margine sopra e sotto tiene 1077 px.
+       La testata se ne prende novantuno: sette millimetri di aria in cima, lo
+       stemma, la riga sotto e lo stacco. A video la stessa testata ne misura
+       settanta, percio' il numero va scritto qui e non chiesto alla pagina.
+       Venti pixel restano di margine: al millimetro giusto la stampante manda
+       l'ultima riga a pagina due. */
+    const tetto = 1077 - 100 - 20;
+    const prima = host.getAttribute('style') || '';
+    host.style.cssText = prima+';display:block;position:absolute;left:-30000px;top:0;width:194mm;visibility:hidden;';
+    let scelto = WK_PAD[0];
+    for(let i=0; i<WK_PAD.length; i++){
+      host.style.setProperty('--wk-pad', WK_PAD[i]+'px');
+      if(host.offsetHeight > tetto) break;
+      scelto = WK_PAD[i];
+    }
+    if(prima) host.setAttribute('style', prima); else host.removeAttribute('style');
+    host.style.setProperty('--wk-pad', scelto+'px');
   }
   function doPrint(mode){
     printMode = mode;
