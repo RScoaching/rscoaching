@@ -908,8 +908,21 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 #pr-print .pp-sum{ display:flex; gap:26px; padding:14px 20px; background:#fdf4ee; border-bottom:1px solid #eddfd4; }
 #pr-print .pp-sum .v{ font-size:20px; font-weight:800; color:#8a3a12; line-height:1; }
 #pr-print .pp-sum .l{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:#65594f; margin-top:3px; }
-#pr-print table.pptbl{ width:100%; border-collapse:collapse; font-size:13.5px; }
-#pr-print table.pptbl th, #pr-print table.pptbl td{ border-bottom:1px solid #eddfd4; padding:9px 20px; text-align:left; vertical-align:middle; }
+#pr-print table.pptbl{ width:100%; border-collapse:collapse; font-size:13.5px; table-layout:fixed; }
+/* Il passo verticale non e' scritto qui: lo decide `schedaFill()`, che misura la
+   facciata e lo alza finche' il foglio non e' pieno. */
+#pr-print table.pptbl th, #pr-print table.pptbl td{ border-bottom:1px solid #eddfd4;
+  padding:var(--pp-pad, 9px) 14px; text-align:left; vertical-align:middle; }
+/* Sei colonne, quattro di numeri corti e due con delle parole dentro. A
+   larghezza automatica ognuna si prendeva quello che chiedeva la sua
+   intestazione, `Carico` centoventisette pixel e `Min` novantatre, e le due che
+   contano davvero, il nome del blocco e la nota, restavano a duecentodue e
+   centosette. A larghezza fissa i numeri stanno nel loro e quello che avanza si
+   divide fra il blocco e la nota. */
+#pr-print table.pptbl col.c-n{ width:12mm; }
+#pr-print table.pptbl col.c-min{ width:16mm; }
+#pr-print table.pptbl col.c-rpe{ width:16mm; }
+#pr-print table.pptbl col.c-car{ width:20mm; }
 #pr-print table.pptbl th{ background:#f7ece4; color:#6e2f0f; font-size:11px; text-transform:uppercase;
   letter-spacing:.05em; border-bottom:1px solid #e2d6cc; }
 #pr-print table.pptbl td.c, #pr-print table.pptbl th.c{ text-align:center; font-variant-numeric:tabular-nums; }
@@ -971,10 +984,12 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
      pagina e l'indirizzo del sito, in nero, sopra e sotto ogni foglio: sono le
      scritte che il mister vede stampate e che non ha mai chiesto. Sotto i nove
      millimetri quella riga non ci sta piu' e il browser la lascia perdere. Ai
-     lati i tredici restano, li' non scrive niente e la scheda ha bisogno del
-     suo contorno. L'aria che si perde in testa la rimettono la testata e la
-     scheda della seduta, che sono i due punti dove serve davvero. */
-  @page{ size:A4 portrait; margin:6mm 13mm; }
+     lati bastano otto millimetri: li' il browser non scrive niente e ogni
+     millimetro in piu' e' larghezza che va al nome del blocco e alla nota, le
+     due colonne con delle parole dentro. L'aria che si perde in testa la
+     rimettono la testata e la scheda della seduta, che sono i due punti dove
+     serve davvero. */
+  @page{ size:A4 portrait; margin:6mm 8mm; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sidebar, .sb-mob-bar, .sb-mob-overlay, .toast, .foot-note,
@@ -4415,7 +4430,9 @@ window.FORZA = window.FORZA || { roster:[] };
         '<div><div class="v">'+s.blocks.length+'</div><div class="l">blocchi</div></div>' +
         '<div><div class="v">'+nDisp+'</div><div class="l">in gruppo</div></div>' +
       '</div>' +
-      '<table class="pptbl"><thead><tr>' +
+      '<table class="pptbl">' +
+      '<colgroup><col class="c-n"><col><col class="c-min"><col class="c-rpe"><col class="c-car"><col></colgroup>' +
+      '<thead><tr>' +
         '<th class="c">#</th><th>Blocco</th><th class="c">Min</th>' +
         '<th class="c">RPE</th><th class="c">Carico</th><th>Note</th>' +
       '</tr></thead><tbody>'+rows+'</tbody></table>' +
@@ -4424,10 +4441,38 @@ window.FORZA = window.FORZA || { roster:[] };
     '</div>';
   }
 
+  /* Una seduta di cinque blocchi occupa poco piu' di meta' facciata e il resto
+     resta bianco, che stampato sembra un foglio sbagliato. L'altezza che avanza
+     si da' alle righe della tabella, cosi' il foglio si riempie e da lontano, in
+     campo, le righe si leggono meglio. Il passo si misura davvero: la scheda
+     viene messa fuori schermo alla larghezza vera del foglio e si tiene il
+     valore piu' alto che ci sta ancora dentro. Quando i blocchi sono tanti o la
+     rosa del giorno e' lunga il primo passo e' gia' troppo e resta quello. */
+  const PP_PAD = [9, 12, 15, 19, 23, 28, 34, 41, 49];
+  function schedaFill(host){
+    if(!host.querySelector('table.pptbl')) return;
+    /* La facciata A4 con sei millimetri di margine sopra e sotto tiene 1077 px.
+       Sette millimetri di aria in cima alla scheda se ne prendono ventisei;
+       venti restano di margine, perche' al millimetro giusto la stampante manda
+       l'ultima riga a pagina due. */
+    const tetto = 1077 - 26 - 20;
+    const prima = host.getAttribute('style') || '';
+    host.style.cssText = prima+';display:block;position:absolute;left:-30000px;top:0;width:194mm;visibility:hidden;';
+    let scelto = PP_PAD[0];
+    for(let i=0; i<PP_PAD.length; i++){
+      host.style.setProperty('--pp-pad', PP_PAD[i]+'px');
+      if(host.offsetHeight > tetto) break;
+      scelto = PP_PAD[i];
+    }
+    if(prima) host.setAttribute('style', prima); else host.removeAttribute('style');
+    host.style.setProperty('--pp-pad', scelto+'px');
+  }
+
   function printSess(s){
     const host = document.getElementById('pr-print');
     if(!host) return;
     host.innerHTML = schedaHTML(s);
+    schedaFill(host);
     document.body.classList.add('print-oggi');
     window.print();
   }
