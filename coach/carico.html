@@ -1644,6 +1644,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return ms.find(m=> m.key===state.monthKey) || ms[ms.length-1] || null;
   }
   function isMicro(){ return state.monthKey === MICRO_KEY; }
+  /* Come si scrive il periodo aperto. Nei mesi veri e' il nome del mese. Nella finestra
+     mobile "Ultimi 4 microcicli" e' un conto, non un periodo, e sul foglio stampato con
+     gli ultimi due era pure sbagliato: al suo posto vanno le due date, che dicono da
+     quando a quando si sta guardando. */
+  function monLabel(m){ return m ? ((m.micro && m.span) ? m.span : m.title) : ''; }
   function monthCode(title){ return (title||'').trim().split(/\s+/)[0].slice(0,3).toUpperCase(); }
 
   // ---------- logo ----------
@@ -2222,11 +2227,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       ? '<span><span class="lg-line-mod"></span>modello partita</span>' : '';
     if(scope==='micro'){
       if(t) t.textContent = 'Microciclo';
-      if(hint) hint.textContent = (state.chartWeek? (state.chartWeek+' · ') : '') + (mon?mon.title:'') + ' · giorno per giorno';
+      if(hint) hint.textContent = (state.chartWeek? (state.chartWeek+' · ') : '') + monLabel(mon) + ' · giorno per giorno';
       if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Allenamento</span><span><span class="lg-match"></span>Partita</span><span><span class="lg-line"></span>media microciclo</span>'+modLeg;
     } else if(scope==='month'){
       if(t) t.textContent = 'Carico settimanale';
-      if(hint) hint.textContent = (mon?mon.title:'') + ' · totali per settimana';
+      if(hint) hint.textContent = monLabel(mon) + ' · totali per settimana';
       // sulla finestra mobile la media non e' di un mese ma delle settimane mostrate
       if(leg) leg.innerHTML = '<span><span class="lg-bar"></span>Totale settimana</span><span><span class="lg-line"></span>media '+((mon&&mon.micro)?'periodo':'mese')+'</span>';
     } else if(scope==='last4' || scope==='range'){
@@ -2947,9 +2952,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function renderGrid(){
     const host = document.getElementById('grid-scroll');
     const mon = activeMonth();
-    document.getElementById('grid-title').textContent = mon ? mon.title : 'Monitoraggio';
-    const who = state.level==='team' ? 'squadra' : disp(state.player);
-    document.getElementById('grid-hint').textContent = (mon? (who+' · giorno per giorno · RPE e TL in fondo') : '');
+    /* In cima alla tabella c'era scritto il mese, e nella finestra mobile ci finiva
+       "Ultimi 4 microcicli" anche quando sul foglio che parte per la nazionale ne
+       vanno due: era la scritta piu' grande della pagina e diceva la cosa sbagliata.
+       Adesso in alto c'e' di chi si sta parlando, il nome dell'atleta o la squadra,
+       che su un foglio che esce di qui e' l'unica cosa che serve leggere per prima.
+       Il periodo scende nella riga piccola, e nella finestra mobile ci vanno le due
+       date vere invece del conto dei microcicli. */
+    const who = state.level==='team' ? (S.squadra || 'Squadra') : disp(state.player);
+    document.getElementById('grid-title').textContent = mon ? who : 'Monitoraggio';
+    document.getElementById('grid-hint').textContent = (mon? (monLabel(mon)+' · giorno per giorno · RPE e TL in fondo') : '');
     const note = document.getElementById('rpe-note');
     const clr  = document.getElementById('rpe-clear');
     if(note) note.textContent = '';
@@ -3548,18 +3560,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
      quando si stampa con un periodo scelto la pagina passa per un attimo alla finestra
      mobile, che i mesi li attraversa, e a stampa finita torna dove stava. A schermo non
      si vede niente: si esce dalla stampa con la stessa pastiglia di prima. */
-  let printMk = null;
+  let printMk = null, printMicro = null;
   function printMonthPush(keep){
-    if(keep < 1 || state.monthKey === MICRO_KEY) return;
-    printMk = state.monthKey;
+    if(keep < 1) return;
+    /* Se la pastiglia aperta e' gia' quella della finestra mobile il mese non deve
+       cambiare, ma il numero di microcicli si': prima in quel caso la funzione usciva
+       subito e chi chiedeva gli ultimi due se ne ritrovava stampati quattro. */
+    if(state.monthKey !== MICRO_KEY){ printMk = state.monthKey; state.monthKey = MICRO_KEY; }
+    printMicro = MICRO_N;
     MICRO_N = keep;
-    state.monthKey = MICRO_KEY;
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   }
   function printMonthPop(){
-    if(printMk === null) return;
-    state.monthKey = printMk; printMk = null;
-    MICRO_N = MICRO_DEF;
+    if(printMk === null && printMicro === null) return;
+    if(printMk !== null){ state.monthKey = printMk; printMk = null; }
+    MICRO_N = (printMicro === null) ? MICRO_DEF : printMicro;
+    printMicro = null;
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
   }
   /* Guscio di pagina. Una scheda che non ci sta piu' nel foglio passa a quello dopo e ci
@@ -3630,7 +3646,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* Nei mesi veri si scrive il nome del mese. Negli ultimi microcicli il titolo direbbe
        "Ultimi 4 microcicli" e subito dopo lo ripeterebbe la voce del periodo: meglio le
        due date, che dicono da quando a quando si sta guardando. */
-    if(m) bits.push(esc((m.micro && m.span) ? m.span : m.title));
+    if(m) bits.push(esc(monLabel(m)));
     const keep = PDF_PERS[sel.per] || 0;
     if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
     const box = document.createElement('div');
@@ -3651,7 +3667,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(S.stagione) bits.push('Stagione ' + esc(S.stagione));
     const m = activeMonth();
     // come nell'intestazione generale: negli ultimi microcicli si scrivono le due date
-    if(m) bits.push(esc((m.micro && m.span) ? m.span : m.title));
+    if(m) bits.push(esc(monLabel(m)));
     const keep = PDF_PERS[sel.per] || 0;
     if(keep) bits.push('ultimi ' + keep + (keep === 1 ? ' microciclo' : ' microcicli'));
     const box = document.createElement('div');
