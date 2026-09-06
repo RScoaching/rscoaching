@@ -961,6 +961,8 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
     </div>
     <div id="pl-detbody"></div>
     <div class="pl-dact">
+      <a class="btn" id="pl-detfog" href="#" target="_blank" rel="noopener" hidden
+         title="Apre la scansione del foglio che il mister ha disegnato per questa seduta">Foglio del mister</a>
       <a class="btn primary" id="pl-detgo" href="./esercitazioni.html" hidden>Apri le esercitazioni</a>
       <button type="button" class="btn" id="pl-detclose" autofocus>Chiudi</button>
     </div>
@@ -3231,6 +3233,26 @@ window.RS_ROSTER = window.RS_ROSTER || [
     return '<div class="sdet"><h4>Programma e dati a confronto</h4><div class="blk">'+b+'</div></div>';
   }
 
+  /* Foglio del mister: la scansione della seduta sta in coach/prev con il nome
+     seduta-<data>-<AM|PM>.jpg. Il file c'e' solo per le giornate che il mister
+     ha disegnato, quindi non si puo' dare per scontato: si chiede al server con
+     una domanda leggera che non scarica l'immagine e dice solo se esiste. */
+  const FOG_OK = Object.create(null);
+  function fogKey(s){ return s && s.data ? s.data+'-'+(s.slot||'AM') : ''; }
+  function fogSrc(key){ return 'prev/seduta-'+key+'.jpg'; }
+  function fogChiedi(key){
+    if(!key) return Promise.resolve(false);
+    if(FOG_OK[key] !== undefined) return Promise.resolve(FOG_OK[key]);
+    /* Aperta da disco o senza fetch la domanda non si puo' fare: meglio un
+       tasto in piu' che un foglio irraggiungibile. */
+    if(location.protocol === 'file:' || typeof fetch !== 'function'){
+      FOG_OK[key] = true; return Promise.resolve(true);
+    }
+    return fetch(fogSrc(key), { method:'HEAD' })
+      .then(function(r){ FOG_OK[key] = !!(r && r.ok); return FOG_OK[key]; })
+      .catch(function(){ FOG_OK[key] = true; return true; });
+  }
+
   function plDetBody(s){
     let h = '';
     if(s.fix){
@@ -3382,6 +3404,24 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const ex = s.only_fix ? null : exOf(s);
       if(exHasDetail(ex)){ go.href = exLink(ex.date, ex.slot, null); go.hidden = false; }
       else go.hidden = true;
+    }
+    /* Il foglio del mister sta in Esercitazioni e in Report ma qui no, e il
+       calendario e' il primo posto dove si va a cercare una giornata. Il tasto
+       nasce nascosto e si accende solo se la scansione di quella seduta esiste
+       davvero: cosi' non promette un foglio che non c'e'. */
+    const fg = document.getElementById('pl-detfog');
+    if(fg){
+      fg.hidden = true;
+      const fkey = s.only_fix ? '' : fogKey(s);
+      if(fkey){
+        fg.href = fogSrc(fkey);
+        fg.setAttribute('data-f', fkey);
+        fogChiedi(fkey).then(function(ok){
+          // fra la domanda e la risposta il dialogo puo' essere gia' passato a
+          // un'altra giornata: il tasto si accende solo se e' ancora la sua
+          if(ok && fg.isConnected && fg.getAttribute('data-f')===fkey) fg.hidden = false;
+        });
+      }else fg.removeAttribute('data-f');
     }
     if(typeof plDet.showModal==='function') plDet.showModal(); else plDet.setAttribute('open','');
   }
