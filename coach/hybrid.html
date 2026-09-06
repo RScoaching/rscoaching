@@ -332,6 +332,16 @@ td.num.cmp.na{ color:var(--faint); }
 tr.r-diff td, tr.r-diff td.col-day{ background:oklch(28% 0.03 250); }
 tr.r-diff td.col-day .lb{ color:oklch(78% 0.10 250); }
 tr.r-diff td.col-day .role-inline{ color:var(--muted); }
+/* il tasto che gira il verso dello scarto: sta dentro la riga, piccolo, e non deve
+   sembrare un titolo. In stampa sparisce come tutti i comandi */
+.cf-swap{ appearance:none; cursor:pointer; font-family:inherit; font-size:10.5px; font-weight:700;
+  letter-spacing:.03em; text-transform:uppercase; color:oklch(78% 0.10 250);
+  background:transparent; border:1px solid var(--border2); border-radius:7px;
+  padding:3px 8px; margin-left:8px; vertical-align:middle;
+  transition:border-color .18s var(--ease), color .18s var(--ease); }
+.cf-swap:hover{ border-color:var(--border3); color:var(--ink); }
+.cf-swap:active{ transform:scale(.97); }
+.cf-swap:focus-visible{ outline:2px solid var(--border3); outline-offset:2px; }
 
 /* ---------- confronto giocatrici ---------- */
 #confronto-view{ position:relative; overflow:hidden; }
@@ -878,6 +888,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const CF_RADAR_MAX = 4;
   let cfSessSel = null;   // Set di "monthKey|label"
   let cfPlaySel = null;   // Set di nomi atlete
+  // Con due atlete lo scarto ha un verso: chi sta davanti e chi sta dietro. Qui resta il
+  // nome di quella che deve stare davanti, scelta col tasto Inverti. Vale per quella
+  // coppia soltanto: se una delle due esce dalla selezione si torna all'ordine della tabella.
+  let cfFirst = '';
   // La lettura che finisce davvero in tabella: se manca la media squadra o il modello, il
   // confronto ripiega sulla media per seduta. In stampa il titolo deve dire quella, non
   // quella chiesta col pulsante.
@@ -1944,6 +1958,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       va=(va==null?-Infinity:va); vb=(vb==null?-Infinity:vb);
       return csort.dir*(va-vb);
     });
+    // Con due atlete l'ordine lo decide chi guarda, non la tabella: il nome messo davanti
+    // col tasto Inverti va in cima e lo scarto si legge nel suo verso. Se la coppia cambia,
+    // o se si torna a ordinare per colonna, la scelta cade e riprende l'ordine della tabella.
+    if(cfFirst){
+      if(pdata.length!==2) cfFirst='';
+      else if(cfFirst===pdata[1].name) pdata.reverse();
+      else if(cfFirst!==pdata[0].name) cfFirst='';
+    }
     // La riga dello scarto esce solo con due atlete e solo dove i numeri sono assoluti:
     // sopra le percentuali il rapporto fra due percentuali non direbbe niente di utile.
     const duello=(!isCmp && !isTvm && pdata.length===2) ? { a:pdata[0], b:pdata[1] } : null;
@@ -2030,7 +2052,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(duello){
       const A=duello.a.v||[], B=duello.b.v||[], rr=cfRatio(A, B);
       h+='<tr class="r-diff"><td class="col-day"><span class="lb">Scarto</span>'
-        +'<span class="role-inline">'+esc(disp(duello.a.name))+' su '+esc(disp(duello.b.name))+'</span></td><td class="cf-n">-</td>';
+        +'<span class="role-inline">'+esc(disp(duello.a.name))+' su '+esc(disp(duello.b.name))+'</span>'
+        +'<button type="button" class="cf-swap print-hidden" id="cf-swap" title="Metti davanti '
+        +esc(disp(duello.b.name))+': lo scarto si legge nel verso opposto">Inverti</button>'
+        +'</td><td class="cf-n">-</td>';
       V.forEach(i=>{
         const d=(A[i]!=null && isFinite(A[i]) && B[i]!=null && isFinite(B[i])) ? (A[i]-B[i]) : null;
         h+=cfPctCell(rr[i], (d==null?'-':((d>0?'+':'')+fmt(d, i))), keyCls(i));
@@ -2038,10 +2063,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       h+='</tr>';
     }
     h+='</tbody></table>'; host.innerHTML=h;
+    if(duello){
+      const sw=document.getElementById('cf-swap'), altra=duello.b.name;
+      if(sw) sw.addEventListener('click', function(){ cfFirst=altra; renderConfronto(); });
+    }
     host.querySelectorAll('th.sortable').forEach(th=> th.addEventListener('click', ()=>{
       const raw=th.getAttribute('data-c');
       const c=(raw==='name'||raw==='role'||raw==='n')?raw:+raw;
       if(csort.col===c) csort.dir*=-1; else { csort.col=c; csort.dir=(c==='name'||c==='role')?1:-1; }
+      // ordinare per colonna e' un'altra richiesta: l'ordine scelto a mano si toglie di mezzo
+      cfFirst='';
       renderConfronto();
     }));
   }
