@@ -952,9 +952,13 @@ window.addEventListener('storage', function(ev) {
 // due atlete hanno lo stesso cognome restano tutte e due col nome per esteso.
 // Chi vuole un nome diverso lo scrive in Atlete e quello vince sempre.
 // ---------------------------------------------------------------------------
+// Le particelle arabe e nordafricane stanno qui accanto a quelle italiane per la
+// stessa ragione: "El Miroun" e' un cognome intero, e senza "el" in questa lista
+// nella tendina del carico si leggeva soltanto "El".
 window.FIO_PARTICELLE = ['de', 'di', 'da', 'del', 'della', 'dello', 'dei', 'degli',
   'dal', 'dalla', 'lo', 'la', 'li', 'van', 'von', 'der', 'den', 'mc', 'mac',
-  'san', 'santa', 'sant', 'saint', 'st'];
+  'san', 'santa', 'sant', 'saint', 'st',
+  'el', 'al', 'ben', 'bin', 'ibn', 'abu', 'ait', 'du', 'do', 'dos', 'das', 'le'];
 
 // Il cognome di un nome scritto "Cognome Nome".
 window.fioCognome = function(name) {
@@ -974,7 +978,9 @@ window.fioCognome = function(name) {
 // dall'atleta e sembra una giocatrice nuova. Qui si corregge solo come si
 // legge: chiave a sinistra in minuscolo, forma giusta a destra.
 window.FIO_ORTOGRAFIA = {
-  'oberparlaiter': 'Oberparleiter'
+  'oberparlaiter': 'Oberparleiter',
+  // nei fogli di partenza la seconda parola e' scritta minuscola, "Del conte"
+  'conte': 'Conte'
 };
 
 // Le scritture diverse dello stesso cognome. A sinistra la variante in
