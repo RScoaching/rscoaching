@@ -806,6 +806,9 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   .pgw{ break-inside:avoid; page-break-inside:avoid; padding-top:6mm; }
   /* la prima scheda il bordo lo prende gia' dal foglio, se no ne avrebbe due */
   .pgw.pgw-top{ padding-top:0; }
+  .pgw.pgw-open{ break-inside:auto; page-break-inside:auto; }
+  /* una scheda che si divide non deve lasciare il titolo solo in fondo alla facciata */
+  .pgw-open .card-head{ break-after:avoid; page-break-after:avoid; }
   .pgw:empty{ display:none !important; }
   .card-head h2{ color:#14110f !important; }
   .card-head .hint{ color:#5a524c !important; }
@@ -847,8 +850,18 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
      Il riempimento sopra e sotto e' il bordo bianco della facciata che il gruppo apre */
   .print-pg{ break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always;
     padding:6mm 0; }
-  .print-split .print-blk:last-child .print-pg:last-child{ break-after:auto; page-break-after:auto; }
+  /* La fascia dopo non deve piu' aprire una facciata sua. Quando i parametri sono venti la
+     griglia esce in due fasce: prima ognuna si prendeva un foglio intero e ne riempiva meno
+     della meta', e la prima tabella dell'atleta finiva gia' sulla pagina dopo il nome. Adesso
+     la fascia successiva parte subito sotto e scende di pagina solo se davvero non ci sta. */
+  .print-blk .print-pg:last-child{ break-after:auto; page-break-after:auto; }
+  .print-blk:first-child .print-pg:first-child{ padding-top:0; }
   #grid-card, .pk-grid{ break-inside:auto !important; }
+  /* L'analisi del carico e' piu' alta di una facciata: tenendola tutta intera si portava via
+     due fogli interi e lasciava mezza pagina bianca sotto il nome dell'atleta. I pezzi dentro
+     (indice, riquadri, grafici) restano interi per conto loro, quindi si puo' lasciare che il
+     blocco si divida dove capita: la facciata sotto il nome si riempie e le pagine calano. */
+  #acwr-card, .pk-acwr{ break-inside:auto !important; }
   table.grid thead{ display:table-header-group; }
   /* cornice viola attorno alla griglia: sul foglio bianco la tabella si stacca dal resto della
      scheda e si vede dove finisce un gruppo di microcicli e dove comincia il successivo */
@@ -3580,6 +3593,49 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     printTrimCols(c, lead, nMet, 0, n, tail);
     return c;
   }
+  /* Quanto e' alta la griglia intera quando le fasce stanno una sotto l'altra sullo stesso
+     foglio. Ha senso solo se i microcicli chiesti entrano tutti in un gruppo: e' il caso del
+     report per la nazionale, dove di solito se ne stampano due. */
+  const PRINT_PG = 760;        // altezza vera della facciata orizzontale a margini azzerati
+  const PRINT_CARD_FRAME = 122; // guscio della pagina piu' intestazione della scheda griglia
+  const PRINT_BLK_GAP = 38;    // etichetta della fascia piu' lo stacco fino a quella dopo
+  /* Quanto spazio si prende quello che sta sopra la griglia sulla stessa facciata. Se sono
+     accesi i blocchi grandi (andamento, parametri chiave, analisi carico) la griglia apre
+     comunque una facciata sua e la trova vuota, quindi non c'e' niente da scalare. */
+  function printGridTop(){
+    const sel = pdfRead();
+    if(sel['chart-card'] || sel['mini-card'] || sel['acwr-card']) return 0;
+    let h = 0;
+    if(sel.who && sel.who.length >= 2) h += 104;   // riga di testa dell'atleta nel report unico
+    if(sel.kpis) h += 96;                          // riepilogo del mese su una riga sola
+    return h;
+  }
+  function printStackH(info, lay, nF){
+    if(nF < 2) return 0;
+    const groups = printPageGroups(lay, info.headH, info.rowsH).filter(g=> g.length);
+    if(groups.length !== 1) return Infinity;   // piu' gruppi di settimane: le pagine servono
+    const hOf = idx=> (info.rowsH && info.rowsH[idx]) ? info.rowsH[idx] : 26;
+    let one = info.headH;
+    lay.pre.forEach(i=> one += hOf(i));
+    lay.weeks.forEach(w=> w.forEach(i=> one += hOf(i)));
+    lay.tail.forEach(i=> one += hOf(i));
+    return nF * (one + PRINT_BLK_GAP);
+  }
+  /* Stringe il corpo del testo finche' tutte le fasce entrano nella stessa facciata. Prima
+     ogni fascia si prendeva una pagina e la riempiva a meta': l'atleta ne occupava due o tre
+     quando ne bastava una. Se non si arriva a farle entrare nemmeno col corpo piu' piccolo si
+     torna alla misura scelta prima e le fasce si dividono da sole. */
+  function printPickStack(node, lay, probe, nF, from){
+    if(!lay || nF < 2) return null;
+    const k0 = Math.max(0, PRINT_TIERS.indexOf(from && from.tier));
+    const room = PRINT_PG - PRINT_CARD_FRAME - printGridTop();
+    for(let k=k0; k<PRINT_TIERS.length; k++){
+      const info = printMeasure(node, probe, PRINT_TIERS[k]);
+      if(info.w > PRINT_W) continue;
+      if(printStackH(info, lay, nF) <= room) return info;
+    }
+    return null;
+  }
   // sceglie misura del testo e, se proprio non bastasse la larghezza, in quante fasce dividere
   function printPlan(clean, lead, nMet, lay, probe, tail){
     const use = printPickTier(clean, lay, probe);
@@ -3594,9 +3650,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const chunks = printChunks(nMet, cap);
     let wide = 1;
     chunks.forEach(c=>{ wide = Math.max(wide, c[1] - c[0]); });
-    const pick = printPickTier(printSliceCols(clean, lead, nMet, wide, tail), lay, probe) || big;
-    pick.chunks = chunks;
-    return pick;
+    const slice = printSliceCols(clean, lead, nMet, wide, tail);
+    const pick = printPickTier(slice, lay, probe) || big;
+    const stacked = printPickStack(slice, lay, probe, chunks.length, pick);
+    const out = stacked || pick;
+    out.chunks = chunks;
+    out.stack = !!stacked;
+    return out;
   }
   function printBuildTable(clean, lay, grp, withTail){
     const t = document.createElement('table');
@@ -3650,7 +3710,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       wrap.appendChild(blk);
     });
-    return { wrap:wrap, tier:plan.tier, fasce:chunks.length, pagine:(groups ? groups.length : 1) };
+    const pagine = groups ? groups.length : 1;
+    // quando le fasce stanno una sotto l'altra il foglio e' uno solo, non uno per fascia
+    return { wrap:wrap, tier:plan.tier, fasce:chunks.length, pagine:pagine,
+      fogli: plan.stack ? pagine : pagine * chunks.length };
   }
   /* toglie solo i pezzi costruiti attorno alla griglia viva. Nel report su piu' atlete
      serve tra un nome e l'altro: la copia e' gia' stata presa, la pagina deve tornare
@@ -3695,7 +3758,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(!el.classList || !el.classList.contains('card')) return;
       if(el.classList.contains('print-off')) return;
       const box = document.createElement('div');
-      box.className = 'pgw' + (first ? ' pgw-top' : '');
+      /* le schede piu' alte di una facciata si dividono da sole: il guscio attorno non deve
+         provare a tenerle intere, se no il browser le butta tutte sulla pagina dopo */
+      const open = el.id === 'grid-card' || el.id === 'acwr-card'
+        || el.classList.contains('pk-grid') || el.classList.contains('pk-acwr');
+      box.className = 'pgw' + (first ? ' pgw-top' : '') + (open ? ' pgw-open' : '');
       first = false;
       host.insertBefore(box, el);
       box.appendChild(el);
@@ -3833,6 +3900,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
          la regola di impaginazione anche dopo che l'id se ne e' andato. */
       const pg = copy.querySelector('#grid-card'); if(pg) pg.classList.add('pk-grid');
       const pm = copy.querySelector('#mini-card'); if(pm) pm.classList.add('pk-mini');
+      const pa = copy.querySelector('#acwr-card'); if(pa) pa.classList.add('pk-acwr');
       /* nella copia gli id spariscono, se no in pagina ce ne sarebbero cinque uguali e
          chi cerca un blocco per id troverebbe la copia sbagliata. Dentro gli SVG invece
          restano: le sfumature delle barre sono agganciate a quegli id e senza restano
@@ -3894,7 +3962,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let out = null;
     try{
       const sheet = printSheetFor(tb, lead, nMet, probe, tail);
-      if(sheet) out = { fasce:sheet.fasce, pagine:sheet.pagine };
+      if(sheet) out = { fasce:sheet.fasce, pagine:sheet.pagine, fogli:sheet.fogli };
     }catch(e){ out = null; }
     if(probe.parentNode) probe.parentNode.removeChild(probe);
     return out;
@@ -4038,9 +4106,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const g = printGridInfo();
         if(g){
           const nMet = VIS().length;
-          const np = g.pagine * g.fasce;
+          const np = g.fogli || (g.pagine * g.fasce);
           s += ' · griglia: ' + nMet + ' parametri';
-          s += g.fasce > 1 ? ' in '+g.fasce+' fasce' : ' tutti in larghezza';
+          s += g.fasce > 1
+            ? ' in '+g.fasce+' fasce'+(np <= g.pagine ? ' una sotto l\'altra' : '')
+            : ' tutti in larghezza';
           s += ', ' + np + (np===1 ? ' pagina' : ' pagine');
         }
       }
