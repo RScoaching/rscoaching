@@ -1261,6 +1261,101 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 (function(){
   "use strict";
   const S = window.SNAP;
+  /* Una ragazza sola, una riga sola. Nei fogli del mister lo stesso cognome capita
+     scritto in due modi in due giorni diversi (Oberparlaiter e Operparleiter), e chi
+     legge il foglio non se ne accorge: qui pero' diventavano due atlete, con mezza
+     stagione a testa. La sidebar sa gia' quali grafie sono la stessa persona
+     (`fioChiaveAtleta`), quindi prima di disegnare qualsiasi cosa le due schede si
+     fondono in una. Si tiene la grafia con piu' dati e ci si versa dentro l'altra,
+     mese per mese e riga per riga: le sedute che mancano si aggiungono al loro posto,
+     quelle gia' presenti si limitano a riempire i buchi. Nessun dato si perde e la
+     chiave con cui sono salvati gli RPE resta quella dell'atleta tenuta. */
+  (function unisciOmonime(){
+    const P = S.players;
+    if(!P || typeof window.fioChiaveAtleta !== 'function') return;
+
+    /* Vero quando il nome e' gia' scritto come la sidebar lo considera buono. */
+    function esattoCanonico(n){
+      if(typeof window.fioCognome !== 'function') return false;
+      const cog = String(window.fioCognome(n) || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z]/g, '');
+      return cog === window.fioChiaveAtleta(n);
+    }
+    function pesoNome(n){
+      const p = P[n], mesi = (p && p.months) || [];
+      let r = 0;
+      for(let i=0;i<mesi.length;i++) r += ((mesi[i] && mesi[i].rows) || []).length;
+      return r;
+    }
+    /* Dove il nome tenuto non ha misure ci vanno quelle dell'altra grafia. */
+    function riempiBuchi(dst, src){
+      const a = dst.v || (dst.v = []), b = src.v || [];
+      for(let i=0;i<b.length;i++){
+        if(b[i]===null || b[i]===undefined) continue;
+        if(a[i]===null || a[i]===undefined) a[i] = b[i];
+      }
+      if(!dst.wd && src.wd) dst.wd = src.wd;
+    }
+    /* Le righe delle due schede si incastrano senza scombinare l'ordine dei giorni:
+       si scorre la seconda tenendo il segno sulla prima, chi c'e' gia' si aggiorna,
+       chi manca entra nel punto in cui il foglio lo aveva. */
+    function unisciRighe(dst, src){
+      let pos = 0;
+      for(let i=0;i<src.length;i++){
+        const r = src[i];
+        let trovata = -1;
+        for(let k=pos;k<dst.length;k++){
+          if(dst[k].label === r.label && dst[k].type === r.type){ trovata = k; break; }
+        }
+        if(trovata >= 0){ riempiBuchi(dst[trovata], r); pos = trovata + 1; }
+        else { dst.splice(pos, 0, r); pos++; }
+      }
+    }
+    function unisciMesi(dst, src){
+      let pos = 0;
+      for(let i=0;i<src.length;i++){
+        const m = src[i];
+        let trovato = -1;
+        for(let k=pos;k<dst.length;k++){ if(dst[k].key === m.key){ trovato = k; break; } }
+        if(trovato >= 0){
+          const d = dst[trovato];
+          d.rows = d.rows || [];
+          unisciRighe(d.rows, (m.rows || []));
+          pos = trovato + 1;
+        } else { dst.splice(pos, 0, m); pos++; }
+      }
+    }
+
+    const perChiave = {};
+    Object.keys(P).forEach(function(n){
+      const k = window.fioChiaveAtleta(n);
+      if(!perChiave[k]) perChiave[k] = [];
+      perChiave[k].push(n);
+    });
+    Object.keys(perChiave).forEach(function(k){
+      const nomi = perChiave[k];
+      if(nomi.length < 2) return;
+      /* Fra due grafie si tiene quella giusta, cioe' quella che la sidebar riconosce
+         come cognome buono; a parita' vince quella con piu' dati, e se sono pari
+         l'ordine alfabetico, cosi' la scheda tenuta e' sempre la stessa a ogni carico. */
+      nomi.sort(function(a, b){
+        const ca = (window.fioChiaveAtleta(a) === k && esattoCanonico(a)) ? 0 : 1;
+        const cb = (window.fioChiaveAtleta(b) === k && esattoCanonico(b)) ? 0 : 1;
+        if(ca !== cb) return ca - cb;
+        const d = pesoNome(b) - pesoNome(a);
+        return d !== 0 ? d : a.localeCompare(b, 'it');
+      });
+      const tenuto = P[nomi[0]];
+      tenuto.months = tenuto.months || [];
+      for(let i=1;i<nomi.length;i++){
+        const altra = P[nomi[i]];
+        if(!tenuto.role && altra && altra.role) tenuto.role = altra.role;
+        unisciMesi(tenuto.months, (altra && altra.months) || []);
+        delete P[nomi[i]];
+      }
+    });
+  })();
   const NF = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
   const NF0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
   const NF1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
