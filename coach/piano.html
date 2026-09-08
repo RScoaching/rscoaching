@@ -1658,6 +1658,41 @@ window.FORZA = window.FORZA || { roster:[] };
   }
   microLoad();
 
+  /* LE SEDUTE SCRITTE A CALENDARIO.
+     Il calendario ha due strati. Il primo sono le giornate registrate, che
+     arrivano dai file GPS e quindi esistono solo per i giorni gia' passati. Il
+     secondo sono i blocchi scritti a mano nel planner, cioe' le sedute in
+     programma. L'Oggi leggeva solo il primo, e il risultato era una bugia: una
+     settimana pianificata per intero risultava senza sedute, il preventivo
+     diceva che non restava niente da fare e dava per persi metri che invece
+     hanno ancora tre allenamenti davanti. Qui si legge anche il secondo strato,
+     dalla stessa chiave che scrive la pagina Calendario, cosi' quello che si e'
+     messo li' vale anche qui. Le gare non entrano: quelle le sa gia' matchSet,
+     che legge anche le partite in programma. I riposi nemmeno, ed e' il loro
+     senso: un giorno di riposo non e' capacita' di allenamento. */
+  const LS_CAL = 'rs_fio_calendario';
+  let PIAN = {};
+  function pianLoad(){
+    PIAN = {};
+    let s = null;
+    try{ s = JSON.parse(localStorage.getItem(LS_CAL) || 'null'); }catch(e){}
+    const man = (s && Array.isArray(s.manual)) ? s.manual : [];
+    man.forEach(function(m){
+      if(!m || !m.data) return;
+      const kind = String(m.kind || 'training');
+      const tipo = String(m.type || '');
+      if(kind === 'match' || kind === 'amichevole') return;
+      if(kind === 'riposo' || tipo === 'riposo') return;
+      const ds = String(m.data);
+      let o = PIAN[ds];
+      if(!o) o = PIAN[ds] = { n:0, slots:[], tit:'' };
+      o.n++;
+      if(m.slot && o.slots.indexOf(m.slot) < 0) o.slots.push(m.slot);
+      if(!o.tit && (m.title || tipo)) o.tit = String(m.title || tipo);
+    });
+  }
+  pianLoad();
+
   const calMatch = {};
   dates.forEach(function(d){ if(d.is_match) calMatch[d.data] = 1; });
   fixtures.forEach(function(f){ if(f && f.data) calMatch[f.data] = 1; });
@@ -1801,13 +1836,23 @@ window.FORZA = window.FORZA || { roster:[] };
   let active = weekMap.get(curKey) || (weeks.length ? weeks[weeks.length-1] : {key:curKey, load:0, sessions:0, matches:0});
 
   // ---- stato di oggi ----
-  const todayRow = byDate[TSTR] || null;
-  // match | train | rest | off. La gara la decide matchSet, cosi' una correzione a
-  // mano nel microciclo cambia anche lo stato della giornata.
+  const todayRow  = byDate[TSTR] || null;
+  /* Oggi puo' esistere in due modi: registrato nei file GPS (todayRow) oppure
+     scritto a calendario e non ancora svolto (todayPian). Il secondo caso e' la
+     normalita' al mattino, quando la seduta e' in programma ma non e' passata da
+     nessun orologio. */
+  const todayPian = PIAN[TSTR] || null;
+  /* match | train | rest | off. La gara la decide matchSet, cosi' una correzione a
+     mano nel microciclo cambia anche lo stato della giornata.
+     L'ordine conta. Prima si guardava se la data cadeva dentro l'intervallo dello
+     snapshot GPS, e fuori da quello la risposta era "Pausa: stagione conclusa"
+     anche con una gara in calendario e tre allenamenti scritti nella settimana.
+     Lo snapshot dice fino a dove arrivano i dati registrati, non fino a dove
+     arriva la stagione: se per oggi c'e' un impegno scritto, quello vince. */
   function todayState(){
-    if(!inSeason) return 'off';
     if(matchSet[TSTR]) return 'match';
-    if(todayRow) return 'train';
+    if(todayRow || todayPian) return 'train';
+    if(!inSeason) return 'off';
     return 'rest';
   }
   let state = todayState();
@@ -1845,7 +1890,9 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   function renderKpis(){
-    const sl = slotLabel(todayRow);
+    /* Se la seduta di oggi non e' ancora registrata lo slot lo dice il calendario:
+       "mattina" scritto nel planner vale quanto "mattina" letto dal GPS. */
+    const sl = slotLabel(todayRow || todayPian);
     const stMap = {
       match:{v:'Partita', sub:(TODAY_MD?('giorno gara &#183; '+TODAY_MD):'giorno gara'), cls:'up'},
       train:{v:'Allenamento', sub:(sl?('sessione '+esc(sl)):'sessione in programma')+(TODAY_MD?(' &#183; '+TODAY_MD):''), cls:''},
@@ -1886,6 +1933,12 @@ window.FORZA = window.FORZA || { roster:[] };
       meta += '<div class="mchip"><span class="ml">Carico oggi</span><b>'+NF.format(+todayRow.load||0)+'</b><span class="ml">u.a.</span></div>';
       const sl = slotLabel(todayRow);
       if(sl) meta += '<div class="mchip"><span class="ml">Slot</span><b style="font-size:14px">'+esc(sl)+'</b></div>';
+    } else if(todayPian){
+      /* Nessun carico da mostrare, la seduta non e' ancora stata fatta: si dice
+         cosa c'e' scritto, che e' l'unica informazione disponibile stamattina. */
+      const sl = slotLabel(todayPian);
+      meta += '<div class="mchip"><span class="ml">A calendario</span><b style="font-size:14px">'+
+        esc(todayPian.tit || 'seduta in programma')+'</b>'+(sl ? '<span class="ml">'+esc(sl)+'</span>' : '')+'</div>';
     }
     if(lastSession){
       meta += '<div class="mchip"><span class="ml">Ultima seduta</span><b style="font-size:14px">'+esc(itShort(parse(lastSession.data)))+'</b><span class="ml">'+NF.format(+lastSession.load||0)+' u.a.</span></div>';
@@ -5906,10 +5959,22 @@ window.FORZA = window.FORZA || { roster:[] };
       const d  = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate()+i);
       const ds = dstr(d);
       if(ds < TSTR) continue;
-      const row = byDate[ds];
-      if(!row) continue;
+      /* LE SEDUTE CHE RESTANO SONO DUE COSE INSIEME.
+         byDate arriva dallo snapshot GPS e contiene solo giorni gia' passati:
+         leggendo solo quello, una settimana pianificata per intero risultava
+         vuota da oggi in avanti e il preventivo dichiarava perso tutto quello
+         che invece ha ancora tre allenamenti davanti. PIAN sono i blocchi
+         scritti nel planner, cioe' esattamente le sedute che restano. Le due
+         fonti si sommano perche' il giorno di oggi puo' stare in entrambe:
+         registrato al mattino e comunque a programma. */
+      const row  = byDate[ds];
+      const plan = PIAN[ds];
+      if(!row && !plan) continue;
       const md = mdOf(ds);
-      if(row.is_match || md === 'MD'){
+      /* La gara non e' capacita' di allenamento. matchSet conosce anche le gare
+         in programma, quindi la giornata di partita si riconosce in avanti e non
+         solo dopo che e' stata giocata. */
+      if((row && row.is_match) || matchSet[ds] || md === 'MD'){
         if(ds === TSTR) out.oggiGara = true;
         continue;
       }
