@@ -850,6 +850,12 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
      Il riempimento sopra e sotto e' il bordo bianco della facciata che il gruppo apre */
   .print-pg{ break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always;
     padding:6mm 0; }
+  /* Rete di sicurezza. Tenere un gruppo tutto intero ha senso finche' il gruppo ci sta:
+     se e' piu' alto della facciata, il browser non puo' fare altro che spostarlo tutto
+     sulla pagina dopo, e quella prima resta mezza bianca. Quando la misura fatta prima di
+     stampare dice che nemmeno il corpo piu' piccolo basta, si preferisce lasciarlo
+     spezzare: meglio una tabella che continua sotto che mezzo foglio vuoto. */
+  .print-split-open .print-pg{ break-inside:auto; page-break-inside:auto; }
   /* La fascia dopo non deve piu' aprire una facciata sua. Quando i parametri sono venti la
      griglia esce in due fasce: prima ognuna si prendeva un foglio intero e ne riempiva meno
      della meta', e la prima tabella dell'atleta finiva gia' sulla pagina dopo il nome. Adesso
@@ -3355,7 +3361,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // In altezza si ragiona a microcicli: ogni pagina prende gruppi interi di settimane, cosi'
   // due settimane stanno in una pagina e un mese da quattro esce due piu' due.
   const PRINT_W = 1060;      // 283mm di foglio utile a 96dpi, con un filo di margine
-  const PRINT_H = 712;       // 196mm di altezza utile meno intestazione della scheda
+  const PRINT_H = 712;       // altezza utile di una facciata di seguito: solo il bordo bianco in cima
   const PRINT_WK_PAGE = 2;   // microcicli per pagina
   const PRINT_TIERS = [
     { fs:10, pad:'5px 8px' },
@@ -3524,14 +3530,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let cur = null, curH = 0;
     lay.weeks.forEach(w=>{
       const h = w.reduce((s,i)=> s + hOf(i), 0);
-      if(cur && (cur.length >= PRINT_WK_PAGE || curH + h > PRINT_H)){ groups.push(cur); cur = null; }
+      // la facciata che apre la griglia e' piu' stretta delle altre: il conto va fatto su quella
+      const room = printRoom(groups.length === 0);
+      if(cur && (cur.length >= PRINT_WK_PAGE || curH + h > room)){ groups.push(cur); cur = null; }
       if(!cur){ cur = []; curH = base; }
       cur.push(w); curH += h;
     });
     if(cur) groups.push(cur);
     if(!groups.length) groups.push([]);
     const tailH = lay.tail.reduce((s,i)=> s + hOf(i), 0);
-    if(tailH > 0 && curH + tailH > PRINT_H){
+    if(tailH > 0 && curH + tailH > printRoom(groups.length === 1)){
       // i totali del mese non ci stanno piu': invece di lasciarli soli su una pagina quasi vuota
       // si porta con loro l'ultimo microciclo, se sull'ultima pagina ce n'era piu' di uno
       const lastG = groups[groups.length-1];
@@ -3548,6 +3556,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function printPageFull(groups){
     const g = groups.filter(x=> x.length);
     for(let i=0;i<g.length-1;i++){ if(g[i].length < PRINT_WK_PAGE) return false; }
+    return true;
+  }
+  /* Quanto viene alta davvero ogni facciata di griglia: la testa della tabella e il
+     modello di riferimento tornano in cima a tutte, i totali del mese vanno in fondo
+     all'ultima. */
+  function printGroupsH(lay, info, groups){
+    const hOf = idx=> (info.rowsH && info.rowsH[idx]) ? info.rowsH[idx] : 26;
+    const base = info.headH + lay.pre.reduce((s,i)=> s + hOf(i), 0);
+    const tailH = lay.tail.reduce((s,i)=> s + hOf(i), 0);
+    return groups.map(function(g, i){
+      let h = base;
+      g.forEach(w=> w.forEach(k=> h += hOf(k)));
+      if(i === groups.length - 1) h += tailH;
+      return h;
+    });
+  }
+  /* Il controllo che mancava. Prima si guardava solo quanti microcicli finivano in una
+     facciata, non quanto venivano alti: due settimane lunghe passavano il controllo, poi
+     sul foglio non ci stavano e la tabella scivolava tutta intera sulla pagina dopo. */
+  function printGroupsFit(lay, info, groups){
+    const hs = printGroupsH(lay, info, groups);
+    for(let i=0;i<hs.length;i++){ if(hs[i] > printRoom(i === 0)) return false; }
     return true;
   }
   // misura vera della tabella a una data misura di testo: larghezza, colonna del giorno,
@@ -3577,16 +3607,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // in larghezza, poi per far stare in pagina il numero di microcicli previsto
   function printPickTier(node, lay, probe){
     const nWk = lay ? lay.weeks.length : 0;
-    let fit = null, last = null;
+    let largo = null, alto = null, last = null;
     for(let k=0;k<PRINT_TIERS.length;k++){
       const info = printMeasure(node, probe, PRINT_TIERS[k]);
       last = info;
       if(info.w > PRINT_W) continue;
-      if(!fit) fit = info;                       // in larghezza ci sta: peggio che vada e' questa
+      if(!largo) largo = info;                   // in larghezza ci sta: peggio che vada e' questa
       if(!nWk) break;                            // niente microcicli: non c'e' altro da guadagnare
-      if(printPageFull(printPageGroups(lay, info.headH, info.rowsH))){ fit = info; break; }
+      const gr = printPageGroups(lay, info.headH, info.rowsH);
+      const sta = printGroupsFit(lay, info, gr);
+      if(sta && !alto) alto = info;              // in altezza ci sta: le tabelle non scendono di pagina
+      if(sta && printPageFull(gr)) return info;  // e ci stanno anche i microcicli previsti
     }
-    return fit || last;
+    /* Se nessun corpo tiene i microcicli previsti si sceglie comunque quello che entra in
+       altezza: meglio una settimana per facciata che una facciata mezza vuota. */
+    return alto || largo || last;
   }
   function printSliceCols(clean, lead, nMet, n, tail){
     const c = clean.cloneNode(true);
@@ -3599,16 +3634,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const PRINT_PG = 760;        // altezza vera della facciata orizzontale a margini azzerati
   const PRINT_CARD_FRAME = 122; // guscio della pagina piu' intestazione della scheda griglia
   const PRINT_BLK_GAP = 38;    // etichetta della fascia piu' lo stacco fino a quella dopo
+  const PRINT_DOC_TOP = 118;   // bordo del foglio, titolo della pagina e nome grande: solo in cima al documento
+  /* Il documento comincia una volta sola. Il primo foglio si porta dietro l'intestazione
+     grande, gli altri no: senza questo segno il conto dello spazio sarebbe lo stesso per
+     tutti e la prima tabella, che di spazio ne ha meno, uscirebbe dalla facciata. */
+  let printFirstPage = true;
   /* Quanto spazio si prende quello che sta sopra la griglia sulla stessa facciata. Se sono
      accesi i blocchi grandi (andamento, parametri chiave, analisi carico) la griglia apre
      comunque una facciata sua e la trova vuota, quindi non c'e' niente da scalare. */
   function printGridTop(){
     const sel = pdfRead();
     if(sel['chart-card'] || sel['mini-card'] || sel['acwr-card']) return 0;
-    let h = 0;
+    let h = printFirstPage ? PRINT_DOC_TOP : 0;
     if(sel.who && sel.who.length >= 2) h += 104;   // riga di testa dell'atleta nel report unico
     if(sel.kpis) h += 96;                          // riepilogo del mese su una riga sola
     return h;
+  }
+  /* Lo spazio che resta al corpo della tabella dentro una facciata, e non e' lo stesso su
+     tutte. La prima si porta dietro il guscio della scheda, l'intestazione della griglia e
+     quello che sta sopra; le altre soltanto il bordo bianco in cima. Finche' la misura era
+     una sola, e per giunta quella comoda delle facciate di seguito, il primo gruppo di
+     microcicli veniva dichiarato buono e poi sul foglio non ci stava: non potendosi
+     spezzare scivolava tutto sulla pagina dopo e ne lasciava una mezza vuota. E' quello che
+     si vedeva chiedendo quattro microcicli, o gli ultimi due della squadra. */
+  function printRoom(first){
+    return first ? Math.max(240, PRINT_PG - PRINT_CARD_FRAME - printGridTop()) : PRINT_H;
   }
   function printStackH(info, lay, nF){
     if(nF < 2) return 0;
@@ -3628,7 +3678,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function printPickStack(node, lay, probe, nF, from){
     if(!lay || nF < 2) return null;
     const k0 = Math.max(0, PRINT_TIERS.indexOf(from && from.tier));
-    const room = PRINT_PG - PRINT_CARD_FRAME - printGridTop();
+    const room = printRoom(true);
     for(let k=k0; k<PRINT_TIERS.length; k++){
       const info = printMeasure(node, probe, PRINT_TIERS[k]);
       if(info.w > PRINT_W) continue;
@@ -3679,6 +3729,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const chunks = plan.chunks && plan.chunks.length ? plan.chunks : [[0, nMet]];
     const wrap = document.createElement('div');
     wrap.className = 'print-split';
+    /* Quando nemmeno il corpo piu' piccolo fa entrare un gruppo nella facciata, tenerlo
+       tutto intero significa solo spostarlo di pagina e lasciare un vuoto dietro: si
+       lascia che si spezzi. */
+    if(groups && !printGroupsFit(lay, plan, groups)) wrap.className += ' print-split-open';
     wrap.style.setProperty('--pfs', plan.tier.fs+'px');
     wrap.style.setProperty('--ppad', plan.tier.pad);
     chunks.forEach(ch=>{
@@ -3856,6 +3910,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(sheetsOn) return;
     clearPrintSheets();
     sheetsOn = true;
+    printFirstPage = true;   // si riparte dalla prima facciata del documento
     const sel = pdfRead();
     // il periodo scelto vale sulla stagione intera, non solo sul mese aperto
     printMonthPush(PDF_PERS[sel.per] || 0);
@@ -3885,6 +3940,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
       pdfApply();
       buildGridSheets();
+      /* Dall'atleta dopo in poi la facciata non ha piu' sopra l'intestazione del
+         documento: torna lo spazio e la griglia puo' restare del corpo che merita. */
+      printFirstPage = false;
       const sec = document.createElement('section');
       sec.className = 'print-atl' + (i === names.length - 1 ? ' last' : '');
       sec.appendChild(printAtlHead(n, i, names.length));
