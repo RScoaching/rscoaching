@@ -403,6 +403,37 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
 .tg-xr .l{ font-size:11.5px; color:var(--text); }
 .tg-xr .l i{ display:block; font-style:normal; font-size:10.5px; color:var(--faint); margin-top:3px; }
+/* il bollino della priorita': si accende sulle voci che il preparatore vuole
+   colpire per prime in settimana, e da quelle nasce il riepilogo qui sotto */
+.tg-pr{
+  display:inline-flex; align-items:center; gap:5px; appearance:none; cursor:pointer;
+  font-family:inherit; font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--faint); background:none; border:1px solid var(--border2);
+  border-radius:999px; padding:2px 8px; min-height:22px; margin-top:5px;
+  transition: color .18s var(--ease), border-color .18s var(--ease), background .18s var(--ease);
+}
+.tg-pr:hover{ color:var(--ink); border-color:var(--border3); }
+.tg-pr.on{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
+.tg-pr b{ font-weight:700; font-size:11px; line-height:1; }
+
+/* il preventivo della settimana: cosa si era deciso di colpire e a che punto e' */
+.tg-pw{ margin-top:13px; background:var(--ember-bg); border:1px solid var(--ember-border);
+  border-radius:var(--r); padding:12px 14px 11px; }
+.tg-pw .hh{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px; }
+.tg-pw .hh b{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.tg-pw .hh span{ font-size:11px; color:var(--muted); }
+.tg-pw .pr{ margin-top:11px; }
+.tg-pw .pr + .pr{ margin-top:10px; padding-top:10px; border-top:1px solid var(--ember-border); }
+.tg-pw .pl{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:5px; }
+.tg-pw .pl span{ font-size:11px; font-weight:600; color:var(--text); }
+.tg-pw .pl em{ font-style:normal; font-size:11px; color:var(--muted); }
+.tg-pw .pl em b{ color:var(--ink); font-weight:700; }
+.tg-pw .pb{ height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; }
+.tg-pw .pb i{ display:block; height:100%; border-radius:999px; background:var(--orange); }
+.tg-pw .pb i.full{ background:var(--green); }
+.tg-pw .pn{ font-size:11px; color:var(--muted); margin-top:10px; }
+.tg-pw .pn b{ color:var(--ink); font-weight:600; }
+.tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
 .tg-xp{ display:flex; flex-wrap:wrap; gap:6px; }
 .tg-x{
   appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:700;
@@ -5218,7 +5249,10 @@ window.FORZA = window.FORZA || { roster:[] };
     renderAlert();
 
     document.getElementById('tg-foot').textContent =
-      'Riferimento: mediana delle gare oltre 80 minuti, ' + (ref.n||0) + ' prestazioni. '+
+      'Riferimento: media delle gare di campionato chiuse sui 90 minuti (almeno '+TG_MIN+
+      ' rilevati) nella stagione '+TG_STAG+', '+(ref.n||0)+' prestazioni'+
+      (TG_ROLE === 'Squadra' ? ' di tutti i ruoli di movimento' : ' del ruolo')+'. '+
+      'Nella scheda della singola atleta il riferimento diventa il suo, quando ha gare intere sue. '+
       'Accelerazioni e decelerazioni contano le azioni oltre 3 m/s2. Tolleranza del 15%.';
   }
 
@@ -5411,6 +5445,63 @@ window.FORZA = window.FORZA || { roster:[] };
     }catch(e){}
   }
 
+  /* LE VOCI DA COLPIRE PER PRIME IN SETTIMANA.
+     Il moltiplicatore dice quante volte la gara si vuole rifare, ma non dice cosa
+     viene prima. In una settimana con due sedute utili non si tiene dietro a tutto:
+     si sceglie, e la scelta la fa il preparatore lunedi', non il programma martedi'.
+     Qui si segnano le voci prioritarie, restano nel browser come le altre scelte di
+     squadra, e nella card di oggi tornano indietro come preventivo: cosa si era
+     deciso di colpire, quanto ne e' arrivato fino a stasera, chi e' rimasta indietro.
+     Il valore di partenza e' la fascia sopra i 23 km/h, che e' la voce che tiene le
+     atlete pronte allo sprint ed e' anche la piu' facile da perdere. */
+  const WKPRI_KEY = K('rs_fio_wkpri');
+  const WKPRI = (function(){
+    const o = {};
+    let v = null;
+    try{ v = JSON.parse(localStorage.getItem(WKPRI_KEY) || 'null'); }catch(e){}
+    if(Array.isArray(v)){
+      v.forEach(function(k){ if(WK_MET.indexOf(k) >= 0) o[k] = 1; });
+      return o;
+    }
+    o.hi = 1;
+    return o;
+  })();
+
+  function wkPriList(){
+    return WK_MET.filter(function(k){ return !!WKPRI[k]; });
+  }
+  function wkPriSave(){
+    try{ localStorage.setItem(WKPRI_KEY, JSON.stringify(wkPriList())); }catch(e){}
+  }
+  function wkPriMet(){
+    const on = wkPriList();
+    return AT_MET.filter(function(m){ return on.indexOf(m.k) >= 0; });
+  }
+  // L'elenco delle voci scelte scritto come si direbbe a voce.
+  function wkPriTxt(){
+    const n = wkPriMet().map(function(m){ return m.lbl.toLowerCase(); });
+    if(!n.length) return '';
+    if(n.length === 1) return n[0];
+    return n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1];
+  }
+  // Quanto e' scoperta un'atleta sulle voci scelte: media delle quote mancanti,
+  // cosi' una che ha meta' della fascia alta pesa quanto una a meta' sul totale.
+  function wkPriGap(r, met){
+    if(!met.length) return 0;
+    let s = 0;
+    met.forEach(function(m){
+      const need = r.need[m.k];
+      s += need > 0 ? Math.max(0, r.rest[m.k]) / need : 0;
+    });
+    return s / met.length;
+  }
+  function wkPriPill(k){
+    const on = !!WKPRI[k];
+    return '<button type="button" class="tg-pr'+(on ? ' on' : '')+'" data-pk="'+k+'"'+
+      ' aria-pressed="'+(on ? 'true' : 'false')+'">'+
+      '<b>'+(on ? '&#9679;' : '&#9675;')+'</b>'+(on ? 'da colpire' : 'metti in priorita')+'</button>';
+  }
+
   // Le pillole della scelta. Senza nome sono quelle di squadra, con il nome quelle
   // della singola atleta: cambia solo l'attributo che l'handler legge.
   function wkxPills(k, val, name){
@@ -5480,7 +5571,7 @@ window.FORZA = window.FORZA || { roster:[] };
         'sopra i 23 km/h della sua gara, mezzo passo in piu\' se la settimana gira bene'+
         (nSu ? ', e chi ha un valore suo tiene quello' : '')+'. '+
         'Il microciclo del ruolo ne consegna sempre gli stessi: chi in gara corre molto piu\' della '+
-        'mediana del suo ruolo resta scoperta e va integrata a parte.</div>';
+        'media del suo ruolo resta scoperta e va integrata a parte.</div>';
 
     if(g.late.length){
       html += g.late.map(function(r, i){
@@ -5507,7 +5598,7 @@ window.FORZA = window.FORZA || { roster:[] };
 
     const coda = [];
     if(g.ok.length)   coda.push('In linea: <b>'+g.ok.length+'</b> ('+tgNames(g.ok)+').');
-    if(g.none.length) coda.push('Senza gare oltre 80 minuti, non valutabili: <b>'+g.none.length+'</b> ('+tgNames(g.none)+').');
+    if(g.none.length) coda.push('Senza gare di campionato chiuse sui 90 minuti, non valutabili: <b>'+g.none.length+'</b> ('+tgNames(g.none)+').');
     if(coda.length) html += '<div class="tg-ok">'+coda.join(' ')+'</div>';
 
     box.innerHTML = html + '</div>';
@@ -5533,8 +5624,8 @@ window.FORZA = window.FORZA || { roster:[] };
   // ================= OGGI ATLETA PER ATLETA =================
   // Fin qui i numeri sono del ruolo, uguali per tutte. Qui diventano di ognuna:
   // quanto deve fare oggi e quanto le manca da qui a domenica.
-  // La base e' la sua gara quando c'e' registrata (TG_ATL, mediana delle gare
-  // oltre 80 minuti), la mediana del ruolo quando non c'e'. Il fatto della
+  // La base e' la sua gara quando c'e' registrata (TG_ATL, media delle gare di
+  // campionato chiuse sui 90 minuti), quella del ruolo quando non c'e'. Il fatto della
   // settimana arriva dai GPS gia' in pagina: per ogni seduta si legge la riga
   // Full Training dell'atleta, che e' la seduta intera; se in quel file non
   // compare si sommano le sue esercitazioni, saltando i file doppi.
@@ -5718,8 +5809,102 @@ window.FORZA = window.FORZA || { roster:[] };
                       sed: w ? Object.keys(w.gg).length : 0, ha: !!w,
                       nx: w ? w.nx : 0 });
     });
-    out.rows.sort(function(r1, r2){ return r2.rest.hi - r1.rest.hi || plNomeSort(r1.name, r2.name); });
+    /* In cima le piu' scoperte sulle voci scelte per la settimana: la card si legge
+       dall'alto prima di scendere in campo, e chi e' indietro su quello che si era
+       deciso di colpire deve stare li'. Senza voci scelte si torna all'ordine di
+       prima, il buco sopra i 23 km/h. */
+    const met = wkPriMet();
+    out.rows.forEach(function(r){ r.pri = wkPriGap(r, met); });
+    out.rows.sort(function(r1, r2){
+      if(met.length) return r2.pri - r1.pri || plNomeSort(r1.name, r2.name);
+      return r2.rest.hi - r1.rest.hi || plNomeSort(r1.name, r2.name);
+    });
     return out;
+  }
+
+  /* IL PREVENTIVO DELLA SETTIMANA, LETTO STASERA.
+     Sopra si sceglie cosa colpire per primo, qui torna indietro il conto: per ogni
+     voce scelta quanto chiede la settimana a tutto il gruppo, quanto ne e' arrivato
+     dal lunedi' a oggi, e i nomi di chi e' rimasta piu' indietro. I totali sono la
+     somma delle atlete in gruppo, non una media: se una e' ferma il gruppo le ha
+     comunque richiesto quei metri, e il buco va visto. */
+  function tgPrevHtml(g, wk){
+    const met = wkPriMet();
+    let html = '<div class="tg-pw">'+
+      '<div class="hh">'+
+        '<b>Il preventivo della settimana</b>'+
+        '<span>'+(met.length
+          ? 'scelto da te, letto sui file di questa settimana'
+          : 'scegli sopra le voci da colpire per prime')+'</span>'+
+      '</div>';
+
+    if(!met.length){
+      return html + '<div class="pv">Nessuna voce in priorita\'. Accendi il bollino '+
+        'metti in priorita sulle voci che vuoi colpire per prime: qui sotto '+
+        'torna quanto ne e\' arrivato al gruppo e chi e\' rimasta indietro, e le schede '+
+        'si ordinano da quella piu\' scoperta.</div></div>';
+    }
+
+    if(!g.rows.length){
+      return html + '<div class="pv">Preventivato: <b>'+esc(wkPriTxt())+'</b>. '+
+        'Nessuna atleta in gruppo con il filtro attivo, non c\'e\' niente da contare.</div></div>';
+    }
+
+    html += met.map(function(m){
+      let need = 0, done = 0;
+      g.rows.forEach(function(r){ need += r.need[m.k]; done += Math.min(r.done[m.k], r.need[m.k]); });
+      const pct = need > 0 ? Math.min(100, Math.round(done / need * 100)) : 100;
+      const ok  = pct >= 100;
+      return '<div class="pr">'+
+        '<div class="pl">'+
+          '<span>'+esc(m.lbl)+'</span>'+
+          '<em class="tnum"><b>'+NF.format(Math.round(done))+'</b> / '+
+            NF.format(Math.round(need))+' '+esc(m.u)+' &#183; '+pct+'%</em>'+
+        '</div>'+
+        '<div class="pb"><i'+(ok ? ' class="full"' : '')+' style="width:'+pct+'%"></i></div>'+
+      '</div>';
+    }).join('');
+
+    if(!wk.n && !wk.nx){
+      return html + '<div class="pv">Preventivato: <b>'+esc(wkPriTxt())+'</b>. '+
+        'Questa settimana non risulta ancora nessuna seduta caricata, il consuntivo parte '+
+        'dal primo file.</div></div>';
+    }
+
+    /* Chi e' rimasta indietro. Si guarda la quota mancante, non i metri: 200 m che
+       mancano a una che ne deve fare 250 sono un buco, gli stessi 200 a una che ne
+       deve fare 900 sono una seduta di ritardo. */
+    const conDati = g.rows.filter(function(r){ return r.ha; });
+    const late    = conDati.filter(function(r){ return r.pri >= 0.25; }).slice(0, 3);
+    if(late.length){
+      const q = late.map(function(r){
+        const manca = met.filter(function(m){ return r.rest[m.k] > 0; })
+          .map(function(m){ return NF.format(r.rest[m.k])+' '+esc(m.u); });
+        return '<b>'+esc(plNome(r.name))+'</b>'+(manca.length ? ' ('+manca.join(', ')+')' : '');
+      });
+      html += '<div class="pn">Piu\' indietro su quello che avevi preventivato: '+q.join(', ')+
+        '. Le schede qui sotto partono da loro.</div>';
+    } else if(conDati.length){
+      /* Il conto e' fatto solo su chi nei file c'e'. Dire che il gruppo e' in linea
+         quando meta' rosa non compare sarebbe una bugia comoda, e chi manca lo dice
+         la riga qui sotto. */
+      html += '<div class="pn">Nessuna delle '+conDati.length+
+        (conDati.length === 1 ? ' atleta gia\' nei file' : ' atlete gia\' nei file')+
+        ' e\' scoperta oltre un quarto del preventivo.</div>';
+    }
+
+    const senza = g.rows.filter(function(r){ return !r.ha; }).length;
+    if(senza){
+      html += '<div class="'+(conDati.length ? 'pv' : 'pn')+'">'+
+        (conDati.length
+          ? senza+(senza === 1 ? ' atleta non compare' : ' atlete non compaiono')+
+            ' nei file di questa settimana: per loro il preventivo resta scoperto per intero.'
+          : 'Nessuna atleta di questo gruppo compare ancora nei file della settimana: '+
+            'il preventivo e\' tutto da fare.')+
+      '</div>';
+    }
+
+    return html + '</div>';
   }
 
   function renderAtlete(){
@@ -5755,11 +5940,13 @@ window.FORZA = window.FORZA || { roster:[] };
         '</div>'+
         AT_MET.map(function(m){
           return '<div class="tg-xr">'+
-            '<div class="l">'+esc(m.lbl)+'<i class="tnum">il piano del ruolo ne da '+wkxLbl(TG_WK_MULT[m.k])+'</i></div>'+
+            '<div class="l">'+esc(m.lbl)+'<i class="tnum">il piano del ruolo ne da '+wkxLbl(TG_WK_MULT[m.k])+'</i>'+
+              wkPriPill(m.k)+'</div>'+
             wkxPills(m.k, WKX[m.k], '')+
           '</div>';
         }).join('')+
-      '</div>';
+      '</div>'+
+      tgPrevHtml(g, wk);
 
     if(g.rows.length){
       html += '<div class="tg-at-g">'+g.rows.map(function(r){
@@ -6018,6 +6205,17 @@ window.FORZA = window.FORZA || { roster:[] };
     if(atl) atl.addEventListener('click', function(ev){
       const t = ev.target;
       if(!t || !t.closest) return;
+
+      // il bollino della priorita': accende o spegne la voce da colpire per prima
+      const pr = t.closest('.tg-pr');
+      if(pr){
+        const pk = pr.getAttribute('data-pk');
+        if(!pk) return;
+        if(WKPRI[pk]) delete WKPRI[pk]; else WKPRI[pk] = 1;
+        wkPriSave();
+        renderTargets();
+        return;
+      }
 
       const px = t.closest('.tg-x');
       if(px){
