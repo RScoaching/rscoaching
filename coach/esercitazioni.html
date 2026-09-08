@@ -572,7 +572,10 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
   /* una facciata per giornata: #print-only e' solo il contenitore, la scatola
      A4 e' .ps-sheet, alta quanto la pagina e con il taglio a fine foglio. La
      scala di ogni .ps-page la decide fitPrintSheet() misurandola per conto suo,
-     cosi' un giorno pieno si stringe senza portarsi dietro gli altri. */
+     cosi' un giorno pieno si stringe senza portarsi dietro gli altri. Il taglio
+     a fine foglio serve a non far scivolare due giornate sulla stessa pagina;
+     quando una seduta non entra nemmeno alla scala minima e' fitPrintSheet() a
+     sbloccare l'altezza di quel solo foglio, senno' il fondo si perderebbe. */
   #print-only{ display:block !important; }
   #print-only .ps-sheet{ box-sizing:border-box;
     width:210mm; height:297mm; padding:11mm 12mm; overflow:hidden;
@@ -2036,14 +2039,15 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
 
   // ogni giornata deve stare in una pagina sola. Si misura fuori schermo alla
-  // larghezza vera di stampa e, se sfora, si stringe la scala di un passo per
-  // volta: meglio un carattere un filo piu' piccolo che una seconda pagina con
+  // larghezza vera di stampa e, se sfora, si stringe della scala esatta che
+  // serve: meglio un carattere un filo piu' piccolo che una seconda pagina con
   // due righe sopra. La larghezza cresce di pari passo (186/k) cosi' il testo
   // torna a riempire il foglio invece di lasciare la colonna bianca a destra.
   // La misura e' per facciata: un giorno pieno si stringe da solo e non tira
-  // dietro gli altri, che di loro ci starebbero comodi.
+  // dietro gli altri, che di loro ci starebbero comodi. Stessa regola di
+  // pAdatta() in report.html, cosi' le due stampe si spiegano allo stesso modo.
   const PS_W = 186, PS_H = 275;   // area utile dentro l'A4, in millimetri
-  const PS_STEPS = [1, .95, .9, .86, .82, .78, .74, .7, .66, .62, .58, .54, .5];
+  const PS_MIN = .5;              // sotto meta' non si legge piu': e' il fondo
   function fitPrintSheet(){
     const host = document.getElementById('print-only');
     if(!host) return;
@@ -2058,17 +2062,31 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     sheets.forEach(function(sh){
       sh.setAttribute('style', 'display:block;width:'+PS_W+'mm;height:auto;padding:0;overflow:visible;');
     });
+    const sfora = [];
     sheets.forEach(function(sh){
       const page = sh.querySelector('.ps-page');
       if(!page || !page.firstChild) return;
-      for(let i=0; i<PS_STEPS.length; i++){
-        const k = PS_STEPS[i];
-        page.style.width = (PS_W / k) + 'mm';
-        page.style.transform = 'scale('+k+')';
-        if(page.scrollHeight * k <= maxH) break;
-      }
+      // prima l'altezza che il giorno vorrebbe, alla larghezza vera del foglio
+      page.style.width = PS_W + 'mm';
+      page.style.transform = 'none';
+      const nat = page.scrollHeight;
+      // poi la scala esatta che serve, non il gradino piu' vicino: un giorno che
+      // sforerebbe di un pelo si stringe di un pelo. Il mezzo per cento copre la
+      // differenza fra il testo misurato a schermo e quello del motore di stampa.
+      // La misura e' presa stretta e la riga poi si allarga di 1/k, quindi il
+      // testo cala ancora: la scala calcolata cosi' non puo' restare corta.
+      let k = 1;
+      if(nat > maxH) k = Math.max(PS_MIN, (maxH / nat) * 0.995);
+      page.style.width = (PS_W / k) + 'mm';
+      page.style.transform = (k === 1) ? 'none' : ('scale('+k+')');
+      // se non ci sta nemmeno al fondo della scala, la facciata e' fissa e con
+      // il taglio: il fondo della giornata sparirebbe senza dirlo. Meglio due
+      // facciate che mezza seduta persa, quindi questo foglio lascia crescere
+      // l'altezza e prosegue sulla pagina dopo.
+      if(k <= PS_MIN && page.scrollHeight * k > maxH) sfora.push(sh);
     });
     sheets.forEach(function(sh){ sh.removeAttribute('style'); });
+    sfora.forEach(function(sh){ sh.style.height = 'auto'; sh.style.overflow = 'visible'; });
     if(saved) host.setAttribute('style', saved); else host.removeAttribute('style');
   }
   function preparePrint(){ buildPrintSheet(); fitPrintSheet(); }
