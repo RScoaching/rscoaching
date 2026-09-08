@@ -5049,18 +5049,30 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   // ================= OBIETTIVI DA COLPIRE OGGI =================
-  // Riferimento gara per ruolo: mediana delle partite giocate oltre gli 80 minuti nella
-  // stagione registrata, calcolata una volta sola dallo snapshot GPS. Sono valori per
-  // singola atleta, non di squadra. Lo snapshot completo (carico_data.js) non viene
-  // caricato in questa pagina perche' pesa troppo.
+  /* IL MODELLO PRESTATIVO, E DA DOVE ARRIVANO I NUMERI.
+     Tutto quello che si legge qui sotto poggia su una sola cosa: la gara intera di
+     campionato. Non le amichevoli di agosto, non gli spezzoni, non i minuti di
+     rifinitura. Dallo snapshot GPS della stagione 2025-26 si prendono le righe di
+     tipo partita con la sigla del campionato (FIO-CAS, ROM-FIO e cosi' via) e con
+     almeno 88 minuti rilevati, che con il recupero sono i 90 pieni. Di quelle si fa
+     la media, voce per voce.
+     La cascata poi e' quella che si usa in campo:
+       1. la media dell'atleta sulle sue gare intere, quando ne ha almeno una;
+       2. altrimenti la media del suo ruolo sulle stesse gare, il centrale prende dai
+          centrali, il terzino dai terzini, l'attaccante dagli attaccanti;
+       3. e se il ruolo non e' fra quelli di movimento, la media di squadra.
+     I conti sono fatti una volta sola e scritti qui: carico_data.js pesa un mega e in
+     questa pagina non viene caricato. */
+  const TG_STAG = '2025-26';
+  const TG_MIN  = 88;
   const TG_REF = {
-    'Squadra':            { dist:9378,  hi:76,  mid:229, acc:15, dec:29, n:196 },
-    'Terzino':            { dist:9417,  hi:121, mid:324, acc:15, dec:27, n:33  },
-    'Difensore centrale': { dist:8810,  hi:62,  mid:179, acc:17, dec:27, n:52  },
-    'Mezzala':            { dist:10280, hi:27,  mid:207, acc:12, dec:29, n:37  },
-    'Play':               { dist:9994,  hi:7,   mid:97,  acc:14, dec:26, n:7   },
-    'Esterno':            { dist:9624,  hi:128, mid:274, acc:17, dec:37, n:46  },
-    'Punta':              { dist:9315,  hi:63,  mid:253, acc:14, dec:23, n:19  }
+    'Squadra':            { dist:9513,  hi:93,  mid:238, acc:16, dec:31, n:179 },
+    'Terzino':            { dist:9597,  hi:139, mid:293, acc:15, dec:28, n:30  },
+    'Difensore centrale': { dist:8822,  hi:72,  mid:184, acc:17, dec:29, n:46  },
+    'Mezzala':            { dist:10345, hi:39,  mid:217, acc:12, dec:30, n:33  },
+    'Play':               { dist:10354, hi:10,  mid:92,  acc:13, dec:27, n:6   },
+    'Esterno':            { dist:9522,  hi:137, mid:277, acc:17, dec:37, n:45  },
+    'Punta':              { dist:9238,  hi:92,  mid:278, acc:15, dec:25, n:17  }
   };
   const TG_ORDER = ['Squadra','Terzino','Difensore centrale','Mezzala','Play','Esterno','Punta'];
 
@@ -5286,29 +5298,34 @@ window.FORZA = window.FORZA || { roster:[] };
   // volte e mezzo nella settimana di lavoro. Una terzino che in gara corre 200 m sopra
   // i 23 km/h ne deve fare dai 400 ai 500 fra il giorno dopo la partita e la rifinitura.
   // Il microciclo pero' e' costruito sul riferimento del ruolo: chi in gara va molto
-  // oltre la mediana del suo ruolo riceve meno di quello che le serve e va integrata.
-  // Mediana per atleta delle gare oltre 80 minuti (metri sopra i 23 km/h) e numero di
-  // gare intere: calcolate una volta sola dallo snapshot GPS, come TG_REF.
+  // oltre la media del suo ruolo riceve meno di quello che le serve e va integrata.
+  /* Il modello prestativo della singola atleta: media delle sue gare di campionato
+     chiuse sui 90 minuti, le stesse righe da cui esce TG_REF, stesse cinque voci.
+     Prima qui c'era solo la fascia sopra i 23 km/h e tutto il resto veniva comunque
+     dal ruolo: due atlete con lo stesso ruolo e gare molto diverse ricevevano lo
+     stesso obiettivo di distanza e di frenate. n e' il numero di gare intere che
+     compongono la media, e serve a dire quanto quel numero e' solido: sotto le
+     cinque va letto con prudenza e la scheda lo scrive. */
   const TG_ATL = {
-    'Andreoni':      { hi:161, n:14 },
-    'Baccaro':       { hi:63,  n:17 },
-    'Bedini':        { hi:65,  n:12 },
-    'Bellani':       { hi:28,  n:11 },
-    'Benedettini':   { hi:126, n:22 },
-    'Bianchi':       { hi:7,   n:7  },
-    'Boldrini':      { hi:184, n:7  },
-    'De Gregorio':   { hi:95,  n:13 },
-    'El Miroun':     { hi:27,  n:3  },
-    'Fontana':       { hi:85,  n:2  },
-    'Ieva':          { hi:8,   n:5  },
-    'Luciani':       { hi:56,  n:4  },
-    'Magazzini':     { hi:33,  n:1  },
-    'Miraldi':       { hi:14,  n:6  },
-    'Muka':          { hi:54,  n:2  },
-    'Pieri Arianna': { hi:94,  n:17 },
-    'Pieri Viola':   { hi:45,  n:19 },
-    'Sarti':         { hi:142, n:19 },
-    'Tomassoni':     { hi:79,  n:15 }
+    'Andreoni':      { dist:9578,  hi:159, mid:289, acc:16, dec:44, n:13 },
+    'Baccaro':       { dist:9202,  hi:88,  mid:270, acc:14, dec:23, n:16 },
+    'Bedini':        { dist:9641,  hi:67,  mid:247, acc:16, dec:34, n:11 },
+    'Bellani':       { dist:11002, hi:35,  mid:255, acc:10, dec:27, n:11 },
+    'Benedettini':   { dist:9491,  hi:132, mid:295, acc:15, dec:24, n:22 },
+    'Bianchi':       { dist:10354, hi:10,  mid:92,  acc:13, dec:27, n:6  },
+    'Boldrini':      { dist:10111, hi:189, mid:328, acc:17, dec:41, n:6  },
+    'De Gregorio':   { dist:9548,  hi:116, mid:261, acc:19, dec:34, n:13 },
+    'El Miroun':     { dist:9809,  hi:34,  mid:126, acc:13, dec:25, n:2  },
+    'Fontana':       { dist:9813,  hi:148, mid:400, acc:26, dec:55, n:1  },
+    'Ieva':          { dist:10710, hi:7,   mid:103, acc:5,  dec:18, n:3  },
+    'Luciani':       { dist:9225,  hi:66,  mid:158, acc:11, dec:29, n:2  },
+    'Magazzini':     { dist:9198,  hi:33,  mid:132, acc:17, dec:27, n:1  },
+    'Miraldi':       { dist:10428, hi:14,  mid:179, acc:11, dec:35, n:6  },
+    'Muka':          { dist:10075, hi:54,  mid:231, acc:22, dec:40, n:2  },
+    'Pieri Arianna': { dist:9187,  hi:102, mid:227, acc:16, dec:38, n:14 },
+    'Pieri Viola':   { dist:8499,  hi:45,  mid:162, acc:14, dec:24, n:18 },
+    'Sarti':         { dist:9465,  hi:135, mid:279, acc:17, dec:35, n:19 },
+    'Tomassoni':     { dist:8847,  hi:79,  mid:174, acc:22, dec:25, n:13 }
   };
 
   // I giorni che compongono la settimana di lavoro. Sommando i loro pesi si ottiene
@@ -5639,15 +5656,37 @@ window.FORZA = window.FORZA || { roster:[] };
     return AT_WK;
   }
 
-  // La base di riferimento: la sua gara se c'e', altrimenti la mediana del ruolo.
+  /* La cascata del riferimento, il punto da cui parte tutto il resto della card.
+     Primo gradino la sua media sulle gare di campionato chiuse sui 90 minuti; se non
+     ne ha nemmeno una si scende al ruolo, e se il ruolo non e' fra quelli di movimento
+     si scende alla squadra. Il gradino scelto viene restituito insieme ai numeri
+     perche' la scheda lo deve scrivere: un obiettivo che non dice da dove viene non e'
+     un obiettivo, e' un numero. */
   function atBase(p){
     const rk  = TG_REF[p.role] ? p.role : 'Squadra';
     const ref = TG_REF[rk];
     const a   = TG_ATL[p.name];
-    const sua = !!(a && a.hi > 0);
-    return { hi: sua ? a.hi : (+ref.hi || 0), mid: +ref.mid || 0, dist: +ref.dist || 0,
-             acc: +ref.acc || 0, dec: +ref.dec || 0,
-             sua:sua, n: a ? a.n : 0, rk:rk };
+    const sua = !!(a && a.n > 0);
+    const src = sua ? a : ref;
+    const o   = { sua:sua, n: a ? a.n : 0, rk:rk, rn: +ref.n || 0,
+                  liv: sua ? 'sua' : (rk === 'Squadra' ? 'squadra' : 'ruolo') };
+    AT_MET.forEach(function(m){ o[m.k] = +src[m.k] || 0; });
+    return o;
+  }
+
+  /* La riga che dice da dove esce il riferimento, in parole. Sta sotto le barre della
+     settimana ed e' l'unica cosa che spiega perche' due atlete dello stesso ruolo
+     hanno obiettivi diversi. */
+  function atSrcTxt(b){
+    if(b.liv === 'sua'){
+      return 'Riferimento: la sua media su '+b.n+(b.n === 1 ? ' gara intera' : ' gare intere')+
+             ' di campionato'+(b.n < 5 ? ', ancora poche per fidarsi del tutto' : '');
+    }
+    if(b.liv === 'ruolo'){
+      return 'Riferimento: media del ruolo '+esc(b.rk.toLowerCase())+' su '+b.rn+
+             ' gare intere, non ha mai chiuso una partita';
+    }
+    return 'Riferimento: media di squadra su '+b.rn+' gare intere, ruolo non in elenco';
   }
 
   function atRows(){
@@ -5744,9 +5783,7 @@ window.FORZA = window.FORZA || { roster:[] };
           txt = 'Mancano '+manca.join(', ')+'.';
         }
 
-        const src = r.base.sua
-          ? 'base: la sua gara, '+NF.format(r.base.hi)+' m in '+r.base.n+(r.base.n === 1 ? ' gara intera' : ' gare intere')
-          : 'base: mediana '+esc(r.base.rk.toLowerCase())+', '+NF.format(r.base.hi)+' m';
+        const src = atSrcTxt(r.base);
 
         const bars = AT_MET.map(function(m){
           const pct = r.need[m.k] > 0 ? Math.min(100, Math.round(r.done[m.k] / r.need[m.k] * 100)) : 100;
