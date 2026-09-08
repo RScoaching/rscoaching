@@ -1834,6 +1834,14 @@ window.FORZA = window.FORZA || { roster:[] };
   // settimana attiva: quella di oggi se presente, altrimenti l'ultima disponibile
   const curKey = dstr(mondayOf(NOW));
   let active = weekMap.get(curKey) || (weeks.length ? weeks[weeks.length-1] : {key:curKey, load:0, sessions:0, matches:0});
+  /* Il ripiego sull'ultima settimana disponibile serve a non lasciare le caselle
+     vuote quando i file non sono ancora arrivati, ma va detto. Finche' restava
+     muto, "Carico settimana" e "Scarto" mostravano numeri di una settimana di
+     mesi prima con l'etichetta di questa, e adesso che il preventivo qui sotto
+     legge le sedute a calendario i due discorsi finivano fianco a fianco:
+     "restano 4 sedute questa settimana" accanto al carico di maggio. */
+  const activeCur = (active.key === curKey);
+  const activeLbl = activeCur ? '' : 'settimana del '+esc(itShort(parse(active.key)));
 
   // ---- stato di oggi ----
   const todayRow  = byDate[TSTR] || null;
@@ -1903,9 +1911,15 @@ window.FORZA = window.FORZA || { roster:[] };
     const sc = scartoInfo();
     const kp = [
       {cls:'', label:'Stato di oggi', val:'<span class="k-val '+(st.cls)+'" style="font-size:26px">'+esc(st.v)+'</span>', sub:st.sub},
-      {cls:'v', label:'Carico settimana', val:'<span class="k-val">'+NF.format(active.load)+'<small>u.a.</small></span>', sub:(active.sessions+' sedute'+(active.matches?(' &#183; '+active.matches+' gara'):''))},
+      /* Quando i numeri non sono di questa settimana la data viene per prima: e' la
+         cosa che cambia il senso di tutto il resto della casella. */
+      {cls:'v', label:'Carico settimana', val:'<span class="k-val">'+NF.format(active.load)+'<small>u.a.</small></span>',
+        sub:(activeCur ? '' : activeLbl+' &#183; ')+active.sessions+' sedute'+(active.matches?(' &#183; '+active.matches+' gara'):'')},
       {cls:'b', label:'Obiettivo settimana', val:'<span class="k-val">'+(TARGET?NF.format(TARGET):'-')+'<small>u.a.</small></span>', sub:'riferimento mediano stagione'},
-      {cls:'g', label:'Scarto', val:'<span class="k-val '+sc.cls+'">'+sc.label+'</span>', sub:(TARGET? (sc.pct>0?'sopra il riferimento':sc.pct<0?'sotto il riferimento':'in linea') : 'dati non disponibili')}
+      {cls:'g', label:'Scarto', val:'<span class="k-val '+sc.cls+'">'+sc.label+'</span>',
+        sub:(TARGET
+          ? (activeCur ? '' : activeLbl+', ')+(sc.pct>0?'sopra il riferimento':sc.pct<0?'sotto il riferimento':'in linea')
+          : 'dati non disponibili')}
     ];
     document.getElementById('kpis').innerHTML = kp.map(k=>(
       '<div class="kpi '+k.cls+'"><div class="k-label">'+k.label+'</div>'+k.val+'<div class="k-sub">'+k.sub+'</div></div>'
@@ -2444,9 +2458,13 @@ window.FORZA = window.FORZA || { roster:[] };
     } else {
       fig.innerHTML = NF.format(active.load)+'<small>di '+NF.format(TARGET)+' u.a.</small>';
       const abs = Math.abs(sc.diff);
-      note.textContent = sc.pct===0 ? 'La settimana e in linea con il riferimento della stagione.'
+      /* Stessa onesta' delle caselle sopra: se il confronto e' su una settimana
+         vecchia lo si dice prima di dare il consiglio, altrimenti "valuta un
+         alleggerimento" sembra riferito ai giorni che restano da fare adesso. */
+      const pre = activeCur ? '' : 'Settimana del '+itShort(parse(active.key))+', l\'ultima con dati caricati. ';
+      note.textContent = pre + (sc.pct===0 ? 'La settimana e in linea con il riferimento della stagione.'
         : (sc.pct>0 ? ('Sei sopra il riferimento di '+NF.format(abs)+' u.a. ('+sc.label+'). Valuta un alleggerimento.')
-                    : ('Mancano '+NF.format(abs)+' u.a. ('+sc.label+') per raggiungere il riferimento.'));
+                    : ('Mancano '+NF.format(abs)+' u.a. ('+sc.label+') per raggiungere il riferimento.')));
     }
 
     const fill = document.getElementById('dist-fill');
