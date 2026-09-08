@@ -479,6 +479,11 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atr .rl span i{ font-style:normal; text-transform:none; letter-spacing:0; color:var(--muted); font-weight:600; }
 .tg-atr .rl em{ font-style:normal; font-size:11px; color:var(--muted); }
 .tg-atr .rl em b{ color:var(--text); font-weight:600; }
+/* la riga di una voce messa in priorita': si distingue senza gridare, l'etichetta
+   passa al colore pieno e la barra tiene un filo di sfondo caldo */
+.tg-atr.pri .rl span{ color:var(--muted); font-weight:600; }
+.tg-atr.pri .rl em b{ color:var(--ink); font-weight:700; }
+.tg-atr.pri .tg-atb{ background:var(--ember-bg); }
 .tg-atw .wh{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:9px; }
 .tg-atw .wh span{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; color:var(--muted); }
 .tg-atw .wh i{ font-style:normal; font-size:10.5px; color:var(--faint); }
@@ -6007,6 +6012,15 @@ window.FORZA = window.FORZA || { roster:[] };
           'Aggregate '+(aggOn ? 'si' : 'no')+' ('+g.agg+')</button>'
       : '';
 
+    /* Le voci scelte sopra comandano anche dentro la scheda. Prima erano le stesse
+       cinque righe per tutte, con l'evidenza fissa sopra i 23 km/h: la scheda
+       diceva una cosa e l'ordine delle schede ne diceva un'altra. Adesso quello
+       che il preparatore ha messo in priorita' e' quello che si legge per primo,
+       e senza scelte si torna all'evidenza di prima. */
+    const pmet = wkPriMet();
+    const pset = {};
+    pmet.forEach(function(m){ pset[m.k] = 1; });
+
     let html = '<div class="tg-at">'+
       '<div class="tg-at-h">'+
         '<span class="t">Oggi atleta per atleta</span>'+
@@ -6048,8 +6062,11 @@ window.FORZA = window.FORZA || { roster:[] };
         } else if(full){
           txt = 'Tutto coperto in '+r.sed+(r.sed === 1 ? ' seduta' : ' sedute')+'.';
         } else {
+          /* Le voci scelte per prime si leggono per prime anche qui: il resto
+             viene dopo, nell'ordine di sempre. */
+          const ord = pmet.concat(AT_MET.filter(function(m){ return !pset[m.k]; }));
           const manca = [];
-          AT_MET.forEach(function(m){
+          ord.forEach(function(m){
             if(r.rest[m.k] > 0) manca.push('<b>'+NF.format(r.rest[m.k])+'</b> '+esc(m.u));
           });
           txt = 'Mancano '+manca.join(', ')+'.';
@@ -6060,7 +6077,7 @@ window.FORZA = window.FORZA || { roster:[] };
         const bars = AT_MET.map(function(m){
           const pct = r.need[m.k] > 0 ? Math.min(100, Math.round(r.done[m.k] / r.need[m.k] * 100)) : 100;
           const ok  = r.rest[m.k] <= 0;
-          return '<div class="tg-atr">'+
+          return '<div class="tg-atr'+(pset[m.k] ? ' pri' : '')+'">'+
             '<div class="rl">'+
               '<span>'+esc(m.u)+' &#183; <i>'+wkxLbl(r.x[m.k])+'</i></span>'+
               '<em class="tnum"><b>'+NF.format(r.done[m.k])+'</b> / '+NF.format(r.need[m.k])+'</em>'+
@@ -6097,7 +6114,11 @@ window.FORZA = window.FORZA || { roster:[] };
             '</div>'
           : '';
 
-        return '<div class="tg-atc'+(r.rest.hi > 0 ? ' gap' : '')+'">'+
+        const scoperta = pmet.length
+          ? pmet.some(function(m){ return r.rest[m.k] > 0; })
+          : r.rest.hi > 0;
+
+        return '<div class="tg-atc'+(scoperta ? ' gap' : '')+'">'+
           '<div class="hd">'+
             '<span class="nm">'+esc(plNome(r.name))+'</span>'+
             '<span class="rl">'+esc(r.role || 'senza ruolo')+'</span>'+
@@ -6106,7 +6127,8 @@ window.FORZA = window.FORZA || { roster:[] };
               (apri ? 'chiudi' : (r.sua ? 'su misura' : 'cambia'))+'</button>'+
           '</div>'+
           '<div class="tg-atv">'+AT_MET.map(function(m){
-            return '<div'+(m.key ? ' class="key"' : '')+'>'+
+            const kk = pmet.length ? !!pset[m.k] : m.key;
+            return '<div'+(kk ? ' class="key"' : '')+'>'+
               '<b class="tnum">'+NF.format(r.t[m.k])+'</b>'+
               '<i>'+esc(m.u)+'</i>'+
             '</div>';
