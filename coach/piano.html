@@ -437,6 +437,15 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pq{ font-size:10.5px; color:var(--muted); margin-top:5px; }
 .tg-pw .pq b{ color:var(--ink); font-weight:600; }
 .tg-pw .pq.no b{ color:var(--orange2); }
+/* il riparto: quanto di quello che manca tocca a ogni seduta che resta */
+.tg-pw .pd{ margin-top:11px; padding-top:10px; border-top:1px solid var(--ember-border); }
+.tg-pw .pd > .t{ font-size:10.5px; color:var(--faint); margin-bottom:6px; }
+.tg-pw .pd .d{ display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 10px; padding:4px 0; }
+.tg-pw .pd .d + .d{ border-top:1px dashed var(--ember-border); }
+.tg-pw .pd .d > b{ flex:0 0 110px; font-size:11px; font-weight:600; color:var(--ink); }
+.tg-pw .pd .d > span{ font-size:10.5px; color:var(--muted); }
+.tg-pw .pd .d > span i{ font-style:normal; font-weight:600; color:var(--ink); }
+.tg-pw .pd .d > span.no i{ color:var(--orange2); }
 .tg-pw .pn{ font-size:11px; color:var(--muted); margin-top:10px; }
 .tg-pw .pn b{ color:var(--ink); font-weight:600; }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
@@ -5903,7 +5912,9 @@ window.FORZA = window.FORZA || { roster:[] };
         out.oggiMd = md;
         if(wk.gg[ds]){ out.oggiFatto = true; continue; }
       }
-      out.gg.push({ ds:ds, md:md });
+      /* Il peso del giorno viaggia insieme al giorno: senza, il riparto dovrebbe
+         rileggere TG_MD una seconda volta e le due letture potrebbero divergere. */
+      out.gg.push({ ds:ds, md:md, pes:pes });
       AT_MET.forEach(function(m){ out.w[m.k] += (+pes[m.k] || 0); });
     }
     return out;
@@ -5952,14 +5963,22 @@ window.FORZA = window.FORZA || { roster:[] };
       AT_MET.forEach(function(m){ bsum[m.k] += r.base[m.k]; });
     });
 
-    html += met.map(function(m){
+    /* Il conto per voce si fa una volta sola: lo leggono sia le barre sia il
+       riparto qui sotto, e devono leggere gli stessi numeri. */
+    const vc = met.map(function(m){
       let need = 0, done = 0;
       g.rows.forEach(function(r){ need += r.need[m.k]; done += Math.min(r.done[m.k], r.need[m.k]); });
+      return {
+        m:m, need:need, done:done,
+        resto: Math.max(0, Math.round(need - done)),
+        cap:   Math.round(bsum[m.k] * gio.w[m.k])
+      };
+    });
+
+    html += vc.map(function(v){
+      const m = v.m, need = v.need, done = v.done, resto = v.resto, cap = v.cap;
       const pct = need > 0 ? Math.min(100, Math.round(done / need * 100)) : 100;
       const ok  = pct >= 100;
-
-      const resto = Math.max(0, Math.round(need - done));
-      const cap   = Math.round(bsum[m.k] * gio.w[m.k]);
       let q = '', qc = '';
       if(resto <= 0){
         q = 'Preventivo coperto: quello che arriva nelle sedute che restano e\' in piu\'.';
@@ -5997,6 +6016,51 @@ window.FORZA = window.FORZA || { roster:[] };
           return esc(WD[parse(x.ds).getDay()])+(x.md ? ' '+esc(x.md) : '');
         }).join(', ')+'. Il conto qui sopra e\' fatto sui pesi di quei giorni.'
       : 'Non restano altre sedute a calendario in questa settimana.')+'</div>';
+
+    /* IL RIPARTO SUI GIORNI CHE RESTANO.
+       Fin qui il residuo e' un numero solo, buono per capire se ci sta ma inutile
+       quando si scrive la seduta: due sedute rimaste non valgono uguale, e sapere
+       che mancano duemila metri non dice quanti metterne giovedi'. Qui il residuo
+       si spalma sui giorni rimasti in proporzione al peso del giorno nel
+       microciclo, che e' la stessa proporzione con cui era stata calcolata la
+       capacita': se giovedi' porta il 60 per cento della capacita' che resta,
+       riceve il 60 per cento di quello che manca. Accanto alla quota c'e' il
+       confronto con quanto quel giorno porta di suo, perche' la quota da sola non
+       dice se e' una seduta normale o una fuori misura: sopra il solito la scritta
+       si accende, e allora o si carica davvero di piu' o si accetta di chiudere
+       sotto. Nessun riparto quando non manca niente o quando non restano sedute:
+       li' non c'e' niente da spalmare. */
+    const rip = vc.filter(function(v){ return v.resto > 0; });
+    if(gio.gg.length && rip.length){
+      html += '<div class="pd">'+
+        '<div class="t">Come si spalma quello che manca sulle sedute che restano</div>'+
+        gio.gg.map(function(x){
+          const q = rip.map(function(v){
+            const k    = v.m.k;
+            const tot  = gio.w[k];
+            if(!(tot > 0)) return '';
+            /* La quota del giorno e' la sua fetta di peso sul totale dei giorni
+               rimasti; il solito e' quello che quel giorno porta di suo. */
+            const quota = Math.round(v.resto * (+x.pes[k] || 0) / tot);
+            const solito = Math.round(bsum[k] * (+x.pes[k] || 0));
+            if(quota <= 0) return '';
+            /* L'avviso si accende solo da un punto percentuale in su: una quota
+               che supera il solito di due metri e' il tondeggio dei conti, non
+               una seduta da caricare, e scrivere "+0% sul solito" in arancione
+               farebbe alzare un sopracciglio per niente. */
+            const su = solito > 0 ? Math.round((quota / solito - 1) * 100) : 0;
+            const no = solito > 0 && su >= 1;
+            return '<span class="tnum'+(no ? ' no' : '')+'"><i>'+NF.format(quota)+'</i> '+
+              esc(v.m.u)+(solito > 0
+                ? (no ? ' &#183; +'+su+'% sul solito' : ' &#183; dentro il solito')
+                : '')+'</span>';
+          }).filter(function(s){ return !!s; }).join('');
+          return '<div class="d"><b>'+esc(WD[parse(x.ds).getDay()])+
+            (x.md ? ' '+esc(x.md) : '')+'</b>'+
+            (q || '<span>niente da recuperare qui</span>')+'</div>';
+        }).join('')+
+      '</div>';
+    }
 
     if(!wk.n && !wk.nx){
       return html + '<div class="pv">Preventivato: <b>'+esc(wkPriTxt())+'</b>. '+
