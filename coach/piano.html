@@ -5465,15 +5465,50 @@ window.FORZA = window.FORZA || { roster:[] };
      deciso di colpire, quanto ne e' arrivato fino a stasera, chi e' rimasta indietro.
      Il valore di partenza e' la fascia sopra i 23 km/h, che e' la voce che tiene le
      atlete pronte allo sprint ed e' anche la piu' facile da perdere. */
+  /* La scelta vale per una settimana, non per sempre. Prima era una lista sola,
+     salvata una volta e buona fino a quando qualcuno non la cambiava: a novembre
+     si leggeva ancora quello che si era deciso a settembre. Adesso la chiave e' il
+     lunedi' della settimana, cosi' ogni microciclo si porta dietro il suo
+     preventivo e a fine stagione resta scritto cosa si era deciso di colpire e
+     quando. Se per questa settimana non c'e' ancora niente si eredita l'ultima
+     scelta fatta, che e' quello che succede davvero il lunedi' mattina: si
+     continua con l'idea della settimana prima finche' non si decide altro, e la
+     card lo dice invece di far finta che la scelta sia di oggi. Si tengono le
+     ultime dodici settimane, il resto non serve a nessuno. */
   const WKPRI_KEY = K('rs_fio_wkpri');
+  const WKPRI_LUN = dstr(mondayOf(NOW));
+  let   WKPRI_ALL = {};
+  let   WKPRI_ERE = '';
   const WKPRI = (function(){
     const o = {};
     let v = null;
     try{ v = JSON.parse(localStorage.getItem(WKPRI_KEY) || 'null'); }catch(e){}
+
+    /* Il formato vecchio era un array secco. Chi apre la pagina con quello
+       salvato non deve perdere la scelta: diventa la scelta di questa settimana. */
     if(Array.isArray(v)){
-      v.forEach(function(k){ if(WK_MET.indexOf(k) >= 0) o[k] = 1; });
+      WKPRI_ALL[WKPRI_LUN] = v.filter(function(k){ return WK_MET.indexOf(k) >= 0; });
+    } else if(v && typeof v === 'object'){
+      Object.keys(v).forEach(function(d){
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(d) || !Array.isArray(v[d])) return;
+        WKPRI_ALL[d] = v[d].filter(function(k){ return WK_MET.indexOf(k) >= 0; });
+      });
+    }
+
+    /* La settimana corrente vince sempre, anche se vuota: aver tolto tutte le
+       voci e' una scelta, non un buco da riempire con quella di sette giorni fa. */
+    if(WKPRI_ALL[WKPRI_LUN]){
+      WKPRI_ALL[WKPRI_LUN].forEach(function(k){ o[k] = 1; });
       return o;
     }
+
+    const pre = Object.keys(WKPRI_ALL).filter(function(d){ return d < WKPRI_LUN; }).sort();
+    if(pre.length){
+      WKPRI_ERE = pre[pre.length - 1];
+      WKPRI_ALL[WKPRI_ERE].forEach(function(k){ o[k] = 1; });
+      return o;
+    }
+
     o.hi = 1;
     return o;
   })();
@@ -5482,7 +5517,11 @@ window.FORZA = window.FORZA || { roster:[] };
     return WK_MET.filter(function(k){ return !!WKPRI[k]; });
   }
   function wkPriSave(){
-    try{ localStorage.setItem(WKPRI_KEY, JSON.stringify(wkPriList())); }catch(e){}
+    WKPRI_ALL[WKPRI_LUN] = wkPriList();
+    WKPRI_ERE = '';
+    const ks = Object.keys(WKPRI_ALL).sort();
+    while(ks.length > 12){ delete WKPRI_ALL[ks.shift()]; }
+    try{ localStorage.setItem(WKPRI_KEY, JSON.stringify(WKPRI_ALL)); }catch(e){}
   }
   function wkPriMet(){
     const on = wkPriList();
@@ -5881,8 +5920,12 @@ window.FORZA = window.FORZA || { roster:[] };
     let html = '<div class="tg-pw">'+
       '<div class="hh">'+
         '<b>Il preventivo della settimana</b>'+
+        /* Se la scelta arriva da una settimana precedente si dice: cosi' non passa
+           per una decisione presa lunedi' quando invece nessuno l'ha piu' toccata. */
         '<span>'+(met.length
-          ? 'scelto da te, letto sui file di questa settimana'
+          ? (WKPRI_ERE
+              ? 'ripreso dalla settimana del '+esc(itShort(parse(WKPRI_ERE)))+', vale per questa'
+              : 'scelto da te per questa settimana, letto sui file gia\' caricati')
           : 'scegli sopra le voci da colpire per prime')+'</span>'+
       '</div>';
 
