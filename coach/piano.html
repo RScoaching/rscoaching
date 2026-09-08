@@ -391,6 +391,13 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
    perche' e' una precisazione su quel numero, non un numero nuovo */
 .tg-atd{ font-size:11px; color:var(--faint); margin-top:5px; }
 .tg-atd b{ color:var(--muted); font-weight:600; }
+/* la quota della prossima seduta: sta sotto al conto della settimana perche' e' la
+   riga che si legge scendendo in campo, e va vista senza cercarla */
+.tg-atq{ font-size:11px; color:var(--muted); margin-top:7px; padding-top:6px;
+  border-top:1px dashed var(--ember-border); }
+.tg-atq em{ font-style:normal; font-weight:600; color:var(--text); }
+.tg-atq b{ color:var(--ink); font-weight:700; }
+.tg-atq .no b{ color:var(--orange2); }
 .tg-atc .src{ font-size:10.5px; color:var(--faint); margin-top:6px; }
 
 /* quante volte la gara si vuole in settimana, voce per voce */
@@ -6127,6 +6134,27 @@ window.FORZA = window.FORZA || { roster:[] };
     const pmet = wkPriMet();
     const pset = {};
     pmet.forEach(function(m){ pset[m.k] = 1; });
+    /* L'ordine di lettura e' uno solo per tutta la scheda: prima le voci in
+       priorita', poi le altre come sempre. Prima veniva ricostruito dentro il
+       testo del "mancano", e chi lo voleva altrove doveva rifarlo uguale. */
+    const ordM = pmet.concat(AT_MET.filter(function(m){ return !pset[m.k]; }));
+    /* La quota della prossima seduta si scrive solo sulle voci scelte: con tutte
+       e cinque diventa una riga di cinque numeri che nessuno legge scendendo in
+       campo, e tre di quei numeri sono voci che questa settimana non si voleva
+       colpire. Senza scelte resta il buco sopra i 23 km/h, l'evidenza di sempre. */
+    const qmet = pmet.length ? pmet : AT_MET.filter(function(m){ return m.key; });
+
+    /* LA PROSSIMA SEDUTA, LA STESSA PER TUTTE.
+       Il riparto del preventivo dice quanto tocca al gruppo giovedi'; sceso in
+       campo pero' si allena una persona alla volta, e il numero di gruppo non si
+       divide a occhio. Qui la prima seduta rimasta si prende una volta sola e
+       ogni scheda ci mette dentro il proprio residuo: stessa proporzione del
+       riparto di sopra, applicata al buco di quell'atleta. */
+    const gio  = tgGiorni(wk);
+    const gg1  = gio.gg[0] || null;
+    const gg1L = gg1
+      ? (gg1.ds === TSTR ? 'Oggi' : esc(WD[parse(gg1.ds).getDay()]))+(gg1.md ? ' '+esc(gg1.md) : '')
+      : '';
 
     let html = '<div class="tg-at">'+
       '<div class="tg-at-h">'+
@@ -6171,9 +6199,8 @@ window.FORZA = window.FORZA || { roster:[] };
         } else {
           /* Le voci scelte per prime si leggono per prime anche qui: il resto
              viene dopo, nell'ordine di sempre. */
-          const ord = pmet.concat(AT_MET.filter(function(m){ return !pset[m.k]; }));
           const manca = [];
-          ord.forEach(function(m){
+          ordM.forEach(function(m){
             if(r.rest[m.k] > 0) manca.push('<b>'+NF.format(r.rest[m.k])+'</b> '+esc(m.u));
           });
           txt = 'Mancano '+manca.join(', ')+'.';
@@ -6206,6 +6233,38 @@ window.FORZA = window.FORZA || { roster:[] };
           dfx = '<div class="tg-atd tnum">Di cui fuori dal gruppo, in '+r.nx+
             (r.nx === 1 ? ' seduta' : ' sedute')+
             (q.length ? ': '+q.join(', ') : '')+'.</div>';
+        }
+
+        /* QUANTO LE TOCCA NELLA PROSSIMA SEDUTA.
+           Il "mancano 2.400 m" e' il buco della settimana, e la settimana non si
+           allena in una volta: quel numero da solo porta a caricare tutto sulla
+           prima seduta utile o a rimandarlo finche' non c'e' piu' tempo. Qui il
+           suo residuo si spalma come quello del gruppo, in proporzione al peso
+           del giorno, e resta la quota della prima seduta rimasta: quella che si
+           scrive davvero adesso. Il confronto e' con il suo solito di quel
+           giorno, non con quello della squadra: una che in gara corre poco puo'
+           avere una quota bassa e comunque fuori misura per lei. Niente riga se
+           non restano sedute o se non le manca niente: in quel caso il testo
+           sopra ha gia' detto tutto. */
+        let qta = '';
+        if(gg1){
+          const qq = qmet.map(function(m){
+            const k   = m.k;
+            const tot = gio.w[k];
+            if(!(tot > 0) || r.rest[k] <= 0) return '';
+            const quota  = Math.round(r.rest[k] * (+gg1.pes[k] || 0) / tot);
+            const solito = Math.round(r.base[k] * (+gg1.pes[k] || 0));
+            if(quota <= 0) return '';
+            /* Stessa soglia del riparto di gruppo: sotto il punto percentuale e'
+               tondeggio, non una seduta da caricare. */
+            const su = solito > 0 ? Math.round((quota / solito - 1) * 100) : 0;
+            const no = solito > 0 && su >= 1;
+            return '<span'+(no ? ' class="no"' : '')+'><b>'+NF.format(quota)+'</b> '+
+              esc(m.u)+(no ? ' &#183; +'+su+'% sul suo solito' : '')+'</span>';
+          }).filter(function(s){ return !!s; });
+          if(qq.length){
+            qta = '<div class="tg-atq tnum"><em>'+gg1L+'</em> le tocca '+qq.join(', ')+'.</div>';
+          }
         }
 
         const ed = apri
@@ -6248,6 +6307,7 @@ window.FORZA = window.FORZA || { roster:[] };
             bars+
             '<div class="tg-att tnum">'+txt+'</div>'+
             dfx+
+            qta+
             '<div class="src tnum">'+src+'</div>'+
           '</div>'+
           ed+
