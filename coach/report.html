@@ -486,6 +486,23 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
    fissa che poi sbaglia sulla seduta dopo. */
 #rprint .pbody{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
 #rprint .pbody > *{ flex:0 0 auto; }
+/* La fascia dei numeri della sintesi arriva dalla pagina, dove e' disegnata per
+   lo schermo: dentro il documento va vestita come si stampera' davvero, senno'
+   si misura un'altezza e se ne stampa un'altra e il conto delle facciate salta.
+   I valori sono gli stessi che le regole di stampa danno alla fascia. */
+#rprint .rkpis{ border:0; border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6;
+  border-radius:0; background:transparent; margin-bottom:24px; }
+#rprint .rkpi{ background:transparent; border-top:0; border-left:1px solid #e2ddd6;
+  padding:11px 12px 12px; }
+#rprint .rkpi:first-child{ border-left:0; padding-left:0; }
+#rprint .rkpi .k-label{ font-size:9px; color:#666; }
+#rprint .rkpi .k-val{ font-size:25px; margin-top:6px; color:#141414; }
+#rprint .rkpi .k-val small{ color:#8a847c; }
+#rprint .rkpi .k-sub{ font-size:9.5px; margin-top:2px; color:#666; }
+#rprint .trend{ border:1px solid #e2ddd6; background:#fff; }
+#rprint .trend-legend, #rprint .sem-legend{ color:#555; }
+#rprint .tcol .tval{ color:#555; }
+#rprint .tcol .tlab{ color:#8a847c; border-top:1px solid #e2ddd6; }
 #rprint .ph{ display:flex; align-items:center; gap:12px;
   border-bottom:1.5px solid #141414; padding-bottom:11px; margin-bottom:17px; }
 #rprint .ph .pmark{ width:31px; height:31px; object-fit:contain; }
@@ -681,6 +698,12 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .topbar, .toolbar, .foot-note, .toast{ display:none !important; }
   .app{ display:block; }
   .main{ padding:0 !important; }
+  /* Il margine del foglio e' a zero per togliere le righe che il browser scrive
+     in testa e in fondo. Quando si stampa il documento il contorno lo rimette la
+     facciata; quando invece si stampa la pagina, perche' il documento non si e'
+     costruito, il contorno lo deve rimettere qui, senno' il testo finisce a filo
+     del bordo e le stampanti ne mangiano un pezzo. */
+  body:not(.pstampa) .main{ padding:14mm 12mm !important; }
   .wrap{ max-width:none; padding:0 !important; }
   .reveal{ animation:none !important; opacity:1 !important; transform:none !important; }
   /* Il foglio deve sembrare un documento, non la pagina web stampata: via la
@@ -1354,19 +1377,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function itMonth(d){ const m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(d||'')); return m? m[3]+'-'+m[2] : ''; }
 
-  function renderSintesi(){
+  /* La sintesi si costruisce a pezzi e non come un blocco unico di HTML perche'
+     i pezzi servono a due padroni. A schermo vanno in fila dentro un documento
+     che si scorre; sul foglio vanno distribuiti sulle facciate, che sono alte
+     una pagina e basta. Finche' la stampa ricalcava la pagina a schermo, una
+     tabella lunga non entrava nel foglio rimasto e scivolava tutta intera su
+     quello dopo, lasciando mezza facciata bianca: e' il difetto che si vedeva
+     con quattro microcicli o con la squadra intera. */
+  function sintesiPezzi(){
     const scope = document.getElementById('sel-scope').value || TEAM;
     const monthKey = document.getElementById('sel-month').value || '';
-    const host = document.getElementById('rdoc');
-    host.classList.remove('has-fog');
     const lab = scopeLabel(scope);
     const per = periodLabel(monthKey);
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
 
     const c = collect(scope, monthKey);
     const nTrain = c.train.length, nMatch = c.matches.length;
 
-    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
     const headHTML =
       '<div class="rdoc-head">'+
         '<img class="rh-mark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+
@@ -1378,20 +1406,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="rh-meta"><div>Stagione <b>'+esc(SEASON)+'</b></div><div>'+esc(genTxt)+'</div></div>'+
       '</div>';
 
+    const base = { lab:lab, per:per, genTxt:genTxt, crestSrc:crestSrc, headHTML:headHTML };
+
     if(!nTrain && !nMatch){
-      host.innerHTML = headHTML +
+      base.vuoto = true;
+      base.vuotoHTML =
         '<div class="rbody"><div class="rempty">'+
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>'+
           '<div class="t">Nessun dato per questo periodo</div>'+
           '<div class="d">'+esc(lab.name)+' non ha sedute o partite registrate in '+esc(per.toLowerCase())+'.</div>'+
         '</div></div>';
-      return;
+      base.sezioni = [];
+      return base;
     }
 
     // KPI
     const minTot  = agg(c.train, IDX_MIN).sum + agg(c.matches, IDX_MIN).sum;
     const distTot = agg(c.train, IDX_DIST).sum + agg(c.matches, IDX_DIST).sum;
-    const kpis =
+    base.kpisHTML =
       '<div class="rkpis">'+
         '<div class="rkpi"><div class="k-label">Allenamenti</div><div class="k-val tnum">'+NF0.format(nTrain)+'</div><div class="k-sub">sedute di campo</div></div>'+
         '<div class="rkpi"><div class="k-label">Partite</div><div class="k-val tnum">'+NF0.format(nMatch)+'</div><div class="k-sub">gare disputate</div></div>'+
@@ -1399,43 +1431,48 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="rkpi"><div class="k-label">Distanza totale</div><div class="k-val tnum">'+fmtKm(distTot)+'<small>km</small></div><div class="k-sub">allenamento + gara</div></div>'+
       '</div>';
 
-    // indicatori chiave
-    const keyTbl = '<div class="rsec"><div class="rsec-head"><h3>Indicatori chiave</h3>'+
-      '<span class="rsec-n">media allenamento e gara · aderenza al modello</span></div>'+
-      keyTableHTML(c.train, c.matches)+'</div>';
+    const sez = [];
+    sez.push({ titolo:'Indicatori chiave',
+      nota:'media allenamento e gara · aderenza al modello',
+      corpo:keyTableHTML(c.train, c.matches) });
 
-    // reparti (solo squadra)
-    let repSec = '';
     if(scope===TEAM){
       const rt = repartoTableHTML(monthKey);
-      if(rt) repSec = '<div class="rsec"><div class="rsec-head"><h3>Reparti</h3>'+
-        '<span class="rsec-n">media gara per linea tattica</span></div>'+rt+'</div>';
+      if(rt) sez.push({ titolo:'Reparti', nota:'media gara per linea tattica', corpo:rt });
     }
 
-    // confronto partita per partita
     const mbm = matchByMatchHTML(scope, monthKey);
-    let mbmSec = '';
     if(mbm){
-      mbmSec = '<div class="rsec"><div class="rsec-head"><h3>Confronto partite</h3>'+
-        '<span class="rsec-n">ultime '+mbm.n+' gare · indicatori chiave</span></div>'+mbm.html+'</div>';
+      sez.push({ titolo:'Confronto partite',
+        nota:'ultime '+mbm.n+' gare · indicatori chiave', corpo:mbm.html });
     }else{
       const mt = matchesTableHTML(scope, monthKey);
-      if(mt) mbmSec = '<div class="rsec"><div class="rsec-head"><h3>Partite del periodo</h3>'+
-        '<span class="rsec-n">'+mt.n+(mt.n===1?' partita':' partite')+'</span></div>'+mt.html+'</div>';
+      if(mt) sez.push({ titolo:'Partite del periodo',
+        nota:mt.n+(mt.n===1?' partita':' partite'), corpo:mt.html });
     }
 
-    // trend
     const tr = trendHTML(scope);
-    const trSec = tr ? '<div class="rsec"><div class="rsec-head"><h3>Andamento mensile</h3>'+
-      '<span class="rsec-n">distanza totale per mese</span></div>'+tr+'</div>' : '';
+    if(tr) sez.push({ titolo:'Andamento mensile', nota:'distanza totale per mese', corpo:tr });
 
+    base.sezioni = sez;
     /* Il piede del documento porta solo quello che il documento non dice gia'
        da nessun'altra parte: chi e' la squadra, che periodo si guarda, di quando
        sono i dati. La firma dello studio non serve a chi legge il report. */
-    const foot = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(lab.name)+' · '+esc(per)+'</span>'+
+    base.footHTML = '<div class="rdoc-foot"><span>Fiorentina Primavera U19W · '+esc(lab.name)+' · '+esc(per)+'</span>'+
       '<span>'+esc(genTxt)+'</span></div>';
+    return base;
+  }
 
-    host.innerHTML = headHTML + '<div class="rbody">'+kpis+keyTbl+repSec+mbmSec+trSec+foot+'</div>';
+  function renderSintesi(){
+    const host = document.getElementById('rdoc');
+    host.classList.remove('has-fog');
+    const p = sintesiPezzi();
+    if(p.vuoto){ host.innerHTML = p.headHTML + p.vuotoHTML; return; }
+    const secs = p.sezioni.map(function(s){
+      return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.titolo)+'</h3>'+
+        (s.nota ? '<span class="rsec-n">'+esc(s.nota)+'</span>' : '')+'</div>'+s.corpo+'</div>';
+    }).join('');
+    host.innerHTML = p.headHTML + '<div class="rbody">'+p.kpisHTML+secs+p.footHTML+'</div>';
   }
 
   // ---------- export CSV ----------
@@ -2530,6 +2567,69 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return true;
   }
 
+  /* La sintesi si impagina riempiendo: si apre una facciata, ci si mettono
+     dentro i pezzi uno dopo l'altro e quando il foglio e' pieno se ne apre un
+     altro. Il pezzo che non ci sta viene tolto e riparte in cima alla facciata
+     dopo, cosi' una tabella lunga non lascia mezza pagina bianca dietro di se'.
+     Se un pezzo da solo e' piu' alto di una facciata resta comunque solo sul
+     suo foglio: a quel punto e' pAdatta a stringerlo, come nel giornaliero. */
+  function buildPrintSintesi(){
+    const host = printHost();
+    const p = sintesiPezzi();
+    if(p.vuoto || !p.sezioni.length){ host.innerHTML = ''; return false; }
+    const PG = Math.floor(PG_H);
+    const linea = p.per + ' · ' + p.lab.sub;
+    function testaHTML(){
+      return '<div class="ph">'+
+        '<img class="pmark" src="'+esc(p.crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
+        '<div><h2>Report · '+esc(p.lab.name)+'</h2>'+
+          '<div class="psub"><b>'+esc(linea)+'</b></div></div>'+
+        '<div class="pno"></div>'+
+      '</div>';
+    }
+    const piede = '<div class="pfoot"><span>'+esc(p.genTxt)+'</span></div>';
+
+    host.innerHTML = '';
+    let sec = null, fit = null, corpo = null;
+    function apri(){
+      const w = document.createElement('div');
+      w.innerHTML = pSheet(testaHTML(), '', piede);
+      sec = w.firstElementChild;
+      host.appendChild(sec);
+      fit = sec.querySelector('.pfit');
+      corpo = sec.querySelector('.pbody');
+    }
+    apri();
+
+    const blocchi = [p.kpisHTML].concat(p.sezioni.map(function(s){
+      return pSecHTML(s.titolo, s.nota, s.corpo);
+    }));
+    blocchi.forEach(function(h){
+      const w = document.createElement('div');
+      w.innerHTML = h;
+      const el = w.firstElementChild;
+      if(!el) return;
+      corpo.appendChild(el);
+      /* La misura si fa a facciata libera: la scatola e' alta quanto il suo
+         contenuto finche' non interviene pAdatta, quindi basta guardare se ha
+         passato l'altezza di una pagina. Il primo pezzo non si sposta mai,
+         altrimenti si aprirebbe un foglio vuoto davanti a lui. */
+      if(corpo.children.length > 1 && fit.getBoundingClientRect().height > PG){
+        corpo.removeChild(el);
+        apri();
+        corpo.appendChild(el);
+      }
+    });
+
+    const fogli = host.querySelectorAll('.psheet');
+    Array.prototype.forEach.call(fogli, function(s, i){
+      const no = s.querySelector('.pno');
+      if(no) no.innerHTML = 'Pagina '+(i+1)+' di '+fogli.length+'<br>Stagione '+esc(SEASON);
+    });
+    pAdatta(host);
+    return true;
+  }
+
   function renderDaily(){
     const host = document.getElementById('rdoc');
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
@@ -2981,13 +3081,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('sel-session').addEventListener('change', function(){ daysCambiate(); render(); });
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
-  /* Nel report del giorno si stampa il documento costruito a parte, non la
-     pagina. Il documento si prepara subito prima di aprire la stampa cosi'
-     porta l'ultima descrizione scritta, e si smonta appena la stampa e' finita
-     per non lasciarlo in giro. Il gancio sta anche su beforeprint perche' la
-     stampa si puo' chiamare anche dalla scorciatoia del sistema. */
+  /* Si stampa sempre il documento costruito a parte, non la pagina: vale per il
+     report del giorno come per la sintesi. Il documento si prepara subito prima
+     di aprire la stampa cosi' porta l'ultima descrizione scritta, e si smonta
+     appena la stampa e' finita per non lasciarlo in giro. Il gancio sta anche su
+     beforeprint perche' la stampa si puo' chiamare dalla scorciatoia del
+     sistema. Se il documento non si costruisce (nessun dato nel periodo) si
+     ricade sulla pagina, che in stampa si rimette da sola il suo contorno. */
   function stampaPronta(){
-    if(mode === 'giorno' && buildPrintDaily()) document.body.classList.add('pstampa');
+    const ok = (mode === 'giorno') ? buildPrintDaily() : buildPrintSintesi();
+    if(ok) document.body.classList.add('pstampa');
     else document.body.classList.remove('pstampa');
   }
   function stampaFinita(){
