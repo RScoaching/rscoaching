@@ -431,6 +431,12 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pb{ height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; }
 .tg-pw .pb i{ display:block; height:100%; border-radius:999px; background:var(--orange); }
 .tg-pw .pb i.full{ background:var(--green); }
+/* quanto resta da spendere e quanto ne portano i giorni ancora da fare */
+.tg-pw .pg{ font-size:11px; color:var(--muted); margin-top:10px; }
+.tg-pw .pg b{ color:var(--ink); font-weight:600; }
+.tg-pw .pq{ font-size:10.5px; color:var(--muted); margin-top:5px; }
+.tg-pw .pq b{ color:var(--ink); font-weight:600; }
+.tg-pw .pq.no b{ color:var(--orange2); }
 .tg-pw .pn{ font-size:11px; color:var(--muted); margin-top:10px; }
 .tg-pw .pn b{ color:var(--ink); font-weight:600; }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
@@ -5822,6 +5828,43 @@ window.FORZA = window.FORZA || { roster:[] };
     return out;
   }
 
+  /* I GIORNI CHE RESTANO FINO A DOMENICA.
+     Il preventivo e' settimanale, ma la settimana non e' un blocco unico: quello
+     che manca va speso nelle sedute che restano a calendario, e ogni giorno del
+     microciclo ne porta una quota diversa. MD-3 vale piu' del doppio di MD-1
+     sopra i 23 km/h: un buco lasciato al martedi' non si recupera al sabato, e
+     dirlo il giovedi' serve, dirlo la domenica no. La gara non entra nel conto:
+     non e' capacita' di allenamento, e' il motivo per cui il preventivo esiste.
+     La seduta di oggi conta come capacita' solo finche' non e' nei file: quando
+     il GPS e' caricato quei metri sono gia' nelle barre qui sopra e contarli
+     due volte gonfierebbe il residuo. */
+  function tgGiorni(wk){
+    const lun = mondayOf(NOW);
+    const out = { oggi:null, oggiMd:'', oggiGara:false, oggiFatto:false, gg:[], w:{} };
+    AT_MET.forEach(function(m){ out.w[m.k] = 0; });
+    for(let i=0; i<7; i++){
+      const d  = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate()+i);
+      const ds = dstr(d);
+      if(ds < TSTR) continue;
+      const row = byDate[ds];
+      if(!row) continue;
+      const md = mdOf(ds);
+      if(row.is_match || md === 'MD'){
+        if(ds === TSTR) out.oggiGara = true;
+        continue;
+      }
+      const pes = TG_MD[md] || TG_GEN;
+      if(ds === TSTR){
+        out.oggi   = pes;
+        out.oggiMd = md;
+        if(wk.gg[ds]){ out.oggiFatto = true; continue; }
+      }
+      out.gg.push({ ds:ds, md:md });
+      AT_MET.forEach(function(m){ out.w[m.k] += (+pes[m.k] || 0); });
+    }
+    return out;
+  }
+
   /* IL PREVENTIVO DELLA SETTIMANA, LETTO STASERA.
      Sopra si sceglie cosa colpire per primo, qui torna indietro il conto: per ogni
      voce scelta quanto chiede la settimana a tutto il gruppo, quanto ne e' arrivato
@@ -5850,11 +5893,41 @@ window.FORZA = window.FORZA || { roster:[] };
         'Nessuna atleta in gruppo con il filtro attivo, non c\'e\' niente da contare.</div></div>';
     }
 
+    /* La capacita' che resta si conta sul riferimento gara del gruppo, la stessa
+       base da cui nasce il preventivo: sommo le basi delle atlete in gruppo e le
+       moltiplico per i pesi dei giorni ancora da fare. Stessa scala del bisogno,
+       quindi i due numeri si possono guardare uno accanto all'altro. */
+    const gio  = tgGiorni(wk);
+    const bsum = {};
+    AT_MET.forEach(function(m){ bsum[m.k] = 0; });
+    g.rows.forEach(function(r){
+      AT_MET.forEach(function(m){ bsum[m.k] += r.base[m.k]; });
+    });
+
     html += met.map(function(m){
       let need = 0, done = 0;
       g.rows.forEach(function(r){ need += r.need[m.k]; done += Math.min(r.done[m.k], r.need[m.k]); });
       const pct = need > 0 ? Math.min(100, Math.round(done / need * 100)) : 100;
       const ok  = pct >= 100;
+
+      const resto = Math.max(0, Math.round(need - done));
+      const cap   = Math.round(bsum[m.k] * gio.w[m.k]);
+      let q = '', qc = '';
+      if(resto <= 0){
+        q = 'Preventivo coperto: quello che arriva nelle sedute che restano e\' in piu\'.';
+      } else if(!gio.gg.length){
+        qc = ' no';
+        q  = 'Non restano sedute: questi <b>'+NF.format(resto)+'</b> '+esc(m.u)+
+             ' chiudono la settimana scoperti.';
+      } else {
+        const sta = cap >= resto;
+        if(!sta) qc = ' no';
+        q = 'Ne mancano <b>'+NF.format(resto)+'</b> '+esc(m.u)+'. Le sedute che restano ne portano <b>'+
+            NF.format(cap)+'</b>: '+(sta
+              ? 'ci sta.'
+              : 'non ci sta, o si carica di piu\' o il preventivo si chiude sotto.');
+      }
+
       return '<div class="pr">'+
         '<div class="pl">'+
           '<span>'+esc(m.lbl)+'</span>'+
@@ -5862,8 +5935,20 @@ window.FORZA = window.FORZA || { roster:[] };
             NF.format(Math.round(need))+' '+esc(m.u)+' &#183; '+pct+'%</em>'+
         '</div>'+
         '<div class="pb"><i'+(ok ? ' class="full"' : '')+' style="width:'+pct+'%"></i></div>'+
+        '<div class="pq tnum'+qc+'">'+q+'</div>'+
       '</div>';
     }).join('');
+
+    let gpre = '';
+    if(gio.oggiGara)        gpre = 'Oggi si gioca. ';
+    else if(gio.oggiFatto)  gpre = 'La seduta di oggi e\' gia\' nei file. ';
+    html += '<div class="pg">'+gpre+(gio.gg.length
+      ? 'In settimana restano <b>'+gio.gg.length+
+        (gio.gg.length === 1 ? ' seduta</b>: ' : ' sedute</b>: ')+
+        gio.gg.map(function(x){
+          return esc(WD[parse(x.ds).getDay()])+(x.md ? ' '+esc(x.md) : '');
+        }).join(', ')+'. Il conto qui sopra e\' fatto sui pesi di quei giorni.'
+      : 'Non restano altre sedute a calendario in questa settimana.')+'</div>';
 
     if(!wk.n && !wk.nx){
       return html + '<div class="pv">Preventivato: <b>'+esc(wkPriTxt())+'</b>. '+
