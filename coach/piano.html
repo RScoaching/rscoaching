@@ -453,6 +453,8 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pd .d > span{ font-size:10.5px; color:var(--muted); }
 .tg-pw .pd .d > span i{ font-style:normal; font-weight:600; color:var(--ink); }
 .tg-pw .pd .d > span.no i{ color:var(--orange2); }
+.tg-pw .pd .d > span.pp{ flex:0 0 100%; font-size:10px; color:var(--faint); }
+.tg-pw .pd .d > span.pp.no{ color:var(--orange2); }
 .tg-pw .pn{ font-size:11px; color:var(--muted); margin-top:10px; }
 .tg-pw .pn b{ color:var(--ink); font-weight:600; }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
@@ -1685,11 +1687,62 @@ window.FORZA = window.FORZA || { roster:[] };
       if(kind === 'riposo' || tipo === 'riposo') return;
       const ds = String(m.data);
       let o = PIAN[ds];
-      if(!o) o = PIAN[ds] = { n:0, slots:[], tit:'' };
+      if(!o) o = PIAN[ds] = { n:0, slots:[], tit:'', ph:{}, min:0, campo:0 };
       o.n++;
       if(m.slot && o.slots.indexOf(m.slot) < 0) o.slots.push(m.slot);
       if(!o.tit && (m.title || tipo)) o.tit = String(m.title || tipo);
+      /* Le fasi scritte nel costruttore del Calendario sono il contenuto vero della
+         seduta: senza di loro il giorno che resta e' solo una casella, e il riparto
+         qui sotto puo' chiedere metri di velocita' a una mattina di sola palestra.
+         I minuti si sommano per famiglia perche' due blocchi di possesso nello
+         stesso giorno sono un lavoro solo, e perche' e' l'unica forma che serve:
+         cosa si fa e per quanto. */
+      const fasi = Array.isArray(m.phases) ? m.phases : [];
+      fasi.forEach(function(p){
+        if(!p) return;
+        const t = String(p.t || '');
+        const mn = Math.max(0, Math.round(Number(p.m) || 0));
+        if(!t || !mn) return;
+        o.ph[t] = (o.ph[t] || 0) + mn;
+        o.min  += mn;
+        /* Palestra e defaticamento non producono metri sul campo. Tenerli contati a
+           parte serve dopo, per dire che quel giorno non puo' rispondere a un
+           preventivo fatto di corsa. */
+        if(!PH_GYM[t]) o.campo += mn;
+      });
     });
+  }
+  /* Forza, pliometria e defaticamento sono le famiglie che il GPS non vede correre:
+     la stessa lista che il Calendario usa per non pretendere metri da una seduta di
+     palestra. Vale qui per lo stesso motivo. */
+  const PH_GYM = { forza:1, plyo:1, rec:1 };
+  /* Le stesse parole che si leggono nel costruttore del Calendario. Piu' sotto c'e'
+     gia' CAL_WORD, ma quella traduce le fasi nel lessico degli appunti ("Velocita",
+     "Intermittente") perche' serve a riscrivere una seduta: qui invece si sta
+     rileggendo il planner, e il giorno deve chiamarsi come lo ha chiamato chi lo ha
+     scritto. Due usi diversi, due liste. */
+  const PH_LBL = {
+    attivazione:'attivazione', rondo:'rondo', possesso:'possesso', passing:'passing',
+    ssg:'partita a tema', transizioni:'transizioni', finalizzazione:'finalizzazione',
+    palleinattive:'palle inattive', duelli:'duelli', tecnica:'tecnica', squadra:'squadra',
+    forza:'forza', sprint:'sprint', plyo:'pliometria', z2:'aerobico Z2',
+    interval:'intervallato', priming:'priming', rec:'defaticamento', test:'test'
+  };
+  /* Il programma scritto, in una riga: le famiglie ordinate dalla piu' lunga, che e'
+     l'ordine con cui si legge una seduta a colpo d'occhio. Oltre il limite si conta
+     il resto invece di allungare la riga, perche' la quinta voce da dieci minuti non
+     cambia la lettura del giorno. Una sola voce di troppo si scrive per intero:
+     "e altre 1" e' piu' lungo del blocco che nasconde, oltre che scritto male. */
+  function pianProg(o, max){
+    if(!o || !o.ph) return '';
+    let lim = max || 4;
+    const ks = Object.keys(o.ph).sort(function(a, b){ return o.ph[b] - o.ph[a]; });
+    if(ks.length === lim + 1) lim = ks.length;
+    const vis = ks.slice(0, lim).map(function(t){
+      return (PH_LBL[t] || t)+' '+o.ph[t]+"'";
+    });
+    if(ks.length > lim) vis.push('e altre '+(ks.length - lim));
+    return vis.join(', ');
   }
   pianLoad();
 
@@ -1953,6 +2006,14 @@ window.FORZA = window.FORZA || { roster:[] };
       const sl = slotLabel(todayPian);
       meta += '<div class="mchip"><span class="ml">A calendario</span><b style="font-size:14px">'+
         esc(todayPian.tit || 'seduta in programma')+'</b>'+(sl ? '<span class="ml">'+esc(sl)+'</span>' : '')+'</div>';
+      /* Il titolo dice come si chiama la seduta, non cosa contiene. Se le fasi sono
+         state scritte i minuti ci sono gia': meglio leggerli qui che aprire il
+         Calendario per sapere quanto dura il possesso di stamattina. */
+      const prog = pianProg(todayPian, 3);
+      if(prog){
+        meta += '<div class="mchip"><span class="ml">Programma</span><b style="font-size:14px">'+
+          esc(prog)+'</b>'+(todayPian.min ? '<span class="ml">'+todayPian.min+' min</span>' : '')+'</div>';
+      }
     }
     if(lastSession){
       meta += '<div class="mchip"><span class="ml">Ultima seduta</span><b style="font-size:14px">'+esc(itShort(parse(lastSession.data)))+'</b><span class="ml">'+NF.format(+lastSession.load||0)+' u.a.</span></div>';
@@ -6145,9 +6206,27 @@ window.FORZA = window.FORZA || { roster:[] };
                 ? (no ? ' &#183; +'+su+'% sul solito' : ' &#183; dentro il solito')
                 : '')+'</span>';
           }).filter(function(s){ return !!s; }).join('');
+          /* LA QUOTA ACCANTO A QUELLO CHE C'E' SCRITTO.
+             Il riparto sa quanti metri tocca a giovedi' ma non sa cosa c'e' scritto
+             per giovedi': finche' resta muto, chiede quattrocento metri sopra i 23
+             a una mattina di forza e pliometria e la richiesta e' impossibile, non
+             solo alta. Il programma del giorno arriva dal costruttore del
+             Calendario, quello dove le fasi si scrivono con i minuti. Quando le
+             fasi ci sono e sono tutte di palestra, e il giorno ha comunque una
+             quota da portare, la riga si accende: non e' una seduta da caricare di
+             piu', e' una seduta che quei metri non li puo' fare, e la scelta e'
+             spostarli o cambiare il programma. */
+          const pl = PIAN[x.ds];
+          let pp = '';
+          if(pl && pl.min > 0){
+            const prog = pianProg(pl);
+            const cieco = q && !pl.campo;
+            pp = '<span class="pp'+(cieco ? ' no' : '')+'">A programma: '+esc(prog)+
+              (cieco ? '. Tutto in palestra, questi metri qui non arrivano.' : '')+'</span>';
+          }
           return '<div class="d"><b>'+esc(WD[parse(x.ds).getDay()])+
             (x.md ? ' '+esc(x.md) : '')+'</b>'+
-            (q || '<span>niente da recuperare qui</span>')+'</div>';
+            (q || '<span>niente da recuperare qui</span>')+pp+'</div>';
         }).join('')+
       '</div>';
     }
