@@ -457,6 +457,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pd .d > span.pp.no{ color:var(--orange2); }
 .tg-pw .pn{ font-size:11px; color:var(--muted); margin-top:10px; }
 .tg-pw .pn b{ color:var(--ink); font-weight:600; }
+.tg-pw .pn i{ font-style:normal; color:var(--faint); }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
 .tg-xp{ display:flex; flex-wrap:wrap; gap:6px; }
 .tg-x{
@@ -6242,11 +6243,32 @@ window.FORZA = window.FORZA || { roster:[] };
        deve fare 900 sono una seduta di ritardo. */
     const conDati = g.rows.filter(function(r){ return r.ha; });
     const late    = conDati.filter(function(r){ return r.pri >= 0.25; }).slice(0, 3);
+    /* PERCHE' E' INDIETRO, NON SOLO DI QUANTO.
+       Il gruppo ha fatto le sedute che ha fatto; la singola no. Chi era fuori, chi
+       e' salita in prima squadra, chi ha lavorato a parte arriva a stasera con meno
+       allenamenti alle spalle, e il suo buco e' in parte una presenza mancata, non
+       una scelta di carico. Senza questa mezza riga il nome in cima sembra sempre
+       la stessa cosa, e non lo e': su una che ha saltato due sedute non si carica,
+       si recupera. Il conto e' sui giorni, non sulle sessioni: due lavori nello
+       stesso pomeriggio restano un allenamento a cui essere presenti. */
+    const ggWk = Object.keys((wk && wk.gg) || {}).length;
+    function priCau(r){
+      const c = [];
+      if(ggWk > 0 && r.sed < ggWk){
+        c.push(r.sed+(r.sed === 1 ? ' seduta su ' : ' sedute su ')+ggWk);
+      }
+      /* Qui serve la parola intera, non la sigla della pastiglia: "differenz." sta
+         bene dentro un bollino largo quaranta pixel, dentro una frase no. */
+      if(r.st !== 'disponibile') c.push(avDef(r.st).l.toLowerCase());
+      return c;
+    }
     if(late.length){
       const q = late.map(function(r){
         const manca = met.filter(function(m){ return r.rest[m.k] > 0; })
           .map(function(m){ return NF.format(r.rest[m.k])+' '+esc(m.u); });
-        return '<b>'+esc(plNome(r.name))+'</b>'+(manca.length ? ' ('+manca.join(', ')+')' : '');
+        const cau = priCau(r);
+        return '<b>'+esc(plNome(r.name))+'</b>'+(manca.length ? ' ('+manca.join(', ')+')' : '')+
+          (cau.length ? ' <i>'+esc(cau.join(', '))+'</i>' : '');
       });
       html += '<div class="pn">Piu\' indietro su quello che avevi preventivato: '+q.join(', ')+
         '. Le schede qui sotto partono da loro.</div>';
