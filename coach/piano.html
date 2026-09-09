@@ -399,6 +399,30 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atq b{ color:var(--ink); font-weight:700; }
 .tg-atq .no b{ color:var(--orange2); }
 .tg-atc .src{ font-size:10.5px; color:var(--faint); margin-top:6px; }
+/* le aree di prevenzione dell'atleta: stanno in fondo alla scheda perche' sono
+   la parte che non cambia da un giorno all'altro, ma stanno dentro la scheda
+   perche' e' li' che si decide cosa farle fare stasera */
+.tg-atp{ font-size:11px; color:var(--muted); margin-top:7px; padding-top:6px;
+  border-top:1px dashed var(--border2); }
+.tg-atp b{ color:var(--text); font-weight:600; }
+.tg-atp i{ font-style:normal; color:var(--faint); }
+.tg-atp .no{ color:var(--orange2); }
+/* il quadro di prevenzione del gruppo: quali aree tornano su piu' atlete, cosi'
+   il blocco comune della seduta si sceglie su quello che serve a piu' gente */
+.tg-pz{ margin-top:13px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:var(--r); padding:12px 14px 11px; }
+.tg-pz .hh{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px; }
+.tg-pz .hh b{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.tg-pz .hh span{ font-size:11px; color:var(--faint); }
+.tg-pz .zr{ display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 10px;
+  margin-top:9px; padding-top:9px; border-top:1px solid var(--border); }
+.tg-pz .zr > b{ flex:0 0 152px; font-size:11.5px; font-weight:600; color:var(--text); }
+.tg-pz .zr > em{ font-style:normal; font-size:11px; color:var(--ink); font-weight:700; }
+.tg-pz .zr > span{ flex:1 1 100%; font-size:10.5px; color:var(--faint); }
+.tg-pz .zn{ font-size:11px; color:var(--muted); margin-top:9px; }
+.tg-pz .zn b{ color:var(--ink); font-weight:600; }
+.tg-pz .zn .no{ color:var(--orange2); }
+.tg-pz .zv{ font-size:11px; color:var(--faint); margin-top:8px; }
 
 /* quante volte la gara si vuole in settimana, voce per voce */
 .tg-xw{ margin-top:13px; background:var(--surface2); border:1px solid var(--border);
@@ -1510,6 +1534,9 @@ window.FORZA = window.FORZA || { roster:[] };
 
 <!-- database esercizi condiviso con l'area atleta (window.EXERCISES_DB) -->
 <script src="../exercises_db.js"></script>
+
+<!-- test di prevenzione e lettura delle aree di lavoro (window.prevAree) -->
+<script src="./prevenzione_data.js"></script>
 
 <!-- sidebar area Fiorentina -->
 <script src="./fio_sidebar.js"></script>
@@ -6321,12 +6348,140 @@ window.FORZA = window.FORZA || { roster:[] };
     return html + '</div>';
   }
 
+  /* LE AREE DI PREVENZIONE, LETTE QUI DENTRO.
+     Fin qui l'Oggi parla solo di metri: quanti ne deve produrre una, quanti ne
+     ha fatti, quanti gliene toccano stasera. Ma la seduta non e' fatta solo di
+     metri, e la mezz'ora di prevenzione che la apre veniva scelta senza guardare
+     i test, oppure guardandoli su un'altra pagina, cioe' quasi mai. I test ci
+     sono, dicono per ogni atleta dove sta il buco, e qui arrivano cosi' come li
+     legge Prevenzione: stessa funzione, stesso conto, nessuna seconda versione
+     delle stesse regole. Due cose servono davvero mentre si scrive la seduta:
+     cosa chiede la singola, e cosa chiede il gruppo tutto insieme, perche' il
+     blocco comune si fa una volta sola e conviene farlo su quello che serve a
+     piu' gente. */
+  function atPrevMap(rows){
+    const out = {};
+    if(typeof window.prevAree !== 'function') return out;
+    /* Il registro si legge una volta per tutte: e' un JSON solo, e rileggerlo a
+       ogni nome vorrebbe dire riaprirlo venticinque volte per la stessa risposta. */
+    let reg = {};
+    try{ if(window.prevTestReg) reg = window.prevTestReg(); }catch(e){ reg = {}; }
+    rows.forEach(function(r){
+      let o = null;
+      try{ o = window.prevAree(r.name, reg); }catch(e){ o = null; }
+      out[r.name] = o;
+    });
+    return out;
+  }
+  /* La riga della singola: le due aree che pesano di piu' e, quando c'e', il
+     test rosso. Il rosso si scrive per esteso perche' e' l'unica cosa qui dentro
+     su cui non si passa sopra decidendo di fare altro. */
+  function atPrevRow(name, pm){
+    const o = pm[name];
+    if(!o) return '<div class="tg-atp"><i>Prevenzione: nessun test registrato.</i></div>';
+    if(!o.top.length){
+      return '<div class="tg-atp">Prevenzione: <b>tutti i test in ordine</b>, '+
+        'niente area scoperta.</div>';
+    }
+    const aree = o.top.map(function(a){ return esc(a.lbl.toLowerCase()); }).join(', ');
+    const rossi = o.reds.length
+      ? ' <span class="no">Rosso: '+esc(o.reds.join(', ')).toLowerCase()+'.</span>'
+      : '';
+    return '<div class="tg-atp">Prevenzione: <b>'+aree+'</b>.'+rossi+'</div>';
+  }
+  function atPrevHtml(rows, pm){
+    const con = rows.filter(function(r){ return !!pm[r.name]; });
+    const dat = con.length ? (pm[con[0].name].data || '') : '';
+    let html = '<div class="tg-pz">'+
+      '<div class="hh">'+
+        '<b>Prevenzione: cosa chiedono i test a questo gruppo</b>'+
+        '<span>'+(dat ? 'ultimi test '+esc(dat.toLowerCase()) : 'dai test gia\' registrati')+'</span>'+
+      '</div>';
+    if(!con.length){
+      return html + '<div class="zv">Nessuna atleta di questo gruppo ha test registrati. '+
+        'Le aree di lavoro compaiono qui appena il foglio dei test entra in Prevenzione.</div></div>';
+    }
+
+    /* Il conto e' per area, non per atleta: quante volte quell'area esce fra le
+       due che pesano di piu'. I nomi si scrivono tutti, perche' e' con quelli
+       che si formano i gruppetti quando il blocco comune non basta. */
+    const cnt = {};
+    con.forEach(function(r){
+      (pm[r.name].top || []).forEach(function(a){
+        if(!cnt[a.k]) cnt[a.k] = { lbl:a.lbl, n:0, chi:[] };
+        cnt[a.k].n++;
+        cnt[a.k].chi.push(plNome(r.name));
+      });
+    });
+    const ORD = window.PREV_NEED_ORDER || [];
+    const ord = Object.keys(cnt).sort(function(a, b){
+      return cnt[b].n - cnt[a].n || ORD.indexOf(a) - ORD.indexOf(b);
+    });
+    html += ord.slice(0, 3).map(function(k){
+      const c = cnt[k];
+      return '<div class="zr">'+
+        '<b>'+esc(c.lbl)+'</b>'+
+        '<em>'+c.n+' su '+con.length+'</em>'+
+        '<span>'+esc(c.chi.join(', '))+'</span>'+
+      '</div>';
+    }).join('');
+
+    /* I ROSSI, DIVISI IN DUE: QUELLI DI TUTTI E QUELLI DI QUALCUNO.
+       Un rosso e' una consegna, ma non tutte le consegne sono personali. Sul
+       primo gruppo caricato il faber e' rosso su undici atlete su quindici:
+       scritto come consegna singola diventa un elenco di undici nomi che nessuno
+       legge, e per giunta dice una cosa falsa, perche' un test rosso su tre
+       quarti della squadra e' un problema di squadra e nel blocco comune ci deve
+       stare, non fuori. Quindi il conto e' per test: quelli che passano la meta'
+       del gruppo si dicono una volta con il numero, gli altri restano attaccati
+       al nome di chi li ha, che e' l'unico modo di lavorarli. */
+    const cr = {};
+    con.forEach(function(r){
+      (pm[r.name].reds || []).forEach(function(t){
+        if(!cr[t]) cr[t] = 0;
+        cr[t]++;
+      });
+    });
+    const sogl = Math.ceil(con.length / 2);
+    const diff = Object.keys(cr).filter(function(t){ return cr[t] >= sogl; })
+      .sort(function(a, b){ return cr[b] - cr[a]; });
+    if(diff.length){
+      html += '<div class="zn"><span class="no">Rosso su mezzo gruppo</span>, quindi nel blocco comune: '+
+        diff.map(function(t){
+          return '<b>'+esc(t).toLowerCase()+'</b> ('+cr[t]+' su '+con.length+')';
+        }).join(', ')+'.</div>';
+    }
+    /* Quello che resta e' personale davvero: il rosso che ha lei e non il gruppo. */
+    const rossi = con.map(function(r){
+      const p = (pm[r.name].reds || []).filter(function(t){ return cr[t] < sogl; });
+      return { nome:plNome(r.name), t:p };
+    }).filter(function(o){ return o.t.length; });
+    if(rossi.length){
+      html += '<div class="zn"><span class="no">Test rossi</span>, da non lasciare al blocco comune: '+
+        rossi.map(function(o){
+          return '<b>'+esc(o.nome)+'</b> ('+esc(o.t.join(', ')).toLowerCase()+')';
+        }).join(', ')+'.</div>';
+    }
+
+    const senza = rows.length - con.length;
+    if(senza){
+      html += '<div class="zv">'+senza+(senza === 1
+        ? ' atleta del gruppo non ha ancora test: per lei qui non c\'e\' niente da leggere.'
+        : ' atlete del gruppo non hanno ancora test: per loro qui non c\'e\' niente da leggere.')+'</div>';
+    }
+    return html + '</div>';
+  }
+
   function renderAtlete(){
     const box = document.getElementById('tg-atl');
     if(!box) return;
     const g  = atRows();
     const wk = atWeek();
     if(!g.rows.length && !g.fuori.length && !g.agg){ box.innerHTML = ''; return; }
+
+    /* I test si leggono una volta per tutto il gruppo: servono sia alla riga della
+       singola sia al quadro comune qui sotto, e sono lo stesso conto. */
+    const pm = atPrevMap(g.rows);
 
     const ngg   = Object.keys(wk.gg).length;
     const aggOn = atAggOn();
@@ -6417,6 +6572,7 @@ window.FORZA = window.FORZA || { roster:[] };
         }).join('')+
       '</div>'+
       tgPrevHtml(g, wk)+
+      atPrevHtml(g.rows, pm)+
       salto;
 
     if(g.rows.length){
@@ -6546,6 +6702,7 @@ window.FORZA = window.FORZA || { roster:[] };
             dfx+
             qta+
             '<div class="src tnum">'+src+'</div>'+
+            atPrevRow(r.name, pm)+
           '</div>'+
           ed+
         '</div>';

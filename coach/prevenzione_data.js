@@ -632,4 +632,268 @@
       fisio: { data:'Agosto 2026', t:TEST_FISIO, v:V_FISIO }
     }
   };
+
+  // -------------------------------------------------------------------------
+  // DAI TEST ALLE AREE DI LAVORO, IN UN POSTO SOLO.
+  // Questa lettura nasce dentro la pagina Prevenzione, dove i test diventano le
+  // aree della scheda. Serve pero' anche altrove: nell'Oggi, mentre si scrive la
+  // seduta, sapere che una ha la caviglia rossa vale quanto sapere quanti metri
+  // le mancano, e cercarlo aprendo un'altra pagina vuol dire non cercarlo. Se il
+  // conto venisse riscritto di la' avremmo due letture degli stessi test che
+  // prima o poi divergono, che e' esattamente il guaio gia' visto quando il
+  // quadro leggeva la trascrizione e le aree leggevano il registro. Quindi il
+  // conto sta qui, accanto ai valori, e le pagine lo chiamano.
+  //
+  // Le due fonti sono la tabella qui sopra, trascritta a inizio stagione, e il
+  // registro dei test in localStorage, che si aggiorna da solo a ogni foglio
+  // nuovo. Vince la trascrizione dove ha un valore, il registro riempie i buchi
+  // e le atlete che nella tabella non ci sono ancora.
+  // -------------------------------------------------------------------------
+  var NEED = {
+    cav:  { lbl:'Mobilita caviglia',      fam:'A' },
+    anca: { lbl:'Mobilita anca',          fam:'A' },
+    spal: { lbl:'Mobilita spalle',        fam:'A' },
+    stab: { lbl:'Stabilita monopodalica', fam:'A' },
+    core: { lbl:'Core e antirotazione',   fam:'B' },
+    rinf: { lbl:'Rinforzo',               fam:'B' },
+    stre: { lbl:'Allungamento',           fam:'B' }
+  };
+  var NEED_ORDER = ['cav','anca','spal','stab','core','rinf','stre'];
+
+  // "pre" e "xtra" sono il ponte verso il registro: dicono con che nome le
+  // stesse misure sono scritte nel file che arriva dai fogli.
+  var TEST_GROUPS = [
+    { k:'fms',   lbl:'Screening FMS',       pre:'fms_' },
+    { k:'fisio', lbl:'Test fisioterapista', pre:'fis_',
+      xtra:{ kg:'fis_peso', ckcuest:'fis_ckcuest' } }
+  ];
+  var DEF_PT = { v:0, g:1, r:2 };
+
+  function seasonId(){
+    try{ if(window.getStagione) return window.getStagione(); }catch(e){}
+    return '25-26';
+  }
+  function testSet(){
+    var T = window.PREV_TEST;
+    return (T && T[seasonId()]) ? T[seasonId()] : null;
+  }
+  function testNames(){
+    var T = testSet(), out = {};
+    if(!T) return out;
+    TEST_GROUPS.forEach(function(g){
+      var v = T[g.k] && T[g.k].v;
+      if(v) Object.keys(v).forEach(function(n){ out[n] = true; });
+    });
+    return out;
+  }
+  function loadReg(){
+    try{
+      var raw = localStorage.getItem('fio_test_register_v2_' + seasonId());
+      var o = raw ? JSON.parse(raw) : null;
+      return (o && typeof o === 'object') ? o : {};
+    }catch(e){ return {}; }
+  }
+  function regRaw(reg, key, name){
+    var bag = reg && reg[key]; if(!bag) return null;
+    var e = bag[name];
+    if(!e || e.v == null || e.v === '') return null;
+    return e;
+  }
+  function regCell(reg, key, name){
+    var e = regRaw(reg, key, name);
+    if(!e) return null;
+    // Dove il test non e' un numero il registro tiene la lettera in "t" (V/G/R
+    // della caviglia, OK/D del fisioterapista) e in "v" solo il punteggio con
+    // cui la ordina: qui serve la lettera.
+    if(e.t != null && e.t !== ''){
+      var s = String(e.t);
+      return s.toLowerCase() === 'ok' ? 'ok' : s;
+    }
+    return e.v;
+  }
+  function regRow(reg, gd, tests, name){
+    if(!reg || !gd.pre) return null;
+    var out = null;
+    (tests || []).forEach(function(t){
+      var val;
+      if(t.bil){
+        var d = regCell(reg, gd.pre + t.k + '_dx', name);
+        var s = regCell(reg, gd.pre + t.k + '_sx', name);
+        if(d == null && s == null) return;
+        val = [d, s];
+      }else{
+        val = regCell(reg, gd.pre + t.k, name);
+        if(val == null) return;
+      }
+      if(!out) out = {};
+      out[t.k] = val;
+    });
+    var xt = gd.xtra || {};
+    Object.keys(xt).forEach(function(f){
+      var v = regCell(reg, xt[f], name);
+      if(v == null) return;
+      if(!out) out = {};
+      out[f] = v;
+    });
+    return out;
+  }
+  // Il valore scritto a mano resta al suo posto: il registro entra solo dove non
+  // c'e' niente, lato per lato. Cosi' un test fatto piu' tardi su un solo lato si
+  // aggiunge senza cancellare l'altro.
+  function rowMerge(base, add){
+    if(!add) return base;
+    if(!base) return add;
+    var out = {}, k;
+    for(k in base){ if(Object.prototype.hasOwnProperty.call(base, k)) out[k] = base[k]; }
+    Object.keys(add).forEach(function(key){
+      var a = add[key], b = out[key];
+      if(Array.isArray(a)){
+        var bb = Array.isArray(b) ? b : [null, null];
+        out[key] = [ bb[0] == null || bb[0] === '' ? a[0] : bb[0],
+                     bb[1] == null || bb[1] === '' ? a[1] : bb[1] ];
+      }else if(b == null || b === ''){
+        out[key] = a;
+      }
+    });
+    return out;
+  }
+  function lvlOf(t, raw){
+    if(raw == null || raw === '') return null;
+    var s = String(raw).toLowerCase(), n;
+    if(t.sc === 'fms'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= 3 ? 'v' : (n === 2 ? 'g' : 'r');
+    }
+    if(t.sc === 'vgr'){
+      if(s === 'v') return 'v';
+      if(s === 'g') return 'g';
+      if(s === 'r') return 'r';
+      return null;
+    }
+    if(t.sc === 'okd'){
+      if(s.indexOf('d+') >= 0) return 'r';
+      if(s.charAt(0) === 'd') return 'g';
+      if(s.indexOf('ok') >= 0) return 'v';
+      return null;
+    }
+    if(t.sc === 'faber'){
+      if(s.indexOf('ok') >= 0) return 'v';
+      n = +raw; if(isNaN(n)) return null;
+      return n < 10 ? 'v' : (n <= 15 ? 'g' : 'r');
+    }
+    if(t.sc === 'rif'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= t.v ? 'v' : (n >= t.g ? 'g' : 'r');
+    }
+    return null;
+  }
+  function numOf(raw){
+    if(raw == null || raw === '') return null;
+    var n = +raw;
+    return isNaN(n) ? null : n;
+  }
+  function valTxt(t, raw){
+    if(raw == null || raw === '') return 'n/d';
+    if(t.sc === 'vgr') return String(raw).toUpperCase();
+    return String(raw);
+  }
+  // Il colore conta quanto l'asimmetria: un test rosso uguale a destra e a
+  // sinistra resta un problema anche se i due lati sono identici.
+  function evalTest(t, raw){
+    var dx, sx;
+    if(t.bil){
+      var a = Array.isArray(raw) ? raw : [null, null];
+      dx = a[0]; sx = a[1];
+    }else{ dx = raw; sx = null; }
+    var ld = lvlOf(t, dx), ls = t.bil ? lvlOf(t, sx) : null;
+    if(ld == null && ls == null) return null;
+    var def = Math.max(ld ? DEF_PT[ld] : 0, ls ? DEF_PT[ls] : 0);
+    var asym = false;
+    if(t.bil && ld && ls){
+      if(ld !== ls) asym = true;
+      else{
+        var nd = numOf(dx), ns = numOf(sx);
+        if(t.as && nd != null && ns != null && Math.abs(nd - ns) >= t.as) asym = true;
+      }
+    }
+    if(asym) def += 1;
+    var worst = (ld && ls) ? (DEF_PT[ld] >= DEF_PT[ls] ? ld : ls) : (ld || ls);
+    return {
+      t:t, asym:asym, def:def, worst:worst,
+      dx:{ txt:valTxt(t, dx), lvl:ld },
+      sx:{ txt:valTxt(t, sx), lvl:ls }
+    };
+  }
+  // `why` tiene da parte quali test hanno fatto salire un'area: senza questo la
+  // scheda dice solo "mobilita caviglia" e tocca tornare al quadro test per
+  // capire da dove arriva.
+  function analyzeTests(name, reg){
+    var T = testSet();
+    if(!T) return null;
+    if(!reg) reg = loadReg();
+    var need = {}, why = {}, groups = [], asym = [], reds = [];
+    var nRed = 0, nYel = 0, nOk = 0, defSum = 0, any = false;
+    NEED_ORDER.forEach(function(k){ need[k] = 0; why[k] = []; });
+    TEST_GROUPS.forEach(function(gd){
+      var g = T[gd.k];
+      if(!g) return;
+      var raw = rowMerge((g.v || {})[name] || null, regRow(reg, gd, g.t, name));
+      var rows = [];
+      (g.t || []).forEach(function(t){
+        var ev = raw ? evalTest(t, raw[t.k]) : null;
+        if(!ev) return;
+        rows.push(ev);
+        any = true;
+        if(ev.worst === 'r'){ nRed++; reds.push(t.n); }
+        else if(ev.worst === 'g') nYel++;
+        else nOk++;
+        if(ev.asym) asym.push(t.n);
+        if(!ev.def) return;
+        defSum += ev.def;
+        Object.keys(t.w).forEach(function(k){
+          need[k] += t.w[k] * ev.def;
+          why[k].push({ n:t.n, lvl:ev.worst, asym:ev.asym, p:t.w[k] * ev.def });
+        });
+      });
+      if(raw && (rows.length || raw.kg != null)) any = any || raw.kg != null;
+      groups.push({
+        k:gd.k, lbl:gd.lbl, data:g.data || '', rows:rows,
+        kg: raw && raw.kg != null ? raw.kg : null,
+        ckcuest: raw && raw.ckcuest != null ? raw.ckcuest : null,
+        note: raw && raw.note ? raw.note : ''
+      });
+    });
+    if(!any) return null;
+    var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
+    return { name:name, need:need, why:why, sum:sum, defSum:defSum, groups:groups,
+             asym:asym, reds:reds, nRed:nRed, nYel:nYel, nOk:nOk };
+  }
+
+  /* LA VERSIONE CORTA, PER CHI NON STA IN PREVENZIONE.
+     La scheda intera serve dentro Prevenzione. Nell'Oggi serve una riga: le due
+     aree che pesano di piu' e i test rossi, che sono quelli su cui non si passa
+     sopra. Due aree e non tutte e sette perche' una riga con sette voci non si
+     legge scendendo in campo, ed e' lo stesso taglio che la scheda usa da sempre
+     quando deve dire in due parole di cosa si tratta. */
+  function aree(name, reg){
+    var a = analyzeTests(name, reg);
+    if(!a) return null;
+    var top = NEED_ORDER.filter(function(k){ return a.need[k] > 0; })
+      .sort(function(x, y){
+        return a.need[y] - a.need[x] || NEED_ORDER.indexOf(x) - NEED_ORDER.indexOf(y);
+      })
+      .slice(0, 2)
+      .map(function(k){ return { k:k, lbl:NEED[k].lbl, p:a.need[k] }; });
+    return { name:name, top:top, reds:a.reds, asym:a.asym,
+             nRed:a.nRed, nYel:a.nYel, nOk:a.nOk,
+             data:(a.groups[0] && a.groups[0].data) || '' };
+  }
+
+  window.PREV_NEED       = NEED;
+  window.PREV_NEED_ORDER = NEED_ORDER;
+  window.prevTestSet     = testSet;
+  window.prevTestNames   = testNames;
+  window.prevTestReg     = loadReg;
+  window.prevAnalyzeTests = analyzeTests;
+  window.prevAree        = aree;
 })();
