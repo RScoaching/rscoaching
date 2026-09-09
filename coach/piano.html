@@ -459,6 +459,8 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pn b{ color:var(--ink); font-weight:600; }
 .tg-pw .pn i{ font-style:normal; color:var(--faint); }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
+.tg-pw .pm{ font-size:11px; color:var(--muted); margin:8px 0 2px; }
+.tg-pw .pm b{ color:var(--ink); font-weight:600; }
 .tg-xp{ display:flex; flex-wrap:wrap; gap:6px; }
 .tg-x{
   appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:700;
@@ -6074,10 +6076,13 @@ window.FORZA = window.FORZA || { roster:[] };
 
   /* IL PREVENTIVO DELLA SETTIMANA, LETTO STASERA.
      Sopra si sceglie cosa colpire per primo, qui torna indietro il conto: per ogni
-     voce scelta quanto chiede la settimana a tutto il gruppo, quanto ne e' arrivato
-     dal lunedi' a oggi, e i nomi di chi e' rimasta piu' indietro. I totali sono la
-     somma delle atlete in gruppo, non una media: se una e' ferma il gruppo le ha
-     comunque richiesto quei metri, e il buco va visto. */
+     voce scelta quanto chiede la settimana, quanto ne e' arrivato dal lunedi' a
+     oggi, e i nomi di chi e' rimasta piu' indietro. I numeri sono la media a testa
+     sulle atlete in gruppo, non la somma della squadra: la somma fa cifre da
+     centinaia di migliaia di metri che non si allenano e non si scrivono su una
+     seduta, la media si confronta subito con il riferimento gara di una. Chi e'
+     ferma resta comunque nel conto, perche' il preventivo le e' stato chiesto
+     uguale e il suo buco deve pesare sulla media. */
   function tgPrevHtml(g, wk){
     const met = wkPriMet();
     let html = '<div class="tg-pw">'+
@@ -6104,26 +6109,45 @@ window.FORZA = window.FORZA || { roster:[] };
         'Nessuna atleta in gruppo con il filtro attivo, non c\'e\' niente da contare.</div></div>';
     }
 
-    /* La capacita' che resta si conta sul riferimento gara del gruppo, la stessa
-       base da cui nasce il preventivo: sommo le basi delle atlete in gruppo e le
-       moltiplico per i pesi dei giorni ancora da fare. Stessa scala del bisogno,
-       quindi i due numeri si possono guardare uno accanto all'altro. */
+    /* A TESTA, NON DI SQUADRA.
+       Sommare i metri di tutta la rosa da' un numero enorme che non serve a
+       niente: duecentomila metri non si allenano, non si scrivono su una seduta e
+       non si confrontano con nessun riferimento. Il modello prestativo parla di
+       una partita di una giocatrice, e allora anche il preventivo deve parlare la
+       stessa lingua: quanto tocca a una. Da qui in giu' ogni numero e' diviso per
+       le atlete in gruppo, comprese le quote dei singoli giorni piu' sotto. */
+    const nAt = g.rows.length;
+
+    /* La capacita' che resta si conta sul riferimento gara, la stessa base da cui
+       nasce il preventivo: media delle basi delle atlete in gruppo, moltiplicata
+       per i pesi dei giorni ancora da fare. Stessa scala del bisogno, quindi i due
+       numeri si possono guardare uno accanto all'altro. */
     const gio  = tgGiorni(wk);
-    const bsum = {};
-    AT_MET.forEach(function(m){ bsum[m.k] = 0; });
+    const bmed = {};
+    AT_MET.forEach(function(m){ bmed[m.k] = 0; });
     g.rows.forEach(function(r){
-      AT_MET.forEach(function(m){ bsum[m.k] += r.base[m.k]; });
+      AT_MET.forEach(function(m){ bmed[m.k] += r.base[m.k]; });
     });
+    AT_MET.forEach(function(m){ bmed[m.k] = bmed[m.k] / nAt; });
+
+    /* Detto una volta sola e in cima: senza questa riga i numeri sotto sono
+       ambigui, e un totale letto come media (o il contrario) e' un errore di
+       carico, non una sfumatura. */
+    html += '<div class="pm">I numeri qui sotto sono la media a testa sulle <b>'+nAt+
+      '</b> '+(nAt === 1 ? 'atleta in gruppo' : 'atlete in gruppo')+
+      ', non il totale della squadra.</div>';
 
     /* Il conto per voce si fa una volta sola: lo leggono sia le barre sia il
        riparto qui sotto, e devono leggere gli stessi numeri. */
     const vc = met.map(function(m){
       let need = 0, done = 0;
       g.rows.forEach(function(r){ need += r.need[m.k]; done += Math.min(r.done[m.k], r.need[m.k]); });
+      need = need / nAt;
+      done = done / nAt;
       return {
         m:m, need:need, done:done,
         resto: Math.max(0, Math.round(need - done)),
-        cap:   Math.round(bsum[m.k] * gio.w[m.k])
+        cap:   Math.round(bmed[m.k] * gio.w[m.k])
       };
     });
 
@@ -6137,11 +6161,11 @@ window.FORZA = window.FORZA || { roster:[] };
       } else if(!gio.gg.length){
         qc = ' no';
         q  = 'Non restano sedute: questi <b>'+NF.format(resto)+'</b> '+esc(m.u)+
-             ' chiudono la settimana scoperti.';
+             ' a testa chiudono la settimana scoperti.';
       } else {
         const sta = cap >= resto;
         if(!sta) qc = ' no';
-        q = 'Ne mancano <b>'+NF.format(resto)+'</b> '+esc(m.u)+'. Le sedute che restano ne portano <b>'+
+        q = 'Ne mancano <b>'+NF.format(resto)+'</b> '+esc(m.u)+' a testa. Le sedute che restano ne portano <b>'+
             NF.format(cap)+'</b>: '+(sta
               ? 'ci sta.'
               : 'non ci sta, o si carica di piu\' o il preventivo si chiude sotto.');
@@ -6180,12 +6204,14 @@ window.FORZA = window.FORZA || { roster:[] };
        confronto con quanto quel giorno porta di suo, perche' la quota da sola non
        dice se e' una seduta normale o una fuori misura: sopra il solito la scritta
        si accende, e allora o si carica davvero di piu' o si accetta di chiudere
-       sotto. Nessun riparto quando non manca niente o quando non restano sedute:
-       li' non c'e' niente da spalmare. */
+       sotto. Anche qui si resta a testa: la quota di giovedi' e' quella che deve
+       fare una, che e' il numero con cui si scrive la seduta. Nessun riparto
+       quando non manca niente o quando non restano sedute: li' non c'e' niente da
+       spalmare. */
     const rip = vc.filter(function(v){ return v.resto > 0; });
     if(gio.gg.length && rip.length){
       html += '<div class="pd">'+
-        '<div class="t">Come si spalma quello che manca sulle sedute che restano</div>'+
+        '<div class="t">Come si spalma quello che manca sulle sedute che restano, sempre a testa</div>'+
         gio.gg.map(function(x){
           const q = rip.map(function(v){
             const k    = v.m.k;
@@ -6194,7 +6220,7 @@ window.FORZA = window.FORZA || { roster:[] };
             /* La quota del giorno e' la sua fetta di peso sul totale dei giorni
                rimasti; il solito e' quello che quel giorno porta di suo. */
             const quota = Math.round(v.resto * (+x.pes[k] || 0) / tot);
-            const solito = Math.round(bsum[k] * (+x.pes[k] || 0));
+            const solito = Math.round(bmed[k] * (+x.pes[k] || 0));
             if(quota <= 0) return '';
             /* L'avviso si accende solo da un punto percentuale in su: una quota
                che supera il solito di due metri e' il tondeggio dei conti, non
