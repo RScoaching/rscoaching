@@ -6313,10 +6313,36 @@ window.FORZA = window.FORZA || { roster:[] };
        ogni scheda ci mette dentro il proprio residuo: stessa proporzione del
        riparto di sopra, applicata al buco di quell'atleta. */
     const gio  = tgGiorni(wk);
-    const gg1  = gio.gg[0] || null;
-    const gg1L = gg1
-      ? (gg1.ds === TSTR ? 'Oggi' : esc(WD[parse(gg1.ds).getDay()]))+(gg1.md ? ' '+esc(gg1.md) : '')
-      : '';
+    /* LA PRIMA SEDUTA CHE QUEI METRI LI PUO' DAVVERO PORTARE.
+       Prendere il primo giorno rimasto e basta e' giusto solo finche' non si sa
+       cosa c'e' scritto dentro. Adesso si sa: se il venerdi' a programma e' forza,
+       pliometria e defaticamento, scrivere "venerdi le tocca 320 m sopra 23" e'
+       una consegna che quel giorno non puo' eseguire, ripetuta su quindici schede.
+       Quando le fasi non sono scritte non si salta niente: senza informazione si
+       assume la seduta di campo, che e' la normalita'. */
+    function tgCampo(x){
+      const pl = PIAN[x.ds];
+      if(!pl || !pl.min) return true;
+      return pl.campo > 0;
+    }
+    const ggU  = gio.gg.filter(tgCampo);
+    const gg1  = ggU[0] || null;
+    function tgGL(x){
+      return (x.ds === TSTR ? 'Oggi' : esc(WD[parse(x.ds).getDay()]))+(x.md ? ' '+esc(x.md) : '');
+    }
+    const gg1L = gg1 ? tgGL(gg1) : '';
+    /* Il salto si dice una volta sola qui, non dentro ogni scheda: quindici volte
+       la stessa frase seppellirebbe i numeri che dovrebbe spiegare. */
+    let salto = '';
+    if(gio.gg.length && !gg1){
+      salto = '<div class="tg-at-n">Le sedute che restano sono tutte di palestra a programma. '+
+        'Nessuna quota da scrivere: quei metri, questa settimana, o si spostano su un giorno di campo '+
+        'o si chiude sotto.</div>';
+    } else if(gg1 && gio.gg[0] && gg1.ds !== gio.gg[0].ds){
+      salto = '<div class="tg-at-n">La prima seduta che resta, '+tgGL(gio.gg[0]).toLowerCase()+
+        ', a programma e\' tutta di palestra. Le quote qui sotto sono del primo giorno che quei metri '+
+        'li puo\' portare, '+tgGL(gg1).toLowerCase()+'.</div>';
+    }
 
     let html = '<div class="tg-at">'+
       '<div class="tg-at-h">'+
@@ -6342,7 +6368,8 @@ window.FORZA = window.FORZA || { roster:[] };
           '</div>';
         }).join('')+
       '</div>'+
-      tgPrevHtml(g, wk);
+      tgPrevHtml(g, wk)+
+      salto;
 
     if(g.rows.length){
       html += '<div class="tg-at-g">'+g.rows.map(function(r){
