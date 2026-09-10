@@ -3065,7 +3065,7 @@ window.exportBuilderPDF=function(){
           let rows='';let lastCx='';
           exs.forEach(e=>{
             if(e.complexGroup&&e.complexLabel!==lastCx){
-              rows+='<tr class="cx-sep"><td colspan="'+cols+'">Complex '+esc(e.complexLabel||'A')+'</td></tr>';
+              rows+='<tr class="cx-sep"><td colspan="'+cols+'">Complesso '+esc(e.complexLabel||'A')+'</td></tr>';
               lastCx=e.complexLabel||'';
             }
             const load=[e.pct?'@'+esc(e.pct)+'%':'',e.rpe?'RPE '+esc(e.rpe):''].filter(Boolean).join(' ');
@@ -3114,6 +3114,12 @@ window.exportBuilderPDF=function(){
       +'</div>';
   });
 
+  /* Il foglio nasce in una finestra aperta al volo, che parte senza indirizzo: un
+     percorso relativo li' dentro non si risolve e lo stemma resterebbe vuoto. */
+  function pdfCrestURL(){
+    try{ return new URL('fiorentina.png', location.href).href; }catch(_e){ return 'fiorentina.png'; }
+  }
+
   const css=`
 /* Il margine e' zero. Dentro il margine il browser ci scrive di suo la riga con
    il titolo della pagina e l'indirizzo, in nero, sopra e sotto ogni foglio:
@@ -3127,28 +3133,35 @@ window.exportBuilderPDF=function(){
    finisce. Il bianco in cima e in fondo lo porta il riempimento del body. */
 @page{size:A4 portrait;margin:0 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;color:#241d17;background:#ffffff;line-height:1.45;padding:6mm 0}
+body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;color:#14110f;background:#ffffff;line-height:1.45;padding:6mm 0}
 
 /* HEADER */
-.pg-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0;padding-top:0;padding-bottom:10px;border-bottom:2px solid #E2611C}
-.brand{font-size:12px;font-weight:900;letter-spacing:3px;color:#241d17}
-.brand em{color:#E2611C;font-style:normal}
-.brand-sub{font-size:6px;color:#8a7f72;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+/* La testata era la sigla di chi ha scritto il programma, in arancione, sopra un
+   filo dello stesso colore. Chi riceve il foglio e' un'atleta della squadra: le
+   serve sapere di che squadra e' il programma, non di chi lo ha stampato. Al suo
+   posto la fascia viola con lo stemma, la stessa delle altre stampe del sito. La
+   finestra di stampa nasce vuota, quindi il percorso dell'immagine va reso
+   assoluto o non si risolve; se manca, sparisce e resta il solo nome. */
+.pg-head{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#5b2d90;color:#ffffff;padding:8px 12px;margin-bottom:0}
+.brand{display:flex;align-items:center;gap:8px}
+.brand-mark{width:26px;height:26px;object-fit:contain;flex:0 0 auto}
+.brand-name{font-size:11px;font-weight:900;letter-spacing:1.4px;color:#ffffff;text-transform:uppercase;line-height:1}
+.brand-sub{font-size:6px;color:#e4d6f4;letter-spacing:1.2px;text-transform:uppercase;margin-top:2px}
 .pg-right{text-align:right}
-.pg-prog{font-size:18px;font-weight:800;color:#241d17;letter-spacing:-.5px;line-height:1}
-.pg-meta{margin-top:5px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-.pg-m{font-size:6.5px;color:#6d6459}
-.pg-m strong{color:#241d17;font-weight:700}
-.pg-ath{font-size:6.5px;color:#6d6459;margin-top:3px;text-align:right}
-.pg-date{font-size:6px;color:#8a7f72;margin-top:3px;text-align:right}
+.pg-prog{font-size:16px;font-weight:800;color:#ffffff;letter-spacing:-.2px;line-height:1}
+.pg-meta{margin-top:4px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.pg-m{font-size:6.5px;color:#cdb4e8}
+.pg-m strong{color:#ffffff;font-weight:700}
+.pg-ath{font-size:6.5px;color:#e4d6f4;margin-top:3px;text-align:right}
+.pg-date{font-size:6px;color:#cdb4e8;margin-top:2px;text-align:right}
 
 /* TIMELINE */
-.tl{display:flex;gap:0;margin:14px 0;overflow:hidden;border-radius:5px;border:1px solid #e2dcd3}
-.tl-seg{flex:1;padding:6px 5px 5px;border-top:3px solid #e2dcd3;text-align:center;background:#faf8f4}
-.tl-seg:not(:last-child){border-right:1px solid #e2dcd3}
+.tl{display:flex;gap:0;margin:14px 0;overflow:hidden;border-radius:5px;border:1px solid #d9d2e6}
+.tl-seg{flex:1;padding:6px 5px 5px;border-top:3px solid #d9d2e6;text-align:center;background:#f7f4fb}
+.tl-seg:not(:last-child){border-right:1px solid #d9d2e6}
 .tl-w{font-size:8.5px;font-weight:900;letter-spacing:.3px}
-.tl-ph{font-size:6px;color:#6d6459;margin-top:1px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-s{font-size:5.5px;color:#8a7f72;margin-top:2px}
+.tl-ph{font-size:6px;color:#6b6472;margin-top:1px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-s{font-size:5.5px;color:#8a8395;margin-top:2px}
 
 /* WEEK BLOCK */
 /* Il riempimento del body vale solo dove il foglio comincia davvero, cioe' sulla
@@ -3156,87 +3169,91 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
    il bordo bianco in cima se lo deve portare lui: sei millimetri di riempimento,
    che sono anche l'aria fra un blocco e l'altro. */
 .wb{margin-bottom:0;padding-top:6mm;page-break-inside:avoid}
-.wh{display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:5px;background:#f7f4ef;border-radius:4px;border:1px solid #e2dcd3}
+.wh{display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:5px;background:#f7f4fb;border-radius:4px;border:1px solid #d9d2e6}
 .wh-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.wh-num{font-size:8.5px;font-weight:800;color:#241d17;letter-spacing:.3px}
+.wh-num{font-size:8.5px;font-weight:800;color:#14110f;letter-spacing:.3px}
 .wh-lbl{font-size:7.5px;font-weight:700;color:inherit}
-.wh-note{font-size:7px;color:#6d6459;font-style:italic;flex:1;padding-left:4px}
-.wh-cnt{font-size:6.5px;color:#8a7f72;margin-left:auto;white-space:nowrap}
+.wh-note{font-size:7px;color:#6b6472;font-style:italic;flex:1;padding-left:4px}
+.wh-cnt{font-size:6.5px;color:#8a8395;margin-left:auto;white-space:nowrap}
 .sw{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
 
 /* SESSION CARD */
-.sc{background:#ffffff;border:1px solid #e2dcd3;border-radius:5px;overflow:hidden;flex:1 1 220px;max-width:420px;min-width:150px;page-break-inside:avoid;break-inside:avoid}
+.sc{background:#ffffff;border:1px solid #d9d2e6;border-radius:5px;overflow:hidden;flex:1 1 220px;max-width:420px;min-width:150px;page-break-inside:avoid;break-inside:avoid}
 .sc--corsa{flex:1 1 200px;max-width:300px}
 .sc--recupero{flex:1 1 150px;max-width:240px}
 .sc--conditioning{flex:1 1 180px;max-width:300px}
-.sc-head{display:flex;align-items:center;gap:6px;padding:6px 8px 5px;border-bottom:1px solid #ece7df;background:#faf8f4}
+.sc-head{display:flex;align-items:center;gap:6px;padding:6px 8px 5px;border-bottom:1px solid #e6dff0;background:#f7f4fb}
 .sc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .sc-meta{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
-.sc-day{font-size:6px;font-weight:800;color:#6d6459;text-transform:uppercase;letter-spacing:.5px;background:#efeae2;padding:1px 4px;border-radius:3px;white-space:nowrap}
-.sc-name{font-size:8.5px;font-weight:700;color:#241d17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-day{font-size:6px;font-weight:800;color:#6b6472;text-transform:uppercase;letter-spacing:.5px;background:#e6dff0;padding:1px 4px;border-radius:3px;white-space:nowrap}
+.sc-name{font-size:8.5px;font-weight:700;color:#14110f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-tag{font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;margin-left:auto;padding-left:4px}
-.sc-snote{font-size:6.5px;color:#6d6459;font-style:italic;padding:4px 8px;background:#faf8f4;border-bottom:1px solid #ece7df}
-.empty-body{font-size:7.5px;color:#8a7f72;padding:7px 8px;font-style:italic}
-.empty-week{font-size:7.5px;color:#8a7f72;padding:9px;font-style:italic;text-align:center;border:1px dashed #d9d2c8;border-radius:5px;width:100%}
+.sc-snote{font-size:6.5px;color:#6b6472;font-style:italic;padding:4px 8px;background:#f7f4fb;border-bottom:1px solid #e6dff0}
+.empty-body{font-size:7.5px;color:#8a8395;padding:7px 8px;font-style:italic}
+.empty-week{font-size:7.5px;color:#8a8395;padding:9px;font-style:italic;text-align:center;border:1px dashed #d9d2e6;border-radius:5px;width:100%}
 
 /* EXERCISE TABLE */
 .ex-tbl{width:100%;border-collapse:collapse}
-.ex-tbl thead tr{background:#f7f4ef;border-bottom:1px solid #e2dcd3}
-.ex-tbl th{font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#74695c;padding:4px 6px;text-align:left}
+.ex-tbl thead tr{background:#f7f4fb;border-bottom:1px solid #d9d2e6}
+.ex-tbl th{font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b6472;padding:4px 6px;text-align:left}
 .ex-tbl th:nth-child(n+2){text-align:center}
-.ex-tbl td{padding:3px 6px;font-size:8px;border-bottom:1px solid #ece7df;vertical-align:top}
+.ex-tbl td{padding:3px 6px;font-size:8px;border-bottom:1px solid #e6dff0;vertical-align:top}
 .ex-tbl tbody tr:last-child td{border-bottom:none}
-.en{font-weight:600;color:#241d17}
-.nu{text-align:center;color:#4a4239;white-space:nowrap}
-.cx-sep td{background:#fbeee4;font-size:6px;font-weight:700;color:#A8480F;text-transform:uppercase;letter-spacing:.5px;padding:3px 6px}
+.en{font-weight:600;color:#14110f}
+.nu{text-align:center;color:#4a4352;white-space:nowrap}
+.cx-sep td{background:#efe7f7;font-size:6px;font-weight:700;color:#5b2d90;text-transform:uppercase;letter-spacing:.5px;padding:3px 6px}
 .cx-b{display:inline-block;font-size:6px;font-weight:800;padding:0 3px;border-radius:2px;margin-right:2px}
-.note-cell{font-size:6.5px;color:#6d6459;font-style:italic;max-width:100px;word-break:break-word}
-.note-th{text-align:left!important;color:#74695c}
+.note-cell{font-size:6.5px;color:#6b6472;font-style:italic;max-width:100px;word-break:break-word}
+.note-th{text-align:left!important;color:#6b6472}
 
 /* CONDITIONING */
 .c-cond{padding:6px 8px}
 .cond-title{font-size:8.5px;font-weight:700;margin-bottom:4px}
-.cond-row{font-size:7px;color:#4a4239;padding:2px 0;border-bottom:1px solid #ece7df}
+.cond-row{font-size:7px;color:#4a4352;padding:2px 0;border-bottom:1px solid #e6dff0}
 .cond-row:last-child{border-bottom:none}
 
 /* RUNNING - single phase */
 .c-run-single{padding:6px 8px}
 .run-z-badge{font-size:7px;font-weight:800;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-right:4px}
-.run-tipo{font-size:7.5px;font-weight:700;color:#241d17}
+.run-tipo{font-size:7.5px;font-weight:700;color:#14110f}
 .run-kv-row{display:flex;gap:12px;margin-top:6px;flex-wrap:wrap}
 .run-kv{display:flex;flex-direction:column;gap:1px}
-.kv-k{font-size:5.5px;text-transform:uppercase;letter-spacing:.5px;color:#8a7f72;font-weight:700}
-.kv-v{font-size:9px;font-weight:700;color:#241d17}
-.run-fnote{font-size:6.5px;color:#4a4239;margin-top:6px;padding-top:4px;border-top:1px solid #ece7df;white-space:pre-line;line-height:1.5}
+.kv-k{font-size:5.5px;text-transform:uppercase;letter-spacing:.5px;color:#8a8395;font-weight:700}
+.kv-v{font-size:9px;font-weight:700;color:#14110f}
+.run-fnote{font-size:6.5px;color:#4a4352;margin-top:6px;padding-top:4px;border-top:1px solid #e6dff0;white-space:pre-line;line-height:1.5}
 
 /* RUNNING - multi phase */
 .c-run-multi{padding:4px 8px}
-.rf{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:start;padding:4px 0;border-bottom:1px solid #ece7df}
+.rf{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:start;padding:4px 0;border-bottom:1px solid #e6dff0}
 .rf:last-child{border-bottom:none}
 .rf-left{display:flex;align-items:center;gap:4px;min-width:0}
 .rf-z{font-size:6.5px;font-weight:800;padding:1px 4px;border-radius:3px;letter-spacing:.3px;white-space:nowrap}
-.rf-num{font-size:6.5px;font-weight:700;color:#8a7f72;min-width:10px;text-align:center}
-.rf-tipo{font-size:7px;font-weight:600;color:#241d17;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rf-num{font-size:6.5px;font-weight:700;color:#8a8395;min-width:10px;text-align:center}
+.rf-tipo{font-size:7px;font-weight:600;color:#14110f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rf-right{display:flex;gap:6px;align-items:center;white-space:nowrap}
-.rf-kv{font-size:7px;font-weight:700;color:#241d17}
-.rf-kv.muted{font-weight:500;color:#6d6459}
-.rf-note{font-size:6px;color:#6d6459;font-style:italic;grid-column:1/-1;padding-left:0;margin-top:1px}
+.rf-kv{font-size:7px;font-weight:700;color:#14110f}
+.rf-kv.muted{font-weight:500;color:#6b6472}
+.rf-note{font-size:6px;color:#6b6472;font-style:italic;grid-column:1/-1;padding-left:0;margin-top:1px}
 .rf-intv{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:3px;padding:2px 0}
 .rf-rec{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:3px;padding:2px 0;align-items:center}
 .intv-chip{font-size:6.5px;font-weight:700;color:#0a7d52;background:#e6f5ee;padding:1px 4px;border-radius:2px}
-.rec-lbl{font-size:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a7f72;margin-right:1px}
-.rf-rec span{font-size:6.5px;color:#4a4239}
+.rec-lbl{font-size:6px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a8395;margin-right:1px}
+.rf-rec span{font-size:6.5px;color:#4a4352}
 
 /* FOOTER */
-.pg-foot{margin-top:12px;padding-top:8px;border-top:1px solid #e2dcd3;display:flex;justify-content:space-between;align-items:center;font-size:6px;color:#8a7f72}
-.pg-foot strong{color:#A8480F;font-weight:800}
+.pg-foot{margin-top:12px;padding-top:8px;border-top:1px solid #d9d2e6;display:flex;justify-content:space-between;align-items:center;font-size:6px;color:#8a8395}
+.pg-foot strong{color:#5b2d90;font-weight:800}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `;
 
   const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - RS Coaching</title><style>'+css+'</style></head><body>'
     // Header
     +'<div class="pg-head">'
-    +'<div><div class="brand">RS<em>C</em></div><div class="brand-sub">Strength &amp; Conditioning</div></div>'
+    +'<div class="brand">'
+    +'<img class="brand-mark" src="'+esc(pdfCrestURL())+'" alt="Stemma Fiorentina" onerror="this.style.display=\'none\'">'
+    +'<div><div class="brand-name">Fiorentina Primavera</div>'
+    +'<div class="brand-sub">U19 Femminile &#183; Programma</div></div>'
+    +'</div>'
     +'<div class="pg-right">'
     +'<div class="pg-prog">'+esc(p.name)+'</div>'
     +'<div class="pg-meta">'
