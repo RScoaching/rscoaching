@@ -607,11 +607,22 @@ window.FIO_STAGIONI = ['25-26', '26-27'];
 // in corso: da luglio in poi vale l'anno nuovo. Prima era fissa sulla 25/26,
 // percio' a settembre 2026 il calendario e le altre pagine aprivano sull'anno
 // vecchio e la giornata di oggi risultava senza sedute.
-window.fioStagioneOggi = function(d) {
-  d = d || new Date();
+// A quale stagione appartiene una data: luglio apre l'anno nuovo. Risponde
+// anche per stagioni che l'app non ha ancora ('24-25'), percio' serve a dire
+// se una giornata sta dentro la stagione attiva o in un'altra.
+window.fioStagioneDi = function(d) {
+  if (typeof d === 'string') {
+    var p = /^(\d{4})-(\d{2})/.exec(d);
+    if (!p) return '';
+    d = new Date(+p[1], +p[2] - 1, 1);
+  }
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
   var a = d.getFullYear() - (d.getMonth() + 1 >= 7 ? 0 : 1);
   function due(n) { n = n % 100; return (n < 10 ? '0' : '') + n; }
-  var s = due(a) + '-' + due(a + 1);
+  return due(a) + '-' + due(a + 1);
+};
+window.fioStagioneOggi = function(d) {
+  var s = window.fioStagioneDi(d || new Date());
   if (window.FIO_STAGIONI.indexOf(s) >= 0) return s;
   // Stagione non ancora prevista: si resta sull'ultima che esiste.
   return window.FIO_STAGIONI[window.FIO_STAGIONI.length - 1];

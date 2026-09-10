@@ -1290,6 +1290,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
 
   function recKey(d){ return 'r|'+d.data+'|'+(d.slot||'')+'|'+d.kind+'|'+(d.sigla||''); }
 
+  function manualDiStagione(list){
+    if(!Array.isArray(list)) return [];
+    if(!window.fioStagioneDi || !window.getStagione) return list;
+    const st = window.getStagione();
+    return list.filter(function(m){ return window.fioStagioneDi(m && m.data) === st; });
+  }
+
   // ---------- costruzione sedute (registrate + manuali) ----------
   function buildSessions(){
     const store = loadStore();
@@ -1330,7 +1337,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
       }
       return null;
     }
-    store.manual.forEach(m=>{
+    /* I blocchi scritti a mano stanno tutti nella stessa memoria, senza
+       divisione per stagione, e vanno lasciati li': cancellarli o spostarli
+       vorrebbe dire buttare via il lavoro gia' fatto. Qui si mostrano soltanto
+       quelli della stagione aperta, cosi' un programma di marzo non ricompare
+       ad agosto. Il filtro vale solo per quello che si vede: chi scrive e chi
+       cancella continua a lavorare sulla memoria intera. */
+    manualDiStagione(store.manual).forEach(m=>{
       const kind = m.kind || 'training';
       const hit = regDi(m);
       if(hit){
