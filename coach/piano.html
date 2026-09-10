@@ -4636,6 +4636,19 @@ window.FORZA = window.FORZA || { roster:[] };
   function sessLoad(){ try{ const v = JSON.parse(localStorage.getItem(SESS_KEY)); if(Array.isArray(v)) return v; }catch(e){} return []; }
   function sessSave(list){ try{ localStorage.setItem(SESS_KEY, JSON.stringify(list)); }catch(e){} }
 
+  /* Le sedute salvate stanno tutte nella stessa memoria, senza divisione per
+     anno, e vanno lasciate li': cancellarle o spostarle vorrebbe dire buttare
+     via il lavoro gia' fatto. Qui si mostrano soltanto quelle della stagione
+     aperta, cosi' una seduta di marzo non ricompare a settembre. Il filtro vale
+     solo per quello che si vede: chi salva e chi cancella continua a lavorare
+     sull'elenco intero. */
+  function sedutePerStagione(list){
+    if(!Array.isArray(list)) return [];
+    if(!window.fioStagioneDi || !window.getStagione) return list;
+    const st = window.getStagione();
+    return list.filter(function(s){ return window.fioStagioneDi(s && s.data) === st; });
+  }
+
   /* Quante si sono allenate in quella seduta: il gruppo, chi ha fatto parziale o
      differenziato e chi era su in prima squadra. Vale anche per le sedute vecchie,
      che gli stati li scrivevano part e out. */
@@ -4849,13 +4862,20 @@ window.FORZA = window.FORZA || { roster:[] };
   function renderSaved(){
     const host = document.getElementById('sv-list');
     if(!host) return;
-    const list = sessLoad();
+    const tutte = sessLoad();
+    const list = sedutePerStagione(tutte);
     // I minuti scritti a mano finiscono anche nella card "Ultima settimana":
     // se qui cambia qualcosa, li' il conto deve seguire.
     if(document.getElementById('lw-body')) renderLw();
     if(!list.length){
-      host.innerHTML = '<div class="sv-empty">Nessuna seduta salvata. Costruisci i blocchi qui sopra e premi ' +
-        '<b>Salva</b>: la seduta resta su questo dispositivo e la puoi ristampare quando vuoi.</div>';
+      host.innerHTML = tutte.length
+        ? '<div class="sv-empty">Nessuna seduta salvata in questa stagione. ' +
+          (tutte.length === 1
+            ? 'La seduta di un altro anno resta in memoria e torna visibile'
+            : 'Le ' + tutte.length + ' sedute degli altri anni restano in memoria e tornano visibili') +
+          ' cambiando stagione dal menu.</div>'
+        : '<div class="sv-empty">Nessuna seduta salvata. Costruisci i blocchi qui sopra e premi ' +
+          '<b>Salva</b>: la seduta resta su questo dispositivo e la puoi ristampare quando vuoi.</div>';
       return;
     }
     host.innerHTML = list.slice().reverse().map(function(s){
@@ -4894,8 +4914,14 @@ window.FORZA = window.FORZA || { roster:[] };
          la settimana, e un giorno vuoto in mezzo a due pieni si legge come un
          riposo che non c'e' stato. */
       const cal = calSaveToday(s.blocks);
+      /* Se la data di oggi cade in un'altra stagione la riga non compare
+         nell'elenco qui sotto, che mostra solo la stagione aperta: meglio dirlo
+         subito, altrimenti sembra che il salvataggio non sia andato a buon fine. */
+      const stS = window.fioStagioneDi ? window.fioStagioneDi(s.data) : '';
+      const stA = window.getStagione ? window.getStagione() : '';
+      const altra = (stS && stA && stS !== stA) ? ', visibile nella stagione '+stS : '';
       toast((i >= 0 ? 'Seduta di oggi aggiornata' : 'Seduta salvata')+
-        (cal ? (cal === 'nuovo' ? ', scritta anche nel calendario' : ', aggiornata anche nel calendario') : ''));
+        (cal ? (cal === 'nuovo' ? ', scritta anche nel calendario' : ', aggiornata anche nel calendario') : '')+altra);
     });
 
     const bp = document.getElementById('bld-print');
@@ -4940,7 +4966,7 @@ window.FORZA = window.FORZA || { roster:[] };
   let YD_OPEN = -1;
 
   function ydFind(){
-    const list = sessLoad();
+    const list = sedutePerStagione(sessLoad());
     let first = null;
     for(let k=1; k<=YD_BACK; k++){
       const d = new Date(NOW); d.setDate(d.getDate()-k);
@@ -5206,7 +5232,7 @@ window.FORZA = window.FORZA || { roster:[] };
     const inWin = {};
     cur.forEach(function(x){ inWin[x.ds] = 1; });
     let minTot = 0;
-    sessLoad().forEach(function(s){
+    sedutePerStagione(sessLoad()).forEach(function(s){
       if(!inWin[s.data]) return;
       (s.blocks || []).forEach(function(b){ minTot += (+b.min || 0); });
     });
