@@ -603,10 +603,23 @@ window.markActiveNav = function(pageId) {
 
 // Stagione attiva (condivisa fra tutte le pagine, persistita solo su questo dispositivo).
 window.FIO_STAGIONI = ['25-26', '26-27'];
+// Su un dispositivo dove nessuno ha ancora scelto, la stagione parte da quella
+// in corso: da luglio in poi vale l'anno nuovo. Prima era fissa sulla 25/26,
+// percio' a settembre 2026 il calendario e le altre pagine aprivano sull'anno
+// vecchio e la giornata di oggi risultava senza sedute.
+window.fioStagioneOggi = function(d) {
+  d = d || new Date();
+  var a = d.getFullYear() - (d.getMonth() + 1 >= 7 ? 0 : 1);
+  function due(n) { n = n % 100; return (n < 10 ? '0' : '') + n; }
+  var s = due(a) + '-' + due(a + 1);
+  if (window.FIO_STAGIONI.indexOf(s) >= 0) return s;
+  // Stagione non ancora prevista: si resta sull'ultima che esiste.
+  return window.FIO_STAGIONI[window.FIO_STAGIONI.length - 1];
+};
 window.getStagione = function() {
   var s = null;
   try { s = localStorage.getItem('fio_stagione'); } catch (e) {}
-  return (window.FIO_STAGIONI.indexOf(s) >= 0) ? s : '25-26';
+  return (window.FIO_STAGIONI.indexOf(s) >= 0) ? s : window.fioStagioneOggi();
 };
 window.setStagione = function(v) {
   if (window.FIO_STAGIONI.indexOf(v) < 0) return;
