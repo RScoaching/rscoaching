@@ -981,6 +981,18 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     catch(e){ return []; }
   }
   function saveManual(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch(e){} }
+  /* Le esercitazioni scritte a mano stanno tutte nella stessa memoria, senza
+     divisione per anno, e vanno lasciate li': cancellarle o spostarle vorrebbe
+     dire buttare via il lavoro gia' fatto. Qui si tengono soltanto quelle della
+     stagione aperta, perche' una riga scritta a marzo apriva a settembre una
+     seduta fantasma con la data vecchia. Il filtro vale solo per quello che si
+     vede: chi scrive e chi cancella continua a lavorare sull'elenco intero. */
+  function manualDiStagione(list){
+    if(!Array.isArray(list)) return [];
+    if(typeof window.fioStagioneDi !== 'function' || typeof window.getStagione !== 'function') return list;
+    const st = window.getStagione();
+    return list.filter(function(m){ return window.fioStagioneDi(m && m.date) === st; });
+  }
 
   // ---------- dettagli a mano della singola esercitazione ----------
   // step, serie per ripetizioni, metraggi, recupero, note. Salvati su questo
@@ -1133,7 +1145,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           load:d.load||null, n:d.n||0, atlete:d.atlete||null, i:i }))
       });
     });
-    loadManual().forEach(m=>{
+    manualDiStagione(loadManual()).forEach(m=>{
       const key = m.date+'|'+m.slot;
       let s = map.get(key);
       if(!s){ s = { date:m.date, slot:m.slot, kind:'', load:null, planned:true, drills:[],
