@@ -3243,7 +3243,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
                   '" type="number" min="0" max="10" step="0.5" inputmode="decimal" data-l="'+esc(r.label)+
                   '" data-mk="'+esc(rmk)+
                   '" value="'+(got.v==null ? '' : got.v)+'" aria-label="RPE della seduta '+esc(txt)+'"'+
-                  (got.v!=null && !got.own ? ' title="Preso dall\'RPE scritto sulla squadra"' : '')+'></td>'+
+                  (got.from ? ' title="'+esc(got.from)+'"' : '')+'></td>'+
                   '<td class="num tnum rpe-c key">'+(tl==null ? '-' : fmtLoad(tl))+'</td>';
         }
         else if(r.type==='tot_train') body += totRpe(aT);
@@ -3299,7 +3299,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         'Sui totali l\'RPE non e\' una somma ma la media pesata sui minuti. '+
         (state.level==='team'
           ? 'Sei sulla squadra: quello che scrivi qui vale anche per ogni atleta che non ha un numero suo.'
-          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra: scrivici sopra per mettere quello di '+esc(disp(state.player||''))+'.')+
+          : 'I numeri col bordo tratteggiato arrivano dall\'RPE scritto sulla squadra o dal report della nazionale: scrivici sopra per mettere quello di '+esc(disp(state.player||''))+'.')+
         ' Sedute '+dove+': '+nSed+', con RPE: '+nRpe+'. I numeri restano su questo dispositivo e non toccano i file dei dati.';
     }
   }
@@ -3316,17 +3316,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function rpeSave(o){ try{ localStorage.setItem(RPE_KEY, JSON.stringify(o)); }catch(e){} }
   function rpeKeyOf(mk, scope, label){ return mk+'||'+scope+'||'+label; }
+  // l'RPE del report della nazionale sta nei dati, non qui dentro: e' gia' misurato,
+  // quindi vale solo dove il mister non ha scritto niente di suo
+  function rpeNaz(mk, scope, label){
+    const m = S && S.rpe_naz;
+    if(!m || scope === '_squadra') return null;
+    const v = m[mk+'||'+scope+'||'+label];
+    return (typeof v === 'number') ? v : null;
+  }
   // il numero scritto sulla singola atleta vince; se non c'e' vale quello scritto sulla squadra,
   // cosi' l'RPE di una seduta si puo' battere una volta sola e resta buono per tutte
   function rpeOf(mk, label){
     const o = rpeAll(), sc = rpeScope();
     const mine = o[rpeKeyOf(mk, sc, label)];
-    if(typeof mine === 'number') return { v:mine, own:true };
+    if(typeof mine === 'number') return { v:mine, own:true, from:'' };
     if(sc !== '_squadra'){
       const t = o[rpeKeyOf(mk, '_squadra', label)];
-      if(typeof t === 'number') return { v:t, own:false };
+      if(typeof t === 'number') return { v:t, own:false, from:'Preso dall\'RPE scritto sulla squadra' };
+      const n = rpeNaz(mk, sc, label);
+      if(n != null) return { v:n, own:false, from:'Arriva dal report della nazionale' };
     }
-    return { v:null, own:true };
+    return { v:null, own:true, from:'' };
   }
   function rpeSet(mk, label, v){
     const o = rpeAll(), k = rpeKeyOf(mk, rpeScope(), label);
