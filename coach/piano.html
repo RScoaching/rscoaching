@@ -1732,13 +1732,22 @@ window.FORZA = window.FORZA || { roster:[] };
      diceva che non restava niente da fare e dava per persi metri che invece
      hanno ancora tre allenamenti davanti. Qui si legge anche il secondo strato,
      dalla stessa chiave che scrive la pagina Calendario, cosi' quello che si e'
-     messo li' vale anche qui. Le gare non entrano: quelle le sa gia' matchSet,
-     che legge anche le partite in programma. I riposi nemmeno, ed e' il loro
-     senso: un giorno di riposo non e' capacita' di allenamento. */
+     messo li' vale anche qui. Le gare scritte a mano non sono sedute e quindi
+     non entrano in PIAN, ma vanno raccolte lo stesso: la gara della domenica
+     messa nel Calendario e' l'unica fonte che il GPS non ha (il file arriva il
+     giorno dopo) e che il calendario statico non ha (le amichevoli non ci sono
+     mai). Senza quel passaggio il microciclo non trovava l'MD e il piano della
+     settimana scalava i giorni a stima invece di contarli sulla gara vera.
+     Finiscono in PIAN_M, che buildMatches() fonde con le altre fonti. Il tipo si
+     conserva perche' serve a distinguere amichevole da campionato e coppa.
+     I riposi non entrano da nessuna parte, ed e' il loro senso: un giorno di
+     riposo non e' capacita' di allenamento. */
   const LS_CAL = 'rs_fio_calendario';
   let PIAN = {};
+  let PIAN_M = {};
   function pianLoad(){
     PIAN = {};
+    PIAN_M = {};
     let s = null;
     try{ s = JSON.parse(localStorage.getItem(LS_CAL) || 'null'); }catch(e){}
     const man = (s && Array.isArray(s.manual)) ? s.manual : [];
@@ -1746,7 +1755,10 @@ window.FORZA = window.FORZA || { roster:[] };
       if(!m || !m.data) return;
       const kind = String(m.kind || 'training');
       const tipo = String(m.type || '');
-      if(kind === 'match' || kind === 'amichevole') return;
+      if(kind === 'match' || kind === 'amichevole'){
+        PIAN_M[String(m.data)] = tipo || (kind === 'amichevole' ? 'amichevole' : 'gara');
+        return;
+      }
       if(kind === 'riposo' || tipo === 'riposo') return;
       const ds = String(m.data);
       let o = PIAN[ds];
@@ -1818,6 +1830,14 @@ window.FORZA = window.FORZA || { roster:[] };
   function buildMatches(){
     matchSet = {};
     Object.keys(calMatch).forEach(function(ds){
+      if(MC_DAY[ds] && MC_DAY[ds] !== 'MD') return;
+      matchSet[ds] = 1;
+    });
+    /* Le gare scritte a mano nel Calendario valgono come le altre: stessa regola
+       di rispetto dell'override manuale del microciclo. Stanno qui dentro e non
+       fuori perche' buildMatches() viene richiamata dopo ogni modifica, e una
+       fusione fatta una volta sola all'avvio sparirebbe al primo ricalcolo. */
+    Object.keys(PIAN_M).forEach(function(ds){
       if(MC_DAY[ds] && MC_DAY[ds] !== 'MD') return;
       matchSet[ds] = 1;
     });
