@@ -466,6 +466,41 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-pw .pv{ font-size:11px; color:var(--muted); margin-top:8px; }
 .tg-pw .pm{ font-size:11px; color:var(--muted); margin:8px 0 2px; }
 .tg-pw .pm b{ color:var(--ink); font-weight:600; }
+
+/* il piano della settimana: quanto si vuole fare in tutto e come si spalma sui giorni */
+.tg-wk{ margin-top:13px; background:var(--surface2); border:1px solid var(--border);
+  border-radius:var(--r); padding:12px 14px 11px; }
+.tg-wk .hh{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px; }
+.tg-wk .hh b{ font-size:12.5px; font-weight:700; color:var(--ink); }
+.tg-wk .hh span{ font-size:11px; color:var(--faint); }
+.tg-wk .sc{ margin-top:10px; overflow-x:auto; }
+.tg-wkt{ border-collapse:collapse; width:100%; min-width:540px; }
+.tg-wkt th, .tg-wkt td{ padding:6px 8px; text-align:center; border-bottom:1px solid var(--border); }
+.tg-wkt th{ font-size:10.5px; font-weight:600; color:var(--faint); white-space:nowrap; }
+.tg-wkt th i{ display:block; font-style:normal; font-weight:400; font-size:10px;
+  color:var(--faint); margin-top:2px; }
+.tg-wkt th.d, .tg-wkt td.d{ text-align:left; white-space:nowrap; }
+.tg-wkt td.d{ font-size:11.5px; color:var(--text); }
+.tg-wkt td.d i{ display:block; font-style:normal; font-size:10px; color:var(--faint); margin-top:2px; }
+.tg-wkt tr.tot td{ background:var(--ember-bg); }
+.tg-wkt tr.tot td.d{ font-weight:700; color:var(--ink); }
+.tg-wkt tr.oggi td.d{ color:var(--orange2); font-weight:700; }
+.tg-wkt tr.off td{ font-size:11px; color:var(--faint); }
+.tg-wkt tr.sum td{ font-size:11px; color:var(--muted); border-bottom:none; padding-top:8px; }
+.tg-wkt tr.sum td.d{ font-weight:600; color:var(--ink); }
+.tg-wkt tr.sum td b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+.tg-wkt tr.sum td.no b{ color:var(--orange2); }
+.tg-wkt tr.sum td em{ font-style:normal; font-size:10px; color:var(--faint); }
+.tg-wkn{ width:74px; text-align:center; font-family:inherit; font-size:12px;
+  font-variant-numeric:tabular-nums; color:var(--ink); background:var(--surface);
+  border:1px solid var(--border2); border-radius:8px; padding:5px 6px; min-height:30px; }
+.tg-wkn:focus{ outline:none; border-color:var(--orange); }
+.tg-wkn.man{ border-color:var(--ember-border); background:var(--ember-bg); }
+.tg-wk .fo{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin-top:11px; }
+.tg-wk .fo p{ flex:1 1 260px; margin:0; font-size:11px; color:var(--muted); }
+.tg-wk .no{ font-size:11.5px; color:var(--muted); margin:10px 0 0; }
+.tg-wk .no a{ color:var(--orange2); }
+
 .tg-xp{ display:flex; flex-wrap:wrap; gap:6px; }
 .tg-x{
   appearance:none; cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:700;
@@ -1269,6 +1304,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
           <div class="tg-note" id="tg-note"></div>
           <div class="tg-grid" id="tg-grid"></div>
           <div id="tg-drills"></div>
+          <div id="tg-week"></div>
           <div id="tg-atl"></div>
           <div id="tg-alert"></div>
           <div class="tg-foot" id="tg-foot"></div>
@@ -5439,10 +5475,32 @@ window.FORZA = window.FORZA || { roster:[] };
         (n?'<span class="n">'+n+'</span>':'')+'</button>';
     }).join('');
 
+    // Se oggi a calendario non c'e' niente, gli obiettivi di giornata non hanno senso:
+    // la card lo dice e manda al piano della settimana, che e' il lavoro del giorno libero.
+    const vuoto = (state === 'rest' || state === 'off');
+
     const plan = MD_PLAN[TG_MDK] || null;
-    document.getElementById('tg-day').innerHTML =
-      '<span class="md">'+esc(TG_MDK || 'Giorno tipo')+'</span>'+
-      '<span class="tit">'+esc(plan ? plan.tit : 'nessuna gara vicina a calendario')+'</span>';
+    document.getElementById('tg-day').innerHTML = vuoto
+      ? '<span class="md">Oggi</span><span class="tit">niente a calendario</span>'
+      : '<span class="md">'+esc(TG_MDK || 'Giorno tipo')+'</span>'+
+        '<span class="tit">'+esc(plan ? plan.tit : 'nessuna gara vicina a calendario')+'</span>';
+
+    if(vuoto){
+      document.getElementById('tg-note').textContent =
+        'Oggi non c\'e\' ne\' seduta ne\' gara a calendario, quindi non ci sono obiettivi di giornata da colpire'+
+        tgProx()+'. Un giorno libero serve a decidere cosa deve dare la settimana: il piano qui sotto parte '+
+        'dalla gara del ruolo e lo spalma sui giorni gia\' scritti.';
+      document.getElementById('tg-grid').innerHTML = '';
+      document.getElementById('tg-drills').innerHTML = '';
+      renderWeek();
+      renderAtlete();
+      renderAlert();
+      document.getElementById('tg-foot').textContent =
+        'Riferimento: media delle gare di campionato chiuse sui 90 minuti (almeno '+TG_MIN+
+        ' rilevati) nella stagione '+TG_STAG+', '+(ref.n||0)+' prestazioni'+
+        (TG_ROLE === 'Squadra' ? ' di tutti i ruoli di movimento' : ' del ruolo')+'.';
+      return;
+    }
 
     let note;
     if(TG_MDK === 'MD'){
@@ -5474,6 +5532,7 @@ window.FORZA = window.FORZA || { roster:[] };
     }).join('');
 
     renderDrills();
+    renderWeek();
     renderAtlete();
     renderAlert();
 
@@ -5672,6 +5731,244 @@ window.FORZA = window.FORZA || { roster:[] };
       localStorage.setItem(WKX_KEY, JSON.stringify(WKX));
       localStorage.setItem(WKX_P_KEY, JSON.stringify(WKX_P));
     }catch(e){}
+  }
+
+  /* ================= IL PIANO DELLA SETTIMANA =================
+     Il lunedi' e' giorno libero e primo giorno del microciclo: e' li' che si decide
+     cosa deve dare la settimana, non il martedi' mattina davanti al gruppo gia' in
+     campo. Il totale di partenza esce dalla gara del ruolo moltiplicata per le volte
+     che la si vuole rifare in settimana (il moltiplicatore scelto poco sopra): due
+     volte e mezzo la gara sopra i 23 km/h vuol dire circa 250 m, due volte la fascia
+     20-23 vuol dire circa 500 m, e lo stesso vale per distanza, accelerazioni e
+     decelerazioni.
+     Poi quel totale va spalmato, e qui sta la parte che contava davvero: non si
+     divide in parti uguali fra i giorni. Se servono 200 m sopra i 23 non si fanno
+     50 e 50 e 50 e 50, si parte piano il primo giorno, si carica nel giorno lontano
+     dalla gara e si scarica avvicinandosi. Il riparto usa il peso che ogni giorno ha
+     nel microciclo, voce per voce: MD-3 vale 1,10 sopra i 23 mentre MD-1 vale 0,20,
+     quindi il giorno dello sprint prende quasi sei volte i metri della rifinitura.
+     Sui totali della distanza il rapporto e' quasi piatto, perche' i chilometri si
+     fanno tutti i giorni, e va bene cosi'.
+     I giorni sono quelli scritti a calendario, non sette caselle fisse: se martedi'
+     non c'e' niente, martedi' non entra nel riparto e i suoi metri vanno agli altri.
+     Ogni casella si puo' riscrivere a mano, totale compreso, e quello che si scrive
+     resta: la riga in fondo dice se la somma dei giorni sta ancora dentro il totale
+     o se si e' sforato. Tutto vale per una settimana sola, la chiave e' il lunedi'. */
+  const WKG_KEY = K('rs_fio_wkgoal');
+  const WKG_LUN = dstr(mondayOf(NOW));
+
+  function wkgNum(v){
+    const n = Number(v);
+    return (isFinite(n) && n > 0) ? Math.round(n) : 0;
+  }
+
+  function wkgLoad(){
+    let o = null;
+    try{ o = JSON.parse(localStorage.getItem(WKG_KEY) || '{}'); }catch(e){ o = null; }
+    return (o && typeof o === 'object') ? o : {};
+  }
+  let WKG_ALL = wkgLoad();
+
+  function wkgSave(){
+    try{
+      const ks = Object.keys(WKG_ALL).sort();
+      while(ks.length > 12){ delete WKG_ALL[ks.shift()]; }
+      localStorage.setItem(WKG_KEY, JSON.stringify(WKG_ALL));
+    }catch(e){}
+  }
+
+  // Il foglio della settimana corrente per il ruolo scelto. make dice se crearlo.
+  function wkgCur(make){
+    let w = WKG_ALL[WKG_LUN];
+    if(!w){ if(!make) return null; w = WKG_ALL[WKG_LUN] = {}; }
+    let r = w[TG_ROLE];
+    if(!r){ if(!make) return null; r = w[TG_ROLE] = { tot:{}, day:{} }; }
+    if(!r.tot || typeof r.tot !== 'object') r.tot = {};
+    if(!r.day || typeof r.day !== 'object') r.day = {};
+    return r;
+  }
+
+  // I sette giorni da lunedi' a domenica, letti dal calendario e dai GPS gia' scaricati.
+  function wkgDays(){
+    const lun = mondayOf(NOW);
+    const out = [];
+    for(let i = 0; i < 7; i++){
+      const d = new Date(lun); d.setDate(lun.getDate() + i);
+      const ds   = dstr(d);
+      const gara = !!matchSet[ds];
+      const row  = byDate[ds] || null;
+      const pian = PIAN[ds] || null;
+      out.push({
+        ds: ds, d: d, wd: WD[d.getDay()], md: mdOf(ds),
+        gara: gara, row: row, pian: pian,
+        lav: !gara && !!(row || pian),
+        oggi: ds === TSTR, pass: ds < TSTR, fatto: !!row,
+        mdw: '', sti: false
+      });
+    }
+    /* Il peso del giorno ha bisogno di una posizione nel microciclo. Quando la gara
+       non e' ancora scritta a calendario quella posizione non c'e', e senza di lei
+       tutti i giorni finirebbero con lo stesso peso: la settimana spalmata in parti
+       uguali, che e' esattamente il modo sbagliato di dare 200 m sopra i 23. Allora
+       si conta all'indietro dai giorni di lavoro, come se la gara fosse subito dopo
+       l'ultimo: l'ultimo diventa MD-1, quello prima MD-2 e via fino a MD-5. E' una
+       stima, e si dice che lo e'. */
+    const lav = out.filter(function(g){ return g.lav; });
+    lav.forEach(function(g, i){
+      if(TG_MD[g.md]){ g.mdw = g.md; return; }
+      g.mdw = 'MD-' + Math.min(5, Math.max(1, lav.length - i));
+      g.sti = true;
+    });
+    out.forEach(function(g){ if(!g.mdw) g.mdw = g.md; });
+    return out;
+  }
+
+  // Il totale di settimana per una voce: quello scritto a mano se c'e', se no la
+  // gara del ruolo per il moltiplicatore scelto.
+  function wkgTot(m, ref){
+    const r   = wkgCur(false);
+    const man = r ? wkgNum(r.tot[m.k]) : 0;
+    if(man > 0) return { v: man, man: true };
+    const base = +ref[m.k] || 0;
+    return { v: tgRound(base * wkxOf('', m.k), m.step), man: false };
+  }
+
+  // Il riparto sui giorni di lavoro, con il peso che ogni giorno ha nel microciclo.
+  function wkgSplit(m, gg, tot){
+    const r   = wkgCur(false);
+    const lav = gg.filter(function(g){ return g.lav; });
+    let peso = 0;
+    lav.forEach(function(g){
+      const c = TG_MD[g.mdw] || TG_GEN;
+      peso += (+c[m.k] || 0);
+    });
+    const val = {};
+    let somma = 0;
+    lav.forEach(function(g){
+      const d   = (r && r.day[g.ds]) ? r.day[g.ds] : null;
+      const man = d ? wkgNum(d[m.k]) : 0;
+      let v = 0;
+      if(man > 0){
+        v = man;
+      } else if(peso > 0){
+        const c = TG_MD[g.mdw] || TG_GEN;
+        v = tgRound(tot * (+c[m.k] || 0) / peso, m.step);
+      }
+      val[g.ds] = { v: v, man: man > 0 };
+      somma += v;
+    });
+    return { val: val, somma: somma, lav: lav };
+  }
+
+  // Cosa c'e' scritto dopo oggi, per non lasciare la card vuota senza una via d'uscita.
+  function tgProx(){
+    for(let i = 1; i <= 14; i++){
+      const d = new Date(NOW); d.setDate(NOW.getDate() + i);
+      const ds = dstr(d);
+      if(matchSet[ds]) return ', la prossima cosa a calendario e\' la gara di ' + WD[d.getDay()] + ' ' + itShort(d);
+      if(PIAN[ds] || byDate[ds]) return ', la prossima seduta scritta e\' ' + WD[d.getDay()] + ' ' + itShort(d);
+    }
+    return '';
+  }
+
+  function renderWeek(){
+    const box = document.getElementById('tg-week');
+    if(!box) return;
+
+    const ref = TG_REF[TG_ROLE] || TG_REF['Squadra'];
+    const gg  = wkgDays();
+    const lav = gg.filter(function(g){ return g.lav; });
+    const lun = mondayOf(NOW);
+    const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+    const per = itShort(lun) + ' - ' + itShort(dom);
+
+    if(!lav.length){
+      box.innerHTML =
+        '<div class="tg-wk">'+
+          '<div class="hh"><b>Il piano della settimana</b><span>'+esc(per)+'</span></div>'+
+          '<p class="no">Nessuna seduta scritta a calendario in questa settimana: senza giorni di lavoro '+
+          'non c\'e\' niente da spalmare. Scrivi le sedute in <a href="calendario.html">Calendario</a> '+
+          'e il piano si compila da solo.</p>'+
+        '</div>';
+      return;
+    }
+
+    const tot = {};
+    const spl = {};
+    TG_METRICS.forEach(function(m){ tot[m.k] = wkgTot(m, ref); });
+    TG_METRICS.forEach(function(m){ spl[m.k] = wkgSplit(m, gg, tot[m.k].v); });
+
+    let h = '<div class="tg-wk">'+
+      '<div class="hh"><b>Il piano della settimana</b><span>'+esc(per)+'</span>'+
+      '<span>'+esc(TG_ROLE === 'Squadra' ? 'media di squadra' : TG_ROLE.toLowerCase())+'</span>'+
+      '<span>'+lav.length+' '+(lav.length === 1 ? 'giorno di lavoro' : 'giorni di lavoro')+'</span></div>'+
+      '<div class="sc"><table class="tg-wkt"><thead><tr><th class="d">Giorno</th>'+
+      TG_METRICS.map(function(m){
+        return '<th>'+esc(m.lbl)+'<i>'+esc(wkxLbl(wkxOf('', m.k)))+' la gara</i></th>';
+      }).join('')+
+      '</tr></thead><tbody>';
+
+    h += '<tr class="tot"><td class="d">Totale settimana<i>modificabile</i></td>'+
+      TG_METRICS.map(function(m){
+        const t = tot[m.k];
+        return '<td><input class="tg-wkn'+(t.man ? ' man' : '')+'" type="number" min="0" step="'+m.step+'"'+
+          ' data-wk="'+m.k+'" data-ds="tot" value="'+t.v+'"'+
+          ' aria-label="Totale settimana '+esc(m.lbl)+'"></td>';
+      }).join('')+'</tr>';
+
+    gg.forEach(function(g){
+      const nom = g.wd.charAt(0).toUpperCase() + g.wd.slice(1) + ' ' + g.d.getDate();
+      if(!g.lav){
+        let che;
+        if(g.gara) che = 'si gioca';
+        else if(g.oggi) che = 'niente a calendario';
+        else che = 'libero';
+        h += '<tr class="off'+(g.oggi ? ' oggi' : '')+'">'+
+          '<td class="d">'+esc(nom)+'<i>'+esc(g.md || 'fuori microciclo')+'</i></td>'+
+          '<td colspan="'+TG_METRICS.length+'">'+esc(che)+'</td></tr>';
+        return;
+      }
+      h += '<tr'+(g.oggi ? ' class="oggi"' : '')+'>'+
+        '<td class="d">'+esc(nom)+
+        '<i>'+esc(g.mdw || 'giorno tipo')+(g.sti ? ' stimato' : '')+
+        (g.fatto ? ' &#183; gia\' fatto' : (g.pass ? ' &#183; passato' : ''))+'</i></td>'+
+        TG_METRICS.map(function(m){
+          const c = spl[m.k].val[g.ds] || { v:0, man:false };
+          return '<td><input class="tg-wkn'+(c.man ? ' man' : '')+'" type="number" min="0" step="'+m.step+'"'+
+            ' data-wk="'+m.k+'" data-ds="'+g.ds+'" value="'+c.v+'"'+
+            ' aria-label="'+esc(nom)+' '+esc(m.lbl)+'"></td>';
+        }).join('')+'</tr>';
+    });
+
+    h += '<tr class="sum"><td class="d">Somma dei giorni</td>'+
+      TG_METRICS.map(function(m){
+        const s = spl[m.k].somma;
+        const t = tot[m.k].v;
+        const df = s - t;
+        const no = Math.abs(df) > Math.max(m.step, t * 0.05);
+        return '<td class="'+(no ? 'no' : '')+'"><b>'+NF.format(s)+'</b>'+
+          (df ? '<em><br>'+(df > 0 ? 'sopra di ' : 'sotto di ')+NF.format(Math.abs(df))+'</em>' : '')+
+          '</td>';
+      }).join('')+'</tr>';
+
+    h += '</tbody></table></div>';
+
+    let man = false;
+    TG_METRICS.forEach(function(m){
+      if(tot[m.k].man) man = true;
+      lav.forEach(function(g){
+        const c = spl[m.k].val[g.ds];
+        if(c && c.man) man = true;
+      });
+    });
+
+    h += '<div class="fo"><p>I totali partono dalla gara del ruolo per il moltiplicatore scelto qui sopra, '+
+      'e si spalmano sui soli giorni scritti a calendario con il peso che ogni giorno ha nel microciclo: '+
+      'il giorno dello sprint prende molto piu\' dei metri della rifinitura. Cambia una casella e resta quella.</p>'+
+      (man ? '<button type="button" class="tg-x" data-wkrst="1">Torna ai numeri calcolati</button>' : '')+
+      '</div></div>';
+
+    box.innerHTML = h;
   }
 
   /* LE VOCI DA COLPIRE PER PRIME IN SETTIMANA.
@@ -6775,6 +7072,37 @@ window.FORZA = window.FORZA || { roster:[] };
       TG_OPEN = (TG_OPEN === k) ? '' : k;
       renderTargets();
     });
+
+    // Il piano della settimana: ogni casella riscritta a mano resta com'e' stata
+    // scritta, e il bottone rimette i numeri calcolati per il ruolo aperto.
+    const week = document.getElementById('tg-week');
+    if(week){
+      week.addEventListener('change', function(ev){
+        const inp = ev.target.closest ? ev.target.closest('.tg-wkn') : null;
+        if(!inp) return;
+        const k  = inp.getAttribute('data-wk');
+        const ds = inp.getAttribute('data-ds');
+        if(!k || !ds) return;
+        const r = wkgCur(true);
+        const v = wkgNum(inp.value);
+        if(ds === 'tot'){
+          if(v > 0) r.tot[k] = v; else delete r.tot[k];
+        }else{
+          if(!r.day[ds]) r.day[ds] = {};
+          if(v > 0) r.day[ds][k] = v; else delete r.day[ds][k];
+          if(!Object.keys(r.day[ds]).length) delete r.day[ds];
+        }
+        wkgSave();
+        renderWeek();
+      });
+      week.addEventListener('click', function(ev){
+        const b = ev.target.closest ? ev.target.closest('[data-wkrst]') : null;
+        if(!b) return;
+        if(WKG_ALL[WKG_LUN]) delete WKG_ALL[WKG_LUN][TG_ROLE];
+        wkgSave();
+        renderWeek();
+      });
+    }
 
     // Le scelte su quante volte la gara: le pillole di squadra, quelle della singola
     // atleta e il pulsante che apre la sua scheda. Tutto qui dentro perche' il blocco
