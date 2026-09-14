@@ -5853,31 +5853,182 @@ window.FORZA = window.FORZA || { roster:[] };
     return { v: tgRound(base * wkxOf('', m.k), m.step), man: false };
   }
 
-  // Il riparto sui giorni di lavoro, con il peso che ogni giorno ha nel microciclo.
-  function wkgSplit(m, gg, tot){
-    const r   = wkgCur(false);
-    const lav = gg.filter(function(g){ return g.lav; });
-    let peso = 0;
-    lav.forEach(function(g){
-      const c = TG_MD[g.mdw] || TG_GEN;
-      peso += (+c[m.k] || 0);
+  /* QUELLO CHE E' STATO FATTO DAVVERO, GIORNO PER GIORNO.
+     Il piano scritto lunedi' e' una previsione, e una previsione dura fino al primo
+     allenamento. Se il martedi' esce meglio del preventivo i giorni dopo devono
+     calare, se esce scarso quei metri vanno riportati avanti: e' esattamente il
+     lavoro che un preparatore fa a mano il mercoledi' mattina guardando il file.
+     Per farlo serve il misurato, e il misurato non sta in `byDate`, che dallo
+     snapshot del calendario porta solo il carico complessivo del giorno. Sta nei
+     file delle esercitazioni, riga Full Training dell'atleta quando c'e' e somma
+     delle sue esercitazioni quando manca, piu' le righe del lavoro fuori squadra
+     ("4AM diff", "12AM FT") che nel file di gruppo non compaiono. Sono le stesse
+     due fonti che legge la card atleta per atleta, lette per giorno invece che per
+     settimana. La lettura grezza e' per nome e non dipende dal ruolo scelto, cosi'
+     si fa una volta sola e cambiando ruolo si rifa' solo la media. */
+  let WKG_RAW = null;
+  function wkgRaw(){
+    if(WKG_RAW) return WKG_RAW;
+    const out = {};
+    const lun = mondayOf(NOW);
+    const dm  = new Date(lun); dm.setDate(lun.getDate() + 6);
+    const d0  = dstr(lun);
+    const d1  = dstr(dm);
+
+    const add = function(ds, name, arr, ix){
+      let d = out[ds];
+      if(!d) d = out[ds] = {};
+      let p = d[name];
+      if(!p){ p = d[name] = {}; AT_MET.forEach(function(m){ p[m.k] = 0; }); }
+      AT_MET.forEach(function(m){
+        const v = ix[m.k] >= 0 ? Number(arr[ix[m.k]]) : NaN;
+        if(!isNaN(v)) p[m.k] += v;
+      });
+    };
+
+    const E    = window.ESERC;
+    const cols = (E && Array.isArray(E.load_cols)) ? E.load_cols : [];
+    if(E && Array.isArray(E.sessions) && cols.length){
+      const ix = {};
+      AT_MET.forEach(function(m){ ix[m.k] = cols.indexOf(m.col); });
+      E.sessions.forEach(function(s){
+        const d = String(s.date || '');
+        if(d < d0 || d > d1) return;
+        const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
+        const vis = {};
+        Object.keys(ft).forEach(function(n){ vis[n] = 1; add(d, n, ft[n], ix); });
+        (s.drills || []).forEach(function(dr){
+          if(dr.dup) return;
+          const a = dr.atlete || {};
+          Object.keys(a).forEach(function(n){ if(!vis[n]) add(d, n, a[n], ix); });
+        });
+      });
+    }
+
+    const P  = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+    const MF = (window.SNAP && Array.isArray(window.SNAP.metrics_full)) ? window.SNAP.metrics_full : [];
+    if(P && MF.length){
+      const jx = {};
+      AT_MET.forEach(function(m){ jx[m.k] = MF.indexOf(m.col); });
+      Object.keys(P).forEach(function(nome){
+        const mesi = (P[nome] && P[nome].months) || [];
+        mesi.forEach(function(mo){
+          let wk = '';
+          (mo.rows || []).forEach(function(r){
+            if(r.type === 'wk_header'){ wk = r.label || ''; return; }
+            if(r.type !== 'day' || !Array.isArray(r.v)) return;
+            if(!SOLO_RE.test(String(r.label || '').trim())) return;
+            const dd = gpsRowDate(r, wk, mo.key);
+            if(!dd) return;
+            const k = dstr(dd);
+            if(k < d0 || k > d1) return;
+            add(k, nome, r.v, jx);
+          });
+        });
+      });
+    }
+
+    WKG_RAW = out;
+    return out;
+  }
+
+  /* La media a testa del giorno, sulle atlete del ruolo scelto che quel giorno
+     hanno un file. Media e non somma per la stessa ragione del preventivo: il
+     piano parla di quanto tocca a una, e con la somma di squadra il confronto non
+     si potrebbe nemmeno fare. Chi quel giorno non c'era resta fuori dal conto e
+     non dal piano: un'assenza non e' un allenamento leggero del gruppo, e farla
+     pesare sulla media direbbe che si e' corso meno di quanto si e' corso. */
+  function wkgReal(){
+    const raw = wkgRaw();
+    const ok  = {};
+    ROSTER.forEach(function(p){
+      if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
+      if(atPortiere(p.role)) return;
+      ok[p.name] = 1;
     });
-    const val = {};
-    let somma = 0;
+    const gg = {};
+    Object.keys(raw).forEach(function(ds){
+      const s = {};
+      AT_MET.forEach(function(m){ s[m.k] = 0; });
+      let n = 0;
+      Object.keys(raw[ds]).forEach(function(nm){
+        if(!ok[nm]) return;
+        n++;
+        AT_MET.forEach(function(m){ s[m.k] += raw[ds][nm][m.k]; });
+      });
+      if(!n) return;
+      const o = { n: n };
+      AT_MET.forEach(function(m){ o[m.k] = s[m.k] / n; });
+      gg[ds] = o;
+    });
+    return gg;
+  }
+
+  /* Il riparto sui giorni di lavoro, e la modulazione mentre la settimana va avanti.
+     Prima si conta quello che e' gia' andato: i giorni con il file dentro valgono il
+     misurato, i giorni riscritti a mano valgono quello che ci si e' scritto. Quel che
+     resta del totale si spalma sui soli giorni ancora aperti, sempre con il peso del
+     microciclo. Cosi' un martedi' corso forte alleggerisce da solo il mercoledi' e il
+     giovedi', e un martedi' scarso li carica, senza che nessuno debba rifare i conti
+     a mano. Quando il totale e' gia' coperto i giorni che restano vanno a zero: e'
+     un'informazione, non un errore, e vuol dire che da qui in avanti si tiene. */
+  function wkgSplit(m, gg, tot){
+    const r    = wkgCur(false);
+    const real = wkgReal();
+    const lav  = gg.filter(function(g){ return g.lav; });
+    const val  = {};
+    const open = [];
+    let speso = 0;
+    let nfat  = 0;
+
     lav.forEach(function(g){
       const d   = (r && r.day[g.ds]) ? r.day[g.ds] : null;
       const man = d ? wkgNum(d[m.k]) : 0;
-      let v = 0;
       if(man > 0){
-        v = man;
-      } else if(peso > 0){
-        const c = TG_MD[g.mdw] || TG_GEN;
-        v = tgRound(tot * (+c[m.k] || 0) / peso, m.step);
+        val[g.ds] = { v: man, man: true, fat: false };
+        speso += man;
+        return;
       }
-      val[g.ds] = { v: v, man: man > 0 };
-      somma += v;
+      const f = real[g.ds];
+      if(f){
+        const v = Math.round(f[m.k]);
+        val[g.ds] = { v: v, man: false, fat: true, n: f.n };
+        speso += v;
+        nfat++;
+        return;
+      }
+      open.push(g);
     });
-    return { val: val, somma: somma, lav: lav };
+
+    let peso = 0;
+    open.forEach(function(g){
+      const c = TG_MD[g.mdw] || TG_GEN;
+      peso += (+c[m.k] || 0);
+    });
+    const resta = Math.max(0, tot - speso);
+    open.forEach(function(g){
+      let v = 0;
+      if(peso > 0 && resta > 0){
+        const c = TG_MD[g.mdw] || TG_GEN;
+        v = tgRound(resta * (+c[m.k] || 0) / peso, m.step);
+      }
+      val[g.ds] = { v: v, man: false, fat: false };
+    });
+
+    /* Il peso di tutti i giorni di lavoro serve per dire se si sta caricando o
+       alleggerendo: e' la quota che i giorni ancora aperti avrebbero preso se la
+       settimana fosse andata esattamente come scritta lunedi'. */
+    let pieno = 0;
+    lav.forEach(function(g){
+      const c = TG_MD[g.mdw] || TG_GEN;
+      pieno += (+c[m.k] || 0);
+    });
+    const atteso = pieno > 0 ? Math.round(tot * peso / pieno) : 0;
+
+    let somma = 0;
+    lav.forEach(function(g){ somma += (val[g.ds] ? val[g.ds].v : 0); });
+    return { val: val, somma: somma, lav: lav, speso: speso, resta: resta,
+             aperti: open.length, fatti: nfat, atteso: atteso };
   }
 
   // Cosa c'e' scritto dopo oggi, per non lasciare la card vuota senza una via d'uscita.
@@ -5953,7 +6104,14 @@ window.FORZA = window.FORZA || { roster:[] };
         '<i>'+esc(g.mdw || 'giorno tipo')+(g.sti ? ' stimato' : '')+
         (g.fatto ? ' &#183; gia\' fatto' : (g.pass ? ' &#183; passato' : ''))+'</i></td>'+
         TG_METRICS.map(function(m){
-          const c = spl[m.k].val[g.ds] || { v:0, man:false };
+          const c = spl[m.k].val[g.ds] || { v:0, man:false, fat:false };
+          /* Un giorno con il file dentro non si preventiva piu': quello che si legge
+             e' quello che e' stato corso, e riscriverlo a mano vorrebbe dire mettere
+             un'intenzione al posto di una misura. Resta scritto e non modificabile,
+             ed e' il numero da cui parte il riparto dei giorni che restano. */
+          if(c.fat){
+            return '<td class="fat"><b>'+NF.format(c.v)+'</b><em>fatto</em></td>';
+          }
           return '<td><input class="tg-wkn'+(c.man ? ' man' : '')+'" type="number" min="0" step="'+m.step+'"'+
             ' data-wk="'+m.k+'" data-ds="'+g.ds+'" value="'+c.v+'"'+
             ' aria-label="'+esc(nom)+' '+esc(m.lbl)+'"></td>';
@@ -5982,9 +6140,33 @@ window.FORZA = window.FORZA || { roster:[] };
       });
     });
 
+    /* La riga che spiega la modulazione vuole numeri veri, non una regola generica:
+       la voce sopra i 23 km/h e' quella su cui si decide la settimana, quindi il
+       conto si fa su quella. Senza giorni gia' chiusi non c'e' niente da modulare e
+       la frase non compare: sarebbe una promessa. */
+    const kM  = TG_METRICS[0];
+    const sM  = spl[kM.k];
+    let modu = '';
+    if(sM.fatti){
+      const dif = sM.resta - sM.atteso;
+      const sog = Math.max(kM.step, sM.atteso * 0.05);
+      modu = '<p>'+sM.fatti+(sM.fatti === 1 ? ' giorno e\' gia\' nei file' : ' giorni sono gia\' nei file')+
+        ' e vale il misurato, non il preventivo: '+NF.format(sM.speso)+' m '+
+        esc(kM.lbl.toLowerCase())+' gia\' corsi'+(sM.aperti
+          ? '. Restano '+NF.format(sM.resta)+' m su '+sM.aperti+
+            (sM.aperti === 1 ? ' giorno' : ' giorni')+', contro i '+NF.format(sM.atteso)+
+            ' del piano di lunedi\': '+
+            (dif > sog ? 'si e\' fatto meno del previsto, i giorni che restano si caricano.'
+              : (dif < -sog ? 'si e\' gia\' fatto molto, i giorni che restano si alleggeriscono.'
+              : 'la settimana sta andando come scritta.'))
+          : '. Non restano giorni di lavoro.')+'</p>';
+    }
+
     h += '<div class="fo"><p>I totali partono dalla gara del ruolo per il moltiplicatore scelto qui sopra, '+
       'e si spalmano sui soli giorni scritti a calendario con il peso che ogni giorno ha nel microciclo: '+
-      'il giorno dello sprint prende molto piu\' dei metri della rifinitura. Cambia una casella e resta quella.</p>'+
+      'il giorno dello sprint prende molto piu\' dei metri della rifinitura. Cambia una casella e resta quella. '+
+      'Man mano che i file arrivano, i giorni gia\' corsi escono dal preventivo e quello che manca si '+
+      'ridistribuisce da solo su quelli che restano.</p>'+ modu +
       (man ? '<button type="button" class="tg-x" data-wkrst="1">Torna ai numeri calcolati</button>' : '')+
       '</div></div>';
 
