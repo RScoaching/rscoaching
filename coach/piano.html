@@ -581,6 +581,15 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   text-underline-offset:3px; transition: color .18s var(--ease);
 }
 .tg-atx .rst:hover{ color:var(--ink); }
+/* la casella dell'obiettivo scritto a mano, sotto i moltiplicatori della singola
+   atleta: stessa forma delle caselle del piano settimana, cosi' si riconosce che
+   e' un numero che si scrive e non un'etichetta */
+.tg-atx .tg-atg{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:7px; }
+.tg-atx .tg-atg .tg-wkn{ width:92px; }
+.tg-atx .tg-atg span{ font-size:10.5px; color:var(--faint); }
+/* il moltiplicatore che esce da una cifra scritta a mano si distingue da quello
+   scelto con le pillole: il primo lo ha deciso il preparatore, il secondo il conto */
+.tg-atr .rl span i.man{ color:var(--orange2); }
 .tg-atr{ margin-top:9px; }
 .tg-atr:first-child{ margin-top:0; }
 .tg-atr .rl{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:5px; }
@@ -5867,6 +5876,47 @@ window.FORZA = window.FORZA || { roster:[] };
     }catch(e){}
   }
 
+  /* L'OBIETTIVO DELLA SETTIMANA SCRITTO A MANO, PER UNA SOLA ATLETA.
+     Il riferimento esce dalle partite chiuse, sue o del ruolo, e va benissimo per
+     dire dove sta oggi. Come obiettivo no, non sempre: un play che in gara fa venti
+     metri sopra i 23, moltiplicato anche per il gradino piu' alto, arriva a ottanta,
+     e in una settimana con lo sprint dentro quegli ottanta li fa senza accorgersene.
+     Un obiettivo che si raggiunge camminando non e' un obiettivo. Il moltiplicatore
+     da solo non ci arriva perche' i gradini finiscono a quattro volte: qui la cifra
+     si scrive a mano, e quello che c'e' scritto vince sul conto.
+     Il riferimento gara non si tocca: e' una misura, e serve intatta per poter dire
+     di quante volte la sua gara si sta chiedendo. Quello che si scrive resta finche'
+     non si cancella la casella, come il moltiplicatore su misura: una settimana di
+     sprint dura piu' di un giorno e riscriverlo ogni lunedi' non servirebbe. */
+  const WKT_P_KEY = K('rs_fio_atgoal');
+
+  const WKT_P = (function(){
+    const out = {};
+    const v = wkxRead(WKT_P_KEY);
+    Object.keys(v).forEach(function(nome){
+      const src = v[nome];
+      if(!src || typeof src !== 'object') return;
+      const o = {};
+      WK_MET.forEach(function(k){
+        const n = Math.round(Number(src[k]));
+        if(isFinite(n) && n > 0) o[k] = n;
+      });
+      if(Object.keys(o).length) out[nome] = o;
+    });
+    return out;
+  })();
+
+  function wktOf(name, k){
+    const p = WKT_P[name];
+    return p && p[k] > 0 ? p[k] : 0;
+  }
+
+  function wktSua(name){ return !!WKT_P[name]; }
+
+  function wktSave(){
+    try{ localStorage.setItem(WKT_P_KEY, JSON.stringify(WKT_P)); }catch(e){}
+  }
+
   /* ================= IL PIANO DELLA SETTIMANA =================
      Il lunedi' e' giorno libero e primo giorno del microciclo: e' li' che si decide
      cosa deve dare la settimana, non il martedi' mattina davanti al gruppo gia' in
@@ -6706,17 +6756,28 @@ window.FORZA = window.FORZA || { roster:[] };
       if(AT_ST.indexOf(st) < 0){ out.fuori.push({ name:p.name, st:st }); return; }
       const b = atBase(p);
       const w = wk.p[p.name] || null;
-      const t = {}, x = {}, need = {}, done = {}, rest = {}, dif = {};
+      const t = {}, x = {}, need = {}, done = {}, rest = {}, dif = {}, man = {};
+      let nman = 0;
       AT_MET.forEach(function(m){
-        t[m.k]    = tgRound(b[m.k] * TG_COEF[m.k], m.step);
+        const ta  = tgRound(b[m.k] * TG_COEF[m.k], m.step);
         x[m.k]    = wkxOf(p.name, m.k);
-        need[m.k] = tgRound(b[m.k] * x[m.k], m.step);
+        const na  = tgRound(b[m.k] * x[m.k], m.step);
+        const scr = wktOf(p.name, m.k);
+        man[m.k]  = scr > 0;
+        if(scr > 0) nman++;
+        need[m.k] = scr > 0 ? scr : na;
+        /* L'obiettivo di stasera segue quello della settimana nella stessa
+           proporzione. Senza, la riga grossa in cima alla scheda resterebbe sul
+           conto vecchio mentre le barre sotto contano su quello nuovo, e la
+           scheda direbbe due cose diverse sulla stessa atleta. */
+        t[m.k]    = (scr > 0 && na > 0) ? tgRound(ta * scr / na, m.step) : ta;
         done[m.k] = w ? Math.round(w[m.k]) : 0;
         rest[m.k] = Math.max(0, need[m.k] - done[m.k]);
         dif[m.k]  = w ? Math.round(w.dif[m.k]) : 0;
       });
       out.rows.push({ name:p.name, role:p.role, st:st, base:b, t:t, x:x,
-                      need:need, done:done, rest:rest, dif:dif, sua:wkxSua(p.name),
+                      need:need, done:done, rest:rest, dif:dif, man:man, nman:nman,
+                      sua: wkxSua(p.name) || wktSua(p.name),
                       sed: w ? Object.keys(w.gg).length : 0, ha: !!w,
                       nx: w ? w.nx : 0 });
     });
@@ -7171,9 +7232,15 @@ window.FORZA = window.FORZA || { roster:[] };
         const bars = AT_MET.map(function(m){
           const pct = r.need[m.k] > 0 ? Math.min(100, Math.round(r.done[m.k] / r.need[m.k] * 100)) : 100;
           const ok  = r.rest[m.k] <= 0;
+          /* Quando la cifra e' scritta a mano si dice, e si dice anche a quante volte
+             la sua gara corrisponde: e' l'unico modo per accorgersi di aver chiesto
+             sei volte la partita a una che ne regge tre. */
+          const xl = r.man[m.k]
+            ? (r.base[m.k] > 0 ? wkxLbl(r.need[m.k] / r.base[m.k])+' a mano' : 'a mano')
+            : wkxLbl(r.x[m.k]);
           return '<div class="tg-atr'+(pset[m.k] ? ' pri' : '')+'">'+
             '<div class="rl">'+
-              '<span>'+esc(m.u)+' &#183; <i>'+wkxLbl(r.x[m.k])+'</i></span>'+
+              '<span>'+esc(m.u)+' &#183; <i'+(r.man[m.k] ? ' class="man"' : '')+'>'+xl+'</i></span>'+
               '<em class="tnum"><b>'+NF.format(r.done[m.k])+'</b> / '+NF.format(r.need[m.k])+'</em>'+
             '</div>'+
             '<div class="tg-atb"><i'+(ok ? ' class="full"' : '')+' style="width:'+pct+'%"></i></div>'+
@@ -7229,11 +7296,28 @@ window.FORZA = window.FORZA || { roster:[] };
 
         const ed = apri
           ? '<div class="tg-atx">'+
-              '<div class="h">Quante volte la gara in settimana, solo per '+esc(plNome(r.name))+'.</div>'+
+              '<div class="h">Quante volte la gara in settimana, solo per '+esc(plNome(r.name))+'. '+
+                'Se i gradini non bastano, scrivi l\'obiettivo che vuoi: quello vince sul conto.</div>'+
               AT_MET.map(function(m){
+                /* La casella parte vuota e mostra come segnaposto il numero calcolato:
+                   cosi' si vede da dove si parte senza che una cifra scritta dal
+                   programma passi per una decisione presa dal preparatore. Sotto resta
+                   scritto il riferimento gara, che e' il metro di paragone. */
                 return '<div class="tg-xr">'+
-                  '<div class="l">'+esc(m.lbl)+'</div>'+
+                  '<div class="l">'+esc(m.lbl)+
+                    /* con la cifra scritta a mano le pillole restano accese ma non
+                       comandano piu': va detto, se no sembrano rotte */
+                    (r.man[m.k] ? '<i>il moltiplicatore non conta, comanda la cifra scritta</i>' : '')+
+                  '</div>'+
                   wkxPills(m.k, r.x[m.k], r.name)+
+                  '<div class="tg-atg">'+
+                    '<input class="tg-wkn'+(r.man[m.k] ? ' man' : '')+'" type="number" min="0" step="'+m.step+'"'+
+                      ' value="'+(r.man[m.k] ? r.need[m.k] : '')+'" placeholder="'+r.need[m.k]+'"'+
+                      ' data-atg="'+esc(m.k)+'" data-atn="'+esc(r.name)+'"'+
+                      ' aria-label="obiettivo della settimana, '+esc(m.lbl)+', '+esc(plNome(r.name))+'">'+
+                    '<span class="tnum">'+esc(m.u)+' in settimana &#183; la sua gara '+
+                      NF.format(r.base[m.k])+'</span>'+
+                  '</div>'+
                 '</div>';
               }).join('')+
               (r.sua ? '<button type="button" class="rst" data-xr="'+esc(r.name)+'">torna ai valori di squadra</button>' : '')+
@@ -7483,6 +7567,27 @@ window.FORZA = window.FORZA || { roster:[] };
     // atleta e il pulsante che apre la sua scheda. Tutto qui dentro perche' il blocco
     // si ridisegna intero a ogni tocco.
     const atl = document.getElementById('tg-atl');
+
+    // L'obiettivo della settimana scritto a mano dentro la scheda di una atleta.
+    // Casella vuota vuol dire "torna al conto", non "obiettivo zero": zero e i numeri
+    // negativi cancellano la riscrittura invece di salvarla.
+    if(atl) atl.addEventListener('change', function(ev){
+      const inp = ev.target && ev.target.closest ? ev.target.closest('[data-atg]') : null;
+      if(!inp) return;
+      const k = inp.getAttribute('data-atg');
+      const n = inp.getAttribute('data-atn') || '';
+      if(!k || !n) return;
+      const v = Math.round(Number(inp.value));
+      const p = WKT_P[n] || (WKT_P[n] = {});
+      if(isFinite(v) && v > 0) p[k] = v; else delete p[k];
+      if(!Object.keys(p).length) delete WKT_P[n];
+      wktSave();
+      // la scheda aperta resta aperta: AT_OPEN non si tocca, e renderTargets rifa'
+      // anche il preventivo del gruppo, che sui buchi di questa atleta adesso conta
+      // un numero diverso
+      renderTargets();
+    });
+
     if(atl) atl.addEventListener('click', function(ev){
       const t = ev.target;
       if(!t || !t.closest) return;
@@ -7533,7 +7638,13 @@ window.FORZA = window.FORZA || { roster:[] };
       const rb = t.closest('.rst');
       if(rb){
         const n = rb.getAttribute('data-xr');
-        if(n && WKX_P[n]){ delete WKX_P[n]; wkxSave(); renderTargets(); }
+        if(!n) return;
+        // il pulsante dice "torna ai valori di squadra" e li' dentro ci stanno tutte
+        // e due le mani sopra: il moltiplicatore su misura e l'obiettivo riscritto
+        let fatto = false;
+        if(WKX_P[n]){ delete WKX_P[n]; wkxSave(); fatto = true; }
+        if(WKT_P[n]){ delete WKT_P[n]; wktSave(); fatto = true; }
+        if(fatto) renderTargets();
         return;
       }
 
