@@ -1206,7 +1206,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
               <div class="chart-wrap" id="acwr-chart2"></div>
             </div>
             <div class="acwr-block">
-              <div class="acwr-blk-head"><h3>Microciclo tipo</h3><span>media squadra per match day</span></div>
+              <div class="acwr-blk-head"><h3>Microciclo tipo</h3><span>media squadra per match day, gara di domenica</span></div>
               <div class="legend acwr-legend">
                 <span><span class="lg-bar"></span>allenamento</span>
                 <span><span class="lg-match"></span>partita</span>
@@ -3220,8 +3220,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function renderMdShape(idx){
     const wrap = document.getElementById('acwr-chart3'); if(!wrap) return;
     const unit = metUnit(idx);
-    const order = [5,4,3,2,1,0];
-    const rows = order.map(md=>{ const av=mdAverage(md); return { md:md, v:(av ? vAt({ v:av }, idx) : null) }; }).filter(r=> r.v!=null);
+    // MD-6 e MD-1 esistono solo quando la settimana e' lunga o si allena di sabato: se
+    // non ci sono sedute la colonna non viene disegnata, non resta un buco
+    const order = [6,5,4,3,2,1,0];
+    const rows = order.map(md=>{ const av=mdAverage(md);
+      return { md:md, n:mdCount(md), v:(av ? vAt({ v:av }, idx) : null) }; }).filter(r=> r.v!=null && r.n>0);
     if(!rows.length){ wrap.innerHTML = emptyBlock('Nessun microciclo tipo disponibile'); return; }
     const geo = anLayout(rows.length, wrap, { H:230, padB:42, slotMin:44, padL:42, padR:16 });
     const W = geo.W;
@@ -3252,7 +3255,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         const r=rows[+b.getAttribute('data-i')];
         tip.innerHTML = '<div class="tt-m">microciclo tipo</div>'+
           '<div class="tt-w">'+(r.md===0?'Partita (MD)':'MD-'+r.md)+'</div>'+
-          '<div class="tt-v tnum">'+fmtLoad(r.v, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>';
+          '<div class="tt-v tnum">'+fmtLoad(r.v, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>'+
+          '<div class="tt-x"><span>sedute in media</span><b>'+NF0.format(r.n)+'</b></div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
     });
@@ -4575,19 +4579,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return out;
   }
   const WDX = { 'Lun':0,'Mar':1,'Mer':2,'Gio':3,'Ven':4,'Sab':5,'Dom':6 };
+  /* Il microciclo della squadra e' sempre lo stesso: gara di domenica, allenamenti da
+     martedi a venerdi. Finche' il MD si leggeva solo dalla riga partita dentro il blocco
+     settimana, le settimane senza quella riga (partita non ancora giocata, gara segnata
+     altrove, coppa fuori calendario) restavano senza microciclo e sparivano dalle medie.
+     Quindi se la partita non c'e' si assume la domenica: martedi MD-5, mercoledi MD-4,
+     giovedi MD-3, venerdi MD-2, sabato MD-1. La domenica senza partita resta fuori,
+     un allenamento di domenica non e' un MD zero. */
+  const MD_DOM = WDX['Dom'];
   // mappa MD per ogni seduta: dentro un blocco settimana trova la partita e calcola la distanza in giorni
   function buildMDMap(){
-    const map = {}; // "monthKey|label" -> { md, matchLabel, matchWd }
+    const map = {}; // "monthKey|label" -> { md, matchLabel, matchWd, assumed }
     ((S.team&&S.team.months)||[]).forEach(mon=>{
       let block = [];
       const flush = ()=>{
         const match = block.find(r=> r.type==='match');
         block.forEach(r=>{
           if(r.type!=='day' && r.type!=='match') return;
-          let md=null;
+          let md=null, assumed=false;
           if(match && WDX[r.wd]!=null && WDX[match.wd]!=null) md = WDX[match.wd]-WDX[r.wd];
-          if(r.type==='match') md=0;
-          map[mon.key+'|'+r.label] = { md, matchLabel: match?match.label:'', matchWd: match?match.wd:'' };
+          else if(!match && WDX[r.wd]!=null && WDX[r.wd] < MD_DOM){ md = MD_DOM-WDX[r.wd]; assumed=true; }
+          if(r.type==='match'){ md=0; assumed=false; }
+          map[mon.key+'|'+r.label] = { md, matchLabel: match?match.label:'', matchWd: match?match.wd:'', assumed:assumed };
         });
         block = [];
       };
@@ -4616,6 +4629,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
     return acc.map((s,i)=> cnt[i]? s/cnt[i] : null);
+  }
+  // quante sedute stanno dietro a un MD: una media su due sedute non vale come una su venti
+  function mdCount(md){
+    if(md==null) return 0;
+    if(!MDMAP) MDMAP=buildMDMap();
+    let n=0;
+    ((S.team&&S.team.months)||[]).forEach(mon=>{
+      (mon.rows||[]).forEach(r=>{
+        if(r.type!=='day' && r.type!=='match') return;
+        const info = MDMAP[mon.key+'|'+r.label];
+        if(info && info.md===md) n++;
+      });
+    });
+    return n;
   }
   function sessionAthletes(monthKey, label){
     const out = [];
