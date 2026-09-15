@@ -246,8 +246,13 @@ svg.chart{ display:block; }
 .mcell.on .mc-name{ color:var(--orange2); }
 .mc-val{ font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:4px; }
 .mc-val small{ font-family:'Inter',sans-serif; font-size:11.5px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
-.mc-sub{ font-size:11.5px; color:var(--faint); margin-top:1px; }
-.mc-spark{ display:block; width:100%; height:42px; margin-top:9px; }
+.mc-sub{ display:flex; align-items:baseline; gap:7px; font-size:11.5px; color:var(--faint); margin-top:1px; }
+/* quanto e' cambiato rispetto alla volta prima: si legge di sfuggita, non grida */
+.mc-d{ font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--faint); }
+.mc-d.up{ color:var(--orange2); }
+.mc-d.dn{ color:oklch(74% 0.12 230); }
+.mc-defs{ position:absolute; width:0; height:0; overflow:hidden; }
+.mc-spark{ display:block; width:100%; height:46px; margin-top:9px; }
 svg.chart .bar{ transform-box:fill-box; transform-origin:center bottom; pointer-events:none;
   transition: opacity .15s var(--ease), filter .15s var(--ease); }
 svg.chart .bar.hot{ opacity:1 !important; filter:brightness(1.14); }
@@ -1728,7 +1733,45 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     colHidden = new Set(rest);
     saveCols(); refreshCols();
   }
-  function refreshCols(){ updateColsCount(); renderGrid(); }
+  /* I grafici parlano la lingua della sinottica. Se sopra si scelgono dodici parametri
+     su venti, le tendine dell'andamento e dell'analisi carico ne devono dare dodici e
+     non venti: gli altri in questo momento non interessano, e scorrerli e' solo tempo
+     perso. Cambiando la scelta la tendina si rifa' da sola; se il parametro aperto nel
+     grafico e' appena stato nascosto si passa al primo di quelli rimasti, invece di
+     lasciare a video un grafico che non corrisponde piu' a niente. */
+  function metChoice(){
+    const vis = colOrder.filter(i=> !colHidden.has(i));
+    const out = vis.length ? vis.slice() : ALL_IDX.slice();
+    // il canale calcolato "oltre 20" esiste solo se ci sono le due colonne che lo fanno
+    if(IOVER20 >= 0 && out.indexOf(I2023) >= 0 && out.indexOf(I23) >= 0){
+      out.splice(Math.max(out.indexOf(I2023), out.indexOf(I23)) + 1, 0, IOVER20);
+    }
+    return out;
+  }
+  function fillMetSelect(id, list, cur){
+    const sel = document.getElementById(id);
+    if(!sel || !list.length) return cur;
+    const val = list.indexOf(cur) >= 0 ? cur : list[0];
+    sel.innerHTML = list.map(function(i){
+      return '<option value="'+i+'"'+(i===val?' selected':'')+'>'+esc(metName(i))+'</option>';
+    }).join('');
+    sel.value = String(val);
+    return val;
+  }
+  // al primo giro la pagina non ha ancora disegnato niente: si riempiono le tendine
+  // e basta, i grafici arrivano dopo per conto loro
+  let metLive = false;
+  function syncMetLists(){
+    const list = metChoice();
+    const a = state.chartIdx, b = state.acwrIdx;
+    state.chartIdx = fillMetSelect('chart-metric', list, state.chartIdx);
+    const sum = list.filter(function(i){ return metSum(i); });
+    state.acwrIdx = fillMetSelect('acwr-metric', sum.length ? sum : SUMIDX, state.acwrIdx);
+    if(!metLive) return;
+    if(state.chartIdx !== a){ renderChart(); renderMini(); }
+    if(state.acwrIdx !== b) renderAnalytics();
+  }
+  function refreshCols(){ updateColsCount(); syncMetLists(); renderGrid(); }
   function updateColsCount(){ const el=document.getElementById('cols-count'); if(el) el.textContent = VIS().length+'/'+M.length; }
 
   // ---------- helpers ----------
@@ -1857,16 +1900,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   })();
 
   // ---------- chart metric dropdown ----------
+  // L'elenco lo riempie syncMetLists con i soli parametri scelti in alto: qui resta
+  // solo l'ascolto del cambio, che vale una volta sola e non si rifa' a ogni riempimento.
   (function(){
     const sel = document.getElementById('chart-metric');
-    let opts = '';
-    for(let i=0;i<NMET;i++) opts += '<option value="'+i+'"'+(i===state.chartIdx?' selected':'')+'>'+esc(metName(i))+'</option>';
-    sel.innerHTML = opts;
-    sel.addEventListener('change', ()=>{ state.chartIdx = +sel.value; renderChart(); });
+    if(!sel) return;
+    sel.addEventListener('change', ()=>{ state.chartIdx = +sel.value; renderChart(); renderMini(); });
   })();
   function syncMetricSelect(){
     const sel = document.getElementById('chart-metric');
-    if(sel) sel.value = String(state.chartIdx);
+    if(!sel) return;
+    /* Un parametro chiave puo' stare fuori dalla sinottica scelta in alto: in quel
+       caso entra lo stesso nella tendina, altrimenti il grafico direbbe una cosa e
+       la tendina ne mostrerebbe un'altra. */
+    if(!sel.querySelector('option[value="'+state.chartIdx+'"]')){
+      const o = document.createElement('option');
+      o.value = String(state.chartIdx);
+      o.textContent = metName(state.chartIdx);
+      sel.appendChild(o);
+    }
+    sel.value = String(state.chartIdx);
   }
 
   // ---------- metrica analisi carico (solo metriche sommabili) ----------
@@ -1876,9 +1929,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   if(SUMIDX.indexOf(state.acwrIdx)<0) state.acwrIdx = (SUMIDX.indexOf(1)>=0 ? 1 : SUMIDX[0]);
   (function(){
     const sel = document.getElementById('acwr-metric'); if(!sel) return;
-    sel.innerHTML = SUMIDX.map(i=> '<option value="'+i+'"'+(i===state.acwrIdx?' selected':'')+'>'+esc(metName(i))+'</option>').join('');
     sel.addEventListener('change', ()=>{ state.acwrIdx = +sel.value; renderAnalytics(); });
   })();
+  // primo riempimento delle due tendine, con la sinottica gia' caricata dal browser
+  syncMetLists();
   function syncAcwrSelect(){
     const sel = document.getElementById('acwr-metric');
     if(sel) sel.value = String(state.acwrIdx);
@@ -2719,25 +2773,62 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     (S.key_idx||[]).forEach(add);
     return out.slice(0,8);
   })();
+  /* Nella scheda si vedono i parametri col pallino arancione, sempre: quelli sono i
+     parametri chiave, e il pallino e' l'unico posto dove si scelgono. Prima, finche'
+     non si toccava il pallino, qui compariva un elenco suo, quindi la scheda diceva
+     una cosa e il pannello ne diceva un'altra. L'elenco di riserva resta buono solo
+     se per qualche motivo non c'e' nemmeno un pallino acceso. */
   function miniIdx(){
-    if(!chiaveNames()) return MINI_AUTO;
     const out = keyOrder.filter(i=> i>=0 && i<NMET);
     return out.length ? out.slice(0, CHIAVE_MAX) : MINI_AUTO;
   }
-  function miniSpark(pts){
-    const n = pts.length, H = 41;
+  /* Le colonnine di queste schede erano tutte uguali: stesso arancione, stessa
+     trasparenza, nessun riferimento. Un istogramma cosi' dice solo "c'e' del carico",
+     non dice se una seduta e' stata sopra o sotto le altre, che e' la sola cosa che
+     serve leggere di sfuggita. Adesso: sfumatura come nel grafico grande, testa
+     arrotondata, riga tratteggiata sulla media del periodo, colonne sotto la media
+     piu' spente e quella piu' recente piena. Le partite restano viola. */
+  const MINI_DEFS =
+    '<svg class="mc-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>'+
+      '<linearGradient id="mkBar" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0" stop-color="oklch(78% 0.16 55)"/><stop offset="1" stop-color="oklch(60% 0.19 38)"/>'+
+      '</linearGradient>'+
+      '<linearGradient id="mkMatch" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0" stop-color="oklch(72% 0.17 288)"/><stop offset="1" stop-color="oklch(55% 0.22 280)"/>'+
+      '</linearGradient>'+
+    '</defs></svg>';
+  function miniSpark(pts, idx){
+    const n = pts.length, H = 46, base = H - 4.5, top = 3;
     if(!n) return '<svg class="mc-spark" viewBox="0 0 100 '+H+'" preserveAspectRatio="none" aria-hidden="true"></svg>';
-    const vals = pts.map(p=> (p.value==null || !isFinite(p.value)) ? 0 : p.value);
-    const mx = Math.max(1, ...vals), W = n*10, gap = 2.4;
+    const ok = function(p){ return p.value != null && isFinite(p.value); };
+    const vals = pts.map(function(p){ return ok(p) ? p.value : 0; });
+    const mx = Math.max(1, Math.max.apply(null, vals));
+    const nz = [];
+    pts.forEach(function(p, k){ if(ok(p) && vals[k] > 0) nz.push(vals[k]); });
+    const avg = nz.length ? nz.reduce(function(a,b){ return a+b; }, 0) / nz.length : 0;
+    const step = 10, W = n * step, gap = n > 18 ? 1.8 : 2.8, bw = step - gap;
+    const hOf = function(v){ return Math.max(1.5, (base - top) * v / mx); };
+    let last = -1;
+    pts.forEach(function(p, k){ if(ok(p)) last = k; });
     let g = '';
-    for(let i=0;i<n;i++){
-      const h = Math.max(1, (H-3) * vals[i]/mx), x = i*10 + gap/2, y = H - h;
-      const col = (pts[i].kind==='match') ? 'var(--violet2)' : 'var(--orange)';
-      const op = (pts[i].value==null) ? 0.2 : 0.85;
-      g += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(10-gap).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="1" fill="'+col+'" opacity="'+op+'"/>';
+    if(avg > 0){
+      const ya = base - hOf(avg);
+      g += '<rect x="0" y="'+ya.toFixed(1)+'" width="'+W+'" height="'+(base-ya).toFixed(1)+'" fill="var(--orange)" opacity="0.05"/>'+
+        '<line x1="0" y1="'+ya.toFixed(1)+'" x2="'+W+'" y2="'+ya.toFixed(1)+'" stroke="var(--orange2)" '+
+        'stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>';
     }
-    g += '<line x1="0" y1="'+(H-0.5)+'" x2="'+W+'" y2="'+(H-0.5)+'" stroke="var(--border2)" stroke-width="1"/>';
-    return '<svg class="mc-spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">'+g+'</svg>';
+    for(let i=0;i<n;i++){
+      const p = pts[i], h = hOf(vals[i]), x = i*step + gap/2, y = base - h;
+      const fill = (p.kind === 'match') ? 'url(#mkMatch)' : 'url(#mkBar)';
+      let op = !ok(p) ? 0.14 : (vals[i] >= avg ? 0.95 : 0.52);
+      if(i === last) op = 1;
+      const d = barPath(x, y, bw, h, Math.min(2.2, bw/2));
+      const ttl = esc(String(p.ttSub || p.barLabel || p.ttTitle || '')) +
+        (ok(p) ? ': '+esc(fmtLoad(p.value, idx)) : ': nessun dato');
+      if(d) g += '<path d="'+d+'" fill="'+fill+'" opacity="'+op+'"><title>'+ttl+'</title></path>';
+    }
+    g += '<line x1="0" y1="'+base.toFixed(1)+'" x2="'+W+'" y2="'+base.toFixed(1)+'" stroke="var(--border2)" stroke-width="1"/>';
+    return '<svg class="mc-spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+g+'</svg>';
   }
   function miniCell(i){
     const pts = buildPoints(i);
@@ -2746,21 +2837,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const tot = nz.reduce((a,b)=> a+b, 0);
     const agg = nz.length ? (sum ? tot : tot/nz.length) : null;
     const on = (i===state.chartIdx), u = metUnit(i);
+    /* Sotto il numero grande sta quanto e' cambiato rispetto alla volta prima: e' la
+       domanda che ci si fa guardando una scheda di questo tipo, e finora bisognava
+       aprire il grafico grande per rispondere. */
+    let delta = '';
+    if(nz.length >= 2){
+      const a = nz[nz.length-1], b = nz[nz.length-2];
+      if(b > 0){
+        const d = Math.round((a/b - 1) * 100);
+        const cls = d > 0 ? 'up' : (d < 0 ? 'dn' : '');
+        delta = '<span class="mc-d '+cls+'">'+(d > 0 ? '+' : '')+d+'%</span>';
+      }
+    }
     return '<button type="button" class="mcell'+(on?' on':'')+'" data-idx="'+i+'" aria-pressed="'+(on?'true':'false')+'">'+
       '<div class="mc-name">'+esc(metShort(i))+'</div>'+
       '<div class="mc-val tnum">'+ (agg==null ? '-' : fmtLoad(agg, i)) + (u ? '<small>'+esc(u)+'</small>' : '') +'</div>'+
-      '<div class="mc-sub">'+ (sum ? 'totale del periodo' : 'media del periodo') +'</div>'+
-      miniSpark(pts)+
+      '<div class="mc-sub">'+ (sum ? 'totale del periodo' : 'media del periodo') + delta +'</div>'+
+      miniSpark(pts, i)+
       '</button>';
   }
   function renderMini(){
     const grid = document.getElementById('mini-grid');
     if(!grid) return;
     const hint = document.getElementById('mini-hint');
-    if(hint) hint.textContent = 'stesso periodo del grafico sopra, tocca un parametro per aprirlo grande';
-    let html = '';
-    miniIdx().forEach(i=>{ html += miniCell(i); });
-    grid.innerHTML = html || emptyBlock('Nessun parametro disponibile');
+    if(hint) hint.textContent = 'i parametri col pallino arancione, stesso periodo del grafico sopra, '+
+      'tocca un parametro per aprirlo grande';
+    const list = miniIdx();
+    let html = MINI_DEFS;
+    list.forEach(i=>{ html += miniCell(i); });
+    grid.innerHTML = list.length ? html : emptyBlock('Nessun parametro chiave acceso');
     grid.querySelectorAll('.mcell').forEach(b=>{
       b.addEventListener('click', ()=>{
         state.chartIdx = +b.getAttribute('data-idx');
@@ -5196,6 +5301,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // Prima ancora si costruiscono i mesi dei portieri, se no non ci sarebbe niente da mettere in ordine.
     gkSeed();
     applyMoves();
+    // da qui in poi un cambio di sinottica puo' ridisegnare i grafici
+    metLive = true;
     const mvr = document.getElementById('mv-reset'); if(mvr) mvr.addEventListener('click', resetMoves);
     const rpc = document.getElementById('rpe-clear');
     if(rpc) rpc.addEventListener('click', ()=>{
