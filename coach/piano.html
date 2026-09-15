@@ -1040,6 +1040,21 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .yd-fig.cal b{ color:var(--muted); }
 .yd-fig span{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; }
 .yd-note{ flex:1 1 220px; min-width:0; font-size:11.5px; color:var(--faint); line-height:1.55; margin:0; }
+/* come sono stati spesi i minuti: una barra sola divisa in tre, si legge in un
+   colpo d'occhio e non ruba spazio ai blocchi */
+.yd-mix{ margin:0 0 14px; }
+.yd-mxb{ display:flex; gap:2px; height:8px; margin-bottom:9px; }
+.yd-mxb i{ display:block; min-width:3px; border-radius:3px; }
+.yd-mxb i.lo{ background:oklch(72% 0.13 230); }
+.yd-mxb i.md{ background:var(--orange2); }
+.yd-mxb i.hi{ background:oklch(62% 0.22 25); }
+.yd-mxl{ display:flex; flex-wrap:wrap; gap:6px 16px; }
+.yd-mxi{ font-size:11px; color:var(--faint); font-variant-numeric:tabular-nums; }
+.yd-mxi b{ font-weight:700; }
+.yd-mxi.lo b{ color:oklch(72% 0.13 230); }
+.yd-mxi.md b{ color:var(--orange2); }
+.yd-mxi.hi b{ color:oklch(62% 0.22 25); }
+.yd-cmp{ margin:0 0 14px; font-size:11.5px; color:var(--faint); line-height:1.6; }
 .yd-list{ display:flex; flex-direction:column; gap:7px; }
 .yd-row{ background:var(--done-bg); border:1px solid var(--done-bd); border-radius:var(--r);
   transition: border-color .16s var(--ease), background .16s var(--ease); }
@@ -1096,6 +1111,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   border:1px solid var(--border2); background:var(--surface2); color:var(--muted); }
 .lw-delta.up{ border-color:oklch(80% 0.15 75 / 0.35); background:oklch(80% 0.15 75 / 0.08); color:var(--orange2); }
 .lw-delta.dn{ border-color:oklch(72% 0.13 230 / 0.35); background:oklch(72% 0.13 230 / 0.08); color:var(--blue); }
+.lw-delta.bad{ border-color:oklch(62% 0.22 25 / 0.38); background:oklch(62% 0.22 25 / 0.09); color:oklch(72% 0.19 25); }
 .lw-note{ flex:1 1 200px; min-width:0; font-size:11.5px; color:var(--faint); line-height:1.55; margin:0; }
 .lw-days{ display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
 .lw-day{ display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -1751,9 +1767,13 @@ window.FORZA = window.FORZA || { roster:[] };
   days.forEach(d=>{
     const mk = dstr(mondayOf(parse(d.data)));
     let w = weekMap.get(mk);
-    if(!w){ w={key:mk, load:0, sessions:0, matches:0}; weekMap.set(mk, w); }
+    if(!w){ w={key:mk, load:0, mload:0, sessions:0, matches:0}; weekMap.set(mk, w); }
     w.load += (+d.load||0);
-    if(d.is_match) w.matches++; else w.sessions++;
+    // mload = la parte di carico che arriva dalle gare: nel grafico delle ultime
+    // settimane diventa il pezzo viola in fondo alla barra, cosi' si vede subito
+    // quanta parte della settimana e' stata partita e quanta allenamento.
+    if(d.is_match){ w.matches++; w.mload += (+d.load||0); }
+    else w.sessions++;
   });
   const weeks = [...weekMap.values()].sort((a,b)=> a.key<b.key?-1:1);
 
@@ -2072,7 +2092,7 @@ window.FORZA = window.FORZA || { roster:[] };
 
   // settimana attiva: quella di oggi se presente, altrimenti l'ultima disponibile
   const curKey = dstr(mondayOf(NOW));
-  let active = weekMap.get(curKey) || (weeks.length ? weeks[weeks.length-1] : {key:curKey, load:0, sessions:0, matches:0});
+  let active = weekMap.get(curKey) || (weeks.length ? weeks[weeks.length-1] : {key:curKey, load:0, mload:0, sessions:0, matches:0});
   /* Il ripiego sull'ultima settimana disponibile serve a non lasciare le caselle
      vuote quando i file non sono ancora arrivati, ma va detto. Finche' restava
      muto, "Carico settimana" e "Scarto" mostravano numeri di una settimana di
@@ -2825,9 +2845,14 @@ window.FORZA = window.FORZA || { roster:[] };
     const last = weeks.slice(-8);
     const holder = document.getElementById('wc-holder');
     if(!last.length){ holder.innerHTML='<div style="color:var(--faint);font-size:12px;padding:10px 0">Nessun dato settimanale.</div>'; return; }
-    document.getElementById('wc-sub').textContent = 'linea tratteggiata = obiettivo '+(TARGET?NF.format(TARGET)+' u.a.':'');
+    /* Il pezzo viola in fondo alla barra e' il carico di gara: senza quello una
+       settimana con la partita sembra un allenamento pesante, e non e' la stessa
+       cosa da programmare. */
+    document.getElementById('wc-sub').textContent =
+      'linea tratteggiata = riferimento '+(TARGET?NF.format(TARGET)+' u.a., ':'')+
+      'base viola = quota gara, sotto la data sedute e gare';
 
-    const W=720, H=180, padT=14, padB=30, padX=8;
+    const W=720, H=196, padT=14, padB=46, padX=8;
     const n=last.length;
     const maxV = Math.max(TARGET||0, ...last.map(w=>w.load)) * 1.12 || 1;
     const plotH = H-padT-padB;
@@ -2849,15 +2874,41 @@ window.FORZA = window.FORZA || { roster:[] };
       const h=plotH*(w.load/maxV);
       const y=(H-padB)-h;
       const isCur = w.key===active.key;
-      const fill = isCur ? 'url(#gcur)' : (w.matches>0 ? 'url(#gmatch)' : 'url(#gbar)');
+      const fill = isCur ? 'url(#gcur)' : 'url(#gbar)';
+      const op = isCur ? '' : ' opacity="0.85"';
+      const ml = +w.mload||0;
+      const mh = (w.load>0 && ml>0) ? Math.min(h, plotH*(ml/maxV)) : 0;
+      const prev = i>0 ? (+last[i-1].load||0) : 0;
+      const dv = prev>0 ? Math.round((w.load-prev)/prev*100) : null;
+      const att = w.sessions + w.matches;
+      /* Il titolo del tooltip: quello che non entra nel grafico ma serve quando
+         ci si ferma con il dito sopra una settimana. */
+      const tip = 'Settimana del '+itShort(parse(w.key))+': '+NF.format(Math.round(w.load))+' u.a., '+
+        w.sessions+(w.sessions===1?' seduta':' sedute')+
+        (w.matches? ', '+w.matches+(w.matches===1?' gara ':' gare ')+'per '+NF.format(Math.round(ml))+' u.a.' : ', nessuna gara')+
+        (dv===null ? '' : ', '+(dv>0?'+':'')+dv+'% sulla settimana prima');
       const d=barPath(x,y,barW,h,4);
-      if(d) s+='<path class="wb" d="'+d+'" fill="'+fill+'"'+(isCur?'':' opacity="0.85"')+'/>';
+      s+='<g><title>'+esc(tip)+'</title>';
+      if(d) s+='<path class="wb" d="'+d+'" fill="'+fill+'"'+op+'/>';
       else s+='<rect class="wb" x="'+x.toFixed(1)+'" y="'+((H-padB)-1).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="1" fill="'+fill+'"/>';
+      // quota gara: sta in fondo alla barra, fondata sulla baseline
+      if(mh>1){
+        s+='<rect class="wb" x="'+x.toFixed(1)+'" y="'+((H-padB)-mh).toFixed(1)+'" width="'+barW.toFixed(1)+
+           '" height="'+mh.toFixed(1)+'" fill="url(#gmatch)"'+op+'/>';
+      }
+      s+='</g>';
       // value
       if(h>16) s+='<text x="'+xOf(i).toFixed(1)+'" y="'+(y-6).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--muted)">'+NF.format(w.load)+'</text>';
       // label settimana
       const wd=parse(w.key);
-      s+='<text x="'+xOf(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="10.5" fill="'+(isCur?'var(--orange2)':'var(--faint)')+'"'+(isCur?' font-weight="700"':'')+'>'+esc(itShort(wd))+'</text>';
+      s+='<text x="'+xOf(i).toFixed(1)+'" y="'+(H-26)+'" text-anchor="middle" font-size="10.5" fill="'+(isCur?'var(--orange2)':'var(--faint)')+'"'+(isCur?' font-weight="700"':'')+'>'+esc(itShort(wd))+'</text>';
+      // sotto la data: quante attivita' e come si muove sulla settimana prima
+      s+='<text x="'+xOf(i).toFixed(1)+'" y="'+(H-13)+'" text-anchor="middle" font-size="9.5" fill="var(--faint)">'+
+         att+(w.matches? ' ('+w.matches+'g)' : '')+'</text>';
+      if(dv !== null && Math.abs(dv) >= 5){
+        s+='<text x="'+xOf(i).toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+
+           (dv>0?'var(--orange2)':'var(--blue)')+'">'+(dv>0?'+':'')+dv+'%</text>';
+      }
     });
     s+='<defs>'+
       '<linearGradient id="gbar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--orange)"/><stop offset="1" stop-color="var(--orange2)"/></linearGradient>'+
@@ -5488,6 +5539,79 @@ window.FORZA = window.FORZA || { roster:[] };
 
   function ydMv(b){ return NF.format(+b.min||0)+' min '+MD+' RPE '+NF.format(+b.rpe||0); }
 
+  /* Come sono stati spesi i minuti: il nome del blocco passa dal riconoscitore
+     gia' usato per scrivere la seduta (wrTypeOf), che sa dire se il lavoro e' di
+     bassa, media o alta intensita'. Cosi' la card non dice solo quanto si e'
+     lavorato ma di che qualita' era il lavoro, che e' l'unica cosa che serve per
+     decidere la seduta di oggi. Il blocco che non si riconosce finisce in media,
+     che e' l'ipotesi meno rischiosa. */
+  const YD_FAM = [
+    { k:'lo', lab:'bassa'  },
+    { k:'md', lab:'media'  },
+    { k:'hi', lab:'alta'   }
+  ];
+  function ydMix(bl){
+    const o = { lo:0, md:0, hi:0, tot:0 };
+    (bl||[]).forEach(function(b){
+      const m = +b.min||0;
+      if(m <= 0) return;
+      const t = wrTypeOf(String(b.name||''));
+      const f = (t && o[t.fam] !== undefined) ? t.fam : 'md';
+      o[f] += m;
+      o.tot += m;
+    });
+    return o;
+  }
+  function ydMixHtml(mx){
+    if(!mx.tot) return '';
+    let bar = '', leg = '';
+    YD_FAM.forEach(function(f){
+      const v = mx[f.k];
+      if(v <= 0) return;
+      const p = Math.round(v / mx.tot * 100);
+      bar += '<i class="'+f.k+'" style="flex:'+v+' 1 0" title="'+esc(f.lab+' intensita: '+NF.format(v)+' min')+'"></i>';
+      leg += '<span class="yd-mxi '+f.k+'"><b>'+NF.format(v)+'</b> min '+f.lab+' ('+p+'%)</span>';
+    });
+    return '<div class="yd-mix"><span class="yd-mxb">'+bar+'</span>' +
+           '<span class="yd-mxl">'+leg+'</span></div>';
+  }
+
+  /* Carico dei sette giorni che finiscono in quel giorno: serve solo a dire
+     quanto pesa la giornata sulla settimana appena passata. */
+  function ydWeekLoad(d0){
+    let s = 0;
+    for(let k=0; k<7; k++){
+      const d = new Date(d0); d.setDate(d.getDate()-k);
+      s += loadOn(dstr(d));
+    }
+    return s;
+  }
+
+  /* Barra delle intensita' piu' le righe di confronto. Sta in una funzione sola
+     perche' la stessa cosa si riscrive sia al disegno della card sia mentre si
+     corregge un blocco. */
+  function ydExtraHtml(bl, cal){
+    const t = ydTot(bl);
+    let h = bl.length ? ydMixHtml(ydMix(bl)) : '';
+    const facts = [];
+    /* I due carichi non sono la stessa cosa e non vanno sottratti: quello scritto
+       e' minuti per RPE di una atleta, quello del calendario e' la somma di tutta
+       la squadra. Metterli a confronto in percentuale darebbe un numero falso,
+       quindi si scrive solo cosa sono. */
+    if(t.load > 0 && cal > 0){
+      facts.push('Il carico scritto e\' quello di una atleta (minuti per RPE), quello del calendario somma tutta la squadra.');
+    }
+    const wl = YD ? ydWeekLoad(YD.d) : 0;
+    if(cal > 0 && wl > 0){
+      facts.push('Pesa il '+Math.round(cal/wl*100)+'% del carico dei sette giorni che finiscono li\'.');
+    }
+    if(t.min > 0 && bl.length){
+      facts.push('RPE medio pesato sui minuti '+NF1.format(t.load/t.min)+'.');
+    }
+    if(facts.length) h += '<p class="yd-cmp">'+esc(facts.join(' '))+'</p>';
+    return h;
+  }
+
   function ydNew(){
     const md = mdOf(YD.ds);
     const gara = !!matchSet[YD.ds] || !!(YD.row && YD.row.is_match);
@@ -5532,6 +5656,8 @@ window.FORZA = window.FORZA || { roster:[] };
     const fl = document.getElementById('yd-fload');
     if(fm) fm.textContent = NF.format(t.min);
     if(fl) fl.textContent = NF.format(t.load);
+    const ex = document.getElementById('yd-extra');
+    if(ex) ex.innerHTML = ydExtraHtml(YD.sess.blocks, YD.row ? Math.round(+YD.row.load||0) : 0);
     const row = document.querySelector('.yd-row.open');
     const b = YD.sess.blocks[i];
     if(!row || !b) return;
@@ -5616,6 +5742,11 @@ window.FORZA = window.FORZA || { roster:[] };
       html += '<div class="yd-fig cal"><b>'+NF.format(cal)+'</b><span>calendario u.a.</span></div>';
     }
     html += '<p class="yd-note">'+txt+'</p></div>';
+
+    /* Le due letture che prima mancavano: com'erano fatti i minuti e quanto
+       pesa quella giornata su quello che c'e' intorno. Stanno in un contenitore
+       con id fisso perche' si riscrivono anche mentre si corregge un blocco. */
+    html += '<div id="yd-extra">'+ydExtraHtml(bl, cal)+'</div>';
 
     if(bl.length){
       html += '<div class="yd-list">' + bl.map(ydRowHTML).join('') + '</div>';
@@ -5713,6 +5844,35 @@ window.FORZA = window.FORZA || { roster:[] };
     return a.reduce(function(s, x){ return s + x.load; }, 0);
   }
 
+  /* MONOTONIA E STRAIN (Foster).
+     La monotonia e' la media dei carichi giornalieri divisa per la loro
+     deviazione standard sui sette giorni: dice quanto la settimana e' stata
+     sempre uguale a se stessa. Una settimana piatta, anche se non pesante,
+     stanca piu' di una settimana con alti e bassi, perche' non lascia un giorno
+     vero di recupero. Lo strain e' il carico settimanale moltiplicato per la
+     monotonia: e' il costo complessivo. Soglie di uso comune in letteratura:
+     sotto 1.5 la settimana ha una buona alternanza, fra 1.5 e 2 e' da tenere
+     d'occhio, sopra 2 e' troppo piatta. I giorni di riposo contano come zero e
+     vanno tenuti dentro il conto, altrimenti la monotonia si gonfia da sola. */
+  function lwMono(a){
+    const v = a.map(function(x){ return x.load; });
+    const n = v.length;
+    if(!n) return null;
+    const m = v.reduce(function(s, x){ return s + x; }, 0) / n;
+    if(!(m > 0)) return null;
+    let q = 0;
+    v.forEach(function(x){ q += (x - m) * (x - m); });
+    const sd = Math.sqrt(q / n);
+    if(!(sd > 0)) return null;
+    const mono = m / sd;
+    return { mono:mono, strain: m * n * mono };
+  }
+  function lwMonoZone(v){
+    if(v < 1.5) return { lbl:'alternanza buona', cls:'' };
+    if(v <= 2)  return { lbl:'settimana piatta', cls:'up' };
+    return        { lbl:'troppo piatta',         cls:'bad' };
+  }
+
   function renderLw(){
     const host = document.getElementById('lw-body');
     const sub  = document.getElementById('lw-sub');
@@ -5766,11 +5926,24 @@ window.FORZA = window.FORZA || { roster:[] };
       '<div class="lw-fig"><b>' + NF.format(load) + '</b><span>carico u.a.</span></div>' +
       '<div class="lw-fig n"><b>' + lav + '</b><span>' + (lav === 1 ? 'giorno' : 'giorni') + ' di lavoro</span></div>' +
       '<div class="lw-fig n"><b>' + gare + '</b><span>' + (gare === 1 ? 'gara' : 'gare') + '</span></div>';
+    // quanta parte del carico e' arrivata dalla gara: quello che resta e' il
+    // lavoro che si puo' davvero spostare quando si programma la settimana
+    const mload = cur.reduce(function(s, x){ return s + (x.gara ? x.load : 0); }, 0);
+    if(load > 0 && mload > 0){
+      html += '<div class="lw-fig n"><b>' + Math.round(mload / load * 100) + '%</b><span>carico da gara</span></div>';
+    }
     if(minTot > 0){
       html += '<div class="lw-fig n"><b>' + NF.format(minTot) + '</b><span>minuti scritti</span></div>';
     }
-    html += '<span class="lw-delta ' + dCls + '">' + esc(dTxt) + '</span>' +
-      '<p class="lw-note">' + esc(note) + '</p></div>';
+    html += '<span class="lw-delta ' + dCls + '">' + esc(dTxt) + '</span>';
+    const mo = lwMono(cur);
+    if(mo){
+      const mz = lwMonoZone(mo.mono);
+      html += '<span class="lw-delta ' + mz.cls + '" title="' +
+        esc('Monotonia = media dei carichi giornalieri diviso la loro deviazione standard. Strain = carico settimanale per monotonia, qui ' + NF.format(Math.round(mo.strain)) + ' u.a.') +
+        '">monotonia ' + NF1.format(mo.mono) + ', ' + mz.lbl + '</span>';
+    }
+    html += '<p class="lw-note">' + esc(note) + '</p></div>';
 
     const maxV = Math.max.apply(null, cur.map(function(x){ return x.load; }).concat([1]));
     html += '<div class="lw-days">' + cur.map(function(x){
@@ -5779,7 +5952,10 @@ window.FORZA = window.FORZA || { roster:[] };
       // Sul giorno vuoto il posto nel microciclo non dice niente di utile
       // (fuori stagione diventa MD+8, MD+9): meglio scrivere che si e' riposato.
       const lab = x.gara ? 'gara' : (x.load > 0 ? (x.md || 'lavoro') : 'riposo');
-      return '<div class="lw-day ' + cls + '">' +
+      const tip = itDate(x.d) + ': ' + (x.load > 0 ? NF.format(x.load) + ' u.a.' : 'nessun carico') +
+        (x.gara ? ', giorno gara' : (x.md ? ', ' + x.md : '')) +
+        (load > 0 && x.load > 0 ? ', il ' + Math.round(x.load / load * 100) + '% della settimana' : '');
+      return '<div class="lw-day ' + cls + '" title="' + esc(tip) + '">' +
         '<span class="lw-wd">' + LW_WD[x.d.getDay()] + '</span>' +
         '<span class="lw-dn">' + x.d.getDate() + '</span>' +
         '<span class="lw-bar"><i style="height:' + h + 'px"></i></span>' +
@@ -5788,8 +5964,16 @@ window.FORZA = window.FORZA || { roster:[] };
         '</div>';
     }).join('') + '</div>';
 
+    // Il giorno piu' pesante e' l'unico numero che manca a occhio nella griglia:
+    // dice dove e' finita la settimana e da dove togliere se serve alleggerire.
+    let top = null;
+    cur.forEach(function(x){ if(x.load > 0 && (!top || x.load > top.load)) top = x; });
     html += '<p class="lw-foot">Stessa finestra del carico acuto in cima alla pagina. ' +
-      'I giorni in viola sono gare, quelli in verde lavoro, quelli spenti riposo.</p>';
+      'I giorni in viola sono gare, quelli in verde lavoro, quelli spenti riposo.' +
+      (top ? ' Il giorno piu\' pesante e\' stato ' + esc(itShort(top.d)) + ' con ' +
+             NF.format(top.load) + ' u.a., il ' + Math.round(top.load / load * 100) +
+             '% della settimana.' : '') +
+      '</p>';
 
     host.innerHTML = html;
   }
