@@ -4473,9 +4473,18 @@ window.FORZA = window.FORZA || { roster:[] };
   let PRE_UNDO = null;
   let PRE_NUOVE = 0;      // quante aggregate ha tirato dentro l'ultima ricalcata
 
-  /* Chi non compare nella seduta torna assente, con una sola eccezione: chi e' dal
-     fisioterapista resta dal fisioterapista. Quello e' un percorso che dura
-     settimane e non va cancellato da una seduta a cui, appunto, non poteva esserci. */
+  /* I portieri il GPS non lo portano: nei file della seduta non compaiono mai, e
+     leggerli da li' vuol dire darli per assenti tutti i giorni. Restano dentro
+     alla ricalcata, poi si tolgono a mano come chiunque altro. */
+  function preGk(){
+    return ROSTER.filter(function(p){ return atPortiereP(p); });
+  }
+
+  /* Chi non compare nella seduta torna assente, con due eccezioni: chi e' dal
+     fisioterapista resta dal fisioterapista, perche' quello e' un percorso che
+     dura settimane e non va cancellato da una seduta a cui, appunto, non poteva
+     esserci; e i portieri, che nella seduta non ci sono mai per come e' fatto
+     il dato, non perche' non c'erano. */
   function preApply(){
     if(!GPS_LAST) return 0;
     // Nella seduta c'e' un nome che in rosa non esiste? E' una che e' salita
@@ -4494,7 +4503,9 @@ window.FORZA = window.FORZA || { roster:[] };
     let cambi = 0;
     ROSTER.forEach(function(p){
       const ora = avSt(p.name);
-      const st  = mappa[p.name] || (ora === 'fisico' ? 'fisico' : 'assente');
+      const fermo = ora === 'fisico' ? 'fisico' : null;
+      const st  = mappa[p.name] || fermo ||
+        (atPortiereP(p) ? 'disponibile' : 'assente');
       if(st !== ora) cambi++;
       if(st === 'disponibile') delete AVAIL[p.name]; else AVAIL[p.name] = st;
     });
@@ -4543,10 +4554,20 @@ window.FORZA = window.FORZA || { roster:[] };
         (GPS_LAST.dopo === 1 ? 'dal giorno dopo' : 'dai giorni dopo') +
         ' ho tenuto solo chi era in prima squadra o a parte.'
       : '';
+    // i portieri non hanno il GPS: si dice chi sono, se no sembra che la seduta
+    // li abbia letti e che siano dentro per caso
+    const gk = preGk();
+    const gkTxt = gk.length
+      ? ' I portieri il GPS non ce l\'hanno: ' +
+        gk.map(function(p){ return plNome(p.name); }).join(' e ') +
+        (gk.length === 1 ? ' resta' : ' restano') + ' sempre in rosa, ' +
+        (gk.length === 1 ? 'toglila' : 'toglile') + ' a mano se oggi non ' +
+        (gk.length === 1 ? 'c\'e\'.' : 'ci sono.')
+      : '';
     el.innerHTML =
       '<div class="rp-txt">Ricalcata dai GPS della seduta <b>'+esc(preGiorno())+'</b>: ' +
         esc(pezzi.join(', '))+'. Le altre partono da assenti, tocca il nome per correggere.' +
-        esc(dopo)+esc(extra)+'</div>' +
+        esc(dopo)+esc(extra)+esc(gkTxt)+'</div>' +
       '<div class="rp-acts">' +
         (PRE_UNDO ? '<button class="rp-btn undo" id="rosa-pre-undo" type="button">'+ICO_UNDO+'Annulla</button>' : '') +
         '<button class="rp-btn" id="rosa-pre-go" type="button">'+ICO_PRE+'Ricalca la seduta</button>' +
@@ -6219,7 +6240,7 @@ window.FORZA = window.FORZA || { roster:[] };
     const ok  = {};
     ROSTER.forEach(function(p){
       if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
-      if(atPortiere(p.role)) return;
+      if(atPortiereP(p)) return;
       ok[p.name] = 1;
     });
     const gg = {};
@@ -6723,6 +6744,19 @@ window.FORZA = window.FORZA || { roster:[] };
   function atPortiere(role){
     return String(role || '').trim().toLowerCase().indexOf('portier') === 0;
   }
+  /* Il ruolo lo scrive il mister in Atlete e per meta' della rosa la casella e'
+     ancora vuota: finche' resta vuota il portiere passa per una di movimento e
+     rientra dove non deve stare. I portieri in rosa sono due e cambiano una volta
+     l'anno, quindi i nomi valgono da rete di scorta, ma solo quando il ruolo non
+     e' scritto: se domani in Atlete c'e' scritto altro, vince quello che c'e'
+     scritto. */
+  const GK_NOMI = ['agostini', 'wenin', 'benin'];
+  function atPortiereP(p){
+    if(!p) return false;
+    if(atPortiere(p.role)) return true;
+    if(String(p.role || '').trim()) return false;
+    return GK_NOMI.indexOf(String(p.name || '').trim().toLowerCase()) >= 0;
+  }
   // Le aggregate sono le U17 che salgono per una seduta e le sporadiche dei fogli.
   // A interruttore spento restano fuori dalle schede: sono una ventina di atlete
   // in rosa, se ci si aggiungono tutte quelle di passaggio le schede diventano
@@ -6859,7 +6893,7 @@ window.FORZA = window.FORZA || { roster:[] };
     const aggOn = atAggOn();
     ROSTER.forEach(function(p){
       if(TG_ROLE !== 'Squadra' && p.role !== TG_ROLE) return;
-      if(atPortiere(p.role)){ out.gk++; return; }
+      if(atPortiereP(p)){ out.gk++; return; }
       if(atAggregata(p)){
         out.agg++;
         if(!aggOn) return;
