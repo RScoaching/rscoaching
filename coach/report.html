@@ -1919,9 +1919,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const ym = /^(\d{4})-(\d{2})$/.exec(String(mk||''));
     const yy = ym ? ym[1] : '';
     const mm = ym ? ym[2] : '';
-    // le sedute fuori squadra portano in coda la sigla FT o diff: qui serve
-    // solo il giorno, quindi la sigla si toglie prima di leggere l'etichetta
-    const lab = String(label||'').trim().replace(/\s+(FT|diff)$/, '');
+    // le sedute fuori squadra portano in coda la sigla FT, diff, rtp o naz: qui
+    // serve solo il giorno, quindi la sigla si toglie prima di leggere l'etichetta
+    const lab = String(label||'').trim().replace(/\s+(FT|diff|rtp|naz)$/, '');
     const lm = /^(\d{1,2})\s*(AM|PM)?$/i.exec(lab);
     const day = lm ? lm[1] : String(label||'');
     const ap  = (lm && lm[2]) ? lm[2].toUpperCase() : '';
@@ -2012,13 +2012,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(!mo) return;
       (mo.rows||[]).forEach(function(r){
         if(r.type!=='day' || !Array.isArray(r.v)) return;
-        const m = /^(.*\S)\s+(FT|diff)$/.exec(String(r.label||'').trim());
+        const m = /^(.*\S)\s+(FT|diff|rtp|naz)$/.exec(String(r.label||'').trim());
         if(!m || m[1] !== base) return;
         out.push({ name:name, role:roleOf(name), v:r.v, sg:m[2] });
       });
     });
+    // ordine delle sigle: prima il lavoro fatto qui (differenziato e rieducatore),
+    // poi quello fatto altrove (prima squadra e nazionale)
+    const SG_ORD = { diff:0, rtp:1, FT:2, naz:3 };
     out.sort(function(a,b){
-      if(a.sg !== b.sg) return a.sg==='diff' ? -1 : 1;
+      if(a.sg !== b.sg) return (SG_ORD[a.sg]||9) - (SG_ORD[b.sg]||9);
       return dispSort(a.name, b.name);
     });
     return out;

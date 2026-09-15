@@ -4197,8 +4197,10 @@ window.FORZA = window.FORZA || { roster:[] };
      Resta una proposta, non un verbale: un tocco sul nome cambia lo stato. */
   const WDI = { 'Lun':0, 'Mar':1, 'Mer':2, 'Gio':3, 'Ven':4, 'Sab':5, 'Dom':6 };
   // Sedute fuori squadra: nel foglio la riga si chiama "12AM FT" per la prima
-  // squadra e "12AM diff" per il lavoro individuale.
-  const SOLO_RE = /\s+(FT|diff)$/;
+  // squadra, "12AM diff" per il lavoro individuale, "12AM rtp" per quello col
+  // rieducatore e "12AM naz" per la nazionale. Senza rtp e naz nell'elenco
+  // quelle righe passavano per lavoro di gruppo e falsavano la rosa del giorno.
+  const SOLO_RE = /\s+(FT|diff|rtp|naz)$/;
 
   /* Il lunedi' della settimana sta nell'intestazione ("24-30/08"): il mese di
      chiusura e' scritto, quello di apertura si ricava quando il primo giorno e' piu'
@@ -4270,7 +4272,10 @@ window.FORZA = window.FORZA || { roster:[] };
           const m = SOLO_RE.exec(String(r.label||'').trim());
           const tag = m ? m[1] : '';
           const day = byDay[k] || (byDay[k] = { data:k, gruppo:[], diff:[], ft:[] });
-          const dove = tag === 'FT' ? day.ft : (tag === 'diff' ? day.diff : day.gruppo);
+          // rtp e naz sono lavoro a parte come il differenziato: chi ha una di
+          // quelle righe non era in gruppo, quindi ogni sigla che non sia FT
+          // finisce fra le atlete a parte invece che fra quelle di squadra
+          const dove = tag === 'FT' ? day.ft : (tag ? day.diff : day.gruppo);
           if(dove.indexOf(nome) < 0) dove.push(nome);
         });
       });
