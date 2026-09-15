@@ -411,10 +411,32 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-xw .hh{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px; }
 .tg-xw .hh b{ font-size:12.5px; font-weight:700; color:var(--ink); }
 .tg-xw .hh span{ font-size:11px; color:var(--faint); }
+/* la riga a griglia resta viva dentro la scheda della singola atleta, dove le voci
+   sono quattro righe e una tabella sarebbe piu' larga della scheda che la contiene */
 .tg-xr{ display:grid; grid-template-columns:158px 1fr; align-items:center; gap:7px 12px;
   margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
 .tg-xr .l{ font-size:11.5px; color:var(--text); }
 .tg-xr .l i{ display:block; font-style:normal; font-size:10.5px; color:var(--faint); margin-top:3px; }
+
+.tg-xw .sc{ margin-top:10px; overflow-x:auto; }
+/* la larghezza minima tiene conto dei sei moltiplicatori in fila: se la tabella
+   stringe sotto questa misura le pillole si impilano una per riga e la riga di una
+   sola voce diventa alta mezzo schermo. Meglio far scorrere la tabella di lato */
+.tg-xt{ border-collapse:collapse; width:100%; min-width:700px; }
+.tg-xt th, .tg-xt td{ padding:8px 10px; text-align:left; border-bottom:1px solid var(--border);
+  vertical-align:middle; }
+.tg-xt tr:last-child td{ border-bottom:0; padding-bottom:1px; }
+.tg-xt th{ font-size:10.5px; font-weight:600; color:var(--faint); white-space:nowrap; }
+.tg-xt td.d{ font-size:11.5px; color:var(--text); white-space:nowrap; }
+.tg-xt th.m, .tg-xt td.m{ text-align:center; white-space:nowrap; }
+.tg-xt td.m{ font-size:11.5px; color:var(--faint); }
+.tg-xt th.p, .tg-xt td.p{ text-align:right; white-space:nowrap; }
+/* nella riga della tabella il bollino sta gia' nella sua colonna: lo stacco
+   verticale che aveva sotto l'etichetta qui lo sposterebbe fuori asse */
+.tg-xt td.p .tg-pr{ margin-top:0; }
+/* i moltiplicatori restano su una riga sola: dentro la tabella la colonna e' fissa
+   e l'a capo qui non guadagna spazio, allunga soltanto la riga */
+.tg-xt .tg-xp{ flex-wrap:nowrap; }
 /* il bollino della priorita': si accende sulle voci che il preparatore vuole
    colpire per prime in settimana, e da quelle nasce il riepilogo qui sotto */
 .tg-pr{
@@ -507,6 +529,25 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-wk .fo p{ flex:1 1 260px; margin:0; font-size:11px; color:var(--muted); }
 .tg-wk .no{ font-size:11.5px; color:var(--muted); margin:10px 0 0; }
 .tg-wk .no a{ color:var(--orange2); }
+
+/* mostra o nascondi la tabella: sta in fondo alla riga del titolo delle due tabelle
+   larghe, il piano della settimana e le scelte su quante volte la gara. Stessa forma
+   dell'interruttore delle aggregate, classe diversa perche' l'handler deve poterli
+   distinguere: stanno tutti e due dentro la stessa card */
+.tg-tog{
+  margin-left:auto; appearance:none; cursor:pointer; font-family:inherit;
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--muted); background:var(--surface3); border:1px solid var(--border2);
+  border-radius:999px; padding:4px 10px; min-height:26px; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:6px;
+  transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .1s var(--ease);
+}
+.tg-tog:hover{ color:var(--ink); border-color:var(--border3); }
+.tg-tog:active{ transform:scale(.96); }
+.tg-tog.on{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
+.tg-tog .n{ font-size:10px; font-weight:700; opacity:.7; }
+.tg-bd{ animation: tgin .24s var(--ease) both; }
+.tg-bd[hidden]{ display:none; }
 
 .tg-xp{ display:flex; flex-wrap:wrap; gap:6px; }
 .tg-x{
@@ -5490,6 +5531,48 @@ window.FORZA = window.FORZA || { roster:[] };
     return tgRound((+ref[m.k] || 0) * TG_COEF[m.k], m.step);
   }
 
+  /* L'OBIETTIVO DI OGGI E IL PIANO DELLA SETTIMANA DEVONO DIRE LO STESSO NUMERO.
+     Erano due conti diversi sulla stessa seduta: la card di giornata ripartiva ogni
+     volta dalla gara del ruolo per il peso del giorno tipo, mentre il piano spalma
+     il totale di settimana sui soli giorni scritti a calendario e tiene conto di
+     quello che e' gia' stato corso. Bastava un giorno saltato o un martedi' forte
+     per far leggere due cifre diverse per lo stesso pomeriggio. Adesso la card
+     legge la riga di oggi del piano: quella e' la cifra che tiene in conto la
+     settimana intera. Se oggi non e' un giorno di lavoro scritto a calendario il
+     piano non ha una riga da dare, e si torna al conto sulla gara del ruolo.
+     Il risultato si tiene da parte finche' la card non si ridisegna: dentro una
+     stessa passata lo chiedono la griglia, le proposte di esercitazione e la nota,
+     e rifare il riparto tre volte non cambierebbe niente. */
+  let TG_WKROW = null;
+  function tgWkRow(ref){
+    if(TG_WKROW) return TG_WKROW;
+    const out = { ok:false, val:{}, man:false, fat:false };
+    try{
+      const gg = wkgDays();
+      const og = gg.filter(function(g){ return g.oggi && g.lav; })[0];
+      if(og){
+        let n = 0;
+        TG_METRICS.forEach(function(m){
+          const t = wkgTot(m, ref);
+          const c = wkgSplit(m, gg, t.v).val[og.ds];
+          if(!c) return;
+          out.val[m.k] = c.v;
+          if(c.man) out.man = true;
+          if(c.fat) out.fat = true;
+          n++;
+        });
+        out.ok = n === TG_METRICS.length;
+      }
+    }catch(e){ out.ok = false; }
+    TG_WKROW = out;
+    return out;
+  }
+  function tgDayTarget(m, ref){
+    const w = tgWkRow(ref);
+    if(w.ok && w.val[m.k] >= 0) return w.val[m.k];
+    return tgTarget(m, ref);
+  }
+
   function tgRoleCount(role){
     if(role === 'Squadra') return ROSTER.length;
     let n = 0;
@@ -5498,6 +5581,10 @@ window.FORZA = window.FORZA || { roster:[] };
   }
 
   function renderTargets(){
+    // il riparto di oggi si rifa' da zero a ogni passata: ruolo, pillole e caselle
+    // riscritte a mano lo cambiano tutte, e una cifra vecchia qui vorrebbe dire una
+    // card che dice una cosa e la tabella sotto un'altra
+    TG_WKROW = null;
     const ref = TG_REF[TG_ROLE] || TG_REF['Squadra'];
 
     document.getElementById('tg-roles').innerHTML = TG_ORDER.map(function(r){
@@ -5543,22 +5630,35 @@ window.FORZA = window.FORZA || { roster:[] };
     } else {
       note = 'Nessuna gara vicina a calendario: gli obiettivi seguono un allenamento tipo di meta\' settimana.';
     }
+    const wkr = tgWkRow(ref);
+    if(wkr.ok){
+      note += ' I numeri sono la riga di oggi del piano della settimana qui sotto: '+
+        'tengono conto di quanti giorni di lavoro ci sono e di quello che e\' gia\' stato corso'+
+        (wkr.man ? ', comprese le caselle riscritte a mano' : '')+'.';
+    }
     document.getElementById('tg-note').textContent = note;
 
     document.getElementById('tg-grid').innerHTML = TG_METRICS.map(function(m){
-      const tgt  = tgTarget(m, ref);
+      const tgt  = tgDayTarget(m, ref);
+      const dal  = wkr.ok && wkr.val[m.k] >= 0;
       const base = +ref[m.k] || 0;
       const lo   = tgRound(tgt * 0.85, m.step);
       const hi   = tgRound(tgt * 1.15, m.step);
       const pct  = Math.round(TG_COEF[m.k] * 100);
       const unit = m.u === 'm' ? 'm' : 'azioni';
       const op   = TG_OPEN === m.k;
+      /* Da dove esce la cifra. Quando la porta il piano si dice quello, perche' li'
+         dentro si puo' andare a cambiarla; quando il piano non ha una riga per oggi
+         resta il vecchio conto sulla gara del ruolo, e allora si dice quello. */
+      const sub  = dal
+        ? 'dal piano della settimana &#183; gara '+NF.format(base)+' '+unit
+        : 'gara '+NF.format(base)+' '+unit+' &#183; '+pct+'% oggi';
       return '<button type="button" class="tg-item'+(m.key?' key':'')+(op?' open':'')+'" data-k="'+m.k+'"'+
         ' aria-expanded="'+(op?'true':'false')+'" aria-controls="tg-drills">'+
         '<span class="tg-lbl">'+esc(m.lbl)+'</span>'+
         '<span class="tg-val tnum">'+NF.format(tgt)+'<small>'+unit+'</small></span>'+
         '<span class="tg-rng tnum">da '+NF.format(lo)+' a '+NF.format(hi)+'</span>'+
-        '<span class="tg-sub tnum">gara '+NF.format(base)+' '+unit+' &#183; '+pct+'% oggi</span>'+
+        '<span class="tg-sub tnum">'+sub+'</span>'+
         '<span class="tg-how">'+(op ? 'chiudi le proposte' : 'come produrli')+SVG_DN+'</span>'+
       '</button>';
     }).join('');
@@ -5597,7 +5697,9 @@ window.FORZA = window.FORZA || { roster:[] };
     if(!m || !list.length){ box.innerHTML = ''; return; }
 
     const ref  = TG_REF[TG_ROLE] || TG_REF['Squadra'];
-    const tgt  = tgTarget(m, ref);
+    // stessa cifra della card: le dosi si calcolano sull'obiettivo che si legge sopra,
+    // non su un secondo conto che nessuno vede
+    const tgt  = tgDayTarget(m, ref);
     const unit = m.u === 'm' ? 'm' : 'azioni';
 
     const allCut = list.every(function(d){ return tgDose(d, tgt).cut; });
@@ -6054,6 +6156,34 @@ window.FORZA = window.FORZA || { roster:[] };
     return '';
   }
 
+  /* LE DUE TABELLE SI APRONO E SI CHIUDONO.
+     Il piano della settimana e le scelte su quante volte la gara sono due tabelle
+     larghe che stanno dentro la card di oggi. Servono quando si programma, cioe'
+     il lunedi' e quando qualcosa cambia, ma il resto della settimana si apre la
+     pagina per leggere i numeri di oggi, e due tabelle aperte li spingono fuori
+     schermo. Adesso si mostrano e si nascondono, e la scelta resta nel browser
+     perche' chi le tiene chiuse le vuole chiuse anche domani. Chiuse di default:
+     la riga di oggi ormai si legge nella barra qui sopra. */
+  const TGSH_KEY = K('rs_fio_tgshow');
+  const TGSH = (function(){
+    const o = { wk:false, xw:false };
+    try{
+      const v = JSON.parse(localStorage.getItem(TGSH_KEY) || 'null');
+      if(v && typeof v === 'object'){ o.wk = !!v.wk; o.xw = !!v.xw; }
+    }catch(e){}
+    return o;
+  })();
+  function tgShSave(){
+    try{ localStorage.setItem(TGSH_KEY, JSON.stringify(TGSH)); }catch(e){}
+  }
+  function tgShBtn(which, quante){
+    const on = !!TGSH[which];
+    return '<button type="button" class="tg-tog'+(on ? ' on' : '')+'" data-tgsh="'+which+'"'+
+      ' aria-expanded="'+(on ? 'true' : 'false')+'">'+
+      (on ? 'nascondi' : 'mostra')+' la tabella'+
+      (on || !quante ? '' : '<span class="n">'+quante+'</span>')+'</button>';
+  }
+
   function renderWeek(){
     const box = document.getElementById('tg-week');
     if(!box) return;
@@ -6084,7 +6214,9 @@ window.FORZA = window.FORZA || { roster:[] };
     let h = '<div class="tg-wk">'+
       '<div class="hh"><b>Il piano della settimana</b><span>'+esc(per)+'</span>'+
       '<span>'+esc(TG_ROLE === 'Squadra' ? 'media di squadra' : TG_ROLE.toLowerCase())+'</span>'+
-      '<span>'+lav.length+' '+(lav.length === 1 ? 'giorno di lavoro' : 'giorni di lavoro')+'</span></div>'+
+      '<span>'+lav.length+' '+(lav.length === 1 ? 'giorno di lavoro' : 'giorni di lavoro')+'</span>'+
+      tgShBtn('wk', lav.length)+'</div>'+
+      '<div class="tg-bd"'+(TGSH.wk ? '' : ' hidden')+'>'+
       '<div class="sc"><table class="tg-wkt"><thead><tr><th class="d">Giorno</th>'+
       TG_METRICS.map(function(m){
         return '<th>'+esc(m.lbl)+'<i>'+esc(wkxLbl(wkxOf('', m.k)))+' la gara</i></th>';
@@ -6180,7 +6312,7 @@ window.FORZA = window.FORZA || { roster:[] };
       'Man mano che i file arrivano, i giorni gia\' corsi escono dal preventivo e quello che manca si '+
       'ridistribuisce da solo su quelli che restano.</p>'+ modu +
       (man ? '<button type="button" class="tg-x" data-wkrst="1">Torna ai numeri calcolati</button>' : '')+
-      '</div></div>';
+      '</div></div></div>';
 
     box.innerHTML = h;
   }
@@ -6985,14 +7117,27 @@ window.FORZA = window.FORZA || { roster:[] };
         '<div class="hh">'+
           '<b>Quante volte la gara in settimana</b>'+
           '<span>vale per tutte, poi si cambia atleta per atleta</span>'+
+          tgShBtn('xw', AT_MET.length)+
         '</div>'+
+        /* Erano cinque righe a griglia, una per voce, con il moltiplicatore del
+           ruolo infilato sotto l'etichetta e il bollino della priorita' di fianco:
+           tre cose diverse nella stessa colonna. In tabella ognuna ha la sua, si
+           leggono per colonna invece che riga per riga, e il confronto fra le voci
+           si fa con gli occhi invece che a memoria. */
+        '<div class="tg-bd"'+(TGSH.xw ? '' : ' hidden')+'>'+
+        '<div class="sc"><table class="tg-xt"><thead><tr>'+
+          '<th class="d">Voce</th><th class="m">Il piano del ruolo</th>'+
+          '<th>Quante volte la gara</th><th class="p">Da colpire per prima</th>'+
+        '</tr></thead><tbody>'+
         AT_MET.map(function(m){
-          return '<div class="tg-xr">'+
-            '<div class="l">'+esc(m.lbl)+'<i class="tnum">il piano del ruolo ne da '+wkxLbl(TG_WK_MULT[m.k])+'</i>'+
-              wkPriPill(m.k)+'</div>'+
-            wkxPills(m.k, WKX[m.k], '')+
-          '</div>';
+          return '<tr>'+
+            '<td class="d">'+esc(m.lbl)+'</td>'+
+            '<td class="m tnum">'+wkxLbl(TG_WK_MULT[m.k])+'</td>'+
+            '<td>'+wkxPills(m.k, WKX[m.k], '')+'</td>'+
+            '<td class="p">'+wkPriPill(m.k)+'</td>'+
+          '</tr>';
         }).join('')+
+        '</tbody></table></div></div>'+
       '</div>'+
       tgPrevHtml(g, wk)+
       salto;
@@ -7307,14 +7452,30 @@ window.FORZA = window.FORZA || { roster:[] };
           if(!Object.keys(r.day[ds]).length) delete r.day[ds];
         }
         wkgSave();
-        renderWeek();
+        // non basta piu' ridisegnare la tabella: la barra degli obiettivi di oggi
+        // legge la riga di oggi di questo piano, e se resta indietro dice una cifra
+        // diversa da quella appena scritta due righe piu' sotto
+        renderTargets();
       });
       week.addEventListener('click', function(ev){
-        const b = ev.target.closest ? ev.target.closest('[data-wkrst]') : null;
+        const t = ev.target;
+        if(!t || !t.closest) return;
+
+        const sh = t.closest('[data-tgsh]');
+        if(sh){
+          const w = sh.getAttribute('data-tgsh');
+          if(!w) return;
+          TGSH[w] = !TGSH[w];
+          tgShSave();
+          renderWeek();
+          return;
+        }
+
+        const b = t.closest('[data-wkrst]');
         if(!b) return;
         if(WKG_ALL[WKG_LUN]) delete WKG_ALL[WKG_LUN][TG_ROLE];
         wkgSave();
-        renderWeek();
+        renderTargets();
       });
     }
 
@@ -7325,6 +7486,18 @@ window.FORZA = window.FORZA || { roster:[] };
     if(atl) atl.addEventListener('click', function(ev){
       const t = ev.target;
       if(!t || !t.closest) return;
+
+      // mostra o nascondi la tabella delle scelte. Va letto prima dell'interruttore
+      // delle aggregate: sono due pillole nella stessa card e si somigliano
+      const sh = t.closest('[data-tgsh]');
+      if(sh){
+        const w = sh.getAttribute('data-tgsh');
+        if(!w) return;
+        TGSH[w] = !TGSH[w];
+        tgShSave();
+        renderAtlete();
+        return;
+      }
 
       // il bollino della priorita': accende o spegne la voce da colpire per prima
       const pr = t.closest('.tg-pr');
