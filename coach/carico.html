@@ -944,6 +944,17 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   tr.r-teamref td, tr.r-teamref td.col-day{ background:#eaf4ea !important; }
   tr.r-teamref td.col-day .lb{ color:#2f6b34 !important; }
   tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td{ color:#6a625c !important; }
+  /* le righe val/match devono leggersi come tutte le altre: stesso corpo, niente corsivo.
+     A video restano piccole e in corsivo, in stampa no: il foglio deve essere uniforme */
+  .print-split table.grid tr.r-valweek td, .print-split table.grid tr.r-valtrain td,
+  .print-split table.grid tr.r-valmonth td, .print-split table.grid tr.r-model td,
+  .print-split table.grid tr.r-valweek td .lb, .print-split table.grid tr.r-valtrain td .lb,
+  .print-split table.grid tr.r-valmonth td .lb, .print-split table.grid tr.r-model td .lb{
+    font-size:inherit !important; font-style:normal !important; }
+  /* stesso corpo ma riga piu' bassa: e' cosi' che il taglio Completo recupera lo spazio
+     verticale che serve per tenere due microcicli per foglio senza rimpicciolire i dati */
+  .print-split table.grid tr.r-valweek td, .print-split table.grid tr.r-valtrain td,
+  .print-split table.grid tr.r-valmonth td{ padding:var(--ptight, 2px 7px) !important; }
   /* la fascia del microciclo porta le date e i nomi dei parametri: e' la riga che
      dice cosa si sta leggendo, quindi diventa viola piena con le scritte in bianco */
   tr.wkband td{ background:#5b2d90 !important; color:#ffffff !important;
@@ -3425,11 +3436,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const PRINT_W = 1060;      // 283mm di foglio utile a 96dpi, con un filo di margine
   const PRINT_H = 712;       // altezza utile di una facciata di seguito: solo il bordo bianco in cima
   const PRINT_WK_PAGE = 2;   // microcicli per pagina
+  // La scala parte piu' in alto di prima: il taglio Completo ha quasi il doppio delle righe
+  // del Nazionale, quindi prima si prova a tenere il corpo grande e a stringere solo le righe
+  // val/match (tight), che sono di appoggio, invece di rimpicciolire tutta la tabella.
   const PRINT_TIERS = [
-    { fs:10, pad:'5px 8px' },
-    { fs:9,  pad:'4px 6px' },
-    { fs:8,  pad:'3px 5px' },
-    { fs:7,  pad:'2px 4px' }
+    { fs:12, pad:'7px 9px', tight:'3px 9px' },
+    { fs:11, pad:'6px 8px', tight:'3px 8px' },
+    { fs:10, pad:'5px 8px', tight:'2px 8px' },
+    { fs:9,  pad:'4px 6px', tight:'2px 6px' },
+    { fs:8,  pad:'3px 5px', tight:'1px 5px' },
+    { fs:7,  pad:'2px 4px', tight:'1px 4px' }
   ];
   function printChunks(n, cap){
     const out = [];
@@ -3537,6 +3553,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       n.style.marginLeft = '6px';
       n.style.marginTop = '0';
     });
+    // a video le righe val/match sono piccole e in corsivo per distinguersi dai totali, ma in
+    // stampa devono leggersi come tutte le altre. Va neutralizzato qui, sulla copia, perche' e'
+    // questa che finisce sul banco di misura: se lo facessi solo nel CSS di stampa la misura
+    // sarebbe presa su righe da 11.5px e il corpo scelto per il foglio sarebbe sbagliato.
+    cl.querySelectorAll('tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td, tr.r-model td')
+      .forEach(td=>{
+        td.style.fontSize = 'inherit';
+        td.style.fontStyle = 'normal';
+        td.querySelectorAll('.lb').forEach(n=>{
+          n.style.fontSize = 'inherit';
+          n.style.fontStyle = 'normal';
+        });
+      });
     return cl;
   }
   function printApplyTier(tb, t){
@@ -3544,6 +3573,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     tb.style.width = 'auto';
     tb.style.tableLayout = 'auto';
     tb.querySelectorAll('th, td').forEach(c=>{ c.style.padding = t.pad; });
+    // le righe val/match tengono lo stesso corpo delle altre ma stanno piu' strette in altezza:
+    // e' il margine che permette al taglio Completo di restare sui due microcicli per foglio
+    if(t.tight){
+      tb.querySelectorAll('tr.r-valweek td, tr.r-valtrain td, tr.r-valmonth td')
+        .forEach(c=>{ c.style.padding = t.tight; });
+    }
   }
   // tiene le prime lead colonne, taglia i parametri fuori dalla fascia a-b e lascia sempre
   // in coda le tail colonne di RPE e TL: quelle devono tornare su ogni fascia, altrimenti
@@ -3797,6 +3832,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(groups && !printGroupsFit(lay, plan, groups)) wrap.className += ' print-split-open';
     wrap.style.setProperty('--pfs', plan.tier.fs+'px');
     wrap.style.setProperty('--ppad', plan.tier.pad);
+    wrap.style.setProperty('--ptight', plan.tier.tight || plan.tier.pad);
     chunks.forEach(ch=>{
       const a = ch[0], b = ch[1];
       const blk = document.createElement('div');
