@@ -29,6 +29,10 @@
   --violet-border: oklch(62% 0.22 280 / 0.22);
   --ember-bg: oklch(68% 0.19 42 / 0.10);
   --ember-border: oklch(68% 0.19 42 / 0.24);
+  /* l'azzurro era gia' in uso per i numeri in discesa: qui serve anche in fondo e in
+     cornice, per i giorni che hanno una seduta scritta e non ancora corsa */
+  --blue-bg: oklch(72% 0.13 230 / 0.10);
+  --blue-border: oklch(72% 0.13 230 / 0.24);
   --text:    oklch(78% 0.012 38);
   --ink:     oklch(93% 0.010 38);
   --muted:   oklch(58% 0.014 38);
@@ -780,6 +784,30 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .mc-ld{ display:block; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; line-height:1.2; }
 .mc-ld small{ font-size:9px; color:var(--faint); display:block; }
 .mc-ovr{ display:block; font-size:9.5px; color:var(--orange2); margin-top:5px; }
+/* il giorno che ha gia' una seduta scritta nel Calendario ma non ancora corsa: la
+   colonna e' vuota di carico e piena di programma, e va vista prima di leggere il
+   resto della striscia. Il tratteggio dice che quella colonna e' un impegno preso,
+   non una misura */
+.mc-day.pian{ border-color:var(--blue-border); background:var(--blue-bg); }
+.mc-day.pian .mc-fill{ background:transparent; border:1px dashed var(--blue); border-bottom:none; }
+.mc-day.pian .mc-ld{ color:var(--blue); }
+.mc-sl{ display:block; font-size:9.5px; color:var(--blue); margin-top:4px;
+  letter-spacing:.4px; text-transform:uppercase; }
+/* l'elenco di quello che e' gia' scritto piu' avanti nel microciclo: giorno, slot e
+   programma su una riga sola per seduta, perche' la domanda e' sempre la stessa,
+   quanti allenamenti restano e dove sono */
+.mc-pln{ margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+.mc-pln .h{ font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+.mc-pln .h b{ color:var(--text); font-weight:600; }
+.mc-plr{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px; padding:6px 0;
+  border-bottom:1px solid var(--border); font-size:12px; }
+.mc-plr:last-child{ border-bottom:none; padding-bottom:0; }
+.mc-plr .g{ font-weight:600; color:var(--ink); min-width:108px; }
+.mc-plr .g em{ font-style:normal; color:var(--blue); font-size:10.5px; letter-spacing:.4px;
+  text-transform:uppercase; margin-left:5px; }
+.mc-plr .p{ color:var(--muted); flex:1 1 220px; }
+.mc-plr .m{ color:var(--faint); font-size:11px; font-variant-numeric:tabular-nums; }
+.mc-plr.oggi .g{ color:var(--orange2); }
 .btn.mc-rst{ min-height:32px; padding:6px 11px; font-size:12px; }
 .mc-ed{ margin-top:15px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r);
   padding:15px 16px 14px; animation: tgin .3s var(--ease) both; }
@@ -1396,6 +1424,7 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
         </div>
         <div class="card-body">
           <div class="mc-strip" id="mc-strip"></div>
+          <div id="mc-pln"></div>
           <div id="mc-edit"></div>
           <div class="mc-txt" id="mc-txt"></div>
         </div>
@@ -2375,14 +2404,23 @@ window.FORZA = window.FORZA || { roster:[] };
     if(!rng){ card.hidden = true; return; }
     card.hidden = false;
 
+    /* Due misure diverse nella stessa striscia: il carico del GPS per i giorni gia'
+       corsi, i minuti scritti nel Calendario per quelli che devono ancora arrivare.
+       Non sono la stessa cosa e quindi non condividono la scala: la colonna piena sta
+       sul massimo del carico, quella tratteggiata sul massimo dei minuti scritti. Il
+       giorno che ha tutte e due e' un giorno gia' fatto e vince il carico, perche'
+       quello che era scritto ormai e' successo. */
     const cells = [];
-    let maxLoad = 0;
+    let maxLoad = 0, maxMin = 0;
     for(let d = new Date(rng.start); d <= rng.end; d.setDate(d.getDate()+1)){
       const ds = dstr(d);
       const row = byDate[ds] || null;
       const load = row ? (+row.load||0) : 0;
+      const pl = (!load && !matchSet[ds]) ? (PIAN[ds] || null) : null;
       if(load > maxLoad) maxLoad = load;
-      cells.push({ ds:ds, d:new Date(d), md:mdOf(ds), load:load, row:row, isMatch:!!matchSet[ds] });
+      if(pl && pl.min > maxMin) maxMin = pl.min;
+      cells.push({ ds:ds, d:new Date(d), md:mdOf(ds), load:load, row:row,
+                   isMatch:!!matchSet[ds], pian:pl });
     }
 
     const strip = document.getElementById('mc-strip');
@@ -2391,19 +2429,33 @@ window.FORZA = window.FORZA || { roster:[] };
       if(c.isMatch) cls.push('match');
       if(c.ds === TSTR) cls.push('today');
       if(!c.load) cls.push('zero');
+      if(c.pian) cls.push('pian');
       if(c.ds === MC_SEL) cls.push('sel');
-      const h = maxLoad ? Math.max(2, Math.round(c.load/maxLoad*46)) : 2;
+      const h = c.pian
+        ? (maxMin ? Math.max(4, Math.round(c.pian.min/maxMin*46)) : 4)
+        : (maxLoad ? Math.max(2, Math.round(c.load/maxLoad*46)) : 2);
       const lbl = c.md || '·';
-      const val = c.load ? NF.format(c.load) : (c.ds > TSTR ? 'da fare' : '-');
+      /* "da fare" restava scritto anche sul giorno che una seduta ce l'ha gia': la
+         domanda del mister non e' se manca qualcosa, e' quanto e' lungo quello che
+         ha scritto. I minuti rispondono, "da fare" no. */
+      const val = c.load ? NF.format(c.load)
+                : (c.pian ? c.pian.min+"'"
+                : (c.ds > TSTR ? 'da fare' : '-'));
+      const un  = c.load ? '<small>u.a.</small>'
+                : (c.pian ? '<small>gia\' scritti</small>' : '');
       return '<button type="button" class="'+cls.join(' ')+'" data-ds="'+esc(c.ds)+'" '+
-          'title="'+esc(itDate(c.d))+'" aria-expanded="'+(c.ds === MC_SEL ? 'true' : 'false')+'">'+
+          'title="'+esc(itDate(c.d))+(c.pian ? ' &#183; '+esc(pianProg(c.pian, 3)) : '')+'" '+
+          'aria-expanded="'+(c.ds === MC_SEL ? 'true' : 'false')+'">'+
         '<span class="mc-md">'+esc(lbl)+'</span>'+
         '<span class="mc-dt">'+esc(itShort(c.d))+'</span>'+
         '<span class="mc-bar"><span class="mc-fill" style="height:'+h+'px"></span></span>'+
-        '<span class="mc-ld">'+esc(val)+(c.load?'<small>u.a.</small>':'')+'</span>'+
+        '<span class="mc-ld">'+esc(val)+un+'</span>'+
+        (c.pian && c.pian.slots.length ? '<span class="mc-sl">'+esc(c.pian.slots.join('+'))+'</span>' : '')+
         (MC_DAY[c.ds] ? '<span class="mc-ovr">corretto a mano</span>' : '')+
       '</button>';
     }).join('');
+
+    renderMicroPlan(cells);
 
     strip.querySelectorAll('.mc-day').forEach(function(b){
       b.addEventListener('click', function(){
@@ -2435,6 +2487,53 @@ window.FORZA = window.FORZA || { roster:[] };
             'Click sul giorno della gara per metterla a mano.';
     }
     document.getElementById('mc-txt').innerHTML = txt;
+  }
+
+  /* ---- quello che e' gia' scritto nel microciclo ----
+     La striscia dice dove sono gli allenamenti in attesa, questo elenco dice cosa
+     sono: senza il programma la colonna azzurra e' solo una casella occupata, e per
+     sapere se la settimana regge bisogna aprire il Calendario. Le sedute scritte e
+     gia' passate restano in elenco, separate: un giorno scritto che non ha carico
+     non e' un allenamento in attesa, e' un file GPS che non e' arrivato, e nascondere
+     la differenza farebbe contare due volte lo stesso lavoro. */
+  function renderMicroPlan(cells){
+    const box = document.getElementById('mc-pln');
+    if(!box) return;
+    const pl = cells.filter(function(c){ return c.pian; });
+    if(!pl.length){
+      const dopo = cells.filter(function(c){ return c.ds > TSTR && !c.isMatch; }).length;
+      box.innerHTML = dopo
+        ? '<div class="h">Da qui alla gara ci sono <b>'+dopo+'</b> giorni liberi e nessuna seduta scritta nel Calendario.</div>'
+        : '';
+      return;
+    }
+    const attesa = pl.filter(function(c){ return c.ds >= TSTR; });
+    const vecchie = pl.length - attesa.length;
+    const min = attesa.reduce(function(s, c){ return s + c.pian.min; }, 0);
+    const rows = pl.map(function(c){
+      const vecchia = c.ds < TSTR;
+      const prog = pianProg(c.pian, 4);
+      return '<div class="mc-plr'+(c.ds === TSTR ? ' oggi' : '')+'">'+
+        '<span class="g">'+esc(WD[c.d.getDay()]+' '+itShort(c.d))+
+          (c.pian.slots.length ? '<em>'+esc(c.pian.slots.join('+'))+'</em>' : '')+'</span>'+
+        '<span class="p">'+esc(prog || c.pian.tit || 'seduta senza programma')+'</span>'+
+        '<span class="m">'+(c.pian.min ? c.pian.min+"'" : '')+
+          (vecchia ? (c.pian.min ? ' &#183; ' : '')+'senza GPS' : '')+'</span>'+
+      '</div>';
+    }).join('');
+    let h;
+    if(!attesa.length){
+      h = 'Nessun allenamento in attesa: le sedute scritte qui sotto sono gia\' passate '+
+          'e il GPS di quei giorni non e\' ancora arrivato.';
+    } else {
+      h = '<b>'+attesa.length+'</b> '+
+          (attesa.length === 1 ? 'allenamento gia\' scritto' : 'allenamenti gia\' scritti')+
+          ' nel Calendario da qui alla gara'+(min ? ', '+min+"' in tutto" : '')+'.';
+      if(vecchie) h += vecchie === 1
+        ? ' Un\'altra seduta scritta resta senza GPS.'
+        : ' Altre '+vecchie+' sedute scritte restano senza GPS.';
+    }
+    box.innerHTML = '<div class="h">'+h+'</div>'+rows;
   }
 
   // ---- correzione a mano di un giorno ----
@@ -2472,12 +2571,25 @@ window.FORZA = window.FORZA || { roster:[] };
     const cur  = MC_DAY[MC_SEL] || '';
     const auto = mcAuto(MC_SEL);
     const plan = MD_PLAN[mdOf(MC_SEL)] || null;
+    /* Chi apre un giorno della striscia lo apre per decidere che giorno e', e la
+       decisione cambia se li' c'e' gia' scritto qualcosa: mettere MD-1 su una mattina
+       da settanta minuti di possesso non e' lo stesso che metterlo su un giorno
+       vuoto. Il programma scritto sta qui accanto ai gradini, non in un'altra pagina. */
+    const scr = PIAN[MC_SEL] || null;
 
     box.innerHTML = '<div class="mc-ed">'+
       '<div class="mc-ed-h">'+
         '<span class="t">'+esc(itDate(d))+'</span>'+
         '<span class="s">'+(plan ? esc(plan.tit.toLowerCase()) : 'nessuna posizione nel microciclo')+'</span>'+
       '</div>'+
+      (scr
+        ? '<div class="mc-ed-n" style="margin-top:9px">Gia\' scritto nel Calendario'+
+            (scr.slots.length ? ' ('+esc(scr.slots.join('+'))+')' : '')+': '+
+            esc(pianProg(scr, 5) || scr.tit || 'seduta senza programma')+
+            (scr.min ? ' &#183; '+scr.min+"' in tutto" : '')+
+            (scr.min && scr.campo < scr.min ? ', di cui '+scr.campo+"' sul campo" : '')+
+          '.</div>'
+        : '')+
       '<div class="mc-ed-c">'+
         MC_PICKS.map(function(p){
           return '<button type="button" class="mc-pick'+(p.k === cur ? ' on' : '')+'" data-k="'+esc(p.k)+'" '+
