@@ -341,8 +341,10 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .acwr-legend .lg-dot.warn{ background:oklch(80% 0.15 75); }
 .acwr-legend .lg-dot.high{ background:oklch(64% 0.22 25); }
 .acwr-legend .lg-band{ width:14px; height:11px; border-radius:3px; background:oklch(70% 0.18 152 / 0.22); border:1px solid oklch(70% 0.18 152 / 0.4); }
-.acwr-legend .lg-vio{ width:16px; height:0; border-top:2.4px solid var(--violet2); }
+.acwr-legend .lg-mid{ width:16px; height:0; border-top:2.4px dashed var(--violet2); }
 svg.chart .an-bar{ transform-box:fill-box; transform-origin:center bottom; cursor:pointer; transition:opacity .15s var(--ease), filter .15s var(--ease); }
+/* le colonne che scendono sotto la media crescono verso il basso, non verso l'alto */
+svg.chart .an-bar.down{ transform-origin:center top; }
 svg.chart .an-bar:hover, svg.chart .an-bar.hot{ opacity:1 !important; filter:brightness(1.12); }
 svg.chart .acwr-dot{ transition:r .12s var(--ease); cursor:pointer; }
 svg.chart .acwr-dot:hover{ r:6.5; }
@@ -1196,10 +1198,10 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
               <div class="chart-wrap" id="acwr-chart1"></div>
             </div>
             <div class="acwr-block">
-              <div class="acwr-blk-head"><h3>Acuto vs cronico</h3><span>settimana per settimana</span></div>
+              <div class="acwr-blk-head"><h3>Scarto dalla media</h3><span>settimana per settimana</span></div>
               <div class="legend acwr-legend">
-                <span><span class="lg-bar"></span>carico settimana</span>
-                <span><span class="lg-vio"></span>media 4 settimane</span>
+                <span><span class="lg-mid"></span>media 4 settimane</span>
+                <span><span class="lg-dot ok"></span>sopra o sotto, col colore della zona</span>
               </div>
               <div class="chart-wrap" id="acwr-chart2"></div>
             </div>
@@ -1771,7 +1773,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(state.chartIdx !== a){ renderChart(); renderMini(); }
     if(state.acwrIdx !== b) renderAnalytics();
   }
-  function refreshCols(){ updateColsCount(); syncMetLists(); renderGrid(); }
+  // la sinottica regge anche i riquadri del rischio quando fra i parametri chiave
+  // non c'e' niente da sommare, quindi vanno rifatti insieme al resto
+  function refreshCols(){ updateColsCount(); syncMetLists(); renderGrid(); if(metLive) renderAcwrGrid(); }
   function updateColsCount(){ const el=document.getElementById('cols-count'); if(el) el.textContent = VIS().length+'/'+M.length; }
 
   // ---------- helpers ----------
@@ -1935,7 +1939,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   syncMetLists();
   function syncAcwrSelect(){
     const sel = document.getElementById('acwr-metric');
-    if(sel) sel.value = String(state.acwrIdx);
+    if(!sel) return;
+    /* Un parametro chiave puo' stare fuori dalla sinottica scelta in alto: toccando
+       il suo riquadro entra comunque nella tendina, altrimenti i grafici direbbero
+       una cosa e la tendina ne mostrerebbe un'altra. */
+    if(!sel.querySelector('option[value="'+state.acwrIdx+'"]')){
+      const o = document.createElement('option');
+      o.value = String(state.acwrIdx);
+      o.textContent = metName(state.acwrIdx);
+      sel.appendChild(o);
+    }
+    sel.value = String(state.acwrIdx);
   }
 
   // ---------- chart scope (microciclo / mese / stagione) + settimana ----------
@@ -3027,13 +3041,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       acwrSpark(acwr)+
       '</button>';
   }
+  /* Anche qui i parametri li sceglie il mister, non il programma. Prima la griglia
+     stampava tutte le metriche che si sommano, venti riquadri buttati dentro insieme,
+     e quelli che interessavano davvero finivano in mezzo agli altri. Adesso escono i
+     parametri col pallino arancione, gli stessi della scheda sopra. Il rapporto ha
+     senso solo su quello che si somma: se fra i chiave non c'e' niente di sommabile
+     si ripiega sui parametri scelti nella sinottica, e l'elenco intero resta come
+     ultima riserva per non lasciare la sezione vuota. */
+  function acwrChoice(){
+    const key = keyOrder.filter(i=> i>=0 && i<NMET && metSum(i));
+    if(key.length) return key.slice(0, CHIAVE_MAX);
+    const vis = metChoice().filter(i=> metSum(i));
+    return vis.length ? vis : SUMIDX;
+  }
   function renderAcwrGrid(){
     const host = document.getElementById('acwr-grid'); if(!host) return;
     const hint = document.getElementById('acwr-grid-hint');
-    if(hint) hint.textContent = 'ultima settimana su media 4 settimane, tocca per portare il parametro nei grafici sotto';
+    if(hint) hint.textContent = 'i parametri col pallino arancione, ultima settimana su media 4 settimane, '+
+      'tocca un parametro per portarlo nei grafici sotto';
+    const list = acwrChoice();
     let html = '';
-    SUMIDX.forEach(i=>{ html += acwrCell(i); });
-    host.innerHTML = html || emptyBlock('Nessun parametro sommabile disponibile');
+    list.forEach(i=>{ html += acwrCell(i); });
+    host.innerHTML = list.length ? html : emptyBlock('Nessun parametro chiave da sommare');
     host.querySelectorAll('.acell').forEach(b=>{
       b.addEventListener('click', ()=>{
         state.acwrIdx = +b.getAttribute('data-idx');
@@ -3118,43 +3147,71 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
   }
-  function renderAcwrLoad(weeks, acwr, idx){
+  /* Una colonna che scende sotto la riga si legge in mezzo secondo, due torri no. */
+  function gapPath(x, y, w, h, r, down){
+    if(!(w>0) || !(h>0)) return '';
+    r = Math.max(0, Math.min(r, w/2, h));
+    const n = v => v.toFixed(1);
+    if(!down){
+      return 'M '+n(x)+' '+n(y+h)+' L '+n(x)+' '+n(y+r)+' Q '+n(x)+' '+n(y)+' '+n(x+r)+' '+n(y)+
+        ' L '+n(x+w-r)+' '+n(y)+' Q '+n(x+w)+' '+n(y)+' '+n(x+w)+' '+n(y+r)+
+        ' L '+n(x+w)+' '+n(y+h)+' Z';
+    }
+    return 'M '+n(x)+' '+n(y)+' L '+n(x)+' '+n(y+h-r)+' Q '+n(x)+' '+n(y+h)+' '+n(x+r)+' '+n(y+h)+
+      ' L '+n(x+w-r)+' '+n(y+h)+' Q '+n(x+w)+' '+n(y+h)+' '+n(x+w)+' '+n(y+h-r)+
+      ' L '+n(x+w)+' '+n(y)+' Z';
+  }
+  /* La grafica "acuto vs cronico" erano due torri sovrapposte: una colonna arancione
+     per la settimana e una linea viola per la media, e per capire se si era caricato
+     di piu' o di meno del solito bisognava misurare a occhio la distanza fra le due.
+     La domanda pero' e' una sola: questa settimana quanto si e' scostata dalle quattro
+     precedenti. Quindi resta una riga sola, la media, e le colonne salgono sopra o
+     scendono sotto, ognuna col colore della sua zona di rischio. Le prime tre
+     settimane, dove la media e' ancora costruita su meno di quattro dati, restano
+     piu' spente: il numero c'e' ma vale meno. */
+  function renderAcwrGap(weeks, acwr, idx){
     const wrap = document.getElementById('acwr-chart2'); if(!wrap) return;
     if(weeks.length<2){ wrap.innerHTML = emptyBlock('Dati insufficienti'); return; }
     const geo = anLayout(weeks.length, wrap, { H:230, padB:34, slotMin:22 });
     const W = geo.W, unit = metUnit(idx);
-    const maxV = Math.max(1, ...acwr.map(x=> x.acute||0), ...acwr.map(x=> x.chronic||0));
-    const nice = niceMax(maxV);
-    const yOf = v => geo.padT + geo.plotH*(1 - Math.min(v,nice)/nice);
-    let g=''; const TICKS=4;
-    for(let t=0;t<=TICKS;t++){ const val=nice*t/TICKS, y=yOf(val);
+    const dev = acwr.map(x=> (x.ratio==null ? null : (x.ratio-1)*100));
+    let mx = 20;
+    dev.forEach(d=>{ if(d!=null && Math.abs(d) > mx) mx = Math.abs(d); });
+    mx = Math.ceil(mx/10)*10;
+    const mid = geo.padT + geo.plotH/2, half = geo.plotH/2;
+    const yOf = d => mid - half * Math.max(-1, Math.min(1, d/mx));
+    let g='';
+    for(let v=-mx; v<=mx+1e-9; v+=mx/2){
+      const y = yOf(v);
       g += '<line x1="'+geo.padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+y.toFixed(1)+'" stroke="oklch(24% 0.016 38 / 0.7)" stroke-width="1"/>';
-      g += '<text x="'+(geo.padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+(nice>=1000?NF0.format(Math.round(val)):NF.format(val))+'</text>';
+      g += '<text x="'+(geo.padL-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--faint)">'+
+        (v>0?'+':'')+NF0.format(Math.round(v))+'%</text>';
     }
     g += monthAxis(weeks, geo);
-    g += '<line x1="'+geo.padL+'" y1="'+(geo.padT+geo.plotH).toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+(geo.padT+geo.plotH).toFixed(1)+'" stroke="oklch(32% 0.02 38)" stroke-width="1.5"/>';
     const barW = Math.min(26, geo.slot-8);
-    acwr.forEach((x,i)=>{ const v=x.acute||0, y=yOf(v), h=Math.max(0,(geo.padT+geo.plotH)-y);
-      const d=barPath(geo.xs[i]-barW/2, y, barW, h, 3);
-      if(d) g += '<path class="an-bar" data-i="'+i+'" d="'+d+'" fill="url(#anBar)" opacity="0.9"></path>';
+    acwr.forEach((x,i)=>{
+      const d = dev[i];
+      if(d==null) return;
+      const z = acwrZone(x.ratio), down = d < 0;
+      const y1 = yOf(d), top = Math.min(mid, y1), h = Math.max(2, Math.abs(y1-mid));
+      const p = gapPath(geo.xs[i]-barW/2, top, barW, h, 3, down);
+      if(p) g += '<path class="an-bar'+(down?' down':'')+'" data-i="'+i+'" d="'+p+'" fill="'+z.color+'" opacity="'+(x.full?'0.92':'0.45')+'"></path>';
     });
-    // linea cronico
-    const cp = acwr.map((x,i)=> ({ x:geo.xs[i], y:yOf(x.chronic||0) }));
-    let line='M '+cp[0].x.toFixed(1)+' '+cp[0].y.toFixed(1);
-    cp.forEach((p,k)=>{ if(k>0) line += ' L '+p.x.toFixed(1)+' '+p.y.toFixed(1); });
-    g += '<path class="acwr-line" d="'+line+'" fill="none" stroke="var(--violet2)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
-    cp.forEach(p=>{ g += '<circle class="acwr-dot" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="var(--violet2)"/>'; });
-    wrap.innerHTML = svgWrap(W, geo.H, 'Carico acuto e cronico', g);
-    revealBars(wrap); revealLine(wrap);
+    // la riga della media resta sopra le colonne, e' il riferimento di tutto il grafico
+    g += '<line x1="'+geo.padL+'" y1="'+mid.toFixed(1)+'" x2="'+(W-geo.padR)+'" y2="'+mid.toFixed(1)+
+      '" stroke="var(--violet2)" stroke-width="2" stroke-dasharray="5 4"/>';
+    wrap.innerHTML = svgWrap(W, geo.H, 'Scarto della settimana dalla media di quattro settimane', g);
+    revealBars(wrap);
     const tip = document.getElementById('tooltip');
     wrap.querySelectorAll('.an-bar').forEach(b=>{
       b.addEventListener('mouseenter', ()=> b.classList.add('hot'));
       b.addEventListener('mouseleave', ()=>{ b.classList.remove('hot'); tip.classList.remove('show'); });
       b.addEventListener('mousemove', ev=>{
-        const i=+b.getAttribute('data-i'), x=acwr[i], w=weeks[i];
+        const i=+b.getAttribute('data-i'), x=acwr[i], w=weeks[i], z=acwrZone(x.ratio), d=dev[i];
         tip.innerHTML = '<div class="tt-m">'+esc(w.code)+' &#183; '+esc(w.week||'sett.')+'</div>'+
-          '<div class="tt-w">carico settimana</div>'+
-          '<div class="tt-v tnum">'+fmtLoad(x.acute, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div>'+
+          '<div class="tt-w" style="color:'+z.color+'">'+esc(z.label)+'</div>'+
+          '<div class="tt-v tnum">'+(d>=0?'+':'-')+NF0.format(Math.abs(Math.round(d)))+'<small>% sulla media</small></div>'+
+          '<div class="tt-x"><span>settimana</span><b>'+fmtLoad(x.acute, idx)+(unit?' '+esc(unit):'')+'</b></div>'+
           '<div class="tt-x"><span>media 4 sett.</span><b>'+fmtLoad(x.chronic, idx)+'</b></div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
@@ -3207,7 +3264,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderAcwrStats(weeks, acwr, idx);
     renderAcwrGrid();
     renderAcwrRatio(weeks, acwr, idx);
-    renderAcwrLoad(weeks, acwr, idx);
+    renderAcwrGap(weeks, acwr, idx);
     renderMdShape(idx);
   }
 
@@ -5087,7 +5144,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   // la scelta e' cambiata: si ridisegna quello che la usa, niente di piu'
   function keyApplied(){
-    renderColPanel(); renderGrid(); renderMini();
+    renderColPanel(); renderGrid(); renderMini(); renderAcwrGrid();
   }
   function moveCol(idx, dir){
     const pos = colOrder.indexOf(idx); if(pos<0) return;
