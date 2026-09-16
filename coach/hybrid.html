@@ -475,6 +475,23 @@ table.partite td.sigla.nolink{ color:var(--muted); }
 .mopen:hover svg{ color:var(--orange2); transform:translateX(2px); }
 .mopen:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
 
+/* Competizione della partita: un'amichevole di agosto e una gara di campionato non sono
+   lo stesso match, quindi la riga lo dice da sola e la scelta si corregge al volo. */
+table.partite td.comp{ white-space:nowrap; }
+table.partite th.comp{ text-align:left; }
+.mcomp{
+  appearance:none; -webkit-appearance:none; font-family:inherit; font-size:10.5px; font-weight:600;
+  letter-spacing:.02em; color:var(--muted); background:transparent;
+  border:1px solid var(--tb-line); border-radius:999px; padding:2px 8px; cursor:pointer;
+  transition: color .16s var(--ease), border-color .16s var(--ease);
+}
+.mcomp:hover{ color:var(--text); border-color:var(--orange2); }
+.mcomp:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.mcomp.uff{ color:var(--orange2); border-color:oklch(55% 0.14 45 / 0.55); }
+.mcomp option{ background:var(--tb-body); color:var(--text); }
+/* la riga del modello spiega da dove viene il numero, senza aprire un pannello */
+table.partite tr.r-model td.comp{ white-space:normal; font-weight:500; font-size:10.5px; color:var(--muted); }
+
 .empty{ padding:44px 20px; text-align:center; color:var(--muted); }
 .empty svg{ width:30px; height:30px; color:var(--faint); margin-bottom:8px; }
 .foot-note{ max-width:1360px; margin:8px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
@@ -583,6 +600,10 @@ table.partite td.sigla.nolink{ color:var(--muted); }
   td.num.cmp.near .pct{ color:#2f6b34 !important; }
   td.num.cmp.under .pct{ color:#2f4f7b !important; }
   td.num.cmp .raw{ color:#6b6472 !important; }
+  /* sul foglio il menu della competizione e' solo la parola, senza bordo ne' freccia */
+  .mcomp{ border:0 !important; padding:0 !important; color:#14110f !important; background:transparent !important; }
+  .mcomp.uff{ color:#b8531f !important; }
+  table.partite tr.r-model td.comp{ color:#5b2d90 !important; }
   .cmp-legend{ color:#6b6472 !important; }
   .cmp-legend b{ color:#14110f !important; }
   .cmp-legend .dot.over{ background:#b8531f !important; }
@@ -949,6 +970,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const SHORT = S.metrics_short || M;
   const UNIT = S.metrics_unit || M.map(()=> '');
   const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // chiave corta della stagione ('2026-27' -> '26-27'): e' quella con cui fio_sidebar.js
+  // archivia la competizione scelta a mano per ogni partita
+  const STK = (function(){
+    const st = S.stagione || (window.getStagione ? window.getStagione() : '');
+    return /^\d{4}-\d{2}$/.test(String(st)) ? String(st).slice(2) : String(st);
+  })();
 
   const state = { view:'sedute', session:null, cmp:'val', mcmp:'val', colMode:'key' };
   const ssort = { col:'name', dir:1 };
@@ -1599,7 +1627,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(eff==='val'){ lg.hidden = true; lg.innerHTML=''; }
       else {
         lg.hidden = false;
+        const mi = S.model_info;
         lg.innerHTML = '% rispetto al <b>modello AVG partita</b>'
+          + (mi ? (' (' + esc(window.fioModelloEtichetta(mi)) + ')') : '')
           + '<span class="lg"><span class="dot under"></span>&lt;95%</span>'
           + '<span class="lg"><span class="dot near"></span>95-105%</span>'
           + '<span class="lg"><span class="dot over"></span>&gt;105%</span>';
@@ -1627,13 +1657,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let h = '<table class="grid partite"><thead><tr>';
     h += '<th class="col-day sortable" data-c="sigla" aria-sort="'+ariaSort('sigla')+'">Sigla <span class="arw">'+arw('sigla')+'</span></th>';
     h += '<th class="sortable" data-c="data" style="text-align:left" aria-sort="'+ariaSort('data')+'">Data <span class="arw">'+arw('data')+'</span></th>';
+    h += '<th class="comp">Tipo</th>';
     V.forEach(i=>{
       const k = keyCls(i);
       h += '<th class="sortable'+k+'" data-c="'+i+'" aria-sort="'+ariaSort(i)+'" title="'+esc(M[i])+'">'+esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span> <span class="arw">'+arw(i)+'</span></th>';
     });
     h += '</tr></thead><tbody>';
     if(S.model && S.model.length){
-      h += '<tr class="r-model"><td class="col-day"><span class="lb">AVG partita</span></td><td class="data">modello</td>';
+      h += '<tr class="r-model"><td class="col-day"><span class="lb">AVG partita</span></td><td class="data">modello</td>'
+         + '<td class="comp">'+esc(S.model_info ? window.fioModelloEtichetta(S.model_info) : 'media delle gare di stagione')+'</td>';
       V.forEach(i=> h += '<td class="num tnum'+keyCls(i)+'">'+fmt(S.model[i], i)+'</td>');
       h += '</tr>';
     }
@@ -1653,6 +1685,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
          + '><td class="col-day sigla'+(link?'':' nolink')+'">'+sig
          + (campo?('<span class="campo">'+esc(campo)+'</span>'):'')+'</td>'
          + '<td class="data">'+(gwd?('<span class="gwd">'+esc(gwd)+'</span>'):'')+esc(r.data||'')+'</td>';
+      // la competizione la propone la data, ma resta correggibile: e' lei a decidere
+      // quali partite entrano nel modello prestativo della stagione
+      const comp = window.fioComp(r.sigla, r.data, STK, r.kind || r.comp);
+      h += '<td class="comp"><select class="mcomp'+(window.fioCompUff(comp)?' uff':'')+'"'
+         + ' data-s="'+esc(r.sigla||'')+'" data-d="'+esc(r.data||'')+'"'
+         + ' title="Amichevole esclusa dal modello prestativo, campionato e coppa inclusi"'
+         + ' aria-label="Competizione di '+esc(r.sigla||'')+'">'
+         + window.FIO_COMP.map(function(c){
+             return '<option value="'+c+'"'+(c===comp?' selected':'')+'>'+c+'</option>';
+           }).join('')
+         + '</select></td>';
       V.forEach(i=> h += mcell(rv[i], i));
       h += '</tr>';
     });
@@ -1664,6 +1707,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(msort.col===c) msort.dir*=-1; else { msort.col=c; msort.dir = (c==='sigla'?1:-1); }
       renderMatches();
     }));
+    // il menu della competizione sta dentro una riga che apre la seduta: il clic si ferma qui
+    host.querySelectorAll('select.mcomp').forEach(sel=>{
+      sel.addEventListener('click', ev=> ev.stopPropagation());
+      sel.addEventListener('change', ev=>{
+        ev.stopPropagation();
+        window.fioSetComp(sel.getAttribute('data-s'), sel.getAttribute('data-d'), sel.value, STK);
+      });
+    });
     // il clic sul pulsante della sigla risale fino alla riga, percio' basta un ascoltatore per riga
     host.querySelectorAll('tr.r-day.openable').forEach(tr=> tr.addEventListener('click', ()=>{
       openMatchSession(tr.getAttribute('data-mk'), tr.getAttribute('data-l'));
@@ -2799,6 +2850,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.addEventListener('fio:nomi', function(){
     renderSession();
     cfRenderPlayRail(document.getElementById('cf-play-search') ? document.getElementById('cf-play-search').value : '');
+    renderConfronto();
+  });
+
+  /* Una partita e' passata da amichevole a gara ufficiale (o viceversa), magari da
+     un'altra scheda: il modello prestativo va rifatto e tutto cio' che si misura
+     rispetto al match va ridisegnato con il numero nuovo. */
+  document.addEventListener('fio:comp', function(){
+    // il ricalcolo vale per la stagione in corso: quello della 25-26 e' chiuso e resta com'e'
+    if(S.model_info && window.fioApplicaModello) window.fioApplicaModello(S);
+    renderSession();
+    renderMatches();
     renderConfronto();
   });
 

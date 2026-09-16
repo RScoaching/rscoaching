@@ -965,6 +965,198 @@ window.addEventListener('storage', function(ev) {
 });
 
 // ---------------------------------------------------------------------------
+// COMPETIZIONE DELLE PARTITE E MODELLO PRESTATIVO DELLA STAGIONE: fonte unica.
+// Un'amichevole di agosto e una gara di campionato non sono lo stesso match: la
+// prima si gioca con cinque cambi e ritmi da preparazione, la seconda e' il
+// riferimento vero. Finche' le partite ufficiali sono poche il modello resta
+// quello ereditato dalla stagione scorsa; appena ce ne sono abbastanza diventa
+// la loro media, e da li' in poi si aggiorna a ogni gara nuova. Il calcolo sta
+// scritto una volta sola e tutte le pagine passano di qui, cosi' l'"AVG partita"
+// che si legge in Sessioni, in Carico e nei Report e' sempre lo stesso numero.
+// ---------------------------------------------------------------------------
+window.FIO_COMP = ['Amichevole', 'Campionato', 'Coppa'];
+// Primo giorno di gare ufficiali per stagione. Prima di questa data una partita
+// e' un'amichevole salvo correzione a mano. La 25-26 non ha una voce di
+// proposito: il suo modello e' gia' stato calcolato su tutte le sue partite e
+// non va cambiato a posteriori.
+window.FIO_COMP_INIZIO = { '26-27': '2026-09-20' };
+// Quante gare ufficiali servono prima di sostituire il modello ereditato. Con
+// una o due partite la media segue troppo la singola gara: una partita giocata
+// in dieci abbasserebbe di colpo tutti i rapporti di tutte le sezioni.
+window.FIO_COMP_MIN = 3;
+
+window.fioCompChiave = function(st) { return window.fioKey('rs_fio_comp', st); };
+
+var FIO_COMP_OV = null, FIO_COMP_OV_K = null;
+
+function fioCompLeggi(st) {
+  var k = window.fioCompChiave(st);
+  if (FIO_COMP_OV && FIO_COMP_OV_K === k) return FIO_COMP_OV;
+  var o = {};
+  try {
+    var v = JSON.parse(localStorage.getItem(k) || '{}');
+    if (v && typeof v === 'object' && !Array.isArray(v)) o = v;
+  } catch (e) {}
+  FIO_COMP_OV = o; FIO_COMP_OV_K = k;
+  return o;
+}
+
+// Identita' di una partita: la sigla da sola non basta, all'andata e al ritorno
+// e' la stessa, quindi ci vuole anche la data.
+window.fioCompId = function(sigla, data) {
+  return String(sigla == null ? '' : sigla).trim() + '|' + String(data == null ? '' : data).trim();
+};
+
+// Le date girano in due formati: 'gg/mm/aaaa' nelle partite del carico,
+// 'aaaa-mm-gg' nel calendario. Qui diventano un numero confrontabile.
+window.fioCompTs = function(d) {
+  d = String(d == null ? '' : d).trim();
+  var a = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(d);
+  if (a) {
+    var y = +a[3]; if (y < 100) y += 2000;
+    return new Date(y, +a[2] - 1, +a[1]).getTime();
+  }
+  var b = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(d);
+  if (b) return new Date(+b[1], +b[2] - 1, +b[3]).getTime();
+  return null;
+};
+
+window.fioNormComp = function(c) {
+  c = String(c == null ? '' : c).trim().toLowerCase();
+  if (!c) return '';
+  if (c.indexOf('amich') === 0) return 'Amichevole';
+  if (c.indexOf('copp') === 0) return 'Coppa';
+  if (c.indexOf('camp') === 0) return 'Campionato';
+  return '';
+};
+
+// Proposta automatica. `kind` e' quello che dice il foglio del mister quando
+// nel nome del file c'e' scritto "amichevole": se c'e' vince sulla data.
+window.fioCompBase = function(sigla, data, st, kind) {
+  if (window.fioNormComp(kind) === 'Amichevole') return 'Amichevole';
+  st = st || window.getStagione();
+  var inizio = window.FIO_COMP_INIZIO[st];
+  if (!inizio) return 'Campionato';
+  var t = window.fioCompTs(data), i = window.fioCompTs(inizio);
+  if (t == null || i == null) return 'Campionato';
+  return t < i ? 'Amichevole' : 'Campionato';
+};
+
+window.fioComp = function(sigla, data, st, kind) {
+  var o = fioCompLeggi(st);
+  var id = window.fioCompId(sigla, data);
+  if (Object.prototype.hasOwnProperty.call(o, id)) {
+    var v = window.fioNormComp(o[id]);
+    if (v) return v;
+  }
+  return window.fioCompBase(sigla, data, st, kind);
+};
+
+// Campionato e coppa contano per il modello, l'amichevole no.
+window.fioCompUff = function(c) {
+  c = window.fioNormComp(c);
+  return c === 'Campionato' || c === 'Coppa';
+};
+
+window.fioHaCompScritta = function(sigla, data, st) {
+  return Object.prototype.hasOwnProperty.call(fioCompLeggi(st), window.fioCompId(sigla, data));
+};
+
+// Scrittura, come per i ruoli: se la scelta torna a essere quella automatica
+// l'override sparisce, cosi' se domani cambia la data d'inizio il dato nuovo passa.
+window.fioSetComp = function(sigla, data, comp, st, kind) {
+  var v = window.fioNormComp(comp);
+  if (!v) return window.fioComp(sigla, data, st, kind);
+  var o = {}, cur = fioCompLeggi(st);
+  Object.keys(cur).forEach(function(k) { o[k] = cur[k]; });
+  var id = window.fioCompId(sigla, data);
+  if (v === window.fioCompBase(sigla, data, st, kind)) delete o[id];
+  else o[id] = v;
+  try { localStorage.setItem(window.fioCompChiave(st), JSON.stringify(o)); } catch (e) {}
+  FIO_COMP_OV = o; FIO_COMP_OV_K = window.fioCompChiave(st);
+  try {
+    document.dispatchEvent(new CustomEvent('fio:comp', { detail: { sigla: sigla, data: data, comp: v } }));
+  } catch (e) {}
+  return v;
+};
+
+window.fioCompRicarica = function() { FIO_COMP_OV = null; FIO_COMP_OV_K = null; };
+
+window.addEventListener('storage', function(ev) {
+  if (!ev || ev.key !== window.fioCompChiave()) return;
+  window.fioCompRicarica();
+  // la scheda che riceve la notizia deve gia' avere il modello nuovo quando ridisegna:
+  // si rifa' qui, ma solo dove era stato applicato (la 25-26 non si tocca)
+  if (window.SNAP && window.SNAP.model_base !== undefined) window.fioApplicaModello(window.SNAP);
+  try { document.dispatchEvent(new CustomEvent('fio:comp', { detail: { sigla: '', data: '', comp: '' } })); } catch (e) {}
+});
+
+// Modello prestativo della stagione.
+// Torna sempre un oggetto, cosi' chi lo mostra sa anche da dove viene:
+//   v    il vettore per metrica, gia' pronto al posto di SNAP.model
+//   src  'stagione' se lo fanno le gare ufficiali di quest'anno, 'ereditato' se
+//        e' ancora quello dell'anno scorso, 'nessuno' se non c'e' niente
+//   n    quante gare ufficiali ci sono in tutto
+//   uso  quante ne sono entrate davvero nel conto (una gara senza dati non entra)
+// La media e' per metrica e non per partita intera: se in una gara manca una
+// colonna, quella colonna la fanno le altre invece di far saltare tutta la riga.
+window.fioModelloPartita = function(snap) {
+  var out = { v: null, src: 'nessuno', n: 0, uso: 0, min: window.FIO_COMP_MIN };
+  if (!snap || typeof snap !== 'object') return out;
+  var eredit = Array.isArray(snap.model) ? snap.model : null;
+  var st = snap.stagione || window.getStagione();
+  // 'stagione' nel file e' scritta per esteso ('2026-27'), le chiavi sono corte
+  var stk = /^\d{4}-\d{2}$/.test(String(st)) ? String(st).slice(2) : String(st);
+  var list = (snap.team && snap.team.matches) || [];
+  var uff = [];
+  list.forEach(function(m) {
+    if (!m) return;
+    if (window.fioCompUff(window.fioComp(m.sigla, m.data, stk, m.kind || m.comp))) uff.push(m);
+  });
+  out.n = uff.length;
+  if (uff.length < window.FIO_COMP_MIN) {
+    if (eredit && eredit.length) { out.v = eredit.slice(); out.src = 'ereditato'; }
+    return out;
+  }
+  var wide = 0;
+  uff.forEach(function(m) { var k = (m.v || []).length; if (k > wide) wide = k; });
+  if (eredit && eredit.length > wide) wide = eredit.length;
+  var vec = [], visti = 0;
+  for (var i = 0; i < wide; i++) {
+    var s = 0, c = 0;
+    uff.forEach(function(m) {
+      var x = (m.v || [])[i];
+      if (x != null && isFinite(x)) { s += x; c++; }
+    });
+    if (c) { vec[i] = Math.round((s / c) * 100) / 100; if (c > visti) visti = c; }
+    else vec[i] = (eredit && eredit[i] != null && isFinite(eredit[i])) ? eredit[i] : null;
+  }
+  out.v = vec; out.src = 'stagione'; out.uso = visti;
+  return out;
+};
+
+// Scorciatoia per le pagine: sostituisce SNAP.model con il modello buono e
+// lascia in `snap.model_info` la provenienza, per l'etichetta a schermo. Da
+// chiamare appena letto lo snapshot e a ogni evento 'fio:comp'.
+window.fioApplicaModello = function(snap) {
+  if (!snap || typeof snap !== 'object') return null;
+  if (snap.model_base === undefined) snap.model_base = Array.isArray(snap.model) ? snap.model.slice() : null;
+  var base = { model: snap.model_base, stagione: snap.stagione, team: snap.team };
+  var r = window.fioModelloPartita(base);
+  if (r.v && r.v.length) snap.model = r.v;
+  else if (snap.model_base) snap.model = snap.model_base.slice();
+  snap.model_info = r;
+  return r;
+};
+
+// Etichetta breve da mettere accanto alla riga del modello.
+window.fioModelloEtichetta = function(info) {
+  if (!info || !info.v) return 'nessun modello';
+  if (info.src === 'stagione') return 'media di ' + info.n + ' gare ufficiali';
+  return 'riferimento 25-26' + (info.n ? (', ' + info.n + ' su ' + info.min + ' gare ufficiali') : '');
+};
+
+// ---------------------------------------------------------------------------
 // NOME MOSTRATO: fonte unica.
 // I file GPS scrivono nome e cognome quando in rosa ci sono due atlete che si
 // chiamano uguale: e' successo l'anno scorso con le due Pieri, e da li' sono
@@ -1443,6 +1635,13 @@ window.applyStagioneData = function() {
   // La rosa di partenza dei ruoli e' appena cambiata sotto i piedi: la cache va
   // buttata, altrimenti resta quella costruita sui dati della 25/26.
   window.fioRuoliRicarica();
+
+  // Modello prestativo: finche' le gare ufficiali della 26/27 sono meno di tre
+  // resta quello ereditato dalla 25/26, poi diventa la loro media. Si fa qui,
+  // prima degli script di pagina, cosi' tutte le sezioni leggono lo stesso
+  // SNAP.model senza doverselo ricalcolare ognuna per conto suo.
+  window.fioCompRicarica();
+  window.fioApplicaModello(window.SNAP);
 };
 
 // Test presi dal foglio nella cartella della stagione.
