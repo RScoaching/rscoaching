@@ -745,6 +745,35 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 .rpe-note{ font-size:12px; color:var(--faint); line-height:1.55; margin:10px 2px 0; max-width:78ch; }
 .rpe-note b{ color:var(--violet2); font-weight:700; }
 
+/* ---------- RPE di gruppo: travaso rapido dal sito della societa' ----------
+   Qui si scrive per colonne, non per righe: si prende una seduta e si scendono tutte
+   le atlete. Quindi la colonna del nome resta ferma a sinistra e la testata resta ferma
+   in cima, se no dopo dieci nomi non si sa piu' in che seduta si sta scrivendo. */
+.cols-panel.rpe-panel{ width:min(1040px, 96vw); }
+.rpe-bulk{ overflow:auto; border:1px solid var(--border); border-radius:var(--r); max-height:54vh;
+  scrollbar-width:thin; }
+.rpe-bulk::-webkit-scrollbar{ width:8px; height:8px; }
+.rpe-bulk::-webkit-scrollbar-thumb{ background:var(--border3); border-radius:4px; }
+table.bulk{ border-collapse:separate; border-spacing:0; font-size:12.5px; }
+table.bulk th, table.bulk td{ padding:5px 8px; white-space:nowrap; text-align:center;
+  background:var(--surface); border-bottom:1px solid var(--border); }
+/* la fascia con la settimana e quella con i giorni: due righe ferme in cima, la seconda
+   sta sotto la prima e l'altezza qui e' fissa apposta, il top della sticky non si calcola */
+table.bulk thead th{ position:sticky; z-index:2; color:var(--ink); font-weight:700;
+  background:var(--violet-head); border-bottom:1px solid var(--border2); }
+table.bulk thead tr.bulk-wk th{ top:0; height:26px; font-size:11px; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--violet2); }
+table.bulk thead tr.bulk-day th{ top:26px; height:30px; font-size:12px; }
+table.bulk thead tr.bulk-day th.bulk-gara{ color:var(--orange2); }
+table.bulk .bulk-name{ position:sticky; left:0; z-index:3; text-align:left; min-width:150px;
+  background:var(--surface2); border-right:1px solid var(--border2); }
+table.bulk thead .bulk-name{ z-index:4; background:var(--violet-head); }
+table.bulk tbody tr:hover td{ background:var(--surface2); }
+table.bulk tbody tr:hover .bulk-name{ color:var(--ink); }
+table.bulk td.bulk-no{ color:var(--faint); }
+.bulk-empty{ padding:22px; text-align:center; font-size:13px; color:var(--muted); }
+.bulk-gt{ display:block; font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--faint); }
+
 /* ---------- modello partita modificabile ---------- */
 .mod-list{ border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
 .mod-row{ display:flex; align-items:center; gap:11px; padding:9px 11px; background:var(--surface);
@@ -801,7 +830,7 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
   html,body{ background:#fff !important; color:#14110f !important; }
   body::before{ display:none !important; }
   .sb-mob-bar, .sb-mob-overlay, .sidebar, .controls, .secnav, .chart-tooltip, .toast,
-  #cols-dialog, #model-dialog, #pdf-dialog, .top-right, .foot-note{ display:none !important; }
+  #cols-dialog, #model-dialog, #pdf-dialog, #rpe-dialog, .top-right, .foot-note{ display:none !important; }
   /* comandi che servono solo a video: sul foglio sono scritte che non dicono niente */
   #mv-reset, #rpe-clear, .rpe-note{ display:none !important; }
   /* gli RPE a video sono caselle da riempire, sul foglio devono essere soltanto numeri */
@@ -1159,6 +1188,10 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4 16.5z"/><path d="M13.5 6.5l4 4"/></svg>
           Modello <span class="cols-count" id="model-count"></span>
         </button>
+        <button class="btn" id="btn-rpe" title="Scrivi gli RPE di piu' atlete in una volta sola: righe le atlete, colonne le sedute delle ultime settimane">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>
+          RPE
+        </button>
         <button class="btn" id="btn-print" title="Scegli cosa mettere nel PDF: foglio orizzontale, griglia adattata alla larghezza e due microcicli per pagina">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
           PDF
@@ -1395,6 +1428,40 @@ table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
     <div class="cols-foot">
       <span class="mod-state" id="model-state"></span>
       <button class="btn primary" id="model-done" type="button">Fatto</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- RPE di gruppo: una tabella sola invece di venti passaggi sulle singole atlete -->
+<dialog id="rpe-dialog" class="cols-dialog" aria-label="RPE di gruppo">
+  <div class="cols-panel rpe-panel">
+    <div class="cols-head">
+      <h2>RPE di gruppo</h2>
+      <span class="hint">Righe le atlete, colonne le sedute delle ultime settimane: serve a travasare in fretta gli RPE dal sito della societa'. Ogni numero finisce sull'atleta di quella riga, esattamente come se lo avessi scritto nella sua griglia. Le caselle col trattino sono sedute che quell'atleta non ha fatto. I numeri restano su questo dispositivo e non toccano i file dei dati.</span>
+    </div>
+    <div class="cols-scroll">
+      <div class="pdf-set">
+        <span class="pdf-set-lbl">Quante settimane</span>
+        <div class="seg pdf-seg" id="rpe-wk-seg" role="group" aria-label="Quante settimane mettere in tabella">
+          <button type="button" data-wk="1">Ultima</button>
+          <button type="button" data-wk="2">Ultime 2</button>
+          <button type="button" data-wk="3">Ultime 3</button>
+          <button type="button" data-wk="4">Ultime 4</button>
+        </div>
+      </div>
+      <div class="pdf-set">
+        <span class="pdf-set-lbl">Atlete in tabella</span>
+        <div class="who-wrap" id="rpe-who" role="group" aria-label="Atlete in tabella"></div>
+        <div class="col-tools">
+          <button class="mini" id="rpe-who-all" type="button">Tutte</button>
+          <button class="mini" id="rpe-who-none" type="button">Nessuna</button>
+        </div>
+      </div>
+      <div class="rpe-bulk" id="rpe-bulk"></div>
+    </div>
+    <div class="cols-foot">
+      <span class="pdf-state" id="rpe-bulk-state"></span>
+      <button class="btn primary" id="rpe-bulk-done" type="button">Fatto</button>
     </div>
   </div>
 </dialog>
@@ -3766,6 +3833,204 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return Math.min(10, Math.max(0, Math.round(v*10)/10));
   }
 
+  /* ---------- RPE di gruppo ----------
+     Gli RPE arrivano dal sito della societa', dove stanno per seduta e per atleta. Nella
+     griglia si scrivono per riga, una seduta alla volta, ma solo dell'atleta aperta: per
+     travasare una settimana bisognava cambiare venti volte atleta e ogni volta ritrovare
+     la riga giusta. Qui si gira la tabella: righe le atlete, colonne le sedute, e si
+     scrive per colonne, cioe' nello stesso ordine in cui i numeri stanno sul sito.
+     Niente di nuovo sotto: ogni casella e' esattamente la chiave mese||atleta||seduta
+     che usa gia' la griglia, quindi quello che si scrive qui e' come averlo scritto li'. */
+  const BULK_KEY  = 'rs_fio_rpe_bulk';
+  const BULK_WKS  = [1,2,3,4];
+  const BULK_HAS  = {};
+  function bulkNames(){ return Object.keys(S.players||{}).sort(dispSort); }
+  function bulkRead(){
+    let o = null;
+    try{ o = JSON.parse(localStorage.getItem(BULK_KEY) || 'null'); }catch(e){ o = null; }
+    const names = bulkNames();
+    // un nome uscito dalla rosa non deve restare acceso per sempre
+    const who = (o && Array.isArray(o.who)) ? o.who.filter(n=> names.indexOf(n)>=0) : names.slice();
+    const wk  = (o && BULK_WKS.indexOf(o.wk)>=0) ? o.wk : 2;
+    return { who: who.sort(dispSort), wk: wk };
+  }
+  function bulkWrite(o){ try{ localStorage.setItem(BULK_KEY, JSON.stringify({ who:o.who, wk:o.wk })); }catch(e){} }
+  /* Le colonne sono le sedute della squadra, non quelle della singola: la squadra e'
+     l'unico elenco che le ha tutte e nello stesso ordine per chiunque. Le partite
+     restano dentro, l'RPE lo danno anche li' e toglierle vorrebbe dire rimandare il
+     mister nella griglia per quei due numeri. */
+  function bulkCols(n){
+    const blocks = [];
+    (((S.team && S.team.months) || [])).forEach(m=>{
+      let cur = null;
+      (m.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ cur = { mk:m.key, week:r.label||'', cols:[] }; blocks.push(cur); return; }
+        if(!cur) return;
+        if(r.type!=='day' && r.type!=='match') return;
+        const d = rowDate(r, cur.week, cur.mk);
+        cur.cols.push({ mk:cur.mk, label:r.label, type:r.type, wd:r.wd||'', txt:dayLabel(r, d) });
+      });
+    });
+    return blocks.filter(b=> b.cols.length).slice(-Math.max(1, n|0));
+  }
+  // quali sedute ha davvero fatto un'atleta: la casella si apre solo li'
+  function bulkHas(name){
+    if(BULK_HAS[name]) return BULK_HAS[name];
+    const s = {}, p = (S.players||{})[name];
+    ((p && p.months) || []).forEach(m=>{
+      (m.rows||[]).forEach(r=>{
+        if(r.type==='day' || r.type==='match') s[m.key+'||'+r.label] = true;
+      });
+    });
+    BULK_HAS[name] = s;
+    return s;
+  }
+  function rpeSetFor(mk, scope, label, v){
+    const o = rpeAll(), k = rpeKeyOf(mk, scope, label);
+    if(v === null) delete o[k]; else o[k] = v;
+    rpeSave(o);
+  }
+  function bulkState(){
+    const host = document.getElementById('rpe-bulk'), st = document.getElementById('rpe-bulk-state');
+    if(!host || !st) return;
+    const tbl = host.querySelector('table.bulk');
+    if(!tbl){ st.textContent = ''; return; }
+    const ins = [].slice.call(tbl.querySelectorAll('input[data-bn]'));
+    const w = ins.filter(i=> !i.classList.contains('borrowed') && String(i.value).trim() !== '').length;
+    const nSed = Math.max(0, tbl.querySelectorAll('thead tr.bulk-day th').length - 1);
+    const nAt  = tbl.querySelectorAll('tbody tr').length;
+    st.innerHTML = w+' RPE scritti su '+ins.length+' caselle &#183; '+nSed+
+                   (nSed===1 ? ' seduta' : ' sedute')+' &#183; '+nAt+(nAt===1 ? ' atleta' : ' atlete');
+  }
+  function renderBulk(){
+    const host = document.getElementById('rpe-bulk'); if(!host) return;
+    const sel = bulkRead();
+    const who = document.getElementById('rpe-who');
+    if(who){
+      who.innerHTML = bulkNames().map(function(n){
+        const on = sel.who.indexOf(n) >= 0;
+        return '<button type="button" class="who-chip'+(on?' on':'')+'" data-bwho="'+esc(n)+'"'+
+               ' aria-pressed="'+(on?'true':'false')+'">'+esc(disp(n))+'</button>';
+      }).join('');
+    }
+    const seg = document.getElementById('rpe-wk-seg');
+    if(seg) seg.querySelectorAll('button').forEach(b=> b.classList.toggle('on', +b.getAttribute('data-wk') === sel.wk));
+    const blocks = bulkCols(sel.wk);
+    if(!blocks.length || !sel.who.length){
+      host.innerHTML = '<p class="bulk-empty">'+
+        (blocks.length ? 'Nessuna atleta accesa: scegli almeno un nome qui sopra.'
+                       : 'Nessuna seduta di squadra da riempire.')+'</p>';
+      bulkState();
+      return;
+    }
+    // il magazzino degli RPE si legge una volta sola: dentro il doppio giro sarebbero
+    // centinaia di letture da localStorage per disegnare una tabella
+    const store = rpeAll();
+    const cols = [];
+    let h1 = '<tr class="bulk-wk"><th class="bulk-name">Microciclo</th>';
+    let h2 = '<tr class="bulk-day"><th class="bulk-name">Atleta</th>';
+    blocks.forEach(b=>{
+      h1 += '<th colspan="'+b.cols.length+'">'+esc(b.week)+'</th>';
+      b.cols.forEach(c=>{
+        cols.push(c);
+        const gara = c.type==='match';
+        h2 += '<th'+(gara ? ' class="bulk-gara"' : '')+
+              ' title="'+esc((c.wd ? c.wd+' ' : '')+c.txt+(gara ? ', partita' : ''))+'">'+
+              esc(c.txt)+'<span class="bulk-gt">'+esc(gara ? 'gara' : (c.wd||''))+'</span></th>';
+      });
+    });
+    let body = '';
+    sel.who.forEach(n=>{
+      const has = bulkHas(n);
+      body += '<tr><td class="bulk-name">'+esc(disp(n))+'</td>';
+      cols.forEach(c=>{
+        if(!has[c.mk+'||'+c.label]){
+          body += '<td class="bulk-no" title="'+esc(disp(n))+' non ha questa seduta">-</td>';
+          return;
+        }
+        const mine = store[rpeKeyOf(c.mk, n, c.label)];
+        const own  = (typeof mine==='number') ? mine : null;
+        let inh = null;
+        if(own == null){
+          const t = store[rpeKeyOf(c.mk, '_squadra', c.label)];
+          inh = (typeof t==='number') ? t : rpeNaz(c.mk, n, c.label);
+        }
+        body += '<td><input class="rpe-in'+(own==null && inh!=null ? ' borrowed' : '')+
+                '" type="number" min="0" max="10" step="0.5" inputmode="decimal"'+
+                ' data-bn="'+esc(n)+'" data-bmk="'+esc(c.mk)+'" data-bl="'+esc(c.label)+'"'+
+                ' value="'+(own!=null ? own : (inh!=null ? inh : ''))+'"'+
+                (own==null && inh!=null
+                  ? ' title="Arriva dall\'RPE della squadra o dal report della nazionale: scrivici sopra per mettere quello di '+esc(disp(n))+'"'
+                  : '')+
+                ' aria-label="RPE di '+esc(disp(n))+' nella seduta '+esc(c.txt)+'"></td>';
+      });
+      body += '</tr>';
+    });
+    host.innerHTML = '<table class="bulk"><thead>'+h1+'</tr>'+h2+'</tr></thead><tbody>'+body+'</tbody></table>';
+    bulkState();
+  }
+  function openRpeDialog(){
+    renderBulk();
+    const d = document.getElementById('rpe-dialog'); if(!d) return;
+    if(typeof d.showModal==='function'){ if(!d.open) d.showModal(); } else d.setAttribute('open','');
+  }
+  function closeRpeDialog(){
+    const d = document.getElementById('rpe-dialog'); if(!d) return;
+    if(typeof d.close==='function' && d.open) d.close(); else d.removeAttribute('open');
+    repaintAll();
+  }
+  (function(){
+    const dlg = document.getElementById('rpe-dialog'); if(!dlg) return;
+    const seg = document.getElementById('rpe-wk-seg');
+    if(seg) seg.addEventListener('click', e=>{
+      const b = e.target.closest('button[data-wk]'); if(!b) return;
+      const o = bulkRead(); o.wk = +b.getAttribute('data-wk'); bulkWrite(o); renderBulk();
+    });
+    const who = document.getElementById('rpe-who');
+    if(who) who.addEventListener('click', e=>{
+      const b = e.target.closest('button[data-bwho]'); if(!b) return;
+      const n = b.getAttribute('data-bwho'), o = bulkRead(), i = o.who.indexOf(n);
+      if(i >= 0) o.who.splice(i, 1); else o.who.push(n);
+      o.who.sort(dispSort); bulkWrite(o); renderBulk();
+    });
+    const all = document.getElementById('rpe-who-all');
+    if(all) all.addEventListener('click', ()=>{ const o = bulkRead(); o.who = bulkNames(); bulkWrite(o); renderBulk(); });
+    const none = document.getElementById('rpe-who-none');
+    if(none) none.addEventListener('click', ()=>{ const o = bulkRead(); o.who = []; bulkWrite(o); renderBulk(); });
+    const host = document.getElementById('rpe-bulk');
+    if(host){
+      host.addEventListener('input', e=>{
+        const inp = e.target.closest('input[data-bn]'); if(!inp) return;
+        rpeSetFor(inp.getAttribute('data-bmk'), inp.getAttribute('data-bn'),
+                  inp.getAttribute('data-bl'), rpeNum(inp.value));
+        // appena ci scrivi sopra il numero e' suo, non piu' preso in prestito
+        inp.classList.remove('borrowed');
+        bulkState();
+      });
+      /* Si travasa una seduta per volta, cioe' si scende lungo una colonna: Invio e le
+         frecce saltano alla casella sotto o sopra della stessa colonna, senza passare
+         per le venti caselle della riga come farebbe il tabulatore. */
+      host.addEventListener('keydown', e=>{
+        if(e.key!=='Enter' && e.key!=='ArrowDown' && e.key!=='ArrowUp') return;
+        const inp = e.target.closest('input[data-bn]'); if(!inp) return;
+        const td = inp.closest('td'), tr = inp.closest('tr'); if(!td || !tr) return;
+        const i = [].indexOf.call(tr.children, td);
+        const dir = (e.key==='ArrowUp') ? -1 : 1;
+        let row = dir>0 ? tr.nextElementSibling : tr.previousElementSibling;
+        while(row){
+          const cell = row.children[i], nx = cell ? cell.querySelector('input') : null;
+          if(nx){ e.preventDefault(); nx.focus(); nx.select(); return; }
+          row = dir>0 ? row.nextElementSibling : row.previousElementSibling;
+        }
+        if(e.key==='Enter') e.preventDefault();
+      });
+    }
+    const done = document.getElementById('rpe-bulk-done');
+    if(done) done.addEventListener('click', closeRpeDialog);
+    dlg.addEventListener('click', e=>{ if(e.target===dlg) closeRpeDialog(); });
+    dlg.addEventListener('cancel', e=>{ e.preventDefault(); closeRpeDialog(); });
+  })();
+
   // frecce e trascinamento della riga seduta sulla fascia di un altro microciclo
   function bindMoveUI(host, monthKey){
     host.querySelectorAll('.mv').forEach(b=>{
@@ -5274,6 +5539,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('btn-csv').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
   document.getElementById('btn-print').addEventListener('click', openPdfDialog);
+  document.getElementById('btn-rpe').addEventListener('click', openRpeDialog);
   window.addEventListener('beforeprint', buildPrintSheets);
   window.addEventListener('afterprint', clearPrintSheets);
   document.getElementById('player-select').addEventListener('change', e=>{
