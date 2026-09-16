@@ -531,6 +531,15 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-wkt td.fat b{ display:block; color:var(--ink); font-weight:600; }
 .tg-wkt td.fat em{ display:block; font-style:normal; font-size:10px;
   color:var(--faint); margin-top:1px; }
+/* Il giorno chiuso si tinge di viola. Il colore non e' un vezzo: separa a colpo
+   d'occhio la parte di settimana che e' misura da quella che e' ancora intenzione,
+   ed e' un colore che nella pagina non vuol dire niente altro. */
+.tg-wkt tr.done td{ background:var(--violet-bg); }
+.tg-wkt tr.done td.d{ color:var(--violet2); font-weight:600; }
+.tg-wkt tr.done td.d i{ color:var(--violet2); opacity:.78; }
+.tg-wkt tr.done td.fat b{ color:var(--violet2); }
+.tg-wkt tr.done td.fat em{ color:var(--violet2); opacity:.72; }
+.tg-wkt tr.done.oggi td.d{ color:var(--violet2); }
 .tg-wkn{ width:74px; text-align:center; font-family:inherit; font-size:12px;
   font-variant-numeric:tabular-nums; color:var(--ink); background:var(--surface);
   border:1px solid var(--border2); border-radius:8px; padding:5px 6px; min-height:30px; }
@@ -6813,19 +6822,23 @@ window.FORZA = window.FORZA || { roster:[] };
     let nfat  = 0;
 
     lav.forEach(function(g){
-      const d   = (r && r.day[g.ds]) ? r.day[g.ds] : null;
-      const man = d ? wkgNum(d[m.k]) : 0;
-      if(man > 0){
-        val[g.ds] = { v: man, man: true, fat: false };
-        speso += man;
-        return;
-      }
+      /* Un giorno con i file GPS dentro e' un giorno chiuso: vale quello che si e'
+         fatto davvero, non quello che ci si era scritto lunedi'. Prima vinceva il
+         numero a mano e il martedi' restava fermo sul preventivato anche a dati
+         caricati, e i giorni dopo venivano ricalcolati sul numero sbagliato. */
       const f = real[g.ds];
       if(f){
         const v = Math.round(f[m.k]);
         val[g.ds] = { v: v, man: false, fat: true, n: f.n };
         speso += v;
         nfat++;
+        return;
+      }
+      const d   = (r && r.day[g.ds]) ? r.day[g.ds] : null;
+      const man = d ? wkgNum(d[m.k]) : 0;
+      if(man > 0){
+        val[g.ds] = { v: man, man: true, fat: false };
+        speso += man;
         return;
       }
       open.push(g);
@@ -6960,10 +6973,18 @@ window.FORZA = window.FORZA || { roster:[] };
           '<td colspan="'+TG_METRICS.length+'">'+esc(che)+'</td></tr>';
         return;
       }
-      h += '<tr'+(g.oggi ? ' class="oggi"' : '')+'>'+
+      /* Il giorno e' chiuso quando almeno una metrica arriva dai file. La riga
+         cambia colore per questo: chi guarda la tabella deve capire al volo dove
+         finisce il fatto e dove comincia quello che resta da fare. */
+      const chiuso = TG_METRICS.some(function(m){
+        const c = spl[m.k].val[g.ds];
+        return !!(c && c.fat);
+      });
+      const cls = (chiuso ? 'done' : '') + (g.oggi ? (chiuso ? ' oggi' : 'oggi') : '');
+      h += '<tr'+(cls ? ' class="'+cls+'"' : '')+'>'+
         '<td class="d">'+esc(nom)+
         '<i>'+esc(g.mdw || 'giorno tipo')+(g.sti ? ' stimato' : '')+
-        (g.fatto ? ' &#183; gia\' fatto' : (g.pass ? ' &#183; passato' : ''))+'</i></td>'+
+        (chiuso || g.fatto ? ' &#183; gia\' fatto' : (g.pass ? ' &#183; passato' : ''))+'</i></td>'+
         TG_METRICS.map(function(m){
           const c = spl[m.k].val[g.ds] || { v:0, man:false, fat:false };
           /* Un giorno con il file dentro non si preventiva piu': quello che si legge
