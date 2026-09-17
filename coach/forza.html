@@ -614,6 +614,11 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fs-alta{ display:inline-flex; align-items:center; margin-left:8px; padding:2px 8px; border-radius:999px;
   font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   background:var(--ember-bg); border:1px solid var(--ember-border); color:var(--orange2); }
+/* il segno dell'individuale: non e' un allarme come la parte alta, e' solo una
+   seduta che sta su un'altra riga di conto, quindi resta in grigio */
+.fs-ind{ display:inline-flex; align-items:center; margin-left:8px; padding:2px 8px; border-radius:999px;
+  font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  background:var(--surface3); border:1px solid var(--border3); color:var(--muted); }
 .fs-body{ padding:12px 15px 4px; }
 .fs-stats{ display:flex; gap:16px; margin-bottom:11px; }
 .fs-st{ display:flex; flex-direction:column; }
@@ -811,6 +816,9 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
           <div class="fg w-alta"><label for="fb-alta">Distretto</label>
             <label class="fb-chk" for="fb-alta" title="Le sedute di parte alta muovono pochi kg: restano fuori dal tonnellaggio dell'andamento, ma serie e volume continuano a contare">
               <input id="fb-alta" type="checkbox"><span>Parte alta</span></label></div>
+          <div class="fg w-ind"><label for="fb-ind">Tipo</label>
+            <label class="fb-chk" for="fb-ind" title="Individuale, recupero o poche atlete fuori rosa: resta fuori dall'andamento di squadra, ma conta per intero nella linea di chi l'ha fatta">
+              <input id="fb-ind" type="checkbox"><span>Individuale</span></label></div>
           <div class="fb-dest">
             <label>Destinatari</label>
             <button class="fb-pick" id="fb-pick" type="button">
@@ -2317,6 +2325,35 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(s.alta === false) return false;
     return altaAuto(s.title);
   }
+
+  /* ---- individuale (punto 188) -------------------------------------------
+     Una seduta individuale, di recupero o di due ragazze fuori rosa non e' la
+     seduta della squadra: ha esercizi suoi, carichi suoi e spesso un volume
+     che non c'entra niente con quello del gruppo. Finche' entrava nella stessa
+     linea, l'andamento di squadra saliva e scendeva per il lavoro di una
+     persona sola, e la settimana sembrava piu' pesante o piu' leggera di
+     quello che era. Da qui in avanti l'andamento di squadra sta sulle sedute
+     di squadra; l'individuale resta intera nella linea dell'atleta che l'ha
+     fatta, che e' l'unico posto dove quel lavoro vuol dire qualcosa.
+     Il segno si accende a mano come quello della parte alta. In automatico si
+     legge da due cose: dal titolo o dal nome del gruppo, perche' chi scrive
+     "recupero" o "RTP" lo ha gia' detto, e dal numero di destinatarie, perche'
+     una scheda scritta per una o due atlete non e' la seduta della squadra.
+     Un gruppo di lavoro vero (G1, G2, mezza rosa) non viene toccato: quelli
+     sono la squadra divisa in due, non atlete fuori rosa. */
+  function indAuto(s){
+    if(!s) return false;
+    var t = String(s.title == null ? '' : s.title) + ' ' + String(s.groupName == null ? '' : s.groupName);
+    if(/(individual|personalizzat|recuper|rientro|reintegr|\brtp\b|\bpost[\s-]*infortun)/i.test(t)) return true;
+    var p = s.players || [];
+    return !isAll(p) && p.length > 0 && p.length <= 2;
+  }
+  function isInd(s){
+    if(!s) return false;
+    if(s.ind === true) return true;
+    if(s.ind === false) return false;
+    return indAuto(s);
+  }
   function normDraft(o){
     o = o || {};
     var tpl = o.tpl || 'forzamax';
@@ -2342,6 +2379,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       date: o.date || '',
       /* true o false quando lo si e' deciso a mano, null quando decide il titolo */
       alta: (o.alta === true || o.alta === false) ? o.alta : null,
+      /* stesso criterio per l'individuale: a mano vince, altrimenti decidono
+         titolo e numero di destinatarie */
+      ind: (o.ind === true || o.ind === false) ? o.ind : null,
       groupName: o.groupName || '',
       players: players,
       rows: rows,
@@ -2800,6 +2840,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var all = isAll(FB.players);
     if(lbl) lbl.textContent = all ? 'Tutta la squadra' : (FB.groupName || (FB.players.length + (FB.players.length===1?' atleta':' atlete')));
     if(cnt) cnt.textContent = all ? NAMES.length : FB.players.length;
+    /* il segno dell'individuale dipende anche da quante atlete si scelgono:
+       quando cambia la lista, se non e' stato deciso a mano, si riallinea */
+    var ci = document.getElementById('fb-ind');
+    if(ci && FB.ind == null) ci.checked = indAuto(FB);
   }
   function renderTags(){
     var host = document.getElementById('fb-tags'); if(!host) return;
@@ -2884,6 +2928,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(date) date.value = FB.date || '';
     var alta = document.getElementById('fb-alta');
     if(alta) alta.checked = isAlta(FB);
+    var indc = document.getElementById('fb-ind');
+    if(indc) indc.checked = isInd(FB);
     updatePickLabel(); renderTags(); fbRender(); fbStateRender();
   }
 
@@ -2943,6 +2989,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       title: FB.title || ((FB_TPLS[FB.tpl] && FB_TPLS[FB.tpl].name) || 'Seduta forza'),
       date: FB.date,
       alta: FB.alta,
+      ind: FB.ind,
       groupName: all ? '' : (FB.groupName || ''),
       players: all ? [] : FB.players.slice(),
       rows: clone(named),
@@ -3039,12 +3086,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var alta = isAlta(s)
       ? '<span class="fs-alta" title="Parte alta: fuori dal tonnellaggio dell\'andamento, serie e volume contano">Parte alta</span>'
       : '';
+    /* e accanto il segno dell'individuale, per lo stesso motivo: quella seduta
+       non e' nella linea della squadra, sta solo in quella di chi l'ha fatta */
+    var indb = isInd(s)
+      ? '<span class="fs-ind" title="Individuale: fuori dall\'andamento di squadra, conta per intero nella linea dell\'atleta">Individuale</span>'
+      : '';
     return ''
       + '<div class="fs-card-head">'
       +   '<div class="fs-date"><span class="d">'+day+'</span><span class="my">'+esc(mon)+'</span></div>'
       +   '<div class="fs-htext">'
       +     '<div class="fs-title">'+esc(s.title||'Seduta forza')+'</div>'
-      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'+done+alta
+      +     '<span class="fs-aud'+(all?'':' grp')+'">'+PEOPLESVG+esc(audLabel(s))+'</span>'+done+alta+indb
       +   '</div>'
       + '</div>'
       + '<div class="fs-body">'
@@ -3121,6 +3173,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
        si interrompe invece di scendere a terra. Serie e volume restano, perche'
        quel lavoro e' stato fatto davvero. */
     if(m === 'ton' && isAlta(s)) return null;
+    /* l'individuale non tocca la linea di squadra su nessuno dei tre conti:
+       tonnellaggio, volume e serie della squadra devono restare quelli della
+       seduta di squadra. Quando invece si guarda una singola atleta il nome
+       c'e', e li' il lavoro conta per intero. */
+    if(!name && isInd(s)) return null;
     if(m !== 'ton'){
       var t = 0;
       rows.forEach(function(r){
@@ -3263,13 +3320,20 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     /* quante sedute restano fuori dal tonnellaggio perche' sono di parte alta */
     var nAlta = 0;
     seq.forEach(function(s){ if(isAlta(s)) nAlta++; });
+    /* e quante restano fuori dalla linea di squadra perche' sono individuali.
+       Si conta solo quando la linea e' quella della squadra: se si e' scelta
+       un'atleta le sue individuali ci sono tutte. */
+    var nInd = 0;
+    if(!plSel.length) seq.forEach(function(s){ if(isInd(s)) nInd++; });
 
     var plot = storChart(seq, lines, m);
     if(!plot){
       plot = '<div class="fstor-none">'
-        + ((m === 'ton' && nAlta === seq.length)
-            ? 'Tutte le sedute in fila sono di parte alta, quindi il tonnellaggio non si conta. Guarda il volume o le serie.'
-            : 'Su questa scelta non ci sono carichi da mettere in fila. Prova con altri esercizi, o con tutti.')
+        + ((nInd === seq.length)
+            ? 'Tutte le sedute in fila sono individuali, quindi non fanno andamento di squadra. Scegli un\'atleta per vedere il suo lavoro.'
+            : ((m === 'ton' && nAlta === seq.length)
+              ? 'Tutte le sedute in fila sono di parte alta, quindi il tonnellaggio non si conta. Guarda il volume o le serie.'
+              : 'Su questa scelta non ci sono carichi da mettere in fila. Prova con altri esercizi, o con tutti.'))
         + '</div>';
     }
 
@@ -3288,11 +3352,16 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       ? (' Fuori dal conto ' + (nAlta === 1 ? 'una seduta di parte alta' : (nAlta + ' sedute di parte alta'))
          + ': in quelle i kg sono pochi per natura, quindi la linea si interrompe invece di crollare.')
       : '';
+    /* e la stessa avvertenza per le individuali, su tutti e tre i conti */
+    var fuoriInd = (nInd > 0)
+      ? (' Fuori dalla linea di squadra ' + (nInd === 1 ? 'una seduta individuale' : (nInd + ' sedute individuali'))
+         + ': quel lavoro non e\' della squadra, si vede scegliendo l\'atleta che l\'ha fatto.')
+      : '';
     var spieg = (m === 'ton')
-      ? ('Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.' + fuori)
+      ? ('Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.' + fuori + fuoriInd)
       : (m === 'vol'
-        ? 'Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.'
-        : 'Serie di lavoro della seduta, senza contare le serie di avvicinamento.');
+        ? ('Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.' + fuoriInd)
+        : ('Serie di lavoro della seduta, senza contare le serie di avvicinamento.' + fuoriInd));
     return '<div class="fstor">'
       + '<div class="fstor-top"><span class="fstor-cap">Andamento del carico</span>'
       +   '<span class="fstor-sw" role="group" aria-label="Cosa mostrare nell\'andamento">'+sw+'</span></div>'
@@ -3833,6 +3902,18 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
          scrive "Forza parte alta" vede la casella accendersi da sola */
       var ck = document.getElementById('fb-alta');
       if(ck && FB.alta == null) ck.checked = altaAuto(FB.title);
+      /* stessa cosa per l'individuale: chi scrive "recupero" o "RTP" nel titolo
+         vede la casella accendersi senza doverci pensare */
+      var ci = document.getElementById('fb-ind');
+      if(ci && FB.ind == null) ci.checked = indAuto(FB);
+    });
+    var indCk = document.getElementById('fb-ind');
+    if(indCk) indCk.addEventListener('change', function(){
+      FB.ind = (indCk.checked === indAuto(FB)) ? null : indCk.checked;
+      fbSave();
+      fbToast(indCk.checked
+        ? 'Individuale: questa seduta resta fuori dall\'andamento di squadra'
+        : 'Seduta di squadra: torna dentro l\'andamento di squadra');
     });
     var altaCk = document.getElementById('fb-alta');
     if(altaCk) altaCk.addEventListener('change', function(){
