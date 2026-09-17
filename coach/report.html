@@ -2160,6 +2160,32 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function scaldaFogli(list){
     (list||[]).forEach(function(d){ fogCerca(fogKey({ meta:d.meta })); });
   }
+  /* Scaldare non basta quando le giornate sono tante. Spuntando un mese intero
+     si chiedono trenta scansioni insieme, e il tasto stampa costruiva il
+     documento nello stesso istante: per quasi tutte le giornate FOG_OK era
+     ancora vuoto, quindi il foglio del mister non entrava e al suo posto
+     restava il bianco. Qui si aspetta che le risposte siano arrivate davvero,
+     poi si stampa. Le risposte restano in memoria, quindi dalla seconda stampa
+     l'attesa non c'e' piu'. */
+  function fogPronti(list, poi){
+    const keys = [];
+    (list||[]).forEach(function(d){
+      const k = fogKey({ meta:d.meta });
+      if(k && FOG_OK[k] === undefined && keys.indexOf(k) < 0) keys.push(k);
+    });
+    if(!keys.length){ poi(); return; }
+    let restano = keys.length, fatto = false;
+    function chiudi(){ if(fatto) return; fatto = true; poi(); }
+    /* Se una scansione non risponde, per rete lenta o file grosso, la stampa
+       non si blocca: dopo dieci secondi si va avanti con quello che c'e'. */
+    const tempo = setTimeout(chiudi, 10000);
+    keys.forEach(function(k){
+      fogCerca(k, function(){
+        restano--;
+        if(restano <= 0){ clearTimeout(tempo); chiudi(); }
+      });
+    });
+  }
   /* Colore solo quando lo scarto conta davvero. Con la vecchia soglia del 3%
      si accendeva quasi ogni cella e il colore non voleva dire piu' niente:
      adesso e' verde chi sta sopra del 20% sulla media della seduta e rosso chi
@@ -3379,9 +3405,44 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const el = document.getElementById('rprint');
     if(el) el.innerHTML = '';
   }
+  /* Costruito il documento, le figure ci sono ma il browser puo' non averle
+     ancora disegnate: chiamando la stampa in quell'istante il foglio esce con il
+     riquadro vuoto. Si aspetta che ogni immagine del documento sia pronta, con
+     lo stesso tetto di dieci secondi perche' una figura che non arriva non deve
+     impedire di stampare il resto. */
+  function attendiImmagini(host, poi){
+    const imgs = host ? Array.prototype.slice.call(host.querySelectorAll('img')) : [];
+    const manca = imgs.filter(function(im){ return !im.complete; });
+    if(!manca.length){ poi(); return; }
+    let restano = manca.length, fatto = false;
+    function chiudi(){ if(fatto) return; fatto = true; poi(); }
+    const tempo = setTimeout(chiudi, 10000);
+    manca.forEach(function(im){
+      function segna(){
+        im.removeEventListener('load', segna);
+        im.removeEventListener('error', segna);
+        restano--;
+        if(restano <= 0){ clearTimeout(tempo); chiudi(); }
+      }
+      im.addEventListener('load', segna);
+      im.addEventListener('error', segna);
+    });
+  }
   document.getElementById('btn-print').addEventListener('click', function(){
-    stampaPronta();
-    window.print();
+    const b = this;
+    if(b.disabled) return;
+    b.disabled = true;
+    fogPronti(printDays(), function(){
+      stampaPronta();
+      attendiImmagini(printHost(), function(){
+        b.disabled = false;
+        /* Le facciate erano gia' state misurate, ma senza le figure dentro:
+           una scansione alta due colonne cambia l'altezza della pagina, quindi
+           il rimpicciolimento si rifa' adesso che le immagini ci sono. */
+        if(document.body.classList.contains('pstampa')) pAdatta(printHost());
+        window.print();
+      });
+    });
   });
   window.addEventListener('beforeprint', stampaPronta);
   window.addEventListener('afterprint', stampaFinita);
