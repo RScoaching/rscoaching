@@ -369,7 +369,25 @@ tr.r-diff td.col-day .role-inline{ color:var(--muted); }
 
 /* ---------- confronto giocatrici ---------- */
 #confronto-view{ position:relative; overflow:hidden; }
-.cf-subctl{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 14px; }
+.cf-subctl{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:2px 0 14px; }
+/* I tre filtri (che sedute, che ruolo, che periodo) erano dodici bottoni in fila: sono
+   scelte singole dentro elenchi chiusi, quindi un menu dice la stessa cosa in una riga
+   sola e lascia il posto in vista alla lettura scelta e alla tabella. */
+.fset{ display:inline-flex; align-items:center; gap:7px; }
+.fsel{
+  appearance:none; -webkit-appearance:none; font-family:inherit; font-size:12px; font-weight:600;
+  color:var(--ink); background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+  padding:6px 26px 6px 10px; cursor:pointer; max-width:190px;
+  background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                   linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+  transition:border-color .18s var(--ease), color .18s var(--ease);
+}
+.fsel:hover{ border-color:var(--border3); }
+.fsel:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.fsel.is-set{ border-color:var(--ember-border); color:var(--orange2); }
+.fsel option{ background:var(--surface); color:var(--ink); }
 /* periodo: le date scelte a mano restano a fianco del segmento, non aprono pannelli */
 .cf-dates{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
 .cf-date{ font-family:inherit; font-size:12px; font-weight:600; color:var(--ink);
@@ -875,21 +893,27 @@ table.partite tr.r-model td.comp{ white-space:normal; font-weight:500; font-size
         <div class="card-body" style="padding-top:6px">
           <div class="sess-stats" id="cf-stats"></div>
           <div class="cf-subctl">
-            <span class="cm-lbl" id="cf-scope-lbl">Includi</span>
-            <div class="seg cmp-seg" id="cf-scope-seg" role="group" aria-label="Tipo di sedute">
-              <button class="on" data-scope="all" type="button">Tutte</button>
-              <button data-scope="match" type="button">Partite</button>
-              <button data-scope="train" type="button">Allenamenti</button>
-            </div>
-            <span class="cm-lbl">Ruolo</span>
-            <div class="seg cmp-seg" id="cf-role-seg" role="group" aria-label="Ruolo in campo"></div>
-            <span class="cm-lbl">Periodo</span>
-            <div class="seg cmp-seg" id="cf-per-seg" role="group" aria-label="Periodo">
-              <button class="on" data-per="all" type="button" title="Tutta la stagione">Tutto</button>
-              <button data-per="w4" type="button" title="Le quattro settimane fino all'ultima seduta con dati">4 sett.</button>
-              <button data-per="w8" type="button" title="Le otto settimane fino all'ultima seduta con dati">8 sett.</button>
-              <button data-per="rng" type="button" title="Scegli tu il giorno di inizio e quello di fine">Date</button>
-            </div>
+            <span class="fset" id="cf-scope-set">
+              <label class="cm-lbl" for="cf-scope-sel">Includi</label>
+              <select class="fsel" id="cf-scope-sel" title="Quali sedute entrano nel confronto">
+                <option value="all">Tutte le sedute</option>
+                <option value="match">Solo partite</option>
+                <option value="train">Solo allenamenti</option>
+              </select>
+            </span>
+            <span class="fset" id="cf-role-set">
+              <label class="cm-lbl" for="cf-role-sel">Ruolo</label>
+              <select class="fsel" id="cf-role-sel" title="Tieni solo le atlete di un ruolo"></select>
+            </span>
+            <span class="fset">
+              <label class="cm-lbl" for="cf-per-sel">Periodo</label>
+              <select class="fsel" id="cf-per-sel" title="Su quali giorni si fa il conto">
+                <option value="all">Tutta la stagione</option>
+                <option value="w4">Ultime 4 settimane</option>
+                <option value="w8">Ultime 8 settimane</option>
+                <option value="rng">Date scelte...</option>
+              </select>
+            </span>
             <div class="cf-dates" id="cf-dates" hidden>
               <input class="cf-date" id="cf-from" type="date" aria-label="Dal giorno">
               <span class="cm-lbl">a</span>
@@ -1788,24 +1812,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     cfAllPlayers().forEach(n=>{ const r=roleOf(n); if(r) c[r]=(c[r]||0)+1; });
     return Object.keys(c).sort((a,b)=> a.localeCompare(b,'it')).map(r=> ({ role:r, n:c[r] }));
   }
+  // I ruoli cambiano con la rosa, percio' le voci del menu si scrivono qui. Accanto al
+  // ruolo quante atlete sono: e' l'unica cosa che i bottoni dicevano solo al passaggio
+  // del mouse e che sul telefono non si vedeva mai.
   function cfRenderRoleSeg(){
-    const host=document.getElementById('cf-role-seg'); if(!host) return;
+    const sel=document.getElementById('cf-role-sel'); if(!sel) return;
+    const set=document.getElementById('cf-role-set');
     const list=cfRoleList();
-    if(!list.length){ host.hidden=true; host.innerHTML=''; return; }
-    host.hidden=false;
-    let h='<button type="button" data-role="" class="'+(cfState.role?'':'on')+'">Tutti</button>';
+    if(!list.length){ if(set) set.hidden=true; sel.innerHTML=''; return; }
+    if(set) set.hidden=false;
+    let h='<option value="">Tutti i ruoli</option>';
     list.forEach(r=>{
-      h+='<button type="button" data-role="'+esc(r.role)+'" class="'+(cfState.role===r.role?'on':'')+'"'
-        +' title="'+esc(r.role)+': '+r.n+(r.n===1?' atleta':' atlete')+'">'+esc(r.role)+'</button>';
+      h+='<option value="'+esc(r.role)+'"'+(cfState.role===r.role?' selected':'')+'>'
+        +esc(r.role)+' ('+r.n+')</option>';
     });
-    host.innerHTML=h;
-    host.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
-      cfState.role = b.getAttribute('data-role') || '';
-      cfRenderRoleSeg();
-      const s=document.getElementById('cf-play-search');
-      cfRenderPlayRail(s?s.value:'');
-      renderConfronto();
-    }));
+    sel.innerHTML=h;
+    sel.value=cfState.role||'';
+    sel.classList.toggle('is-set', !!cfState.role);
   }
   function cfPlayerRows(name, sess){ const out=[]; sess.forEach(s=>{ const r=playerRow(name,s.monthKey,s.label); if(r) out.push(r); }); return out; }
   function cfTeamRows(sess){ const out=[]; sess.forEach(s=>{ const r=findDayRow(teamMonth(s.monthKey), s.label); if(r) out.push(r); }); return out; }
@@ -1885,13 +1908,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // svuotare la tabella.
   function cfSyncCmpUi(){
     const tvm=(cfState.cmp==='tvm');
-    const seg=document.getElementById('cf-scope-seg'); if(seg) seg.hidden=tvm;
-    const lbl=document.getElementById('cf-scope-lbl'); if(lbl) lbl.hidden=tvm;
+    const set=document.getElementById('cf-scope-set'); if(set) set.hidden=tvm;
+    const sel=document.getElementById('cf-scope-sel');
+    if(sel){ sel.value=cfState.scope; sel.classList.toggle('is-set', cfState.scope!=='all'); }
   }
   // Il periodo si vede anche in stampa: nel report deve essere scritto di che giorni si parla.
   function cfRenderPerSeg(){
-    const seg=document.getElementById('cf-per-seg');
-    if(seg) seg.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.getAttribute('data-per')===cfState.per));
+    const sel=document.getElementById('cf-per-sel');
+    if(sel){ sel.value=cfState.per; sel.classList.toggle('is-set', cfState.per!=='all'); }
     const box=document.getElementById('cf-dates');
     if(box) box.hidden = (cfState.per!=='rng');
     const f=document.getElementById('cf-from'), t=document.getElementById('cf-to');
@@ -2414,21 +2438,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // teneva fuori una meta', torna da solo su Tutte invece di dare una tabella di trattini
       if(cfState.cmp==='tvm' && cfState.scope!=='all'){
         cfState.scope='all';
-        const sc=document.getElementById('cf-scope-seg');
-        if(sc) sc.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x.getAttribute('data-scope')==='all'));
         cfResetSessSel();
         cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:'');
       }
       cfSyncCmpUi();
       renderConfronto();
     })); }
-  { const seg=document.getElementById('cf-scope-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
-      cfState.scope = btn.getAttribute('data-scope');
-      seg.querySelectorAll('button').forEach(x=> x.classList.toggle('on', x===btn));
+  { const sel=document.getElementById('cf-scope-sel'); if(sel) sel.addEventListener('change', ()=>{
+      cfState.scope = sel.value;
+      sel.classList.toggle('is-set', cfState.scope!=='all');
       cfResetSessSel(); cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:''); renderConfronto();
-    })); }
-  { const seg=document.getElementById('cf-per-seg'); if(seg) seg.querySelectorAll('button').forEach(btn=> btn.addEventListener('click', ()=>{
-      const p=btn.getAttribute('data-per');
+    }); }
+  { const sel=document.getElementById('cf-role-sel'); if(sel) sel.addEventListener('change', ()=>{
+      cfState.role = sel.value || '';
+      sel.classList.toggle('is-set', !!cfState.role);
+      const s=document.getElementById('cf-play-search');
+      cfRenderPlayRail(s?s.value:'');
+      renderConfronto();
+    }); }
+  { const sel=document.getElementById('cf-per-sel'); if(sel) sel.addEventListener('change', ()=>{
+      const p=sel.value;
       cfState.per=p;
       // La prima volta che si sceglie Date, le due caselle partono dalla stagione intera:
       // cosi' si sposta un estremo e si vede subito l'effetto, senza tabella vuota.
@@ -2440,7 +2469,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       cfRenderSessRail(document.getElementById('cf-sess-search')?document.getElementById('cf-sess-search').value:'');
       renderConfronto();
       if(p!=='all' && p!=='rng') toast('Periodo: '+cfPerText());
-    })); }
+    }); }
   { const wire=(id, key)=>{ const i=document.getElementById(id); if(!i) return;
       i.addEventListener('change', ()=>{
         cfState[key]=i.value||'';
