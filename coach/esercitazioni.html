@@ -548,6 +548,27 @@ body.vlib #addform, body.vlib #athwrap, body.vlib #natpick{ display:none !import
 .lsec{ font-size:10px; font-weight:700; color:var(--faint); text-transform:uppercase;
   letter-spacing:.06em; margin:14px 0 6px; }
 .lnil{ font-size:12px; color:var(--muted); padding:2px 0 6px; }
+.lnil b{ color:var(--text); }
+/* forma di gioco e metri quadri: la riga che dice perche' due schede con lo
+   stesso nome sono due schede e non una */
+.lspz{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:2px 0 4px; }
+.lspz .sq{ font-size:12px; font-weight:600; color:var(--text); background:var(--surface2);
+  border:1px solid var(--border2); border-radius:7px; padding:5px 9px; }
+.lspz .sq.big{ background:var(--violet-bg); border-color:var(--violet-border); color:var(--violet2); }
+.lspz .sn{ font-size:11px; color:var(--faint); }
+/* i minuti della proiezione: una domanda, non un dato da salvare */
+.lstm{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:2px 0 6px; }
+.lstm label{ font-size:12px; font-weight:600; color:var(--text); }
+.lstm .smin{ width:74px; font-family:inherit; font-size:13px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--violet-border); border-radius:8px; padding:6px 9px; }
+.lstm .smin:focus-visible{ outline:2px solid var(--violet2); outline-offset:1px; }
+.lstm .sn{ font-size:11px; color:var(--faint); }
+/* i totali stimati non sono misure prese: restano riconoscibili dal contorno
+   tratteggiato, cosi' non si confondono con le mediane qui sopra */
+.load.mini.sproj .lcell{ background:transparent; box-shadow:inset 0 0 0 1px var(--violet-border); }
+.load.mini.sproj .lcell .lv{ color:var(--violet2); }
+.badge.sq{ background:var(--surface2); border:1px solid var(--border2); color:var(--muted);
+  margin-left:6px; white-space:nowrap; }
 .otbl a{ color:var(--violet2); font-weight:600; }
 .otbl a:hover{ text-decoration:underline; }
 .dnote.arc{ border-color:var(--violet-border); background:var(--violet-bg); }
@@ -1065,6 +1086,60 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       .replace(/\s*\+\s*/g, '+')
       .trim().replace(/\s+/g, ' ');
   }
+
+  // ---------- forma di gioco e spazio: cosa distingue davvero due proposte ----------
+  // Il nome da solo non basta. "Possesso" in un 7c7 su 40x30 e "possesso" in un
+  // 11c11 su tutto il campo si chiamano uguale e non costano niente di simile:
+  // quello che cambia il lavoro sono la forma di gioco e i metri quadri, non la
+  // parola scritta sul foglio. Da qui in avanti l'archivio tiene insieme le volte
+  // che hanno lo stesso nome, la stessa forma e lo stesso spazio, e le altre le
+  // lascia su schede separate.
+
+  // 7c7, 4v4, 10 contro 10: si tiene la contrapposizione piu' grande scritta nel
+  // nome, che e' quella che comanda il campo. Un metraggio come "40 x 30" non
+  // entra qui: il separatore e' la x, mai c/v/vs/contro.
+  function formaOf(desc){
+    const t = String(desc==null?'':desc).toLowerCase();
+    const re = reSq(true);
+    let m, best = null, bestN = -1;
+    while((m = re.exec(t))){
+      const a = +m[1], b = +m[2];
+      if(a > 11 || b > 11 || !a || !b) continue;
+      if(a + b > bestN){ bestN = a + b; best = a + 'c' + b; }
+    }
+    return best;
+  }
+  // i jolly stanno fuori dalla contrapposizione ma dentro lo stesso spazio: due
+  // uomini in piu' su quei metri quadri cambiano quanto si corre
+  function jollyOf(desc){
+    const m = /\+\s*(\d{1,2})\s*j/.exec(String(desc==null?'':desc).toLowerCase());
+    return m ? +m[1] : 0;
+  }
+  // il nome senza la forma di gioco: "rondo 4c4 + 2 jolly" e "rondo 6c6" hanno
+  // lo stesso ceppo, e sono la stessa proposta giocata in due modi
+  function baseKey(desc){
+    const t = String(desc==null?'':desc).toLowerCase()
+      .replace(new RegExp(SQ_SRC, 'g'), ' ')
+      .replace(/\+\s*\d{1,2}\s*j\w*/g, ' ');
+    return exKey(t);
+  }
+  // "40 x 30 m", "40x30", "40 per 30": il campo scritto a mano nei Metraggi.
+  // Sotto i 25 metri quadri non e' un campo ma un numero finito nella casella
+  // sbagliata (le serie per ripetizioni si scrivono anche loro "4 x 3"), e sopra
+  // i 130 metri di lato non esiste terreno di gioco.
+  function areaOf(txt){
+    const t = String(txt==null?'':txt).toLowerCase().replace(/,/g, '.');
+    const m = /(\d{1,3}(?:\.\d+)?)\s*(?:x|per)\s*(\d{1,3}(?:\.\d+)?)/.exec(t);
+    if(!m) return null;
+    const a = +m[1], b = +m[2];
+    if(!(a > 0 && b > 0) || a > 130 || b > 130) return null;
+    const mq = a * b;
+    if(mq < 25) return null;
+    return { l: Math.max(a,b), w: Math.min(a,b), mq: mq };
+  }
+  // due campi non si misurano mai uguali al metro: 40x30 e 42x30 sono lo stesso
+  // lavoro, e tenerli su due schede spezzerebbe l'archivio invece di costruirlo
+  function areaKey(ar){ return ar ? String(Math.round(ar.mq / 50) * 50) : 'nd'; }
 
   // ---------- dettagli dell'esercitazione, non della seduta ----------
   // Gli stessi cinque campi dei dettagli, ma appesi al nome invece che al
@@ -2122,6 +2197,27 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         wirePanels(panel);
       });
     });
+    /* La proiezione si rifa' a ogni cifra battuta, senza ridisegnare la scheda:
+       cambiare i minuti e' una domanda, non una modifica, e ricostruire tutto
+       farebbe perdere il fuoco dalla casella mentre la si sta scrivendo. */
+    host.querySelectorAll('.lstm .smin').forEach(inp=>{
+      const wrap = inp.closest('.lstm');
+      const proj = wrap && wrap.nextElementSibling;
+      if(!proj || !proj.classList.contains('sproj')) return;
+      function calc(){
+        const m = parseFloat(inp.value);
+        const ok = isFinite(m) && m > 0;
+        proj.querySelectorAll('.lv').forEach(cell=>{
+          const r = parseFloat(cell.getAttribute('data-r'));
+          const d = cell.getAttribute('data-d') === '1' ? 1 : 0;
+          const u = cell.querySelector('small');
+          const v = (ok && isFinite(r)) ? lfmt(r * m, d) : '&#8211;';
+          cell.innerHTML = v + (u ? u.outerHTML : '');
+        });
+      }
+      inp.addEventListener('input', calc);
+      inp.addEventListener('change', calc);
+    });
     /* Lo stesso riquadro serve due archivi. Con data-k scrive sulla seduta e
        vale per quel giorno; con data-lib scrive sulla scheda dell'esercitazione
        e da li' ricade su tutte le volte in cui e' stata proposta. */
@@ -2144,6 +2240,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           /* Se la misura del campo arriva da qui e non dal nome, il disegno
              deve aggiornarsi subito: e' l'unico campo che lo cambia. */
           if(inp.getAttribute('data-f') === 'metri'){
+            /* In archivio il metraggio non e' un dettaglio qualsiasi: e' una
+               delle tre cose che decidono in quale scheda sta una proposta.
+               Appena si scrive, l'archivio si ricostruisce. */
+            if(lib && state.view === 'archivio'){ render(); return; }
             const panel = box.closest('.dpanel');
             const pk = panel ? panel.id.slice(3) : '';
             const p = pk ? PANEL[pk] : null;
@@ -2174,39 +2274,71 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const v = lnum(L[c]), m = lnum(L['Minuti']);
     return (v==null || !m) ? null : v / m;
   }
+  // La distanza equivalente non sta nei fogli come metri: c'e' la percentuale in
+  // piu' rispetto alla distanza vera (3% in una corsa continua, 15% in una
+  // attivazione piena di cambi di direzione). Si ricostruisce da li'.
+  function ldeq(L){
+    const d = lnum(L['Dist tot']), p = lnum(L['% Dist Eq']), m = lnum(L['Minuti']);
+    if(d==null || !m) return null;
+    return (p==null ? d : d * (1 + p/100)) / m;
+  }
+  /* I parametri dell'archivio sono quelli su cui si costruisce la settimana:
+     distanza, distanza equivalente, le due fasce di velocita', la potenza sopra
+     20 W/kg, le accelerazioni e le decelerazioni. Tutti al minuto, tranne la
+     durata: un'esercitazione dura quello che dura, ma cosa costa si misura per
+     unita' di tempo, senno' una proposta da venti minuti sembrerebbe sempre piu'
+     pesante della stessa fatta in otto. `t` segna i parametri che si possono
+     proiettare in avanti: durata e velocita' massima non si moltiplicano. */
   const LIBM = [
-    { l:'Durata',        u:'min',   d:1, f:function(L){ return lnum(L['Minuti']); } },
-    { l:'Metri al min',  u:'m/min', d:0, f:function(L){ return lpm(L, 'Dist tot'); } },
-    { l:'Oltre 23 km/h', u:'m/min', d:1, f:function(L){ return lpm(L, 'DIST > 23km/h'); } },
-    { l:'Oltre 20 W/kg', u:'m/min', d:1, f:function(L){ return lpm(L, 'D>20 W/kg'); } },
-    { l:'Azioni int.',   u:'n/min', d:1, f:function(L){ return lnum(L['N az. int. /min']); } },
-    { l:'Velocita max',  u:'km/h',  d:1, f:function(L){ return lnum(L['SMax (kmh)']); } }
+    { k:'min', l:'Durata',        u:'min',   d:1, t:0, f:function(L){ return lnum(L['Minuti']); } },
+    { k:'pm',  l:'Distanza',      u:'m/min', d:0, t:1, f:function(L){ return lpm(L, 'Dist tot'); } },
+    { k:'eq',  l:'Dist. equiv.',  u:'m/min', d:0, t:1, f:ldeq },
+    { k:'v20', l:'20-23 km/h',    u:'m/min', d:1, t:1, f:function(L){ return lpm(L, 'Dist 20-23 Km/h'); } },
+    { k:'v23', l:'Oltre 23 km/h', u:'m/min', d:1, t:1, f:function(L){ return lpm(L, 'DIST > 23km/h'); } },
+    { k:'w20', l:'Oltre 20 W/kg', u:'m/min', d:1, t:1, f:function(L){ return lpm(L, 'D>20 W/kg'); } },
+    { k:'acc', l:'Acc > 3',       u:'n/min', d:1, t:1, f:function(L){ return lpm(L, 'N ACC > 3 m/s^2'); } },
+    { k:'dec', l:'Dec < -3',      u:'n/min', d:1, t:1, f:function(L){ return lpm(L, 'N DEC < -3 m/s^2'); } }
   ];
+  const LIBM_I = Object.create(null);
+  LIBM.forEach(function(m, i){ LIBM_I[m.k] = i; });
+  // unita' del totale proiettato: quello che e' al minuto diventa metri o numero
+  function ltot(u){ return u==='m/min' ? 'm' : (u==='n/min' ? 'n' : u); }
   function lfmt(v, d){ return v==null ? '&#8211;' : (d ? NF1.format(v) : NF0.format(Math.round(v))); }
 
   const LORD = [
     { v:'uso',    l:'Piu&#39; proposte' },
     { v:'ultima', l:'Piu&#39; recenti' },
     { v:'carico', l:'Piu&#39; intense' },
+    { v:'spazio', l:'Piu&#39; larghe' },
     { v:'nome',   l:'Nome' }
   ];
   const LIB_OPEN = Object.create(null);
 
-  // tutte le esercitazioni della stagione raccolte per nome ridotto. Tipologia e
-  // nome mostrato vengono dalla grafia usata piu' spesso, cosi' "Passing Drill"
-  // e "Passing drill" finiscono nella stessa scheda con una sola intestazione.
+  // tutte le esercitazioni della stagione raccolte per ceppo del nome, forma di
+  // gioco e spazio. Tipologia e nome mostrato vengono dalla grafia usata piu'
+  // spesso, cosi' "Passing Drill" e "Passing drill" finiscono nella stessa
+  // scheda con una sola intestazione, mentre lo stesso possesso giocato 7c7 su
+  // 40x30 e 11c11 su tutto il campo resta su due schede: si chiamano uguale ma
+  // non sono la stessa cosa, ed e' da qui che nasce la previsione.
   function libBuild(all){
     const q = state.q.trim().toLowerCase();
+    const DETM = loadDet();
     const map = new Map();
     all.forEach(s=>{
       (s.allDrills || s.drills).forEach(d=>{
         if(state.tipo!=='all' && tipoOf(d.descrizione)!==state.tipo) return;
         if(q && !String(d.descrizione||'').toLowerCase().includes(q)) return;
-        const k = exKey(d.descrizione);
-        if(!k) return;
+        const bk = baseKey(d.descrizione);
+        if(!bk) return;
+        // lo spazio si legge dai Metraggi: quelli scritti sulla seduta vincono,
+        // sotto parla la scheda dell'archivio, come in tutto il resto della pagina
+        const ar = areaOf(detOf(DETM, s, d).metri);
+        const fo = formaOf(d.descrizione);
+        const k = bk + '|' + (fo || '-') + '|' + areaKey(ar);
         let g = map.get(k);
-        if(!g){ g = { k:k, occ:[], nomi:Object.create(null) }; map.set(k, g); }
-        g.occ.push({ s:s, d:d });
+        if(!g){ g = { k:k, forma:fo, occ:[], aree:[], nomi:Object.create(null) }; map.set(k, g); }
+        g.occ.push({ s:s, d:d, ar:ar });
+        if(ar) g.aree.push(ar);
         const nm = String(d.descrizione||'').trim();
         g.nomi[nm] = (g.nomi[nm] || 0) + 1;
       });
@@ -2229,33 +2361,97 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           min: vals.length ? Math.min.apply(null, vals) : null,
           max: vals.length ? Math.max.apply(null, vals) : null };
       });
-      out.push({ k:g.k, nome:nome, tipo:tipoOf(nome), volte:g.occ.length, gps:gps.length,
+      // il campo della scheda e' quello mediano delle volte che l'hanno scritto,
+      // e le atlete sono quelle mediane dei GPS: i metri quadri a testa vogliono
+      // due numeri veri, non uno dedotto dal nome
+      const aree = g.aree.slice().sort((x,y)=> x.mq - y.mq);
+      const ar = aree.length ? aree[aree.length >> 1] : null;
+      const nat = median(g.occ.map(o=> nAthOf(o.d)).filter(n=> n > 0));
+      const mqa = (ar && nat) ? (ar.mq / nat) : null;
+      out.push({ k:g.k, lk:exKey(nome), nome:nome, tipo:tipoOf(nome), forma:g.forma,
+        jolly:jollyOf(nome), area:ar, nAth:nat, mqa:mqa, quanti:g.aree.length,
+        volte:g.occ.length, gps:gps.length,
         prima:dates[0], ultima:dates[dates.length-1], occ:g.occ, met:met,
-        carico: (met[1].med==null ? -1 : met[1].med) });
+        carico: (met[LIBM_I.pm].med==null ? -1 : met[LIBM_I.pm].med) });
     });
     const by = state.lord;
     out.sort((a,b)=>{
       if(by==='nome') return a.nome.localeCompare(b.nome, 'it');
       if(by==='ultima') return a.ultima===b.ultima ? (b.volte - a.volte) : (a.ultima < b.ultima ? 1 : -1);
       if(by==='carico') return (b.carico - a.carico) || (b.volte - a.volte);
+      // le schede senza metraggio finiscono in fondo, non in cima con lo zero
+      if(by==='spazio') return ((b.mqa==null?-1:b.mqa) - (a.mqa==null?-1:a.mqa)) || (b.volte - a.volte);
       return (b.volte - a.volte) || (a.ultima < b.ultima ? 1 : -1);
     });
     return out;
   }
 
-  // corpo della scheda: le sei misure con mediana e campo di variazione, la
-  // lista delle volte con il collegamento alla seduta, e i dettagli che valgono
-  // per tutte le volte
+  // lo spazio della scheda, scritto in chiaro: campo, metri quadri, atlete
+  // dentro e metri quadri a testa. E' la meta' della domanda del punto: quanto
+  // rende un certo lavoro in certi metri quadri, non solo quanto rende un nome.
+  function libSpazio(x){
+    const bits = [];
+    if(x.forma) bits.push('<span class="sq">'+esc(x.forma)+(x.jolly?' + '+x.jolly+' jolly':'')+'</span>');
+    if(x.area){
+      bits.push('<span class="sq">'+lfmt(x.area.l,0)+' &#215; '+lfmt(x.area.w,0)+' m</span>');
+      bits.push('<span class="sq">'+NF0.format(Math.round(x.area.mq))+' mq</span>');
+    }
+    if(x.nAth) bits.push('<span class="sq">'+lfmt(x.nAth,0)+' in campo</span>');
+    if(x.mqa) bits.push('<span class="sq big">'+lfmt(x.mqa,0)+' mq a testa</span>');
+    let h = '<div class="lsec">Forma e spazio</div>';
+    if(bits.length){
+      const da = x.quanti
+        ? ('Misure scritte su '+x.quanti+(x.quanti===1?' volta':' volte')+' su '+x.volte+'.')
+        : '';
+      h += '<div class="lspz">'+bits.join('')+(da ? '<span class="sn">'+da+'</span>' : '')+'</div>';
+    }
+    // senza metri quadri la scheda sa quanto e' costata ma non sa trasportarlo
+    // su un campo diverso, che e' proprio il lavoro che le si chiede
+    if(!x.area){
+      h += '<div class="lnil">Il metraggio non e&#39; ancora scritto: si mette una volta sola, qui sotto in <b>Metraggi</b>, e da li&#39; vale per tutte le volte in cui questa proposta torna.</div>';
+    }
+    return h;
+  }
+
+  /* Quanto rende. E' la domanda vera dell'archivio: se questa proposta, in
+     questa forma e in questi metri quadri, rende tanti metri al minuto sopra i
+     23, quindici minuti quanto danno? Il conto e' una moltiplicazione, ma senza
+     archivio non si poteva fare: serviva sapere il ritmo di quella proposta in
+     quello spazio, non la somma della seduta. I minuti partono dalla durata
+     mediana e si cambiano a mano: il totale si rifa' da solo. */
+  function libStima(x){
+    const med = x.met[LIBM_I.min].med;
+    const min = med ? Math.round(med) : 15;
+    const id = 'st-' + x.k.replace(/[^a-z0-9]+/g, '-');
+    let h = '<div class="lsec">Quanto rende</div>'+
+      '<div class="lstm" data-k="'+esc(x.k)+'">'+
+        '<label for="'+id+'">Minuti</label>'+
+        '<input id="'+id+'" class="smin tnum" type="number" min="1" max="120" step="1" value="'+min+'" autocomplete="off">'+
+        '<span class="sn">'+(med ? 'Di solito dura '+lfmt(med,1)+' min.' : 'Durata mai registrata.')+'</span>'+
+      '</div>';
+    h += '<div class="load mini sproj">' + x.met.filter(m=> m.m.t).map(m=>
+      '<div class="lcell"><div class="ll">'+esc(m.m.l)+'</div>'+
+        '<div class="lv tnum" data-r="'+(m.med==null?'':m.med)+'" data-d="'+(m.m.u==='n/min'?1:0)+'">'+
+        (m.med==null ? '&#8211;' : lfmt(m.med * min, m.m.u==='n/min'?1:0))+
+        '<small>'+esc(ltot(m.m.u))+'</small></div></div>'
+    ).join('') + '</div>';
+    return h;
+  }
+
+  // corpo della scheda: lo spazio, le misure con mediana e campo di variazione,
+  // la proiezione sui minuti, la lista delle volte con il collegamento alla
+  // seduta, e i dettagli che valgono per tutte le volte
   function libBody(x){
-    let h = '';
+    let h = libSpazio(x);
     if(x.gps){
-      h += '<div class="lsec">Quanto costa, mediana di '+x.gps+(x.gps===1?' volta':' volte')+' col GPS</div>';
+      h += '<div class="lsec">Quanto costa al minuto, mediana di '+x.gps+(x.gps===1?' volta':' volte')+' col GPS</div>';
       h += '<div class="load mini">' + x.met.map(m=>{
         const rg = (m.n>1 && m.min!=null && (m.max - m.min) > 0)
           ? '<div class="rg">da '+lfmt(m.min, m.m.d)+' a '+lfmt(m.max, m.m.d)+'</div>' : '';
         return '<div class="lcell"><div class="ll">'+esc(m.m.l)+'</div>'+
           '<div class="lv tnum">'+lfmt(m.med, m.m.d)+'<small>'+esc(m.m.u)+'</small></div>'+rg+'</div>';
       }).join('') + '</div>';
+      h += libStima(x);
     } else {
       h += '<div class="lsec">Quanto costa</div>'+
         '<div class="lnil">Nessuna di queste volte ha il GPS: la scheda non puo&#39; ancora dire quanto costa.</div>';
@@ -2266,7 +2462,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       '<th class="nm" scope="col">Giorno</th><th scope="col">Slot</th>'+
       '<th scope="col">Minuti<span class="u">min</span></th>'+
       '<th scope="col">Dist<span class="u">m/min</span></th>'+
-      '<th scope="col">Atlete</th></tr></thead><tbody>';
+      '<th scope="col">Atlete</th>'+
+      '<th scope="col">Campo<span class="u">m</span></th></tr></thead><tbody>';
     occ.forEach(o=>{
       const dt = parseDate(o.s.date);
       const lbl = dt ? DTFS.format(dt).replace('.','') : o.s.date;
@@ -2279,15 +2476,21 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         '<td>'+esc(o.s.slot)+'</td>'+
         '<td>'+lfmt(mn, 1)+'</td>'+
         '<td class="key">'+lfmt(pm, 0)+'</td>'+
-        '<td>'+(na || '&#8211;')+'</td></tr>';
+        '<td>'+(na || '&#8211;')+'</td>'+
+        '<td>'+(o.ar ? (lfmt(o.ar.l,0)+' &#215; '+lfmt(o.ar.w,0)) : '&#8211;')+'</td></tr>';
     });
     h += '</tbody></table></div>';
 
-    const v = loadLib()[x.k] || {};
-    h += '<div class="dnote arc" data-lib="'+esc(x.k)+'"><div class="nh">Dettagli validi per tutte le volte</div><div class="ng">'+
+    /* I dettagli restano appesi al nome, non alla scheda: il metraggio si
+       scrive una volta e vale per quella proposta ovunque compaia. Se poi due
+       schede nate dalla stessa parola hanno campi diversi, e' la seduta a
+       scriverselo, e da li' si separano da sole. */
+    const v = loadLib()[x.lk] || {};
+    const fid = 'lb-' + x.k.replace(/[^a-z0-9]+/g, '-');
+    h += '<div class="dnote arc" data-lib="'+esc(x.lk)+'"><div class="nh">Dettagli validi per tutte le volte</div><div class="ng">'+
       DET_FIELDS.map(f=>
-        '<div class="nf"><label for="lb-'+esc(x.k).replace(/[^a-z0-9]+/g,'-')+'-'+f.n+'">'+esc(f.l)+'</label>'+
-        '<input id="lb-'+esc(x.k).replace(/[^a-z0-9]+/g,'-')+'-'+f.n+'" type="text" data-f="'+f.n+'" value="'+esc(v[f.n]||'')+
+        '<div class="nf"><label for="'+fid+'-'+f.n+'">'+esc(f.l)+'</label>'+
+        '<input id="'+fid+'-'+f.n+'" type="text" data-f="'+f.n+'" value="'+esc(v[f.n]||'')+
         '" placeholder="'+esc(f.p)+'" autocomplete="off"></div>'
       ).join('')+
       '</div><div class="nsaved">Salvato su questo dispositivo</div>'+
@@ -2330,10 +2533,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const open = !!LIB_OPEN[x.k];
       const tip = x.tipo!=='altro' ? '<span class="badge tip">'+esc(TIPO_LBL[x.tipo])+'</span>' : '';
       const det = hasLib(x.occ[0].d) ? '<span class="badge det">dettagli</span>' : '';
+      /* Forma e metri quadri a testa stanno gia' nella riga chiusa: sono cio'
+         che distingue due schede con lo stesso nome, e se restassero dentro il
+         cassetto la lista sembrerebbe piena di doppioni. */
+      const sq = (x.forma ? '<span class="badge sq">'+esc(x.forma)+'</span>' : '')+
+        (x.mqa ? '<span class="badge sq">'+lfmt(x.mqa,0)+' mq/atleta</span>'
+               : (x.area ? '<span class="badge sq">'+NF0.format(Math.round(x.area.mq))+' mq</span>' : ''));
       return '<article class="lcard'+(open?' open':'')+'" data-k="'+esc(x.k)+'">'+
         '<div class="lhead" role="button" tabindex="0" aria-expanded="'+open+'">'+
           '<span class="lidx tnum" title="Proposta '+x.volte+(x.volte===1?' volta':' volte')+'">'+x.volte+'</span>'+
-          '<span class="lname">'+esc(x.nome)+'</span>'+tip+det+
+          '<span class="lname">'+esc(x.nome)+'</span>'+tip+sq+det+
           '<span class="lwhen">'+when+'</span>'+chev+
         '</div>'+
         '<div class="lbody"'+(open?'':' hidden')+'>'+(open?libBody(x):'')+'</div>'+
