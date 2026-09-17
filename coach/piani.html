@@ -1140,7 +1140,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
           <div class="seed-bar">
             <button class="seed-it all" id="pr-spog" type="button">
               <b>Foglio spogliatoio</b>
-              <span>Record di squadra e classifica della velocita massima, caratteri grandi. Verticale.</span>
+              <span>Solo la classifica della velocita massima, rosa Primavera, caratteri grandi. Verticale.</span>
             </button>
             <button class="seed-it" id="pr-pano" type="button">
               <b>Panoramica completa</b>
@@ -1976,15 +1976,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '@media print{ #print-only{ padding:6mm '+(landscape?'9mm':'8mm')+'; } }';
   }
   function prWhen(){ return curSess ? ('rilevazione di '+curSess) : 'tutte le rilevazioni'; }
-  function prMeta(parts){ return parts.filter(Boolean).map(esc).join(' &#183; '); }
   function prHead(titolo){
     return '<div class="pr-h">'+esc(titolo)+'</div>'+
       '<div class="pr-s">'+esc(SNAP.squadra||'Fiorentina Primavera U19W')+' &#183; '+
       esc(seasonName())+' &#183; '+esc(prWhen())+' &#183; stampato il '+esc(todayShort())+
       (SNAP.generato ? (' &#183; dati '+esc(SNAP.generato)) : '')+'</div>';
   }
+  /* Le aggregate salgono ogni tanto dall'U17: nel foglio appeso allo spogliatoio
+     non c'entrano, la classifica e' quella della rosa Primavera. */
+  const AGG_SET = (function(){
+    const s = Object.create(null);
+    try{
+      (window.fioRosterFull ? window.fioRosterFull() : []).forEach(function(p){
+        if(p && p.tipo === 'sporadica') s[window.fioChiaveAtleta(p.name)] = 1;
+      });
+    }catch(e){}
+    return s;
+  })();
+  function isAgg(name){
+    try{ return !!AGG_SET[window.fioChiaveAtleta(name)]; }catch(e){ return false; }
+  }
   function prSpogVel(){
-    const ranked = monitored.filter(p=> p.smax>0).slice().sort((a,b)=> (b.smax||0)-(a.smax||0));
+    const ranked = monitored.filter(p=> p.smax>0 && !isAgg(p.name)).slice().sort((a,b)=> (b.smax||0)-(a.smax||0));
     if(!ranked.length) return '';
     const riga = (p,i)=>
       '<tr><td class="rk">'+(i+1)+'</td>'+
@@ -2004,71 +2017,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        in due farebbe solo due mezze tabelle mozze. Sopra, il taglio e' a meta'
        esatta: e' una classifica, il primo della seconda colonna e' il numero che
        segue l'ultimo della prima e si legge di seguito. */
-    if(ranked.length < 14) return '<div class="pr-grp">'+tit+tabella(ranked, 1, false)+'</div>';
+    if(ranked.length < 14) return '<div class="pr-grp">'+tit+tabella(ranked, 0, false)+'</div>';
     const meta = Math.ceil(ranked.length/2);
     return '<div class="pr-grp">'+tit+
       '<div class="pr-duo">'+
-        '<div>'+tabella(ranked.slice(0, meta), 1, true)+'</div>'+
-        '<div>'+tabella(ranked.slice(meta), meta+1, true)+'</div>'+
+        '<div>'+tabella(ranked.slice(0, meta), 0, true)+'</div>'+
+        '<div>'+tabella(ranked.slice(meta), meta, true)+'</div>'+
       '</div></div>';
   }
-  function prRecGroups(){
-    const groups = [];
-    const gt = [];
-    if(!curSess && monitored.length){
-      const tNint = topBy('nint'), tMmin = topBy('mmin');
-      if(topSmax && topSmax.smax>0) gt.push({ lab:'Velocita massima', val:NF1.format(topSmax.smax), unit:'km/h', who:topSmax.name, meta:[sessLabel(topSmax)] });
-      if(topHs && topHs.hs>0)       gt.push({ lab:'Distanza oltre 23 km/h', val:NF.format(topHs.hs), unit:'m', who:topHs.name, meta:['in una seduta'] });
-      if(tNint && tNint.nint>0)     gt.push({ lab:'Azioni intense al minuto', val:NF1.format(tNint.nint), unit:'n/min', who:tNint.name, meta:['in una seduta'] });
-      if(tMmin && tMmin.mmin>0)     gt.push({ lab:'Metri al minuto', val:NF.format(tMmin.mmin), unit:'m/min', who:tMmin.name, meta:['in una seduta'] });
-    }
-    if(gt.length) groups.push({ t:'GPS', r:gt });
-    CATS.forEach(c=>{
-      const rr = [];
-      if(c.key==='fms'){
-        const b = fmsBest();
-        if(b) rr.push({ lab:'FMS totale', val:NF.format(b.f.val), unit:'su '+(b.f.nPat*3), who:b.name,
-                        meta:[(b.f.complete ? '7 schemi su 7' : b.f.nPat+' schemi su 7')] });
-      } else {
-        viewsIn(c.key).forEach(v=>{
-          if(noRecord(v)) return;
-          if(v.kind==='pair'){
-            const b = pairBest(v);
-            if(b) rr.push({ lab:v.label, val:recNum(b.v, v.unit), unit:unitLabel(v.unit), who:b.name, meta:['lato '+b.side, b.d] });
-          } else {
-            const st = statsFor(v.def.key, v.def);
-            if(st.n) rr.push({ lab:v.label, val:recNum(st.best, v.unit), unit:unitLabel(v.unit), who:st.bestName,
-                               meta:[dateOf(REG[v.def.key]||{}, st.bestName)] });
-          }
-        });
-      }
-      if(rr.length) groups.push({ t:c.label, r:rr });
-    });
-    return groups;
-  }
-  function prSpogRec(){
-    return prRecGroups().map(g=>(
-      '<div class="pr-grp"><p class="pr-gt">Record &#183; '+esc(g.t)+'</p>'+
-      '<table class="pt">'+
-      '<colgroup><col><col style="width:96px"><col style="width:24%"><col style="width:24%"></colgroup>'+
-      '<thead><tr><th class="l">Metrica</th><th>Valore</th><th class="l">Atleta</th><th class="l">Nota</th></tr></thead>'+
-      '<tbody>'+g.r.map(r=>(
-        '<tr><td class="l">'+esc(r.lab)+'</td>'+
-        '<td class="big">'+r.val+' '+esc(r.unit)+'</td>'+
-        '<td class="l big">'+esc(r.who)+'</td>'+
-        '<td class="l">'+prMeta(r.meta)+'</td></tr>'
-      )).join('')+'</tbody></table></div>'
-    )).join('');
-  }
+  /* Sul foglio appeso va solo la velocita massima: e' il dato che arriva dai GPS e
+     regge il confronto. Gli altri record della batteria test, finche' i valori non
+     sono completi e verificati, sul muro dello spogliatoio confondono e basta. */
   function buildSpog(){
     const host = document.getElementById('print-only');
-    const vel = prSpogVel(), rec = prSpogRec();
+    const vel = prSpogVel();
     host.className = 'sp';
-    host.innerHTML = prHead('Record di squadra')+
-      ((vel||rec) ? (vel+rec)
-       : '<p class="pr-empty">Ancora nessun record da appendere: servono i dati GPS del monitoraggio oppure qualche valore nella batteria test.</p>')+
-      '<p class="pr-note">La velocita massima arriva dai GPS delle sedute gia' + "'" + ' registrate. '+
-      'I record della batteria test sono i migliori valori inseriti in questa stagione.</p>';
+    host.innerHTML = prHead('Velocita massima di squadra')+
+      (vel ? vel
+       : '<p class="pr-empty">Ancora nessuna velocita da appendere: servono i dati GPS delle sedute monitorate.</p>')+
+      '<p class="pr-note">La velocita massima arriva dai GPS delle sedute gia' + "'" + ' registrate: '+
+      'e' + "'" + ' il picco piu' + "'" + ' alto di ogni atleta nella stagione. In classifica c' + "'" + 'e' + "'" + ' solo la rosa Primavera.</p>';
   }
   function prCols(){
     const out = [];
