@@ -253,6 +253,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 
 /* ---------- sessione: quale rilevazione si sta guardando ---------- */
 .sess-bar{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.sess-bar[hidden]{ display:none; }
 .sess-lab{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
   color:var(--muted); margin-right:2px; }
 .sess-btn{ appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600;
@@ -546,6 +547,9 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 .im-c .pm{ display:block; font-family:'Bebas Neue',sans-serif; font-size:19px; letter-spacing:.4px;
   color:var(--ink); line-height:1.1; font-variant-numeric:tabular-nums; }
 .im-c.key .pm{ color:var(--orange2); }
+/* l unita' sta attaccata al numero grande: nelle ripetute i secondi si confondevano
+   con i metri dell intermittente, che stanno nello stesso posto */
+.im-c .pm small{ font-size:11px; margin-left:2px; color:var(--faint); letter-spacing:0; }
 .im-c .pn{ display:block; font-size:10px; color:var(--faint); white-space:nowrap; min-height:12px; }
 
 /* ---------- confronto fra le atlete su un singolo test ---------- */
@@ -823,7 +827,7 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
         </button>
         <button class="pg-btn" type="button" data-pane="inter" aria-selected="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>
-          Intermittente
+          Aerobico
         </button>
         <button class="pg-btn" type="button" data-pane="stampa" aria-selected="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
@@ -1097,21 +1101,23 @@ a.rc-tile:hover .rc-who{ color:var(--orange2); }
 
       </div>
 
-      <!-- ===== Intermittente: navette e metri ricavati dalla VAM ===== -->
+      <!-- ===== Aerobico: intermittente e ripetute ricavati dalla VAM ===== -->
       <div class="pg-pane" id="pane-inter" hidden>
 
-      <!-- Lavoro intermittente calcolato dalla velocita aerobica massima -->
+      <!-- Lavoro aerobico calcolato dalla velocita aerobica massima di ogni atleta -->
       <section class="card reveal" id="im-card" style="--i:1">
         <div class="card-head">
-          <h2>Intermittente</h2>
-          <span class="hint">metri e navette di ogni atleta, calcolati dalla sua velocita aerobica massima</span>
+          <h2>Aerobico</h2>
+          <span class="hint">intermittente e ripetute a secco, calcolati dalla velocita aerobica massima di ogni atleta</span>
           <span class="spacer"></span>
           <div class="head-chips" id="im-chips"></div>
         </div>
         <div class="card-body">
+          <div class="sess-bar" id="im-mode"></div>
           <div class="sess-bar" id="im-src"></div>
           <div class="sess-bar" id="im-pro"></div>
           <div class="sess-bar" id="im-nav"></div>
+          <div class="sess-bar" id="im-rep"></div>
           <p class="im-note" id="im-note"></p>
           <div id="im-list"></div>
         </div>
@@ -1597,9 +1603,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { id:0,  label:'Corsa lineare' }
   ];
   const IM_PCT = [90, 95, 100, 105, 110];
+  // ---- ripetute a secco: distanze fisse e tempo bersaglio ----
+  // Nell intermittente si parte dai secondi e si arriva ai metri. Nelle ripetute e'
+  // il contrario: la distanza e' decisa prima, quello che serve al campo e' il tempo.
+  // La navetta non si paga solo in metri: ogni inversione a 180 gradi costa una
+  // frenata e una ripartenza, e quel costo va aggiunto al tempo teorico.
+  const IM_REP = [
+    { id:'200',  m:200, seg:0,  label:'200 m' },
+    { id:'200n', m:200, seg:50, label:'200 m navetta' },
+    { id:'300',  m:300, seg:0,  label:'300 m' },
+    { id:'400',  m:400, seg:0,  label:'400 m' }
+  ];
+  // secondi persi a ogni cambio di senso: valore medio di riferimento, da tarare
+  // sul campo con il cronometro se il tratto e' piu' corto o il fondo e' lento
+  const IM_TURN = 0.8;
+  const IM_PCT_R = [95, 100, 105, 110, 115];
+  const IM_MODE = [
+    { id:'inter', label:'Intermittente' },
+    { id:'rip',   label:'Ripetute' }
+  ];
+  let imMode = 'inter';
   let imSrc = 'auto';
   let imPro = '20-20';
   let imNav = 10;
+  let imRep = '200';
   let REG = loadReg();
 
   // la classifica velocita parte dalle prime dieci, le altre si aprono col tasto
@@ -2325,7 +2352,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderConfronto();
   });
 
-  /* ---------- intermittente: fonte, serie e distanza ---------- */
+  /* ---------- aerobico: modo, fonte, serie, distanza e ripetuta ---------- */
   function imPick(id, set){
     document.getElementById(id).addEventListener('click', function(ev){
       const b = ev.target.closest('.sess-btn');
@@ -2334,9 +2361,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       renderIntermittente();
     });
   }
+  imPick('im-mode', v=>{ imMode = v; });
   imPick('im-src', v=>{ imSrc = v; });
   imPick('im-pro', v=>{ imPro = v; });
   imPick('im-nav', v=>{ imNav = +v; });
+  imPick('im-rep', v=>{ imRep = v; });
 
   // svuota il test aperto: con una sessione scelta tocca solo quella rilevazione
   document.getElementById('tb-reset').addEventListener('click', ()=>{
@@ -2967,6 +2996,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return imFrom(name, 'gacon') || imFrom(name, 'leger') || imFrom(name, 'ift3015');
   }
   function imProDef(){ return IM_PRO.find(p=> p.id === imPro) || IM_PRO[1]; }
+  function imRepDef(){ return IM_REP.find(p=> p.id === imRep) || IM_REP[0]; }
   function imBar(id, items, cur, lab){
     let h = '<span class="sess-lab">'+esc(lab)+'</span>';
     items.forEach(it=>{
@@ -2975,15 +3005,35 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     document.getElementById(id).innerHTML = h;
   }
+  // quante inversioni a 180 gradi ha la ripetuta scelta
+  function imTurns(rep){ return rep.seg ? Math.max(0, Math.round(rep.m / rep.seg) - 1) : 0; }
+  // il cronometro al campo si legge in minuti e secondi appena si passa il minuto
+  function imTime(sec){
+    if(sec >= 60){
+      const m = Math.floor(sec / 60);
+      const s = Math.round(sec - m*60);
+      return s === 60 ? (m+1)+'&#8217;00' : m+'&#8217;'+(s<10?'0':'')+s;
+    }
+    return NF1.format(sec)+'<small>s</small>';
+  }
   function renderIntermittente(){
     const list  = document.getElementById('im-list');
     const chips = document.getElementById('im-chips');
     const note  = document.getElementById('im-note');
+    const rip   = imMode === 'rip';
     const pro   = imProDef();
+    const rep   = imRepDef();
 
+    imBar('im-mode', IM_MODE, imMode, 'Lavoro');
     imBar('im-src', IM_SRC, imSrc, 'Fonte');
     imBar('im-pro', IM_PRO.map(p=> ({ id:p.id, label:p.id })), imPro, 'Serie');
     imBar('im-nav', IM_NAV, imNav, 'Distanza');
+    imBar('im-rep', IM_REP, imRep, 'Ripetuta');
+    // le barre della serie e della navetta servono solo all intermittente,
+    // quella della ripetuta solo al lavoro a secco: si mostra una cosa per volta
+    document.getElementById('im-pro').hidden = rip;
+    document.getElementById('im-nav').hidden = rip;
+    document.getElementById('im-rep').hidden = !rip;
 
     const rows = roster.map(n=>{
       const b = imFrom(n, imSrc);
@@ -3002,22 +3052,45 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return;
     }
 
-    note.innerHTML = 'Serie <b>'+esc(pro.id)+'</b>: '+pro.w+' secondi di corsa e '+pro.r+' di recupero. '+
-      'Il numero grande sono i <b>metri da coprire nei '+pro.w+' secondi</b>, sotto '+
-      (imNav ? 'quante volte si copre la navetta da '+imNav+' m' : 'la velocita in km/h')+'. '+
-      'Gacon e beep test danno la VAM, il 30-15 la VIFT che e&#39; gia&#39; piu&#39; alta: la percentuale '+
+    const fonte = 'Gacon e beep test danno la VAM, il 30-15 la VIFT che e&#39; gia&#39; piu&#39; alta: la percentuale '+
       'e&#39; sempre riferita al valore scritto nella riga dell&#39; atleta, non a una VAM stimata.';
+
+    if(rip){
+      const giri = imTurns(rep);
+      note.innerHTML = 'Ripetuta <b>'+esc(rep.label)+'</b>'+
+        (giri ? ' su tratto da '+rep.seg+' m, '+giri+(giri===1?' inversione':' inversioni')+' a 180 gradi' : ' in linea')+'. '+
+        'Il numero grande e&#39; il <b>tempo bersaglio</b> per coprire i '+rep.m+' metri alla percentuale della colonna, '+
+        'sotto la velocita media che quel tempo richiede'+
+        (giri ? '. Al tempo teorico sono aggiunti '+trNum(giri*IM_TURN)+' secondi per le inversioni ('+
+                trNum(IM_TURN)+' a giro): sono un riferimento medio, se il fondo e&#39; lento o il tratto piu&#39; corto '+
+                'vanno ritarati col cronometro' : '')+'. '+fonte;
+    } else {
+      note.innerHTML = 'Serie <b>'+esc(pro.id)+'</b>: '+pro.w+' secondi di corsa e '+pro.r+' di recupero. '+
+        'Il numero grande sono i <b>metri da coprire nei '+pro.w+' secondi</b>, sotto '+
+        (imNav ? 'quante volte si copre la navetta da '+imNav+' m' : 'la velocita in km/h')+'. '+fonte;
+    }
 
     rows.sort((a,b)=> (b.v - a.v) || dispSort(a.name, b.name));
 
+    const pcts = rip ? IM_PCT_R : IM_PCT;
     list.innerHTML = rows.map(r=>{
-      const cells = IM_PCT.map(p=>{
+      const cells = pcts.map(p=>{
         const kmh = r.v * p / 100;
-        const m   = kmh / 3.6 * pro.w;
-        const sub = imNav ? (trNum(m/imNav)+' x '+imNav+' m') : (trNum(kmh)+' km/h');
-        return '<span class="im-c'+(p===100?' key':'')+'" title="'+esc(trNum(kmh)+' km/h per '+pro.w+' secondi')+'">'+
+        let big, sub, tip;
+        if(rip){
+          const sec = rep.m / (kmh/3.6) + imTurns(rep) * IM_TURN;
+          big = imTime(sec);
+          sub = trNum(rep.m / sec * 3.6)+' km/h';
+          tip = rep.label+' in '+NF1.format(sec)+' secondi, andatura media '+trNum(rep.m/sec*3.6)+' km/h';
+        } else {
+          const m = kmh / 3.6 * pro.w;
+          big = NF.format(Math.round(m));
+          sub = imNav ? (trNum(m/imNav)+' x '+imNav+' m') : (trNum(kmh)+' km/h');
+          tip = trNum(kmh)+' km/h per '+pro.w+' secondi';
+        }
+        return '<span class="im-c'+(p===100?' key':'')+'" title="'+esc(tip)+'">'+
                  '<span class="pk">'+p+'%</span>'+
-                 '<span class="pm">'+NF.format(Math.round(m))+'</span>'+
+                 '<span class="pm">'+big+'</span>'+
                  '<span class="pn">'+esc(sub)+'</span>'+
                '</span>';
       }).join('');
