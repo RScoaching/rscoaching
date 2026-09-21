@@ -1451,6 +1451,67 @@ a{ color:inherit; text-decoration:none; }
       + '<span>punti di carenza</span></div>' + rows + '</div>';
   }
 
+  function zoneCount(rows){
+    var m = {};
+    (rows || []).forEach(function(r){
+      var e = byId(r.k);
+      if(!e) return;
+      e.z.forEach(function(z){ m[z] = (m[z] || 0) + 1; });
+    });
+    return m;
+  }
+  function statusHtml(p){
+    var when = p.dal ? ('dal '+dmy(p.dal)) : 'non ancora consegnata';
+    var btns = '';
+    if(p.st !== 'in corso') btns += '<button class="gp-sb" data-st="in corso" type="button">Metti in corso</button>';
+    if(p.st !== 'pronta')   btns += '<button class="gp-sb" data-st="chiudi" type="button">Chiudi e archivia</button>';
+    return '<div class="gp-st"><span class="gp-stb '+(ST_CLS[p.st] || '')+'">'+esc(ST_LBL[p.st] || 'Pronta')+'</span>'
+      + '<span class="gp-stx">'+esc(when)+'</span><span class="sp"></span>'+btns+'</div>';
+  }
+  /* Le versioni chiuse non servono per rileggersi la lista esercizi di ottobre,
+     servono per vedere dove si e' lavorato: sotto l'elenco delle versioni c'e'
+     una riga per zona con quante volte quella zona e' stata toccata, versione
+     per versione, e in fondo la scheda di adesso. */
+  function histHtml(s, p){
+    var hs = p.hist || [];
+    if(!hs.length){
+      return '<div class="gph-none">Storico vuoto. La scheda finisce in storico quando la chiudi, '
+        + 'oppure da sola alla prima modifica dopo che e\' stata stampata o messa in corso.</div>';
+    }
+    var rows = hs.map(function(h, i){
+      var n = planRows(h).length;
+      var per = (h.dal ? dmy(h.dal) : '?') + ' - ' + (h.al ? dmy(h.al) : '?');
+      return '<div class="gph-row"><b>V'+(i+1)+'</b>'
+        + '<span>'+esc(ST_LBL[h.st] || 'Pronta')+'</span>'
+        + '<span class="d">'+esc(per)+'</span><span class="sp"></span>'
+        + '<span class="d">'+n+(n === 1 ? ' esercizio' : ' esercizi')+'</span></div>';
+    }).join('');
+    var cols = hs.slice(-5);
+    var off = hs.length - cols.length;
+    var counts = cols.map(function(h){ return zoneCount(planRows(h)); });
+    var now = zoneCount(planRows(p));
+    var seen = {};
+    counts.concat([now]).forEach(function(m){ Object.keys(m).forEach(function(z){ seen[z] = 1; }); });
+    var list = ZONE.map(function(r){ return r[0]; }).filter(function(z){ return seen[z]; });
+    var head = '<tr><th class="l">Zona</th>'
+      + cols.map(function(h, i){ return '<th>V'+(off + i + 1)+'</th>'; }).join('')
+      + '<th>Ora</th></tr>';
+    var body = list.map(function(z){
+      var tds = counts.map(function(m){
+        return '<td>'+(m[z] ? m[z] : '<span class="void">-</span>')+'</td>';
+      }).join('');
+      return '<tr><td class="l">'+esc(zLabel(z))+'</td>'+tds
+        + '<td class="now">'+(now[z] ? now[z] : '<span class="void">-</span>')+'</td></tr>';
+    }).join('');
+    return '<details class="gph"'+(HOPEN[s.name] ? ' open' : '')+' data-hist="'+esc(s.name)+'">'
+      + '<summary class="gph-sum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+      + '<path d="m9 18 6-6-6-6"/></svg>Storico schede, '+hs.length+(hs.length === 1 ? ' versione' : ' versioni')+'</summary>'
+      + '<div class="gph-body">'+rows
+      + '<div class="gph-cap">Andamento, quante volte ogni zona e\' stata toccata</div>'
+      + '<table class="gph-t"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'
+      + '</div></details>';
+  }
+
   function renderDetail(){
     var s = sheetOf(SELECTED);
     if(!s){ genEl.innerHTML = ''; return; }
@@ -1467,8 +1528,11 @@ a{ color:inherit; text-decoration:none; }
     else if(s.asym.length) note += '<div class="gp-note">Asimmetria in: '+esc(s.asym.join(', '))+'.</div>';
     else if(s.top.length) note += '<div class="gp-note">Priorita rilevate: '+esc(s.top.join(', '))+'.</div>';
     var quadro = s.tv ? '<div class="qt">'+s.tv.groups.map(qtGroup).join('')+'</div>' : '';
-    genEl.innerHTML = note + quadro + qtNeedHtml(s)
-      + '<div class="gp-blocks">'+blockHtml('A', pl.A)+blockHtml('B', pl.B)+'</div>';
+    genEl.innerHTML = statusHtml(pl) + note + quadro + qtNeedHtml(s)
+      + '<div class="gp-blocks">'+blockHtml('A', pl.A)+blockHtml('B', pl.B)+'</div>'
+      + histHtml(s, pl);
+    var h = genEl.querySelector('.gph[data-hist]');
+    if(h) h.addEventListener('toggle', function(){ HOPEN[h.getAttribute('data-hist')] = h.open; });
   }
 
   function renderGen(){
@@ -1495,13 +1559,17 @@ a{ color:inherit; text-decoration:none; }
   /* ---------- KPI ---------- */
   function renderKPIs(){
     var nPlans = Object.keys(PLANS).length;
+    var nHist = histCount();
     var pl = SELECTED ? PLANS[SELECTED] : null;
     var cur = pl ? (pl.A.length + pl.B.length) : 0;
+    var stTxt = pl ? ((ST_LBL[pl.st] || 'Pronta').toLowerCase()
+      + (pl.dal ? ', dal '+dmy(pl.dal) : '')) : 'nessuna atleta';
     kpisEl.innerHTML =
         kpiCard('',  'Esercizi',       DB.length,   '', 'nel database con foto')
       + kpiCard('v', 'Zone',           ZONE.length, '', 'aree del corpo coperte')
-      + kpiCard('g', 'Schede salvate', nPlans,      '', 'su questo dispositivo')
-      + kpiCard('b', 'Scheda attiva',  cur,         '', SELECTED ? disp(SELECTED) : 'nessuna atleta');
+      + kpiCard('g', 'Schede salvate', nPlans,      '',
+          nHist ? (nHist + (nHist === 1 ? ' versione in storico' : ' versioni in storico')) : 'su questo dispositivo')
+      + kpiCard('b', 'Scheda attiva',  cur,         '', SELECTED ? (disp(SELECTED)+', '+stTxt) : 'nessuna atleta');
   }
 
   /* ---------- libreria esercizi ---------- */
@@ -1789,6 +1857,19 @@ a{ color:inherit; text-decoration:none; }
   genEl.addEventListener('click', function(ev){
     var zoom = ev.target.closest('[data-zoom]');
     if(zoom){ openLightbox(zoom.dataset.zoom); return; }
+    var st = ev.target.closest('[data-st]');
+    if(st){
+      if(!SELECTED) return;
+      if(st.dataset.st === 'chiudi'){
+        histGuard(SELECTED);
+        savePlans(); renderDetail(); renderKPIs();
+      } else {
+        setStatus(SELECTED, st.dataset.st);
+        renderDetail(); renderKPIs();
+        toast('Scheda messa in corso');
+      }
+      return;
+    }
     var ren = ev.target.closest('[data-ren]');
     if(ren){
       var pl0 = PLANS[SELECTED];
