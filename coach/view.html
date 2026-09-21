@@ -273,6 +273,46 @@ a{ color:inherit; text-decoration:none; }
 .gp-empty{ padding:36px 20px; text-align:center; color:var(--faint); font-size:13px; line-height:1.7; }
 .gp-empty a{ color:var(--orange2); }
 
+/* ---------- stato della scheda e storico delle versioni ---------- */
+.gp-st{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+.gp-stb{ display:inline-flex; align-items:center; gap:7px; padding:5px 12px; border-radius:999px;
+  border:1px solid var(--border2); background:var(--surface3); font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+.gp-stb::before{ content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.gp-stb.sp{ background:oklch(80% 0.15 75 / .10); border-color:oklch(80% 0.15 75 / .26); color:var(--yellow); }
+.gp-stb.ic{ background:oklch(70% 0.18 152 / .10); border-color:oklch(70% 0.18 152 / .26); color:var(--green); }
+.gp-stx{ font-size:11.5px; color:var(--faint); }
+.gp-st .sp{ flex:1; }
+.gp-sb{ font-size:11.5px; font-weight:600; color:var(--text); background:var(--surface3);
+  border:1px solid var(--border2); border-radius:999px; padding:5px 13px; cursor:pointer;
+  transition: color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
+.gp-sb:hover{ color:var(--ink); border-color:var(--border3); background:var(--surface2); }
+.gph{ margin-top:16px; border-top:1px solid var(--border); }
+.gph-sum{ display:flex; align-items:center; gap:8px; padding:11px 0 3px; cursor:pointer; list-style:none;
+  font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+.gph-sum::-webkit-details-marker{ display:none; }
+.gph-sum:hover{ color:var(--ink); }
+.gph-sum svg{ width:13px; height:13px; transition:transform .18s var(--ease); }
+.gph[open] > .gph-sum svg{ transform:rotate(90deg); }
+.gph-body{ padding:10px 0 4px; }
+.gph-row{ display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid var(--border2);
+  font-size:12px; color:var(--text); }
+.gph-row b{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:16px; letter-spacing:.4px; color:var(--ink); }
+.gph-row .sp{ flex:1; }
+.gph-row .d{ font-size:11.5px; color:var(--faint); }
+.gph-cap{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--muted); margin-top:16px; margin-bottom:6px; }
+.gph-t{ width:100%; border-collapse:collapse; }
+.gph-t th, .gph-t td{ padding:6px 8px; font-size:12px; text-align:right; border-bottom:1px solid var(--border2);
+  white-space:nowrap; }
+.gph-t th{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); }
+.gph-t th.l, .gph-t td.l{ text-align:left; }
+.gph-t tr:last-child td{ border-bottom:0; }
+.gph-t td.now{ color:var(--ink); font-weight:700; }
+.gph-t .void{ color:var(--faint); }
+.gph-none{ margin-top:16px; padding:11px 0 0; border-top:1px solid var(--border);
+  font-size:11.5px; color:var(--faint); line-height:1.6; }
+
 /* ---------- quadro test: FMS e fisioterapista ---------- */
 .qt{ display:grid; grid-template-columns:repeat(2, 1fr); gap:16px; margin-bottom:16px; }
 .qt-col,
@@ -902,6 +942,69 @@ a{ color:inherit; text-decoration:none; }
     try{ localStorage.setItem(storeKey(), JSON.stringify(PLANS)); }catch(e){}
   }
 
+  /* ---------- storico delle schede ----------
+     Da agosto a dicembre la stessa atleta fa piu' cicli di prevenzione. Senza
+     storico, rimettere mano alla scheda cancellava quello che aveva gia' fatto.
+     Ogni scheda tiene quindi uno stato (pronta, stampata, in corso) e una lista
+     hist di versioni chiuse: si archivia da sola alla prima modifica di una
+     scheda gia' stampata o gia' in corso, cosi' il lavoro svolto resta scritto
+     e l'andamento si legge versione per versione. */
+  var ST_LBL = { pronta:'Pronta', stampata:'Stampata', 'in corso':'In corso' };
+  var ST_CLS = { pronta:'', stampata:'sp', 'in corso':'ic' };
+  var HOPEN = {};
+
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  function todayISO(){
+    var d = new Date();
+    return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+  }
+  function dmy(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? (m[3]+'/'+m[2]) : '';
+  }
+  function normPlan(p){
+    if(!p) return p;
+    if(!ST_LBL[p.st]) p.st = 'pronta';
+    if(typeof p.dal !== 'string') p.dal = '';
+    if(!Array.isArray(p.hist)) p.hist = [];
+    return p;
+  }
+  function planRows(p){ return (p.A || []).concat(p.B || []); }
+  function snapPlan(p){
+    return { A: JSON.parse(JSON.stringify(p.A || [])),
+             B: JSON.parse(JSON.stringify(p.B || [])),
+             st: p.st, dal: p.dal || '', al: todayISO() };
+  }
+  /* Da chiamare prima di ogni modifica: se la scheda era gia' uscita dal
+     tavolo, la versione svolta va in storico e si riparte da pronta. */
+  function histGuard(name){
+    var p = PLANS[name];
+    if(!p) return;
+    normPlan(p);
+    if(p.st === 'pronta') return;
+    p.hist.push(snapPlan(p));
+    if(p.hist.length > 24) p.hist = p.hist.slice(-24);
+    p.st = 'pronta';
+    p.dal = '';
+    toast('Versione precedente messa in storico');
+  }
+  function setStatus(name, st){
+    var p = PLANS[name];
+    if(!p) return;
+    normPlan(p);
+    p.st = st;
+    p.dal = (st === 'pronta') ? '' : (p.dal || todayISO());
+    savePlans();
+  }
+  function histCount(){
+    var n = 0;
+    Object.keys(PLANS).forEach(function(k){
+      var h = PLANS[k] && PLANS[k].hist;
+      if(Array.isArray(h)) n += h.length;
+    });
+    return n;
+  }
+
   var ZMAP = {
     cav:  { z:['caviglia'], t:['mobilita','stretching'] },
     anca: { z:['anca'], t:['mobilita','stretching'] },
@@ -1079,9 +1182,13 @@ a{ color:inherit; text-decoration:none; }
     if(p && Array.isArray(p.A) && Array.isArray(p.B)){
       p.A = p.A.filter(function(r){ return !!byId(r.k); });
       p.B = p.B.filter(function(r){ return !!byId(r.k); });
-      return p;
+      return normPlan(p);
     }
-    p = genPlan(s);
+    // una scheda nuova non butta lo storico di quella vecchia: le versioni
+    // chiuse restano attaccate all'atleta, non alla singola generazione
+    var old = PLANS[s.name];
+    p = normPlan(genPlan(s));
+    if(old && Array.isArray(old.hist)) p.hist = old.hist;
     PLANS[s.name] = p;
     savePlans();
     return p;
@@ -1166,6 +1273,7 @@ a{ color:inherit; text-decoration:none; }
   function addEx(fam, e, why, zs, ts){
     if(!SELECTED){ toast('Seleziona prima un\'atleta'); return; }
     var s = sheetOf(SELECTED); if(!s) return;
+    histGuard(SELECTED);
     var pl = ensurePlan(s);
     pl[fam].push({ k:e.k, d:DOSE[e.t] || '3x10', why: why || tLabel(e.t),
                    qz: zs && zs.length ? zs.slice() : e.z.slice(),
@@ -1201,6 +1309,7 @@ a{ color:inherit; text-decoration:none; }
   }
   function moveRow(fam, i, dir){
     var pl = PLANS[SELECTED]; if(!pl) return;
+    histGuard(SELECTED);
     var arr = pl[fam], j = i + dir;
     if(j < 0 || j >= arr.length) return;
     var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
@@ -1210,6 +1319,7 @@ a{ color:inherit; text-decoration:none; }
     var pl = PLANS[SELECTED]; if(!pl) return;
     var r = pl[fam][i]; if(!r) return;
     var e = byId(r.k);
+    histGuard(SELECTED);
     pl[fam].splice(i, 1);
     savePlans(); renderDetail(); renderKPIs();
     toast((e ? nameOf(e) : 'Esercizio')+' rimosso');
@@ -1227,6 +1337,7 @@ a{ color:inherit; text-decoration:none; }
     for(var n = 1; n <= list.length; n++){
       var e = list[(at + n) % list.length];
       if(e.k === r.k || used[e.k]) continue;
+      histGuard(SELECTED);
       r.k = e.k;
       r.d = DOSE[e.t] || r.d;
       savePlans(); renderDetail();
@@ -1598,15 +1709,29 @@ a{ color:inherit; text-decoration:none; }
     return sheetHTML(disp(s.name), 'A', pl.A) + sheetHTML(disp(s.name), 'B', pl.B);
   }
 
+  /* La stampa e' il momento in cui la scheda esce dal computer e va in campo:
+     da li' in poi e' una versione svolta, e conta come tale nello storico. */
+  function markPrinted(name){
+    var p = PLANS[name];
+    if(!p) return;
+    normPlan(p);
+    if(p.st === 'pronta'){ p.st = 'stampata'; p.dal = todayISO(); }
+  }
   function printAthlete(name){
     var s = sheetOf(name);
     if(!s){ toast('Seleziona un\'atleta'); return; }
-    openPrint(printDocSheets('Scheda prevenzione '+disp(s.name), athleteSheets(s)));
+    var doc = printDocSheets('Scheda prevenzione '+disp(s.name), athleteSheets(s));
+    markPrinted(s.name);
+    savePlans(); renderDetail(); renderKPIs();
+    openPrint(doc);
   }
   function printAllGen(){
     if(!SHEETS.length){ toast('Nessuna atleta da stampare'); return; }
-    openPrint(printDocSheets('Schede prevenzione U19',
-      SHEETS.map(function(s){ return athleteSheets(s); }).join('')));
+    var doc = printDocSheets('Schede prevenzione U19',
+      SHEETS.map(function(s){ return athleteSheets(s); }).join(''));
+    SHEETS.forEach(function(s){ markPrinted(s.name); });
+    savePlans(); renderDetail(); renderKPIs();
+    openPrint(doc);
   }
 
   /* ---------- eventi ---------- */
@@ -1615,9 +1740,13 @@ a{ color:inherit; text-decoration:none; }
       // il seme e' fisso sul nome dell'atleta, quindi senza spostare la variante
       // il pulsante rifarebbe la stessa identica scheda. La variante di partenza
       // si legge dalla scheda salvata, cosi' si continua a girare la lista.
+      histGuard(SELECTED);
       var old = PLANS[SELECTED];
       VARIANT[SELECTED] = (((old && old.v) || 0) + 1) % 97;
+      var keep = (old && Array.isArray(old.hist)) ? old.hist : [];
       delete PLANS[SELECTED];
+      var sr = sheetOf(SELECTED);
+      if(sr) ensurePlan(sr).hist = keep;
     }
     savePlans();
     renderGen();
@@ -1689,8 +1818,11 @@ a{ color:inherit; text-decoration:none; }
     var pl = PLANS[SELECTED]; if(!pl) return;
     var r = pl[d.dataset.fam][parseInt(d.dataset.i, 10)];
     if(!r) return;
+    if(r.d === (d.value.trim() || r.d)){ return; }
+    histGuard(SELECTED);
     r.d = d.value.trim() || r.d;
     savePlans();
+    renderDetail();
   });
   genEl.addEventListener('keydown', function(ev){
     if(ev.key !== 'Enter') return;
