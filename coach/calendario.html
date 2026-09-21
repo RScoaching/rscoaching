@@ -2067,16 +2067,131 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(prima) host.setAttribute('style', prima); else host.removeAttribute('style');
     host.style.setProperty('--wk-pad', scelto+'px');
   }
+  /* ---------- il mese a griglia ----------
+     Quattro fogli diversi per quattro domande diverse: che cosa si e' fatto in
+     campo, che cosa in palestra, tutto insieme, oppure chi e' rimasto dopo la
+     seduta. Chiedere un foglio solo e leggerlo di traverso non funziona: con
+     tutto dentro, la casella di un giorno di doppia seduta diventa illeggibile. */
+  const MP_FILT = ['campo','forza','tutto','idp'];
+  const MP_LAB  = { campo:'Solo campo', forza:'Solo forza', tutto:'Campo e forza', idp:'Solo individuale' };
+  let mpFilt = 'tutto';
+  function mpIsForza(s){ return !!(s.fz || s.type === 'forza'); }
+  /* Quello che va scritto dentro la casella, gia' filtrato. Ogni blocco e' una
+     riga sola: titolo del lavoro e, sotto, le fasi o gli esercizi. */
+  function mpBlocks(list, filt){
+    const out = [];
+    (list||[]).forEach(function(s){
+      if(filt === 'idp'){
+        const ind = idpOf(s);
+        if(!ind.length) return;
+        out.push({
+          t: ind.length + (ind.length===1 ? ' atleta' : ' atlete'),
+          s: ind.map(function(r){
+            const m = Number(r.min)||0;
+            return plNome(r.n) + (m ? " "+m+"'" : '');
+          }).join(', '),
+          pct: null
+        });
+        return;
+      }
+      if(s.kind==='riposo' || s.type==='riposo') return;
+      const fz = mpIsForza(s);
+      if(filt === 'campo' && fz) return;
+      if(filt === 'forza' && !fz) return;
+      let sub = '';
+      if(fz){
+        const f = fzOf(s);
+        const rows = f ? (f.rows||[]).filter(fzHasEx) : [];
+        let serie = 0;
+        rows.forEach(function(r){ serie += parseFloat(r.serie) || 0; });
+        const bits = [];
+        if(rows.length) bits.push(rows.length + (rows.length===1 ? ' esercizio' : ' esercizi'));
+        if(serie > 0) bits.push(NF0.format(serie) + ' serie');
+        sub = bits.join(', ');
+      }else if(s.is_match){
+        sub = s.fix ? (fixTeams(s.fix).casa ? 'in casa' : 'in trasferta') : '';
+      }else{
+        const fasi = (Array.isArray(s.phases) ? s.phases : []).map(function(p){
+          return sesShort(p.t) + (p.m ? ' '+p.m+"'" : '');
+        });
+        if(fasi.length) sub = fasi.join(', ');
+        else{
+          const ex = exOf(s);
+          const nd = (ex && ex.n_drills) ? ex.n_drills : ((ex && ex.drills) ? ex.drills.length : 0);
+          if(nd) sub = nd + (nd===1 ? ' esercitazione' : ' esercitazioni');
+        }
+      }
+      out.push({
+        t: plTitle(s) + (s.slot ? ' '+s.slot : ''),
+        s: sub,
+        pct: pctOf(s)
+      });
+    });
+    return out;
+  }
+  function buildMonthPrint(){
+    const host = document.getElementById('print-only'); if(!host) return;
+    const map = plByDate();
+    const mds = plMatchDays(map);
+    const days = plMonthMatrix();
+    const a = parseDate(PL.anchor) || new Date();
+    const mese = a.getMonth();
+    /* L'ultima riga della griglia sta tutta nel mese dopo cinque volte l'anno:
+       stamparla vuol dire regalare tre centimetri di foglio al nulla. */
+    let nRow = 6;
+    while(nRow > 4 && days.slice((nRow-1)*7, nRow*7).every(function(d){ return d.getMonth() !== mese; })) nRow--;
+
+    let nSed = 0, rows = '';
+    for(let w=0; w<nRow; w++){
+      rows += '<tr>';
+      for(let i=0; i<7; i++){
+        const d = days[w*7+i];
+        const iso = keyOfDate(d);
+        const fuori = (d.getMonth() !== mese);
+        const blocks = fuori ? [] : mpBlocks(map[iso]||[], mpFilt);
+        nSed += blocks.length;
+        const md = fuori ? '' : plMdInfo(iso, mds);
+        rows += '<td'+(fuori?' class="out"':'')+'>'+
+          '<div class="pcm-d"><span>'+d.getDate()+'</span>'+
+            (md ? '<span class="pcm-md">'+esc(md)+'</span>' : '')+'</div>'+
+          blocks.map(function(b, k){
+            return '<div class="pcm-b'+(k===0?' first':'')+'">'+
+              '<div class="pcm-t">'+esc(b.t)+
+                (b.pct!=null && b.pct>0 ? ' <span class="pcm-p">'+NF0.format(b.pct)+'%</span>' : '')+
+              '</div>'+
+              (b.s ? '<div class="pcm-s">'+esc(b.s)+'</div>' : '')+
+            '</div>';
+          }).join('')+
+        '</td>';
+      }
+      rows += '</tr>';
+    }
+
+    const dow = ['Lunedi','Martedi','Mercoledi','Giovedi','Venerdi','Sabato','Domenica'];
+    host.innerHTML =
+      '<div class="pc-h">'+esc(cap(DTF_MONTH.format(a)))+' &#183; '+esc(MP_LAB[mpFilt])+' &#183; '+
+        nSed+(nSed===1?' blocco':' blocchi')+' &#183; Fiorentina Primavera U19W</div>'+
+      '<table class="pcmon"><thead><tr>'+
+      dow.map(function(x){ return '<th>'+esc(x)+'</th>'; }).join('')+
+      '</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+
   function doPrint(mode){
     printMode = mode;
-    if(mode==='week') buildWeekPrint(); else buildPrintTable();
+    if(mode==='week') buildWeekPrint();
+    else if(mode==='month') buildMonthPrint();
+    else buildPrintTable();
     window.print();
   }
 
   document.getElementById('btn-export').addEventListener('click', exportCSV);
   document.getElementById('btn-xls').addEventListener('click', exportXLS);
   document.getElementById('btn-print').addEventListener('click', ()=> doPrint('season'));
-  window.addEventListener('beforeprint', ()=>{ if(printMode==='week') buildWeekPrint(); else buildPrintTable(); });
+  window.addEventListener('beforeprint', ()=>{
+    if(printMode==='week') buildWeekPrint();
+    else if(printMode==='month') buildMonthPrint();
+    else buildPrintTable();
+  });
   window.addEventListener('afterprint', ()=>{ printMode = 'season'; });
 
   // ---------- crest + gen ----------
@@ -2256,8 +2371,22 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const host = document.getElementById('pl-tpl');
     if(!host) return;
     if(PL.view!=='week'){
-      host.innerHTML=''; host.style.display='none';
+      /* In vista mese la barra dei modelli non ha senso, ma il posto si', ed e'
+         li' che si sceglie che mese stampare e che cosa metterci dentro. */
+      host.style.display = '';
       PL_VAL_OPEN = false; plValPanel([]);
+      let hm = '<span class="pl-glabel">Stampa del mese</span>';
+      MP_FILT.forEach(function(k){
+        hm += '<button type="button" class="pl-tchip'+(mpFilt===k?' on':'')+'" data-mfilt="'+k+'">'+
+                esc(MP_LAB[k])+'</button>';
+      });
+      hm += '<button type="button" class="pl-tchip go" data-mprint="1">'+PL_PRINT_SVG+'Stampa il mese</button>';
+      host.innerHTML = hm;
+      host.querySelectorAll('[data-mfilt]').forEach(function(b){
+        b.addEventListener('click', function(){ mpFilt = b.getAttribute('data-mfilt'); plTplRender(map); });
+      });
+      const mp = host.querySelector('[data-mprint]');
+      if(mp) mp.addEventListener('click', function(){ doPrint('month'); });
       return;
     }
     host.style.display = '';
