@@ -503,10 +503,29 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   padding:4px 9px; border-radius:999px; border:1px dashed var(--border2); background:transparent;
   transition:color .16s var(--ease), border-color .16s var(--ease), background .16s var(--ease); }
 .pl-phz-qc:hover{ color:var(--violet2); border-color:var(--violet-border); background:var(--violet-bg); border-style:solid; }
-.pl-phz-foot{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.pl-phz-tot{ font-size:11.5px; color:var(--muted); }
+.pl-phz-foot{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pl-phz-tot{ font-size:11.5px; color:var(--muted); margin-left:auto; text-align:right; }
 .pl-phz-tot b{ color:var(--ink); font-variant-numeric:tabular-nums; }
 .pl-phz-add{ padding:7px 12px; font-size:12px; }
+/* fasi proprie, quelle che si scrive il mister */
+.pl-phz-qc.mia{ border-style:solid; border-color:var(--violet-border); color:var(--violet2); background:var(--violet-bg); }
+.pl-phz-mineb{ appearance:none; cursor:pointer; font-family:inherit; font-size:11px; font-weight:600; color:var(--faint);
+  padding:4px 9px; border-radius:999px; border:1px dashed var(--border2); background:transparent;
+  transition:color .16s var(--ease), border-color .16s var(--ease); }
+.pl-phz-mineb:hover{ color:var(--ink); border-color:var(--border3); }
+.pl-phz-mine{ margin-top:6px; padding:10px 12px; border:1px solid var(--border2); border-radius:10px; background:var(--surface2); }
+.pl-phz-mine[hidden]{ display:none; }
+.pl-phz-minef{ display:flex; align-items:center; gap:7px; }
+.pl-phz-minef input{ flex:1; min-width:0; font-family:inherit; font-size:12px; color:var(--ink);
+  padding:6px 9px; border:1px solid var(--border2); border-radius:7px; background:var(--surface); }
+.pl-phz-minef input:focus{ outline:none; border-color:var(--violet-border); }
+.pl-phz-mineh{ font-size:11px; color:var(--faint); line-height:1.5; margin-top:7px; }
+.pl-phz-minel{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.pl-phz-minet{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--muted);
+  padding:3px 5px 3px 9px; border-radius:999px; border:1px solid var(--border2); background:var(--surface); }
+.pl-phz-minex{ appearance:none; cursor:pointer; border:0; background:transparent; color:var(--faint);
+  font-family:inherit; font-size:13px; line-height:1; padding:2px 4px; border-radius:5px; }
+.pl-phz-minex:hover{ color:var(--red); background:var(--surface3); }
 /* filtro giocatrici planner */
 .pl-players{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:-4px 0 14px; }
 .pl-pfsel{ position:relative; display:inline-flex; align-items:center; }
@@ -977,8 +996,19 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       <div class="pl-phz">
         <div class="pl-phz-list" id="pl-ephases"></div>
         <div class="pl-phz-quick" id="pl-ephz-quick"></div>
+        <!-- le fasi proprie: quando quello che si fa in campo non ha un nome
+             nella lista di serie, se lo scrive il mister e resta -->
+        <div class="pl-phz-mine" id="pl-ephz-mine" hidden>
+          <div class="pl-phz-minef">
+            <input id="pl-ephz-minen" type="text" maxlength="28" placeholder="nome della fase: es. Costruzione dal basso" aria-label="Nome della fase nuova">
+            <button type="button" class="btn pl-phz-add" id="pl-ephz-minea">Crea</button>
+          </div>
+          <div class="pl-phz-mineh">La fase resta salvata e torna in questa barra tutte le volte. Non ha storico GPS, quindi non entra nel carico atteso.</div>
+          <div class="pl-phz-minel" id="pl-ephz-minel"></div>
+        </div>
         <div class="pl-phz-foot">
           <button type="button" class="btn pl-phz-add" id="pl-ephz-add">+ Fase</button>
+          <button type="button" class="pl-phz-mineb" id="pl-ephz-mineb">Fasi mie</button>
           <span class="pl-phz-tot" id="pl-ephz-tot"></span>
         </div>
         <!-- carico atteso: quanto vale, in metri per atleta, la seduta che si
@@ -1216,6 +1246,62 @@ window.RS_ROSTER = window.RS_ROSTER || [
      Aerobico, intervallato e test ci sono perche' nei fogli ci sono. */
   const PHASE_TYPES = ['attivazione','rondo','possesso','passing','ssg','transizioni','finalizzazione','palleinattive','duelli','tecnica','forza','sprint','plyo','z2','interval','rec','test'];
   const PHASE_QUICK = ['attivazione','rondo','possesso','passing','ssg','finalizzazione','palleinattive','forza','rec'];
+  /* ---------- fasi proprie ----------
+     Le fasi di sopra sono quelle che parlano la stessa lingua delle famiglie
+     dei fogli GPS, e vanno lasciate stare. Ma quello che si fa in campo non ci
+     sta sempre dentro: le fasi scritte a mano restano qui, valgono per tutte le
+     stagioni e nei menu si comportano come le altre. Una fase ritirata resta
+     comunque leggibile, se no le sedute gia' scritte perderebbero il nome. */
+  const PHMIE_KEY = 'rs_fio_fasi_mie';
+  let PHMIE = [], PHOLD = [];
+  function phSlug(s){
+    var v = String(s || '').toLowerCase()
+      .replace(/[aaaa]/g,'a').replace(/[eee]/g,'e').replace(/[ii]/g,'i')
+      .replace(/[oo]/g,'o').replace(/[uu]/g,'u')
+      .replace(/[^a-z0-9]+/g,'').slice(0, 18);
+    return v ? ('mia'+v) : '';
+  }
+  function phMieMerge(list, quick){
+    list.forEach(function(p){
+      SES[p.k] = { l:p.l, k:'training' };
+      SES_SHORT[p.k] = p.l;
+      if(quick && PHASE_TYPES.indexOf(p.k) < 0) PHASE_TYPES.push(p.k);
+    });
+  }
+  function phMieLoad(){
+    var o = null;
+    try{ o = JSON.parse(localStorage.getItem(PHMIE_KEY) || 'null'); }catch(e){ o = null; }
+    PHMIE = (o && Array.isArray(o.mie) ? o.mie : []).filter(function(p){ return p && p.k && p.l; }).slice(0, 24);
+    PHOLD = (o && Array.isArray(o.old) ? o.old : []).filter(function(p){ return p && p.k && p.l; }).slice(0, 48);
+    phMieMerge(PHOLD, false);
+    phMieMerge(PHMIE, true);
+  }
+  function phMieSave(){
+    try{ localStorage.setItem(PHMIE_KEY, JSON.stringify({ v:1, mie:PHMIE, old:PHOLD })); }catch(e){}
+  }
+  function phMieAdd(label){
+    var l = String(label || '').trim().replace(/\s+/g,' ').slice(0, 28);
+    if(!l) return '';
+    var k = phSlug(l);
+    if(!k) return '';
+    if(PHMIE.some(function(p){ return p.k === k; })) return k;
+    if(SES[k] && !PHOLD.some(function(p){ return p.k === k; })) return '';
+    PHOLD = PHOLD.filter(function(p){ return p.k !== k; });
+    if(PHMIE.length >= 24) return '';
+    PHMIE.push({ k:k, l:l });
+    phMieMerge([{ k:k, l:l }], true);
+    phMieSave();
+    return k;
+  }
+  function phMieDel(k){
+    var p = null;
+    PHMIE = PHMIE.filter(function(x){ if(x.k === k){ p = x; return false; } return true; });
+    if(!p) return;
+    if(!PHOLD.some(function(x){ return x.k === k; })) PHOLD.push(p);
+    var i = PHASE_TYPES.indexOf(k);
+    if(i >= 0) PHASE_TYPES.splice(i, 1);
+    phMieSave();
+  }
   function sesShort(t){ return SES_SHORT[t] || (SES[t] ? SES[t].l : t); }
   function phNorm(p){ return { t:(SES[p&&p.t]?p.t:'possesso'), m:Math.max(0,Math.min(240, Math.round(Number(p&&p.m)||0))), n:String(p&&p.n||'').slice(0,80) }; }
   function phasesClean(arr){ return (Array.isArray(arr)?arr:[]).map(phNorm).filter(p=> p.m>0 || p.n); }
