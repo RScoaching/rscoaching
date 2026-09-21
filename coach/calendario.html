@@ -1255,10 +1255,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
   const PHMIE_KEY = 'rs_fio_fasi_mie';
   let PHMIE = [], PHOLD = [];
   function phSlug(s){
-    var v = String(s || '').toLowerCase()
-      .replace(/[aaaa]/g,'a').replace(/[eee]/g,'e').replace(/[ii]/g,'i')
-      .replace(/[oo]/g,'o').replace(/[uu]/g,'u')
-      .replace(/[^a-z0-9]+/g,'').slice(0, 18);
+    var v = String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '').slice(0, 18);
     return v ? ('mia'+v) : '';
   }
   function phMieMerge(list, quick){
@@ -2928,7 +2926,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
       host.innerHTML = '<div class="pl-phz-empty">Nessuna fase. Componi la seduta con i pulsanti qui sotto: attivazione, rondo, possesso, partita a tema, finalizzazione...</div>';
     } else {
       host.innerHTML = plEditPhases.map(function(p,i){
-        const opts = PHASE_TYPES.map(function(t){ return '<option value="'+t+'"'+(t===p.t?' selected':'')+'>'+esc(sesShort(t))+'</option>'; }).join('');
+        /* Una fase ritirata non sta piu' nella lista ma puo' stare dentro una
+           seduta gia' scritta: se non la si rimette fra le scelte, il menu si
+           metterebbe su un'altra fase e cambierebbe la seduta da solo. */
+        const tl = (PHASE_TYPES.indexOf(p.t) < 0 && SES[p.t]) ? PHASE_TYPES.concat([p.t]) : PHASE_TYPES;
+        const opts = tl.map(function(t){ return '<option value="'+t+'"'+(t===p.t?' selected':'')+'>'+esc(sesShort(t))+'</option>'; }).join('');
         return '<div class="pl-phz-row" data-i="'+i+'">'+
           '<select class="pl-phz-t" data-i="'+i+'" aria-label="Attivita fase">'+opts+'</select>'+
           '<input class="pl-phz-m" data-i="'+i+'" type="number" min="0" max="240" step="5" value="'+(p.m||'')+'" placeholder="min" aria-label="Minuti">'+
@@ -2962,15 +2964,65 @@ window.RS_ROSTER = window.RS_ROSTER || [
     expRender(plEditPhases);
   }
   function plAddPhase(t){ plEditPhases.push({ t:(SES[t]?t:'possesso'), m:0, n:'' }); plRenderPhases(); }
+  /* La barra rapida tiene le fasi di serie piu' quelle scritte dal mister, che
+     si riconoscono perche' sono piene invece che tratteggiate. */
+  function plRenderQuick(){
+    const quick = document.getElementById('pl-ephz-quick'); if(!quick) return;
+    quick.innerHTML = PHASE_QUICK.map(function(t){
+      return '<button type="button" class="pl-phz-qc" data-t="'+t+'">'+esc(sesShort(t))+'</button>';
+    }).join('') + PHMIE.map(function(p){
+      return '<button type="button" class="pl-phz-qc mia" data-t="'+esc(p.k)+'">'+esc(p.l)+'</button>';
+    }).join('');
+  }
+  function plRenderMineList(){
+    const el = document.getElementById('pl-ephz-minel'); if(!el) return;
+    el.innerHTML = PHMIE.length
+      ? PHMIE.map(function(p){
+          return '<span class="pl-phz-minet">'+esc(p.l)
+            + '<button type="button" class="pl-phz-minex" data-phdel="'+esc(p.k)+'" title="Togli dalla barra" aria-label="Togli '+esc(p.l)+' dalla barra">&#215;</button></span>';
+        }).join('')
+      : '<span class="pl-phz-mineh">Ancora nessuna fase tua.</span>';
+  }
+  function plBindMine(){
+    const box = document.getElementById('pl-ephz-mine');
+    const btn = document.getElementById('pl-ephz-mineb');
+    const inp = document.getElementById('pl-ephz-minen');
+    const adb = document.getElementById('pl-ephz-minea');
+    if(!box || !btn || !inp || !adb) return;
+    function create(){
+      const l = inp.value.trim();
+      if(!l){ inp.focus(); return; }
+      const k = phMieAdd(l);
+      if(!k){ toast('Questo nome e\' gia\' di una fase della lista, scegline un altro'); return; }
+      inp.value = '';
+      plRenderQuick(); plRenderMineList();
+      plAddPhase(k);
+      toast('Fase "'+l+'" aggiunta');
+    }
+    btn.addEventListener('click', function(){
+      box.hidden = !box.hidden;
+      if(!box.hidden){ plRenderMineList(); inp.focus(); }
+    });
+    adb.addEventListener('click', create);
+    inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); create(); } });
+    box.addEventListener('click', function(e){
+      const d = e.target.closest('[data-phdel]'); if(!d) return;
+      e.preventDefault();
+      phMieDel(d.getAttribute('data-phdel'));
+      plRenderQuick(); plRenderMineList(); plRenderPhases();
+    });
+    plRenderMineList();
+  }
   function plBindPhases(){
     const host = document.getElementById('pl-ephases');
     const quick = document.getElementById('pl-ephz-quick');
     const add = document.getElementById('pl-ephz-add');
     if(quick){
-      quick.innerHTML = PHASE_QUICK.map(function(t){ return '<button type="button" class="pl-phz-qc" data-t="'+t+'">'+esc(sesShort(t))+'</button>'; }).join('');
+      plRenderQuick();
       quick.addEventListener('click', function(e){ const b=e.target.closest('[data-t]'); if(b){ e.preventDefault(); plAddPhase(b.getAttribute('data-t')); } });
     }
     if(add) add.addEventListener('click', function(){ plAddPhase('possesso'); });
+    plBindMine();
     if(host){
       host.addEventListener('input', function(e){
         const el=e.target; const i=+el.getAttribute('data-i'); if(isNaN(i)||!plEditPhases[i]) return;
@@ -4014,6 +4066,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
   }
 
   // ---------- init ----------
+  // le fasi scritte a mano entrano nei menu prima di ogni disegno, se no le
+  // sedute che le usano uscirebbero senza nome
+  phMieLoad();
   renderFixtures();
   buildPrintTable();
   plInit();
