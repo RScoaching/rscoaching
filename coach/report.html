@@ -259,6 +259,26 @@ table.dt tbody tr.row-tot td:first-child{ color:var(--ink); }
 .trend-legend .sw.a{ background:var(--orange); }
 .trend-legend .sw.ga{ background:var(--violet); }
 
+/* ---------- scarti: quanto un numero sta sopra o sotto il suo riferimento ---------- */
+.dlt{ display:inline-flex; align-items:center; gap:5px; justify-content:flex-end;
+  font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dlt-p{ color:var(--green); }
+.dlt-n{ color:var(--red2); }
+.dlt-z{ color:var(--faint); }
+.dlt .dw{ color:var(--faint); font-weight:500; font-size:11px; }
+.rkpi .k-sub .dlt{ font-size:11.5px; }
+/* la barra dentro la cella dice a colpo d'occhio quale settimana ha tirato di piu' */
+table.dt td .cbar{ display:inline-flex; align-items:center; gap:9px; justify-content:flex-end; }
+table.dt td .cbar > i{ display:block; width:46px; height:5px; border-radius:3px;
+  background:var(--surface3); overflow:hidden; flex:0 0 auto; }
+table.dt td .cbar > i > b{ display:block; height:100%; border-radius:3px; background:var(--orange); }
+table.dt td .cbar.ga > i > b{ background:var(--violet); }
+table.dt td.wk{ text-align:left; color:var(--ink); font-weight:600; white-space:nowrap; }
+table.dt td.wk small{ display:block; font-weight:400; font-size:10.5px; color:var(--faint);
+  letter-spacing:.03em; text-transform:uppercase; margin-top:2px; }
+table.dt td.nm{ text-align:left; color:var(--ink); font-weight:600; }
+table.dt td.ro{ text-align:left; color:var(--muted); font-weight:400; font-size:12px; }
+
 /* ---------- empty ---------- */
 .rempty{ text-align:center; padding:44px 16px; color:var(--muted); }
 .rempty svg{ width:34px; height:34px; color:var(--faint); margin-bottom:10px; }
@@ -1360,6 +1380,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const IDX_23   = idxDi(/^\s*>\s*23/);
   const IDX_ACC  = idxDi(/^\s*ACC/i);
   const IDX_DEC  = idxDi(/^\s*DEC/i);
+  const IDX_MMIN = idxDi(/^\s*m\s*\/\s*min/i);
   /* In modalita' giorno restano i sei numeri che il mister guarda davvero:
      minuti, distanza, le due fasce di velocita' e i due conteggi di
      accelerazioni e decelerazioni. Sono anche le colonne della stampa. */
@@ -1637,6 +1658,199 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function itMonth(d){ const m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(d||'')); return m? m[3]+'-'+m[2] : ''; }
 
+  /* ---------- scarti ---------- */
+  /* Un numero da solo non dice niente: dice qualcosa solo accanto al numero di
+     prima. Qui si scrive lo scarto in percentuale con il segno, e il verso lo
+     da' il colore: verde sopra, rosso sotto, grigio quando la differenza sta
+     sotto il punto percentuale e non vale la pena guardarla. */
+  function dltHTML(cur, prev, nota){
+    if(cur==null || prev==null || !prev || Number.isNaN(cur) || Number.isNaN(prev)) return '';
+    const d = (cur/prev*100)-100;
+    if(!isFinite(d)) return '';
+    const cls = (Math.abs(d)<1) ? 'dlt-z' : (d>0 ? 'dlt-p' : 'dlt-n');
+    const seg = (d>0?'+':'');
+    return '<span class="dlt '+cls+'">'+seg+NF0.format(d)+'%'+
+      (nota ? '<span class="dw">'+esc(nota)+'</span>' : '')+'</span>';
+  }
+  function prevMonthKey(monthKey){
+    if(!monthKey) return '';
+    const i = TEAM_MONTHS.findIndex(function(m){ return m.key===monthKey; });
+    return (i>0) ? TEAM_MONTHS[i-1].key : '';
+  }
+  // barra dentro la cella: quota del valore sul massimo della colonna
+  function cbarHTML(val, max, testo, ga){
+    if(val==null || Number.isNaN(val)) return '<span class="cell-na">-</span>';
+    const q = max>0 ? Math.max(2, Math.round(val/max*100)) : 2;
+    return '<span class="cbar'+(ga?' ga':'')+'"><i><b style="width:'+q+'%"></b></i>'+
+      '<span class="big">'+testo+'</span></span>';
+  }
+
+  /* ---------- settimana per settimana ---------- */
+  /* I microcicli sono gia' scritti nei dati: ogni mese si apre con una riga
+     `wk_header` e ogni settimana si chiude con `tot_week` e `valmatch_week`.
+     Non si ricalcola niente a mano, si raccoglie quello che il mister ha gia'
+     messo in colonna, cosi' i numeri qui sono gli stessi di Sessioni. */
+  function weekBuckets(scope, monthKey){
+    const months = srcForScope(scope).months.filter(function(m){ return !monthKey || m.key===monthKey; });
+    const out = [];
+    months.forEach(function(m){
+      let cur = null;
+      (m.rows||[]).forEach(function(r){
+        if(r.type==='wk_header'){
+          cur = { label:r.label||'', mese:capTitle(String(m.title||'').split(' ')[0]), days:[], matches:[], tot:null, vm:null };
+          out.push(cur);
+          return;
+        }
+        if(!cur) return;
+        if(r.type==='day' && Array.isArray(r.v)) cur.days.push(r.v);
+        else if(r.type==='match' && Array.isArray(r.v)) cur.matches.push(r.v);
+        else if(r.type==='tot_week' && Array.isArray(r.v)) cur.tot = r.v;
+        else if(r.type==='valmatch_week' && Array.isArray(r.v)) cur.vm = r.v;
+      });
+    });
+    return out.filter(function(w){ return w.days.length || w.matches.length; });
+  }
+  function weekTableHTML(scope, monthKey){
+    const wks = weekBuckets(scope, monthKey);
+    if(wks.length<2) return null;
+    const dati = wks.map(function(w){
+      const all = w.days.concat(w.matches);
+      const tot = w.tot;
+      const g = function(i){
+        if(i<0) return null;
+        if(tot && tot[i]!=null && !Number.isNaN(tot[i])) return tot[i];
+        const a = agg(all, i); return a.cnt ? a.sum : null;
+      };
+      return {
+        label:w.label, mese:w.mese, nt:w.days.length, ng:w.matches.length,
+        min:g(IDX_MIN), dist:g(IDX_DIST), hi:g(IDX_23),
+        mmin:(IDX_MMIN>=0 && tot && tot[IDX_MMIN]!=null) ? tot[IDX_MMIN] : agg(all, IDX_MMIN).mean,
+        vm:(w.vm && w.vm[IDX_DIST]!=null) ? w.vm[IDX_DIST] : null
+      };
+    });
+    const maxD = Math.max.apply(null, dati.map(function(d){ return d.dist||0; })) || 1;
+    const maxH = Math.max.apply(null, dati.map(function(d){ return d.hi||0; })) || 1;
+    const body = dati.map(function(d, i){
+      const pre = i>0 ? dati[i-1] : null;
+      return '<tr>'+
+        '<td class="wk">'+esc(d.label||'-')+'<small>'+esc(d.mese||'')+'</small></td>'+
+        '<td>'+NF0.format(d.nt)+'</td>'+
+        '<td>'+(d.ng? NF0.format(d.ng) : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(d.min!=null ? NF0.format(d.min)+'<span class="mu">min</span>' : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+cbarHTML(d.dist, maxD, (d.dist!=null? fmtKm(d.dist)+'<span class="mu">km</span>' : '-'))+'</td>'+
+        '<td>'+cbarHTML(d.hi, maxH, (d.hi!=null? NF0.format(d.hi)+'<span class="mu">m</span>' : '-'), true)+'</td>'+
+        '<td>'+(d.mmin!=null ? NF0.format(d.mmin)+'<span class="mu">m/min</span>' : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(d.vm!=null ? '<span class="big">'+NF1.format(d.vm)+'</span>' : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(pre ? (dltHTML(d.dist, pre.dist) || '<span class="cell-na">-</span>') : '<span class="cell-na">-</span>')+'</td>'+
+      '</tr>';
+    }).join('');
+    const sT = function(k){ let s=0, c=0; dati.forEach(function(d){ if(d[k]!=null){ s+=d[k]; c++; } }); return c? s : null; };
+    const mT = function(k){ let s=0, c=0; dati.forEach(function(d){ if(d[k]!=null){ s+=d[k]; c++; } }); return c? s/c : null; };
+    const tot = '<tr class="row-tot">'+
+      '<td class="wk">Totale<small>'+dati.length+' settimane</small></td>'+
+      '<td>'+NF0.format(sT('nt')||0)+'</td>'+
+      '<td>'+NF0.format(sT('ng')||0)+'</td>'+
+      '<td>'+(sT('min')!=null? NF0.format(sT('min'))+'<span class="mu">min</span>':'-')+'</td>'+
+      '<td>'+(sT('dist')!=null? '<span class="big">'+fmtKm(sT('dist'))+'</span><span class="mu">km</span>':'-')+'</td>'+
+      '<td>'+(sT('hi')!=null? '<span class="big">'+NF0.format(sT('hi'))+'</span><span class="mu">m</span>':'-')+'</td>'+
+      '<td>'+(mT('mmin')!=null? NF0.format(mT('mmin'))+'<span class="mu">m/min</span>':'-')+'</td>'+
+      '<td>'+(mT('vm')!=null? '<span class="big">'+NF1.format(mT('vm'))+'</span>':'-')+'</td>'+
+      '<td><span class="cell-na">-</span></td>'+
+    '</tr>';
+    return { n:dati.length, html:'<div class="tbl-wrap tbl-scroll"><table class="dt">'+
+      '<thead><tr><th>Settimana</th><th>Sedute</th><th>Gare</th><th>Min</th><th>Dist tot</th>'+
+      '<th>&gt;23 km/h</th><th>m/min</th><th>Val/match</th><th>Dist vs sett. prec.</th></tr></thead>'+
+      '<tbody>'+body+tot+'</tbody></table></div>' };
+  }
+
+  /* ---------- chi tira e chi resta indietro ---------- */
+  /* La riga squadra e' gia' una media: guardandola non si vede mai chi sta
+     sopra e chi sotto. Qui ogni atleta porta il suo carico del periodo e lo
+     scarto e' calcolato sul carico per seduta, non sul totale, altrimenti chi
+     ha saltato due settimane risulterebbe scarica per forza. */
+  function atleteTableHTML(monthKey){
+    const righe = [];
+    Object.keys(PLAYERS).forEach(function(n){
+      const c = collect(n, monthKey);
+      const pres = c.train.length + c.matches.length;
+      if(!pres) return;
+      const all = c.train.concat(c.matches);
+      const dist = agg(all, IDX_DIST).sum;
+      righe.push({
+        name:n, role:roleOf(n)||'', nt:c.train.length, ng:c.matches.length, pres:pres,
+        min:agg(all, IDX_MIN).sum, dist:dist,
+        hi:(IDX_23>=0 ? agg(all, IDX_23).sum : null),
+        dps:(pres ? dist/pres : null)
+      });
+    });
+    if(righe.length<2) return null;
+    righe.sort(function(a,b){ return (b.dist||0)-(a.dist||0); });
+    const mediaDps = agg(righe.map(function(r){ return [r.dps]; }), 0).mean;
+    const maxD = Math.max.apply(null, righe.map(function(r){ return r.dist||0; })) || 1;
+    const maxP = Math.max.apply(null, righe.map(function(r){ return r.pres||0; })) || 1;
+    const body = righe.map(function(r){
+      return '<tr>'+
+        '<td class="nm">'+esc(disp(r.name))+'</td>'+
+        '<td class="ro">'+esc(r.role||'-')+'</td>'+
+        '<td>'+NF0.format(r.pres)+'<span class="mu">/ '+NF0.format(maxP)+'</span></td>'+
+        '<td>'+(r.ng? NF0.format(r.ng) : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+NF0.format(r.min)+'<span class="mu">min</span></td>'+
+        '<td>'+cbarHTML(r.dist, maxD, fmtKm(r.dist)+'<span class="mu">km</span>')+'</td>'+
+        '<td>'+(r.hi!=null? NF0.format(r.hi)+'<span class="mu">m</span>' : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(r.dps!=null? NF0.format(r.dps)+'<span class="mu">m</span>' : '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(dltHTML(r.dps, mediaDps) || '<span class="cell-na">-</span>')+'</td>'+
+      '</tr>';
+    }).join('');
+    return { n:righe.length,
+      html:'<div class="tbl-wrap tbl-scroll"><table class="dt">'+
+        '<thead><tr><th>Atleta</th><th style="text-align:left">Ruolo</th><th>Presenze</th><th>Gare</th>'+
+        '<th>Min</th><th>Dist tot</th><th>&gt;23 km/h</th><th>Dist / seduta</th><th>vs media rosa</th></tr></thead>'+
+        '<tbody>'+body+'</tbody></table></div>'+
+        '<div class="sem-legend"><span class="lg" style="color:var(--faint)">'+
+        'Presenze su '+NF0.format(maxP)+', il massimo di chi ha lavorato di piu\'. '+
+        'Lo scarto confronta la distanza per seduta con la media della rosa.</span></div>' };
+  }
+
+  /* ---------- l'atleta contro il gruppo ---------- */
+  /* Per una singola atleta la domanda e' sempre la stessa: sta sopra o sotto le
+     altre. Il riferimento sono le righe di tutte le atlete messe insieme, non
+     la riga squadra, che e' gia' mediata e appiattisce le distanze. */
+  function vsGruppoHTML(scope, monthKey){
+    if(scope===TEAM) return null;
+    const ca = collect(scope, monthKey);
+    if(!ca.train.length && !ca.matches.length) return null;
+    const poolT = [], poolG = [];
+    Object.keys(PLAYERS).forEach(function(n){
+      if(n===scope) return;
+      const c = collect(n, monthKey);
+      for(const v of c.train) poolT.push(v);
+      for(const v of c.matches) poolG.push(v);
+    });
+    if(!poolT.length && !poolG.length) return null;
+    const cella = function(val, u){
+      const s = fmtVal(val, u);
+      return s!=null ? ('<span class="big">'+s+'</span><span class="mu">'+esc(u)+'</span>') : '<span class="cell-na">-</span>';
+    };
+    const body = KEYI.map(function(i){
+      const u = MU[i]||'';
+      const at = agg(ca.train, i).mean,  gt = agg(poolT, i).mean;
+      const ag = agg(ca.matches, i).mean, gg = agg(poolG, i).mean;
+      return '<tr>'+
+        '<td>'+esc(MS[i]||('m'+i))+'</td>'+
+        '<td>'+cella(at,u)+'</td><td>'+(fmtVal(gt,u)!=null? fmtVal(gt,u)+'<span class="mu">'+esc(u)+'</span>':'<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(dltHTML(at, gt) || '<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+cella(ag,u)+'</td><td>'+(fmtVal(gg,u)!=null? fmtVal(gg,u)+'<span class="mu">'+esc(u)+'</span>':'<span class="cell-na">-</span>')+'</td>'+
+        '<td>'+(dltHTML(ag, gg) || '<span class="cell-na">-</span>')+'</td>'+
+      '</tr>';
+    }).join('');
+    return '<div class="tbl-wrap tbl-scroll"><table class="dt">'+
+      '<thead><tr><th>Indicatore</th><th>Lei all.</th><th>Rosa all.</th><th>Scarto</th>'+
+      '<th>Lei gara</th><th>Rosa gara</th><th>Scarto</th></tr></thead>'+
+      '<tbody>'+body+'</tbody></table></div>'+
+      '<div class="sem-legend"><span class="lg" style="color:var(--faint)">'+
+      'Media della rosa calcolata sulle altre atlete nello stesso periodo.</span></div>';
+  }
+
   /* La sintesi si costruisce a pezzi e non come un blocco unico di HTML perche'
      i pezzi servono a due padroni. A schermo vanno in fila dentro un documento
      che si scorre; sul foglio vanno distribuiti sulle facciate, che sono alte
@@ -1680,25 +1894,61 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return base;
     }
 
-    // KPI
-    const minTot  = agg(c.train, IDX_MIN).sum + agg(c.matches, IDX_MIN).sum;
-    const distTot = agg(c.train, IDX_DIST).sum + agg(c.matches, IDX_DIST).sum;
+    /* La fascia in alto e' la risposta breve: quanto si e' lavorato, quanto si
+       e' corso e quanto si e' corso forte. Ogni numero porta accanto lo scarto
+       sul mese prima, perche' il totale di un mese da solo non dice se si sta
+       salendo o scendendo. Sulla stagione intera il confronto non esiste e al
+       suo posto resta la didascalia. */
+    const nSet = weekBuckets(scope, monthKey).length;
+    const kpiDi = function(cc, nw){
+      const mn = agg(cc.train, IDX_MIN).sum + agg(cc.matches, IDX_MIN).sum;
+      const ds = agg(cc.train, IDX_DIST).sum + agg(cc.matches, IDX_DIST).sum;
+      const hi = IDX_23>=0 ? (agg(cc.train, IDX_23).sum + agg(cc.matches, IDX_23).sum) : null;
+      return { nt:cc.train.length, ng:cc.matches.length, min:mn, dist:ds, hi:hi,
+        sett:(nw ? ds/nw : null) };
+    };
+    const kNow = kpiDi(c, nSet);
+    const pk = prevMonthKey(monthKey);
+    const kPre = pk ? kpiDi(collect(scope, pk), weekBuckets(scope, pk).length) : null;
+    const preTit = pk ? capTitle(periodLabel(pk)).split(' ')[0].toLowerCase() : '';
+    const sub = function(k, testo){
+      const d = kPre ? dltHTML(kNow[k], kPre[k], preTit) : '';
+      return '<div class="k-sub">'+(d || esc(testo))+'</div>';
+    };
     base.kpisHTML =
-      '<div class="rkpis">'+
-        '<div class="rkpi"><div class="k-label">Allenamenti</div><div class="k-val tnum">'+NF0.format(nTrain)+'</div><div class="k-sub">sedute di campo</div></div>'+
-        '<div class="rkpi"><div class="k-label">Partite</div><div class="k-val tnum">'+NF0.format(nMatch)+'</div><div class="k-sub">gare disputate</div></div>'+
-        '<div class="rkpi"><div class="k-label">Minuti totali</div><div class="k-val tnum">'+NF0.format(Math.round(minTot))+'<small>min</small></div><div class="k-sub">allenamento + gara</div></div>'+
-        '<div class="rkpi"><div class="k-label">Distanza totale</div><div class="k-val tnum">'+fmtKm(distTot)+'<small>km</small></div><div class="k-sub">allenamento + gara</div></div>'+
+      '<div class="rkpis k6">'+
+        '<div class="rkpi"><div class="k-label">Sedute</div><div class="k-val tnum">'+NF0.format(kNow.nt)+'</div>'+sub('nt','sedute di campo')+'</div>'+
+        '<div class="rkpi"><div class="k-label">Partite</div><div class="k-val tnum">'+NF0.format(kNow.ng)+'</div>'+sub('ng','gare disputate')+'</div>'+
+        '<div class="rkpi"><div class="k-label">Minuti</div><div class="k-val tnum">'+NF0.format(Math.round(kNow.min))+'<small>min</small></div>'+sub('min','campo + gara')+'</div>'+
+        '<div class="rkpi"><div class="k-label">Distanza</div><div class="k-val tnum">'+fmtKm(kNow.dist)+'<small>km</small></div>'+sub('dist','campo + gara')+'</div>'+
+        '<div class="rkpi"><div class="k-label">Alta intensita</div><div class="k-val tnum">'+
+          (kNow.hi!=null? NF0.format(kNow.hi)+'<small>m</small>' : '<small>n/d</small>')+'</div>'+sub('hi','oltre 23 km/h')+'</div>'+
+        '<div class="rkpi"><div class="k-label">Per settimana</div><div class="k-val tnum">'+
+          (kNow.sett!=null? fmtKm(kNow.sett)+'<small>km</small>' : '<small>n/d</small>')+'</div>'+
+          (kPre ? sub('sett', '') : '<div class="k-sub">'+NF0.format(nSet)+(nSet===1?' microciclo':' microcicli')+'</div>')+'</div>'+
       '</div>';
 
     const sez = [];
+    /* L'ordine e' quello delle domande: prima come e' andata settimana per
+       settimana, poi i numeri medi, poi chi sta sopra e chi sotto, poi le gare. */
+    const wt = weekTableHTML(scope, monthKey);
+    if(wt) sez.push({ titolo:'Settimana per settimana',
+      nota:wt.n+' microcicli · carico e scarto sulla settimana prima', corpo:wt.html });
+
     sez.push({ titolo:'Indicatori chiave',
       nota:'media allenamento e gara · aderenza al modello',
       corpo:keyTableHTML(c.train, c.matches) });
 
     if(scope===TEAM){
+      const at = atleteTableHTML(monthKey);
+      if(at) sez.push({ titolo:'Chi tira e chi resta indietro',
+        nota:at.n+' atlete · ordinate per distanza totale', corpo:at.html });
       const rt = repartoTableHTML(monthKey);
       if(rt) sez.push({ titolo:'Reparti', nota:'media gara per linea tattica', corpo:rt });
+    }else{
+      const vg = vsGruppoHTML(scope, monthKey);
+      if(vg) sez.push({ titolo:'Rispetto al gruppo',
+        nota:'lei contro la media della rosa · allenamento e gara', corpo:vg });
     }
 
     const mbm = matchByMatchHTML(scope, monthKey);
