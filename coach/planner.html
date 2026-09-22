@@ -437,6 +437,19 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);heigh
 .ath-send-item{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:6px;}
 .ath-send-item:has(input:checked){border-color:var(--purple);background:rgba(167,139,250,.06);}
 .ath-send-item input{width:15px;height:15px;accent-color:var(--purple);}
+/* barra rapida: un colpo solo per tutta la fascia, invece di spuntare una per una */
+.sendq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.sendq-chip{appearance:none;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--muted);
+  border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;line-height:1.2;
+  transition:border-color .16s ease,background .16s ease,color .16s ease;}
+.sendq-chip:hover{border-color:var(--purple);color:var(--white);}
+.sendq-chip:active{transform:scale(.97);}
+.sendq-chip.on{border-color:var(--purple);background:rgba(167,139,250,.14);color:var(--white);}
+.sendq-chip b{font-weight:600;opacity:.55;margin-left:4px;}
+.sendq-n{font-size:11px;color:var(--muted);margin:-4px 0 10px 2px;font-variant-numeric:tabular-nums;}
+.ath-send-sep{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin:10px 2px 5px;}
+.ath-send-sep:first-child{margin-top:0;}
 
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.04);border:1px solid var(--teal);color:var(--teal);padding:10px 12px 10px 18px;border-radius:50px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5);transition:transform .3s;z-index:9999;white-space:nowrap;}
 #toast.show{transform:translateX(-50%) translateY(0);}
@@ -915,6 +928,8 @@ document.addEventListener('DOMContentLoaded',function(){
   <div class="modal" style="max-width:420px;">
     <h3>Invia agli atleti</h3>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;" id="send-desc">Una copia del piano viene assegnata a ogni atleta selezionato. Potrai poi personalizzarla per ciascuno.</div>
+    <div class="sendq" id="send-quick"></div>
+    <div class="sendq-n" id="send-count"></div>
     <div id="send-ath-list" style="max-height:260px;overflow-y:auto;margin-bottom:10px;"></div>
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px;cursor:pointer;">
       <input type="checkbox" id="send-overwrite" style="width:14px;height:14px;">
@@ -3324,31 +3339,122 @@ document.addEventListener('DOMContentLoaded',function(){
     if(_expDownload(fn,ics,'text/calendar;charset=utf-8;')) _toastS('Calendario .ics ('+nEvt+' eventi): '+fn);
   };
 
+  // ── LISTA INVIO: atlete raggruppate per fascia, con selezione rapida ──
+  // Una fascia (nodo groups) e' il gruppo di lavoro del mister: qui un click
+  // spunta tutta la fascia invece di obbligare a segnare atleta per atleta.
+  window._sendRenderList=function(o){
+    o=o||{};
+    var aths=o.aths||{}, grps=o.groups||{}, assigned=o.assigned||{}, custom=o.custom||{};
+    var listEl=document.getElementById('send-ath-list');
+    var qEl=document.getElementById('send-quick');
+    var nEl=document.getElementById('send-count');
+    if(!listEl) return;
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    var ids=Object.keys(aths);
+    if(!ids.length){
+      listEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">Nessun atleta trovato.</div>';
+      if(qEl) qEl.innerHTML='';
+      if(nEl) nEl.textContent='';
+      return;
+    }
+    var byG={}, buckets=[];
+    ids.forEach(function(id){
+      var gid=(aths[id]||{}).group||'';
+      if(!grps[gid]) gid='';
+      if(!byG[gid]){
+        byG[gid]={ id:gid, label:gid?((grps[gid]||{}).name||gid):'Senza fascia', ids:[] };
+        buckets.push(byG[gid]);
+      }
+      byG[gid].ids.push(id);
+    });
+    buckets.forEach(function(b){
+      b.ids.sort(function(x,y){
+        return String((aths[x]||{}).name||x).localeCompare(String((aths[y]||{}).name||y),'it');
+      });
+    });
+    buckets.sort(function(a,b){
+      if(!a.id!==!b.id) return a.id?-1:1;
+      return a.label.localeCompare(b.label,'it');
+    });
+    var conFascia=buckets.filter(function(b){return !!b.id;});
+    var chips=['<button type="button" class="sendq-chip" data-q="all">Tutte<b>'+ids.length+'</b></button>'];
+    if(conFascia.length){
+      buckets.forEach(function(b){
+        chips.push('<button type="button" class="sendq-chip" data-q="g" data-g="'+esc(b.id)+'">'
+          +esc(b.label)+'<b>'+b.ids.length+'</b></button>');
+      });
+    }
+    chips.push('<button type="button" class="sendq-chip" data-q="none">Nessuna</button>');
+    if(qEl) qEl.innerHTML=chips.join('');
+    var html='';
+    buckets.forEach(function(b){
+      if(buckets.length>1) html+='<div class="ath-send-sep">'+esc(b.label)+'</div>';
+      b.ids.forEach(function(id){
+        var a=aths[id]||{}, isA=!!assigned[id], hasC=!!custom[id];
+        var sub=a.sport||a.role||a.position||'';
+        html+='<label class="ath-send-item"><input type="checkbox" name="send-ath" value="'+esc(id)+'" '+(isA?'checked':'')+'>'
+          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--white);">'+esc(a.name||id)+'</div>'
+          +(sub?'<div style="font-size:11px;color:var(--muted);">'+esc(sub)+'</div>':'')
+          +'</div>'
+          +(hasC?'<span style="font-size:10px;color:var(--amber);">piano personalizzato</span>'
+                :(isA?'<span style="font-size:10px;color:var(--teal);">gia assegnato</span>':''))
+          +'</label>';
+      });
+    });
+    listEl.innerHTML=html;
+    var idx={};
+    [].slice.call(listEl.querySelectorAll('input[name="send-ath"]')).forEach(function(c){ idx[c.value]=c; });
+    function tutti(){ return Object.keys(idx).map(function(k){return idx[k];}); }
+    function pieno(b){ return b.ids.length && b.ids.every(function(i){ return idx[i] && idx[i].checked; }); }
+    function sync(){
+      var all=tutti();
+      var n=all.filter(function(c){return c.checked;}).length;
+      if(nEl) nEl.textContent = n ? (n+' selezionat'+(n>1?'e':'a')+' su '+all.length) : 'Nessuna selezionata';
+      if(qEl) [].slice.call(qEl.querySelectorAll('.sendq-chip')).forEach(function(ch){
+        var q=ch.getAttribute('data-q'), on=false;
+        if(q==='all') on = n>0 && n===all.length;
+        else if(q==='none') on = n===0;
+        else { var b=byG[ch.getAttribute('data-g')||'']; on = !!b && pieno(b); }
+        ch.classList.toggle('on',on);
+      });
+    }
+    if(qEl) qEl.onclick=function(e){
+      var ch=e.target && e.target.closest ? e.target.closest('.sendq-chip') : null;
+      if(!ch) return;
+      var q=ch.getAttribute('data-q');
+      if(q==='all') tutti().forEach(function(c){ c.checked=true; });
+      else if(q==='none') tutti().forEach(function(c){ c.checked=false; });
+      else {
+        var b=byG[ch.getAttribute('data-g')||''];
+        if(!b) return;
+        var off=pieno(b);
+        b.ids.forEach(function(i){ if(idx[i]) idx[i].checked=!off; });
+      }
+      sync();
+    };
+    listEl.onchange=sync;
+    sync();
+  };
+
   // ── ASSEGNA ATLETI via REST ──
   window.openSendModal=async function(){
     if(!_eWk){_toastS('Seleziona prima una settimana');return;}
     var r=await fetch(DB_URL+'/athletes.json');
     var aths=r.ok?(await r.json())||{}:{};
     window._restAths=aths;
+    var grps=window._groupsCache||{};
+    if(!Object.keys(grps).length){
+      try{
+        var gr=await fetch(DB_URL+'/groups.json');
+        if(gr.ok){ grps=(await gr.json())||{}; window._groupsCache=grps; }
+      }catch(_g){}
+    }
     var wData=(window._plansCache||{})[_eWk]||{};
     var assigned=wData._athletes||{};
-    var athIds=Object.keys(aths);
     var mon=new Date(_eWk+'T00:00:00');
     function fm(d){return d.toLocaleDateString('it-IT',{day:'numeric',month:'long'});}
     document.getElementById('send-desc').textContent='Settimana del '+fm(mon)+'. Una copia del piano viene assegnata a ogni atleta selezionato.';
-    var listEl=document.getElementById('send-ath-list');
-    if(!athIds.length){
-      listEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">Nessun atleta trovato.</div>';
-    } else {
-      listEl.innerHTML=athIds.map(function(id){
-        var a=aths[id],isA=!!assigned[id];
-        return '<label class="ath-send-item"><input type="checkbox" name="send-ath" value="'+id+'" '+(isA?'checked':'')+'>'
-          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;color:var(--white);">'+(a.name||id)+'</div>'
-          +'<div style="font-size:11px;color:var(--muted);">'+(a.sport||a.role||a.position||'')+'</div></div>'
-          +(isA?'<span style="font-size:10px;color:var(--teal);">già assegnato</span>':'')
-          +'</label>';
-      }).join('');
-    }
+    window._sendRenderList({ aths:aths, groups:grps, assigned:assigned });
     document.getElementById('modal-send').classList.add('open');
   };
 
@@ -5218,24 +5324,12 @@ window.openSendModal=async function(){
     if(snap.exists())hasIndividual[id]=true;
   }));
 
-  const listEl=document.getElementById('send-ath-list');
-  if(!athIds.length){
-    listEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:10px 0;">Nessun atleta trovato.</div>';
-  } else {
-    listEl.innerHTML=athIds.map(id=>{
-      const a=athletes[id];
-      const isAssigned=assigned[id];
-      const hasCustom=hasIndividual[id];
-      return `<label class="ath-send-item">
-        <input type="checkbox" name="send-ath" value="${id}" ${isAssigned?'checked':''}>
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:600;color:var(--white);">${a.name||id}</div>
-          <div style="font-size:11px;color:var(--muted);">${a.sport||a.role||a.position||''}</div>
-        </div>
-        ${hasCustom?'<span style="font-size:10px;color:var(--amber);">piano personalizzato</span>':isAssigned?'<span style="font-size:10px;color:var(--teal);">già assegnato</span>':''}
-      </label>`;
-    }).join('');
-  }
+  window._sendRenderList({
+    aths:athletes,
+    groups:(window._groupsCache||groups||{}),
+    assigned:assigned,
+    custom:hasIndividual
+  });
   const ow=document.getElementById('send-overwrite');if(ow)ow.checked=false;
   document.getElementById('modal-send').classList.add('open');
 };
