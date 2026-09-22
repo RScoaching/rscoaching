@@ -1810,6 +1810,17 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const homeName = f.home || (casa ? (f.squadra||'Fiorentina') : (f.avversario||''));
       const awayName = f.away || (casa ? (f.avversario||'') : (f.squadra||'Fiorentina'));
       const played = f.data < TODAY_KEY;
+      /* Se il risultato e' stato segnato vale piu' di "giocata": si legge il
+         punteggio nell'ordine in cui si e' giocato, casa a sinistra. */
+      const grec = gaRec(f.data);
+      let gtag;
+      if(grec){
+        const es = gaEsito(grec);
+        gtag = '<span class="fx-tag '+es+'">'+
+          (casa ? grec.gf : grec.gs)+' &#183; '+(casa ? grec.gs : grec.gf)+'</span>';
+      }else{
+        gtag = '<span class="fx-tag '+(played?'done':'plan')+'">'+(played?'giocata':'in programma')+'</span>';
+      }
       return '<div class="fxrow" data-date="'+esc(f.data)+'" role="button" tabindex="0">'+
         '<span class="fx-date">'+esc(dlab)+'</span>'+
         '<span class="fx-teams">'+
@@ -1819,7 +1830,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '</span>'+
         '<span class="fx-tags">'+
           '<span class="fx-tag '+(casa?'casa':'via')+'">'+(casa?'casa':'trasferta')+'</span>'+
-          '<span class="fx-tag '+(played?'done':'plan')+'">'+(played?'giocata':'in programma')+'</span>'+
+          gtag+
         '</span>'+
       '</div>';
     }).join('');
@@ -4553,6 +4564,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
             ' aria-pressed="'+(k===cur?'true':'false')+'">'+esc(COMP[k])+'</button>';
         }).join('')+
       '</div></div>';
+      /* Il tabellino sta subito sotto la competizione: risultato, goal e assist
+         sono la prima cosa che si cerca aprendo una gara. */
+      const gah = gaPanel(s);
+      h += gah;
+      h += '<div class="pl-dedit"><button class="svbtn" type="button" id="pl-detga"><span>'+
+        (gah ? 'Modifica il risultato' : 'Segna il risultato')+'</span></button></div>';
     }
     /* Il programma apre la parte tecnica: e' quello che si era deciso di fare,
        e va letto prima di quello che poi e' successo in campo. */
@@ -4643,6 +4660,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
         idpOpen(s);
       });
     }
+    const gb = document.getElementById('pl-detga');
+    if(gb){
+      gb.addEventListener('click', function(){
+        try{ plDet.close(); }catch(e){}
+        gaOpen(s);
+      });
+    }
     const sv = document.getElementById('pl-detsv');
     if(sv){
       sv.addEventListener('click', function(){
@@ -4723,6 +4747,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     plBindPhases();
     plBindPlayerPick();
     idpBind();
+    gaBind();
     plRender();
   }
 
@@ -4731,6 +4756,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
   // sedute che le usano uscirebbero senza nome
   phMieLoad();
   renderFixtures();
+  gaRenderReport();
   buildPrintTable();
   plInit();
 })();
