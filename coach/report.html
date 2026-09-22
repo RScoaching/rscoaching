@@ -3544,11 +3544,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const descH = desc ? (22 + descLines.length*22 + 20) : 0;
 
     /* Il contenuto della seduta va sotto la tabella: prima i numeri, poi cosa
-       li ha prodotti. Ogni riga viene tagliata alla larghezza del foglio, cosi'
-       una nota lunga non esce dal bordo. */
+       li ha prodotti.
+       I titoli sono corti e restano su una riga: se per caso sforano si
+       accorciano. Il corpo no: una seduta di forza scrive venti esercizi di
+       fila e prima veniva tagliato al bordo del foglio, cioe' si leggevano i
+       primi cinque e degli altri quindici non restava traccia. Adesso va a
+       capo, spezzando dove ci sono gia' gli spazi fra un esercizio e l'altro,
+       fino a otto righe. Otto perche' la lista e' separata da punti e a questa
+       larghezza ne bastano quattro per venti esercizi: il doppio e' margine,
+       non un tetto che si tocca. */
     const cfr = cfTesto(m);
-    ctx.font = '400 13.5px Inter, sans-serif';
-    const cfLines = cfr.map(function(r){ return { h:r.h, s:shorten(ctx, r.s, W - P*2) }; });
+    const cfLines = [];
+    cfr.forEach(function(r){
+      if(r.h){
+        ctx.font = '700 13.5px Inter, sans-serif';
+        cfLines.push({ h:true, s:shorten(ctx, r.s, W - P*2) });
+        return;
+      }
+      ctx.font = '400 13.5px Inter, sans-serif';
+      wrapLines(ctx, r.s, W - P*2, 8).forEach(function(ln){ cfLines.push({ h:false, s:ln }); });
+    });
     const cfH = cfLines.length ? (26 + cfLines.length*21 + 16) : 0;
 
     const contentY = P + headerH;
