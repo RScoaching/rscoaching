@@ -2710,6 +2710,28 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return '<div class="cf-blk">'+top+bar+lista+
       (note ? '<p class="cf-note">'+esc(note)+'</p>' : '')+'</div>';
   }
+  /* La casella del carico nella pagina Forza legge tre cose diverse, non solo
+     percentuali: "80" e' la percentuale del massimale, "5-10kg" o "40-50" sono
+     un carico in chili uguale per tutte, "manuale" vuol dire che i kg li scrive
+     il mister a mano atleta per atleta. Il segno di percentuale quindi non si
+     puo' appiccicare sempre, se no sul foglio esce "5-10kg%", che non vuol dire
+     niente. Qui si legge la casella con le stesse regole di `pctInfo` in
+     forza.html: intervallo o numero con kg diventano chili, il numero da solo
+     percentuale, "manuale" non si stampa perche' sul foglio della giornata non
+     aggiunge niente, e qualunque altra cosa scritta a mano resta com'e'. */
+  function cfPct(v){
+    const raw = String(v == null ? '' : v).trim();
+    if(!raw) return '';
+    const low = raw.toLowerCase();
+    if(low === 'm' || low === 'man' || low === 'manu' || low === 'manuale' || low === '?') return '';
+    const s   = low.replace(/\s+/g, '').replace(/,/g, '.');
+    const kg  = s.indexOf('kg') !== -1;
+    const num = s.replace(/kg/g, '').replace(/%/g, '');
+    if(/^\d+(\.\d+)?(-\d+(\.\d+)?)+$/.test(num)) return num+' kg';
+    if(!/^\d+(\.\d+)?$/.test(num)) return raw;
+    if(kg) return num+' kg';
+    return num+'%';
+  }
   function cfForzaHTML(s){
     const righe = (Array.isArray(s.rows)?s.rows:[]).filter(function(r){ return r && String(r.ex||'').trim(); });
     if(!righe.length) return '';
@@ -2726,7 +2748,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(serie && rip) parti.push(serie+' x '+rip);
       else if(serie)   parti.push(serie+' serie');
       else if(rip)     parti.push(rip+' rip');
-      if(pct) parti.push(pct.indexOf('%')>=0 ? pct : (pct+'%'));
+      const car = cfPct(pct);
+      if(car) parti.push(car);
       return '<li><span class="n">'+esc(String(r.ex).trim())+'</span>'+
         (parti.length ? '<span class="s">'+esc(parti.join(' · '))+'</span>' : '')+'</li>';
     }).join('')+'</ul>';
@@ -2803,7 +2826,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         if(serie && rip) coda = serie+'x'+rip;
         else if(serie)   coda = serie+' serie';
         else if(rip)     coda = rip+' rip';
-        const perc = pct ? (pct.indexOf('%')>=0 ? pct : (pct+'%')) : '';
+        const perc = cfPct(pct);
         return esc(String(r.ex).trim())+
           (coda ? ' <b>'+esc(coda)+'</b>' : '')+
           (perc ? ' <i>'+esc(perc)+'</i>' : '');
@@ -2868,7 +2891,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         let coda = '';
         if(serie && rip) coda = ' '+serie+'x'+rip;
         else if(rip)     coda = ' '+rip;
-        if(pct) coda += ' @'+(pct.indexOf('%')>=0 ? pct : (pct+'%'));
+        const car = cfPct(pct);
+        if(car) coda += ' @'+car;
         return String(r.ex).trim()+coda;
       }).join(' · ') });
     });
