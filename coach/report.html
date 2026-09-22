@@ -405,7 +405,9 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 .cf-blk{ background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:13px 15px; }
 .cf-top{ display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
 .cf-t{ font-size:13.5px; font-weight:600; color:var(--ink); }
-.cf-ph3{ display:none; }
+/* la riga di forza esiste solo per il foglio stampato: a schermo la stessa
+   scheda si legge per intero qui sotto, dentro "Cosa si e' fatto" */
+.rforza{ display:none; }
 .cf-tag{ font-size:10.5px; font-weight:600; color:var(--muted); background:var(--surface3);
   border:1px solid var(--border2); border-radius:999px; padding:2px 9px; }
 .cf-num{ margin-left:auto; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--text); }
@@ -1031,26 +1033,26 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   /* Una cosa pero' sul foglio non c'e' da nessun'altra parte: la forza.
      I blocchi del calendario ripetono le esercitazioni gia' stampate sopra,
      la scheda di forza no, e nei giorni in cui si va in sala prima o dopo il
-     campo e' meta' del lavoro della giornata. Quindi quando c'e' la forza la
-     sezione torna, ma con dentro la sola scheda: i blocchi di calendario
-     restano fuori, il titolo diventa "Forza del giorno" e la riga di
-     spiegazione sparisce. Gli esercizi vanno su due colonne a corpo 10, che
-     e' il modo di far stare dodici righe nello spazio di sei senza toglierne
-     nessuna: il mister vuole vedere quante serie per quante ripetizioni ha
-     fatto ognuna, non un riassunto. */
-  .rsec-cf.has-forza{ display:block !important; break-inside:avoid; margin-top:20px !important; }
-  .rsec-cf.has-forza .cf-blk:not(.cf-forza){ display:none !important; }
-  .rsec-cf .rsec-head h3{ display:none !important; }
-  .rsec-cf .rsec-head .rsec-n{ display:none !important; }
-  .rsec-cf.has-forza .rsec-head{ margin-bottom:9px; }
-  .rsec-cf.has-forza .rsec-head .cf-ph3{ display:block !important; }
-  .rsec-cf.has-forza .cf-list{ gap:8px !important; }
-  .rsec-cf.has-forza .cf-blk{ padding:9px 11px !important; }
-  .rsec-cf.has-forza .cf-t{ font-size:12px !important; }
-  .rsec-cf.has-forza .cf-num{ font-size:11px !important; }
-  .rsec-cf.has-forza .cf-ex{ margin-top:7px !important;
-    display:grid !important; grid-template-columns:1fr 1fr; gap:2px 20px !important; }
-  .rsec-cf.has-forza .cf-ex li{ font-size:10px !important; gap:7px; break-inside:avoid; }
+     campo e' meta' del lavoro della giornata. Non torna pero' la sezione
+     intera, che vorrebbe il suo spazio e sposterebbe tutto il resto: torna
+     una riga sola, stretta fra il foglio del mister e le esercitazioni.
+     Corpo 9, esercizi di fila separati dal punto, serie per ripetizioni e
+     percentuale attaccate al nome. Venti esercizi stanno in quattro righe di
+     testo: e' poco piu' di un centimetro, il foglio non se ne accorge e il
+     numero delle facciate non cambia.
+     Il tetto di 40mm e' la valvola: qualunque cosa succeda ai dati, questo
+     blocco non puo' crescere tanto da spingere le esercitazioni sulla
+     facciata dopo. Nell'uso vero non si tocca, servirebbero piu' di sessanta
+     esercizi in un giorno solo. */
+  .rforza{ display:block !important; break-inside:avoid;
+    margin:0 0 15px; padding:7px 10px; max-height:40mm; overflow:hidden;
+    background:#faf8f5 !important; border:1px solid #e2ddd6 !important; border-radius:6px; }
+  .rf-h{ margin:0; font-size:9.5px; font-weight:700; letter-spacing:.05em;
+    text-transform:uppercase; color:#111 !important; }
+  .rf-l{ margin:3px 0 0; font-size:9px; line-height:1.5; color:#333 !important; }
+  .rf-l + .rf-h{ margin-top:7px; }
+  .rf-l b{ font-weight:600; color:#111 !important; }
+  .rf-l i{ font-style:normal; color:#8a847c !important; }
   .rfog{ margin:0 !important; break-inside:avoid; }
   .rfog img{ border:1px solid #e2ddd6 !important; max-width:100% !important;
     max-height:224mm; object-fit:contain; }
@@ -2714,7 +2716,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const iso = cfIso(m.meta.dateStr);
     const ap  = m.meta.ap || '';
     const parti = [];
-    let forza = 0;
     if(iso){
       const cal = cfCal();
       cal.manual.forEach(function(b){
@@ -2742,20 +2743,57 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       cfForzaSess().forEach(function(s){
         if(String(s && s.date||'').slice(0,10) !== iso) return;
         const h = cfForzaHTML(s);
-        if(h){ parti.push(h); forza++; }
+        if(h) parti.push(h);
       });
     }
     const corpo = parti.length
       ? '<div class="cf-list">'+parti.join('')+'</div>'
       : '<p class="cf-void">Per questa data non ci sono blocchi nel calendario ne\' schede di forza. Il contenuto della seduta si scrive nel planner o nella pagina Forza e compare qui da solo.</p>';
-    /* Il secondo titolo non si vede a schermo: esce solo sul foglio, quando
-       quel giorno c'e' stata forza. Sul foglio di questa sezione resta la
-       sola scheda di forza, percio' chiamarla ancora "Cosa si e' fatto"
-       prometterebbe piu' di quello che si legge. */
-    return '<div class="rsec rsec-cf'+(forza ? ' has-forza' : '')+'">'+
-      '<div class="rsec-head"><h3>Cosa si e\' fatto</h3><h3 class="cf-ph3">Forza del giorno</h3>'+
+    return '<div class="rsec rsec-cf">'+
+      '<div class="rsec-head"><h3>Cosa si e\' fatto</h3>'+
       '<span class="rsec-n">blocchi e minuti presi dal calendario e dalle schede di forza di quel giorno</span></div>'+
       corpo+'</div>';
+  }
+  /* La riga di forza del foglio stampato.
+     A schermo non si vede: la scheda di forza sta gia' dentro "Cosa si e'
+     fatto", per intero e leggibile. Sul foglio invece quella sezione non si
+     stampa, e la forza sparirebbe: nei giorni in cui si va in sala prima o
+     dopo il campo e' meta' del lavoro della giornata, e a differenza dei
+     blocchi del calendario non e' scritta da nessun'altra parte del report.
+     Torna quindi in una forma sola: una riga stretta fra il foglio del mister
+     e le esercitazioni, esercizi di fila separati dal punto con serie per
+     ripetizioni e percentuale attaccate al nome. Corpo 9, quattro righe di
+     testo per venti esercizi: poco piu' di un centimetro, il numero delle
+     facciate non cambia. Se quel giorno non c'e' stata forza non esce niente.
+     Solo squadra: qui si stampa la scheda della seduta, gli esercizi e i
+     carichi di gruppo, mai i numeri della singola atleta. */
+  function forzaRigaHTML(m){
+    const iso = cfIso(m.meta.dateStr);
+    if(!iso) return '';
+    const parti = [];
+    cfForzaSess().forEach(function(s){
+      if(String(s && s.date||'').slice(0,10) !== iso) return;
+      const righe = (Array.isArray(s.rows)?s.rows:[]).filter(function(r){ return r && String(r.ex||'').trim(); });
+      if(!righe.length) return;
+      const lista = righe.map(function(r){
+        const serie = String(r.serie||'').trim();
+        const rip   = String(r.rip||'').trim();
+        const pct   = String(r.pct||'').trim();
+        let coda = '';
+        if(serie && rip) coda = serie+'x'+rip;
+        else if(serie)   coda = serie+' serie';
+        else if(rip)     coda = rip+' rip';
+        const perc = pct ? (pct.indexOf('%')>=0 ? pct : (pct+'%')) : '';
+        return esc(String(r.ex).trim())+
+          (coda ? ' <b>'+esc(coda)+'</b>' : '')+
+          (perc ? ' <i>'+esc(perc)+'</i>' : '');
+      }).join(' &#183; ');
+      parti.push('<p class="rf-h">Forza &#183; '+esc(String(s.title||'').trim() || 'Seduta di forza')+
+        ' &#183; '+NF0.format(righe.length)+' esercizi</p>'+
+        '<p class="rf-l">'+lista+'</p>');
+    });
+    if(!parti.length) return '';
+    return '<div class="rforza">'+parti.join('')+'</div>';
   }
   /* Le stesse informazioni ridotte a righe di testo, per il PNG che il mister
      si porta via: sul foglio conta leggere cosa c'era dentro, non la barra. */
@@ -3284,13 +3322,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const fk  = fogKey(m);
     daysCambiate();
     host.classList.toggle('has-fog', !!fk);
-    /* Cosa si e' fatto sta appresso alle esercitazioni e non in fondo: e' la
-       stessa cosa raccontata, il contenuto della giornata, mentre il carico
-       per atleta e' un'altra faccenda e in stampa si porta via un foglio suo.
-       Messa qui, la scheda di forza esce sulla facciata della seduta, che e'
-       quella che il mister si porta in sala. */
+    /* La riga di forza va prima delle esercitazioni: in stampa il foglio del
+       mister apre il documento, poi si legge cosa si e' fatto in sala e poi
+       cosa si e' fatto in campo. A schermo la riga non si vede. */
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
-      exSecHTML(m)+cosaFattoHTML(m)+tbl+chart+foot+'</div>';
+      forzaRigaHTML(m)+exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
     fogSistema(host, fk);
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
