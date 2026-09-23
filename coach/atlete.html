@@ -443,6 +443,22 @@ table.ttbl.vmax td.d{ padding-left:8px; }
 table.ttbl.vmax tr.hi td.v, table.ttbl.vmax tr.hi td.d{ color:var(--orange2); }
 .sh-warn{ margin:10px 0 0; padding:8px 10px; border-radius:8px; font-size:11.5px; line-height:1.5;
   color:var(--orange2); background:oklch(68% 0.19 42 / 0.10); border:1px solid oklch(68% 0.19 42 / 0.28); }
+/* Rientro dall'infortunio: il riquadro che chiede i dati mancanti resta in
+   evidenza finche' l'infortunio non e' registrato, poi sparisce e resta il
+   percorso. Nel percorso le sedute col rieducatore sono in rosso, le
+   differenziate in giallo, quelle col gruppo in verde. */
+.rtp-ask{ padding:12px 13px; margin-bottom:14px; border-radius:10px;
+  background:oklch(78% 0.15 85 / 0.10); border:1px solid oklch(78% 0.15 85 / 0.30); }
+.rtp-ask-h{ margin:0 0 4px; font-size:13px; font-weight:700; line-height:1.35; color:oklch(82% 0.13 85); }
+.rtp-ask-t{ margin:0 0 11px; font-size:11.5px; line-height:1.5; color:var(--muted); }
+.rtp-ask .inf-add{ margin-bottom:0; }
+.rtp-t{ margin:0 0 11px; font-size:13.5px; font-weight:600; line-height:1.35; color:var(--ink); }
+table.ttbl.rtp{ margin-top:2px; }
+table.ttbl.rtp td{ padding:5px 0; }
+table.ttbl.rtp td.d{ padding-left:8px; }
+table.ttbl.rtp tr.r td.l{ color:oklch(72% 0.18 25); }
+table.ttbl.rtp tr.d td.l{ color:oklch(80% 0.14 85); }
+table.ttbl.rtp tr.g td.l{ color:var(--green); }
 .tgrp{ margin-bottom:14px; }
 .tgrp:last-child{ margin-bottom:0; }
 .tgrp-h{ font-size:11.5px; font-weight:700; color:var(--violet2); margin-bottom:6px; }
@@ -1133,6 +1149,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // vicino alla propria punta, che e' il dato che manca quando si programma
       // uno sprint dopo due settimane di lavoro aerobico.
       const vmax = [];
+      /* Ogni giornata di allenamento con la data vera e la sigla di dove si
+         trovava: col gruppo, differenziata, col rieducatore. E' la traccia che
+         serve per ricostruire il percorso di rientro senza sfogliare i fogli. */
+      const giorni = [];
       months.forEach(m=>{
         let wk = '';
         (m.rows||[]).forEach(r=>{
@@ -1155,6 +1175,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
             sedute++;
             const sg = SOLO_RE.exec(String(r.label||''));
             if(sg) solo[sg[1]]++;
+            const dg = rowDate(r, wk, m.key);
+            giorni.push({
+              d: dg, t: dg ? dg.getTime() : 0, sg: sg ? sg[1] : '',
+              min:  (r.v && r.v[iMin]  != null) ? (+r.v[iMin]  || 0) : 0,
+              dist: (r.v && r.v[iDist] != null) ? (+r.v[iDist] || 0) : 0
+            });
           }
           else if(r.type==='match') partite++;
           else if(r.type==='tot_month'){
@@ -1168,7 +1194,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const snapRole = normRole(p.role || rp.role || '');
       const custom = rp.tipo==='manuale' || Object.prototype.hasOwnProperty.call(customPlayers, name);
       vmax.sort(function(a,b){ return a.t - b.t; });
-      return { name, snapRole, min, dist, sedute, partite, solo, vmax,
+      giorni.sort(function(a,b){ return a.t - b.t; });
+      return { name, snapRole, min, dist, sedute, partite, solo, vmax, giorni,
         pres: presenze(months), custom, tipo: rp.tipo || '' };
     });
     return result.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
@@ -1403,7 +1430,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const keep = host.scrollTop;
     /* Le gare stanno subito sotto il carico: sono le due facce della stessa
        stagione, quanto ha lavorato e quanto ha giocato. */
-    host.innerHTML = secCarico(pl) + secVelocita(pl) + secPresenze(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
+    host.innerHTML = secCarico(pl) + secRientro(pl) + secVelocita(pl) + secPresenze(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
     host.scrollTop = keep; // mantiene la posizione tra i redraw
     wireSheet(pl);
   }
@@ -1543,6 +1570,134 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         (pk.d ? ' del '+esc(shortD(pk.d)) : '')+
         '. Le soglie sono il 90% ('+esc(kmh(s90))+' km/h) e il 95% ('+esc(kmh(s95))+' km/h) della sua punta, non di una tabella di squadra. Le partite non entrano nel conto: in gara la velocita\' la detta la partita.'+
         (hs > 0 ? ' In allenamento ha corso '+NF0.format(Math.round(hs))+' m sopra il 90% della massima.' : '')+
+      '</p>'+
+    '</section>';
+  }
+
+  /* Rientro dall'infortunio. Le sedute col rieducatore stanno gia' nel foglio
+     con la sigla in fondo alla riga ("16PM rtp"), ma il foglio non dice ne' che
+     infortunio e' ne' da quando: quella parte sta solo in testa al preparatore.
+     Qui, quando compaiono sedute rtp senza un infortunio registrato che le
+     copra, si apre un riquadro che chiede le due cose che mancano, la
+     descrizione e la data, e le scrive nella sezione Infortuni piu' sotto.
+     Registrato l'infortunio resta il percorso: da quanti giorni e' fuori,
+     quante sedute col rieducatore, quante in differenziata, quante gia' col
+     gruppo, e giorno per giorno quanto ha lavorato rispetto a una sua seduta
+     normale di prima. E' il quadro che si fa a mano quando il medico chiede a
+     che punto siamo. */
+  const RIENTRO_GAP = 21;   // giorni di stacco che chiudono un episodio
+  const RIENTRO_ROWS = 14;  // righe mostrate nel percorso
+  function isoOf(d){
+    if(!d) return '';
+    const p = n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  }
+  function isoDate(iso){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));
+    if(!m) return null;
+    const d = new Date(+m[1], +m[2]-1, +m[3]); d.setHours(0,0,0,0);
+    return d;
+  }
+  function rtpEpisodio(pl){
+    const gg = (pl.giorni||[]).filter(function(x){ return x.d; });
+    const rtp = gg.filter(function(x){ return x.sg==='rtp'; });
+    if(!rtp.length) return null;
+    // si risale dall'ultima seduta col rieducatore finche' le rtp restano vicine
+    let i = rtp.length - 1;
+    while(i > 0 && (rtp[i].t - rtp[i-1].t) <= RIENTRO_GAP*86400000) i--;
+    const start = rtp[i], end = rtp[rtp.length-1];
+    const dentro = gg.filter(function(x){ return x.t >= start.t; });
+    let nRtp = 0, nDiff = 0, nGrp = 0, grpDopo = 0;
+    dentro.forEach(function(x){
+      if(x.sg==='rtp') nRtp++;
+      else if(x.sg==='diff') nDiff++;
+      else if(x.sg==='') { nGrp++; if(x.t > end.t) grpDopo++; }
+    });
+    // il riferimento e' quanto lavorava prima di fermarsi, non la media di squadra
+    const prima = gg.filter(function(x){ return x.sg==='' && x.t < start.t && x.min > 0; });
+    const fonte = prima.length >= 3 ? prima : gg.filter(function(x){ return x.sg==='' && x.min > 0; });
+    let base = 0;
+    if(fonte.length){
+      let tot = 0; fonte.forEach(function(x){ tot += x.min; });
+      base = tot / fonte.length;
+    }
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    return {
+      start: start, end: end, dentro: dentro, base: base,
+      nRtp: nRtp, nDiff: nDiff, nGrp: nGrp, grpDopo: grpDopo,
+      ggDa: Math.max(0, Math.round((oggi - start.d)/86400000)),
+      ggUlt: Math.max(0, Math.round((oggi - end.d)/86400000))
+    };
+  }
+  // l'infortunio che copre l'episodio: registrato prima dell'ultima rtp e non
+  // troppo indietro nel tempo rispetto alla prima
+  function injDiEpisodio(name, ep){
+    const b = bio[name];
+    if(!b || !Array.isArray(b.inf) || !ep) return null;
+    const lim = ep.start.t - 60*86400000;
+    let best = null;
+    b.inf.forEach(function(it){
+      const d = isoDate(it && it.d);
+      if(!d) return;
+      if(d.getTime() > ep.end.t || d.getTime() < lim) return;
+      if(!best || d.getTime() > isoDate(best.d).getTime()) best = it;
+    });
+    return best;
+  }
+  function statoRiga(sg){
+    if(sg==='rtp')  return { lab:'Col rieducatore', cls:'r' };
+    if(sg==='diff') return { lab:'Differenziato',   cls:'d' };
+    if(sg==='FT')   return { lab:'In prima squadra',cls:'' };
+    if(sg==='naz')  return { lab:'In nazionale',    cls:'' };
+    return { lab:'Col gruppo', cls:'g' };
+  }
+  function secRientro(pl){
+    const ep = rtpEpisodio(pl);
+    if(!ep) return '';
+    const inj = injDiEpisodio(pl.name, ep);
+    const dInizio = inj ? isoDate(inj.d) : null;
+    const ggFuori = dInizio
+      ? Math.max(0, Math.round((new Date(new Date().setHours(0,0,0,0)) - dInizio)/86400000))
+      : ep.ggDa;
+    const banner = inj ? '' :
+      '<div class="rtp-ask">'+
+        '<p class="rtp-ask-h">Ci sono '+NF0.format(ep.nRtp)+(ep.nRtp===1?' seduta':' sedute')+
+          ' col rieducatore dal '+esc(shortD(ep.start.d))+', ma nessun infortunio registrato.</p>'+
+        '<p class="rtp-ask-t">Il foglio dice dove si e\' allenata, non che cosa si e\' fatta. Scrivi l\'infortunio e la data: finisce nella sezione Infortuni e il percorso qui sotto parte da li\'.</p>'+
+        '<div class="inf-add">'+
+          '<div class="fld"><span>Data infortunio</span><input id="rtp-d" type="date" value="'+esc(isoOf(ep.start.d))+'"></div>'+
+          '<div class="fld"><span>Infortunio</span><input id="rtp-t" type="text" placeholder="es. lesione ischiocrurali sx"></div>'+
+          '<button class="btn" id="rtp-add">Registra</button>'+
+        '</div>'+
+      '</div>';
+    const righe = ep.dentro.slice(-RIENTRO_ROWS).reverse().map(function(x){
+      const st = statoRiga(x.sg);
+      const pc = (ep.base > 0 && x.min > 0) ? Math.round(x.min*100/ep.base) : null;
+      return '<tr class="'+st.cls+'">'+
+        '<td class="l">'+esc(shortD(x.d))+' &#183; '+esc(st.lab)+'</td>'+
+        '<td class="v">'+(x.min > 0 ? NF0.format(Math.round(x.min))+' min' : '-')+'</td>'+
+        '<td class="d">'+(pc != null ? NF0.format(pc)+'%' : '')+'</td></tr>';
+    }).join('');
+    const tagliate = Math.max(0, ep.dentro.length - RIENTRO_ROWS);
+    const titolo = inj ? esc(inj.txt || 'Infortunio') : 'Percorso di rientro';
+    const stato = inj ? ' <span class="n">'+esc(stLabel(inj.st))+'</span>' : '';
+    return '<section class="sh-sec">'+
+      '<h3 class="sh-h">Rientro'+stato+'</h3>'+
+      banner+
+      '<p class="rtp-t">'+titolo+(inj && inj.d ? ' &#183; dal '+esc(fmtDay(inj.d)) : ' &#183; prima seduta col rieducatore il '+esc(shortD(ep.start.d)))+'</p>'+
+      '<div class="sh-stats">'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(ggFuori)+'</span><span class="ps-l">'+(ggFuori===1?'Giorno dall\'infortunio':'Giorni dall\'infortunio')+'</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(ep.nRtp)+'</span><span class="ps-l">Col rieducatore</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(ep.nDiff)+'</span><span class="ps-l">Differenziate</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(ep.nGrp)+'</span><span class="ps-l">Col gruppo</span></div>'+
+      '</div>'+
+      (righe ? '<p class="sh-sub">Il percorso, dalla giornata piu\' recente</p><table class="ttbl rtp">'+righe+'</table>' : '')+
+      (tagliate ? '<p class="sh-cap">Prima di queste ci sono altre '+NF0.format(tagliate)+' giornate dello stesso percorso.</p>' : '')+
+      '<p class="sh-cap">'+
+        (ep.grpDopo > 0
+          ? 'Dall\'ultima seduta col rieducatore, del '+esc(shortD(ep.end.d))+', ha gia\' fatto '+NF0.format(ep.grpDopo)+(ep.grpDopo===1?' seduta':' sedute')+' col gruppo.'
+          : 'L\'ultima seduta col rieducatore e\' del '+esc(shortD(ep.end.d))+(ep.ggUlt>0 ? ', '+NF0.format(ep.ggUlt)+(ep.ggUlt===1?' giorno fa':' giorni fa') : ', oggi')+'. Col gruppo non e\' ancora tornata.')+
+        (ep.base > 0 ? ' La percentuale e\' sui minuti di una sua seduta normale prima di fermarsi, '+NF0.format(Math.round(ep.base))+' minuti, non su una media di squadra.' : '')+
       '</p>'+
     '</section>';
   }
@@ -1817,6 +1972,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       b.peso = '';
       saveBio(); renderSheetBody();
       toast('Peso ripreso dai test');
+    });
+
+    // il riquadro del rientro scrive nella stessa lista della sezione Infortuni:
+    // arriva da sedute col rieducatore gia' fatte, quindi nasce "in recupero"
+    const rtpBtn = document.getElementById('rtp-add');
+    if(rtpBtn) rtpBtn.addEventListener('click', ()=>{
+      const ti = document.getElementById('rtp-t');
+      const di = document.getElementById('rtp-d');
+      const txt = String(ti.value||'').trim();
+      if(!txt){ ti.focus(); toast('Serve il nome dell\'infortunio'); return; }
+      b.inf.push({
+        id: 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+        d: di.value || todayISO(),
+        txt: txt,
+        st: 'recupero'
+      });
+      saveBio(); renderSheetBody(); renderKPIs(); renderGrid();
+      toast('Infortunio registrato: '+disp(pl.name));
     });
 
     const addBtn = document.getElementById('inf-add');
