@@ -442,6 +442,11 @@ table.ttbl td.d{ text-align:right; color:var(--faint); font-size:11px; white-spa
 .asy.w{ background:oklch(78% 0.15 85 / 0.12); border-color:oklch(78% 0.15 85 / 0.28); color:oklch(80% 0.14 85); }
 .asy.b{ background:oklch(62% 0.22 25 / 0.12); border-color:oklch(62% 0.22 25 / 0.28); color:oklch(72% 0.18 25); }
 .asy.g{ background:oklch(70% 0.18 152 / 0.12); border-color:oklch(70% 0.18 152 / 0.28); color:var(--green); }
+/* Il punteggio nella riga della gara: il colore dice com'e' finita senza
+   aggiungere una colonna. Pari resta del colore del testo, perche' il grigio
+   qui vorrebbe dire "spento" e un pareggio non e' un dato di serie B. */
+.gsc.vinta{ color:var(--green); }
+.gsc.persa{ color:oklch(72% 0.18 25); }
 .fms-tot{ display:flex; align-items:baseline; gap:8px; margin-bottom:12px; padding:10px 12px;
   background:var(--violet-bg); border:1px solid var(--violet-border); border-radius:10px; }
 .fms-tot b{ font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.4px; color:var(--violet2); line-height:1; }
@@ -1233,7 +1238,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const pl = PLAYERS.find(p=> p.name===shName);
     if(!pl){ host.innerHTML = ''; return; }
     const keep = host.scrollTop;
-    host.innerHTML = secCarico(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
+    /* Le gare stanno subito sotto il carico: sono le due facce della stessa
+       stagione, quanto ha lavorato e quanto ha giocato. */
+    host.innerHTML = secCarico(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
     host.scrollTop = keep; // mantiene la posizione tra i redraw
     wireSheet(pl);
   }
@@ -1882,6 +1889,93 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           '<button class="'+s.cls+(s.k===st?' on':'')+'" data-disp="'+esc(s.k)+'" aria-pressed="'+(s.k===st)+'">'+esc(s.l)+'</button>'
         ).join('')+
       '</div>'+
+    '</section>';
+  }
+
+  /* ---------- le gare di lei (sezione) ----------
+     Il risultato, i marcatori e chi ha giocato il primo tempo si scrivono nel
+     calendario, aprendo la partita, e finiscono in `rs_fio_gare` con la data
+     come chiave. Fino ad ora quel dato si leggeva solo li' dentro, nella
+     tabella riassuntiva di tutta la rosa: per sapere quanti goal aveva fatto
+     un'atleta bisognava uscire dalla sua scheda e cercarla in un elenco. Qui
+     torna dalla parte sua: quattro numeri e l'elenco delle gare in cui ha
+     inciso, senza doversi ricordare in quale giornata era.
+     Le presenze totali restano quelle del GPS, che stanno gia' nel Carico
+     stagione: qui si contano solo le gare segnate, cioe' quelle in cui il
+     tabellino e' stato scritto. Sono due numeri diversi e vanno detti diversi,
+     se no sembra che manchino delle partite. */
+  function gaStore(){
+    try{
+      const v = JSON.parse(localStorage.getItem(K('rs_fio_gare'))||'{}');
+      if(v && typeof v==='object' && !Array.isArray(v)) return v;
+    }catch(e){}
+    return {};
+  }
+  function gareDi(name){
+    const all = gaStore();
+    const out = [];
+    Object.keys(all).forEach(function(iso){
+      const r = all[iso];
+      if(!r || typeof r!=='object' || Array.isArray(r)) return;
+      const goals = Array.isArray(r.goals) ? r.goals : [];
+      const pt1   = Array.isArray(r.pt1) ? r.pt1 : [];
+      const miei  = goals.filter(function(g){ return g && g.n===name; });
+      const assist= goals.filter(function(g){ return g && g.a===name; });
+      const primo = pt1.indexOf(name) >= 0;
+      if(!miei.length && !assist.length && !primo) return;
+      const gf = Number(r.gf)||0, gs = Number(r.gs)||0;
+      out.push({
+        iso: iso, gf: gf, gs: gs,
+        esito: (gf>gs) ? 'vinta' : (gf<gs ? 'persa' : 'pari'),
+        opp: String(r.opp||''), casa: !!r.casa,
+        goal: miei.length, assist: assist.length, primo: primo,
+        minuti: miei.map(function(g){ return (g.m==null) ? null : Number(g.m); })
+      });
+    });
+    out.sort(function(a,b){ return a.iso<b.iso ? 1 : (a.iso>b.iso ? -1 : 0); });
+    return out;
+  }
+  function secGare(pl){
+    const list = gareDi(pl.name);
+    let goal = 0, assist = 0, primo = 0;
+    list.forEach(function(g){ goal += g.goal; assist += g.assist; if(g.primo) primo++; });
+
+    let corpo;
+    if(!list.length){
+      corpo = '<div class="sh-none">Nessun tabellino la nomina. Il risultato di una gara, '+
+        'i marcatori e chi ha giocato il primo tempo si segnano nel calendario, aprendo la partita.</div>';
+    }else{
+      corpo = '<div class="sh-stats">'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(list.length)+'</span><span class="ps-l">Gare</span></div>'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(primo)+'</span><span class="ps-l">1&#176; tempo</span></div>'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(goal)+'</span><span class="ps-l">Goal</span></div>'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(assist)+'</span><span class="ps-l">Assist</span></div>'+
+        '</div>'+
+        '<table class="ttbl"><tbody>'+ list.map(function(g){
+          /* Il punteggio si scrive come si legge sul tabellone: a sinistra chi
+             gioca in casa. Le gare segnate prima di questa versione non hanno
+             l'avversario dentro il record, e allora resta la sola data. */
+          const sx = g.casa ? g.gf : g.gs;
+          const dx = g.casa ? g.gs : g.gf;
+          const dove = g.opp ? (esc(g.opp)+(g.casa ? ' in casa' : ' fuori')) : '';
+          const fatti = [];
+          if(g.primo) fatti.push('1&#176; tempo');
+          if(g.goal){
+            const min = g.minuti.filter(function(m){ return m!=null && !isNaN(m); });
+            fatti.push((g.goal===1 ? '1 goal' : g.goal+' goal')+(min.length ? ' ('+min.map(function(m){ return m+"'"; }).join(', ')+')' : ''));
+          }
+          if(g.assist) fatti.push(g.assist===1 ? '1 assist' : g.assist+' assist');
+          return '<tr><td class="l">'+esc(fmtDay(g.iso))+
+              (dove ? '<span class="asy">'+dove+'</span>' : '')+'</td>'+
+            '<td class="v"><span class="gsc '+g.esito+'" title="Gara '+g.esito+'">'+sx+' - '+dx+'</span></td>'+
+            '<td class="d">'+(fatti.join(' &#183; ') || g.esito)+'</td></tr>';
+        }).join('') +'</tbody></table>';
+    }
+
+    return '<section class="sh-sec">'+
+      '<h3 class="sh-h">Le sue gare <span class="n">dai tabellini segnati</span></h3>'+
+      corpo+
+      '<a class="sh-link" href="calendario.html">Apri il calendario'+ARROW+'</a>'+
     '</section>';
   }
 
