@@ -263,6 +263,11 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   border-radius:var(--r); box-shadow: var(--shadow-sm); padding:11px 14px; cursor:pointer;
   transition: border-color .16s var(--ease), background .16s var(--ease); }
 .fxrow:hover{ border-color:var(--border3); background:var(--surface2); }
+/* La prossima gara e' l'unica riga che si cerca davvero aprendo la pagina:
+   qui si stacca dalle altre e dice quanto manca. */
+.fxrow.next{ border-color:var(--violet-border); background:var(--violet-bg); }
+.fxrow.next .fx-date{ color:var(--violet2); }
+.fx-tag.next{ background:var(--violet2); border:1px solid var(--violet2); color:#fff; }
 .fx-date{ flex:0 0 62px; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:.4px;
   color:var(--orange2); text-transform:capitalize; line-height:1.05; }
 .fx-teams{ flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); }
@@ -310,6 +315,17 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .gares .s.vinta{ color:var(--green); }
 .gares .s.pari{ color:var(--muted); }
 .gares .s.persa{ color:var(--orange2); }
+/* Le gare gia' giocate a cui manca il tabellino. Finche' il risultato non e'
+   scritto quella partita non entra in nessun conto, e la cosa non si vede da
+   nessuna parte: qui si vede, e il bottone apre proprio quella. */
+.gamiss{ margin-top:12px; padding-top:10px; border-top:1px dashed var(--border2); }
+.gamiss .lb{ font-size:11px; font-weight:700; letter-spacing:.03em; color:var(--orange2);
+  margin:0 0 4px; }
+.gamiss .go{ appearance:none; -webkit-appearance:none; background:none; border:0; padding:0;
+  flex:0 0 auto; font:inherit; font-size:11.5px; font-weight:700; color:var(--violet2);
+  cursor:pointer; }
+.gamiss .go:hover{ text-decoration:underline; }
+.gamiss .go:focus-visible{ outline:2px solid var(--violet2); outline-offset:2px; border-radius:4px; }
 
 /* ---------- footnote / toast / reveal ---------- */
 .foot-note{ max-width:1180px; margin:20px auto 0; padding:0 28px; font-size:11.5px; color:var(--faint); }
@@ -709,8 +725,8 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-gal .x{ flex:1 1 auto; min-width:120px; color:var(--ink); font-weight:600; }
 .pl-gal .a{ color:var(--muted); white-space:nowrap; }
 /* Il dialogo del risultato. Sopra i due gol, in mezzo le marcature, sotto chi
-   ha giocato il primo tempo: i minuti del GPS dicono chi e' uscita a meta'
-   partita, ma tra un 46 e un 48 la differenza la sa solo il mister. */
+   e' partita titolare: i minuti del GPS dicono quante ne ha giocate, ma chi
+   era in campo al fischio d'inizio lo sa solo il mister. */
 #pl-ga{ width:min(600px, calc(100vw - 24px)); }
 .pl-gaform{ display:grid; grid-template-columns:1fr 78px 78px 1fr; gap:9px; align-items:center;
   padding:11px; border:1px solid var(--border2); border-radius:11px; background:var(--surface2); }
@@ -1230,7 +1246,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   </form>
 </dialog>
 
-<!-- dialog risultato della gara (P192): gol, marcatrici, assist e primo tempo -->
+<!-- dialog risultato della gara (P192): gol, marcatrici, assist e titolari -->
 <dialog id="pl-ga" class="pl-dialog">
   <form class="pl-dform" id="pl-gaform" method="dialog">
     <div class="pl-dhead">
@@ -1242,6 +1258,15 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       <div class="pl-gaform" id="pl-gasc"></div>
     </div>
     <div class="pl-drow">
+      <label for="pl-gaslot">Quando si e' giocato</label>
+      <select id="pl-gaslot">
+        <option value="">Non segnato</option>
+        <option value="AM">Mattina (AM)</option>
+        <option value="PM">Pomeriggio (PM)</option>
+        <option value="Sera">Sera</option>
+      </select>
+    </div>
+    <div class="pl-drow">
       <label>Chi ha segnato</label>
       <div class="pl-gagl" id="pl-gagl"></div>
       <div class="pl-gapth">
@@ -1250,7 +1275,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       </div>
     </div>
     <div class="pl-drow">
-      <label>Chi ha giocato il primo tempo</label>
+      <label>Chi e' partita titolare</label>
       <div class="pl-gapt">
         <div class="pl-plsel" id="pl-gaptp"></div>
         <div class="pl-gapth">
@@ -1832,6 +1857,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const host = document.getElementById('fixlist');
     const fx = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
     document.getElementById('fix-n').textContent = fx.length + (fx.length===1?' partita':' partite');
+    /* La prima gara non ancora passata e' la prossima: si evidenzia e si dice
+       quanti giorni mancano, che e' il conto che si fa a mente ogni volta. */
+    const nextF = fx.find(function(f){ return f.data >= TODAY_KEY; });
+    const nextIso = nextF ? nextF.data : '';
     host.innerHTML = fx.map(f=>{
       const dt = parseDate(f.data);
       const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : f.data;
@@ -1850,7 +1879,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
       }else{
         gtag = '<span class="fx-tag '+(played?'done':'plan')+'">'+(played?'giocata':'in programma')+'</span>';
       }
-      return '<div class="fxrow" data-date="'+esc(f.data)+'" role="button" tabindex="0">'+
+      const isNext = (f.data === nextIso);
+      if(isNext){
+        const td = parseDate(TODAY_KEY), fd = parseDate(f.data);
+        const gg = (td && fd) ? Math.round((fd - td) / 86400000) : null;
+        const q = (gg===0) ? 'oggi' : (gg===1 ? 'domani' : (gg!=null ? 'fra '+gg+' giorni' : 'prossima'));
+        gtag = '<span class="fx-tag next">'+esc(q)+'</span>' + (grec ? gtag : '');
+      }
+      return '<div class="fxrow'+(isNext?' next':'')+'" data-date="'+esc(f.data)+'" role="button" tabindex="0">'+
         '<span class="fx-date">'+esc(dlab)+'</span>'+
         '<span class="fx-teams">'+
           '<span class="'+(casa?'fx-fio':'')+'">'+esc(homeName)+'</span>'+
@@ -2860,6 +2896,21 @@ window.RS_ROSTER = window.RS_ROSTER || [
   }
   function plAfterMutate(){ plRender(); }
 
+  /* Lo slot di una giornata arriva dal nome del file GPS, e quando li' dentro
+     non c'e' ne' AM ne' PM la pipeline scrive AM per riempire il campo. Sulle
+     sedute ci sta, sulle partite no: i file delle gare non hanno mai la sigla
+     e quell'AM se lo e' inventato (la Fiorentina-Roma del 20/09 era di
+     pomeriggio). Quindi per una gara vale solo la parte di giornata che ha
+     segnato il mister nel tabellino; se non l'ha segnata, non si scrive
+     niente, che e' piu' onesto di un'ipotesi. */
+  function slotShow(s){
+    if(!s) return '';
+    if(s.is_match){
+      const r = gaOf(s);
+      return (r && r.slot) ? String(r.slot) : '';
+    }
+    return s.slot || '';
+  }
   // ---- render chip ----
   function plChipHTML(s, compact){
     const manual = !!s.manual;
@@ -2883,7 +2934,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(isGara) dot = 'var(--orange)';
     else if(isRiposo) dot = 'var(--faint)';
     else dot = (pct!=null) ? loadColorOk(pct) : 'var(--violet2)';
-    const slot = s.slot ? '<span class="pl-cslot">'+esc(s.slot)+'</span>' : '';
+    const sl = slotShow(s);
+    const slot = sl ? '<span class="pl-cslot">'+esc(sl)+'</span>' : '';
     let ttl = plTitle(s);
     let badges = '';
     if(plan && s.group) badges += '<span class="pl-gbadge">'+esc(s.group)+'</span>';
@@ -4246,7 +4298,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       }).join('')+'</ul>';
     }
     const bits = [];
-    if(pt1.length) bits.push('<b>'+pt1.length+'</b> in campo dal primo minuto');
+    if(pt1.length) bits.push('<b>'+pt1.length+'</b> '+(pt1.length===1?'titolare':'titolari'));
     const gf = Number(r.gf)||0;
     if(gf && goals.length !== gf) bits.push('<b>'+goals.length+'</b> '+(goals.length===1?'marcatrice segnata':'marcatrici segnate')+' su '+gf);
     return '<div class="sdet">'+
@@ -4312,11 +4364,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
   function gaRenderPtn(){
     const el = document.getElementById('pl-gaptn'); if(!el) return;
     const n = gaDraft.pt1.length;
-    el.innerHTML = n ? ('<b>'+n+'</b> '+(n===1?'ha giocato il primo tempo':'hanno giocato il primo tempo'))
-                     : 'Primo tempo non segnato';
+    el.innerHTML = n ? ('<b>'+n+'</b> '+(n===1?'titolare':'titolari'))
+                     : 'Titolari non segnate';
   }
   /* Il chip porta i minuti del GPS: chi ne ha 60 contro 30 si riconosce da
-     sola, il segno serve per il 46 contro 48 dove i minuti non bastano. */
+     sola, il segno serve per chi e' entrata presto e i minuti non bastano. */
   function gaRenderPt(){
     const host = document.getElementById('pl-gaptp'); if(!host) return;
     const list = rosterList();
@@ -4421,6 +4473,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       }) : [],
       pt1: (r && Array.isArray(r.pt1)) ? r.pt1.slice() : []
     };
+    const sl = document.getElementById('pl-gaslot');
+    if(sl) sl.value = (r && r.slot) ? String(r.slot) : '';
     const dl = document.getElementById('pl-gadate');
     if(dl){
       const dt = parseDate(s.data);
@@ -4455,13 +4509,18 @@ window.RS_ROSTER = window.RS_ROSTER || [
        senza queste due voci avrebbero la data e il punteggio ma non contro chi
        si e' giocato. Le partite segnate prima non ce l'hanno, e chi legge deve
        reggere la loro assenza. */
+    const sl = document.getElementById('pl-gaslot');
+    const slot = sl ? String(sl.value||'') : '';
     const rec = {
       gf: Math.max(0, Math.min(30, Math.round(Number(gaDraft.gf)||0))),
       gs: Math.max(0, Math.min(30, Math.round(Number(gaDraft.gs)||0))),
       goals: goals,
       pt1: gaDraft.pt1.slice(),
       opp: String(t.opp||''),
-      casa: !!t.casa
+      casa: !!t.casa,
+      /* Mattina o pomeriggio la sa solo il mister: il file GPS della gara non
+         lo dice mai. Se resta vuoto, in giro non si scrive nessuno slot. */
+      slot: (slot==='AM' || slot==='PM' || slot==='Sera') ? slot : ''
     };
     gaSet(gaCur.data, rec);
     gaCur = null;
@@ -4479,8 +4538,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     out.sort(function(a,b){ return a.data<b.data?-1:a.data>b.data?1:0; });
     return out;
   }
-  /* Una gara conta per un'atleta se ha minuti nel GPS, se e' segnata nel primo
-     tempo o se compare nel tabellino: sono i tre modi che abbiamo di sapere
+  /* Una gara conta per un'atleta se ha minuti nel GPS, se e' segnata fra le
+     titolari o se compare nel tabellino: sono i tre modi che abbiamo di sapere
      che era in campo. */
   function gaReportRows(list){
     const tot = {};
@@ -4528,7 +4587,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       a += '<div class="garep-e">Ancora niente da mettere in tabella. I minuti arrivano dai dati GPS della gara, '+
         'goal e assist si scrivono aprendo la partita nel calendario e segnando il risultato.</div>';
     }else{
-      a += '<table class="atbl"><thead><tr><th>Atleta</th><th class="r">PG</th><th class="r">1T</th>'+
+      a += '<table class="atbl"><thead><tr><th>Atleta</th><th class="r">PG</th>'+
+        '<th class="r" title="Partite da titolare">Tit</th>'+
         '<th class="r">Min</th><th class="r">Goal</th><th class="r">Assist</th></tr></thead><tbody>'+
         rows.map(function(t){
           return '<tr><td class="nm">'+esc(plNome(t.n))+'</td>'+
@@ -4553,9 +4613,33 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '</li>';
       }).join('')+'</ul>';
     }
+    /* Le giocate senza tabellino. Sono quelle che fanno sembrare sbagliati i
+       conti sopra: PG, goal e assist non le contano finche' non le segni. */
+    GA_MISS = list.filter(function(s){ return !gaOf(s); });
+    if(GA_MISS.length){
+      b += '<div class="gamiss"><p class="lb">'+
+        (GA_MISS.length===1 ? 'Una gara giocata senza risultato' : GA_MISS.length+' gare giocate senza risultato')+
+        '</p><ul class="gares">'+ GA_MISS.map(function(s, i){
+          const t = gaTeams(s), dt = parseDate(s.data);
+          return '<li>'+
+            '<span class="d">'+esc(dt ? DTF_SHORT.format(dt).replace('.','') : s.data)+'</span>'+
+            '<span class="o">'+esc(t.opp)+'</span>'+
+            '<button type="button" class="go" data-gamiss="'+i+'">Segna'+'</button>'+
+          '</li>';
+        }).join('')+'</ul></div>';
+    }
     b += '</div>';
     host.innerHTML = a + b;
   }
+  /* Le gare da segnare vengono da un elenco costruito un attimo fa: si tiene
+     l'indice, non il nodo, cosi' il pannello si puo' ridisegnare quando vuole. */
+  let GA_MISS = [];
+  document.addEventListener('click', function(ev){
+    const b = ev.target.closest ? ev.target.closest('[data-gamiss]') : null;
+    if(!b) return;
+    const s = GA_MISS[+b.getAttribute('data-gamiss')];
+    if(s) gaOpen(s);
+  });
 
   function plDetBody(s){
     let h = '';
@@ -4573,7 +4657,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }
     if(!s.only_fix){
       const bits = [];
-      if(s.slot) bits.push('<span>'+esc(s.slot)+'</span>');
+      const sld = slotShow(s);
+      if(sld) bits.push('<span>'+esc(sld)+'</span>');
       /* Su una partita il tipo lo dicono gia' le pillole della competizione. */
       if(!s.fix && !s.is_match) bits.push('<span>'+esc(KIND_LABEL[s.kind] || 'Seduta')+'</span>');
       const p = pctOf(s);

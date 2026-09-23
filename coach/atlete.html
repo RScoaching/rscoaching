@@ -430,6 +430,11 @@ select.picker:hover{ border-color:var(--border3); }
 table.ttbl.fuori{ margin-bottom:12px; }
 table.ttbl.fuori td{ padding:5px 0; }
 table.ttbl.fuori td.d{ padding-left:8px; }
+table.ttbl.pres{ margin-top:10px; }
+table.ttbl.pres td{ padding:5px 0; }
+table.ttbl.pres td.d{ padding-left:8px; }
+table.ttbl.pres tr.ass td{ color:var(--faint); }
+.sh-cap{ margin:10px 0 0; font-size:11.5px; line-height:1.5; color:var(--faint); }
 .tgrp{ margin-bottom:14px; }
 .tgrp:last-child{ margin-bottom:0; }
 .tgrp-h{ font-size:11.5px; font-weight:700; color:var(--violet2); margin-bottom:6px; }
@@ -996,6 +1001,57 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // una volta sola. Qui si usa la rosa completa, fuori rosa comprese, perche'
   // questa e' l'unica pagina che le deve poter rimettere dentro.
   // I minuti, i chilometri e le presenze restano quelli del carico GPS.
+  // Le giornate di squadra della stagione. Nel carico ogni atleta ha le sue
+  // righe giorno: quelle senza sigla sono le sedute fatte col gruppo, quelle
+  // con la sigla ("16PM rtp") sono state fatte lo stesso giorno ma altrove.
+  // Una giornata conta come seduta di squadra se almeno un'atleta quel giorno
+  // era col gruppo: cosi' un rtp isolato non diventa un allenamento di squadra
+  // a cui tutte le altre risultano assenti.
+  function teamDays(){
+    const src = S.players || {};
+    const seen = Object.create(null);
+    Object.keys(src).forEach(function(n){
+      ((src[n]||{}).months||[]).forEach(function(m){
+        (m.rows||[]).forEach(function(r){
+          if(r.type!=='day') return;
+          const lab = String(r.label||'');
+          if(SOLO_RE.test(lab)) return;
+          seen[String(m.key||'')+'|'+lab] = 1;
+        });
+      });
+    });
+    return seen;
+  }
+  const TEAM_DAYS = teamDays();
+  const TEAM_DAYS_N = Object.keys(TEAM_DAYS).length;
+  // Dove si trovava un'atleta nelle giornate di squadra. E' il conto che a fine
+  // stagione si fa a mano sfogliando i fogli: quante col gruppo, quante in
+  // differenziata, quante col rieducatore, quante in prima squadra, quante in
+  // nazionale, e quante non c'era proprio.
+  function presenze(months){
+    const mine = Object.create(null);
+    (months||[]).forEach(function(m){
+      (m.rows||[]).forEach(function(r){
+        if(r.type!=='day') return;
+        const lab = String(r.label||'');
+        const sg = SOLO_RE.exec(lab);
+        const base = sg ? lab.slice(0, sg.index) : lab;
+        const k = String(m.key||'')+'|'+base;
+        // Col gruppo vince su tutto: se quel giorno ha entrambe le righe,
+        // quella che conta e' la seduta di squadra.
+        if(!sg) mine[k] = '';
+        else if(mine[k] === undefined) mine[k] = sg[1];
+      });
+    });
+    const out = { squadra:0, diff:0, rtp:0, FT:0, naz:0, assente:0 };
+    Object.keys(TEAM_DAYS).forEach(function(k){
+      const v = mine[k];
+      if(v === undefined) out.assente++;
+      else if(v === '') out.squadra++;
+      else out[v]++;
+    });
+    return out;
+  }
   function buildPlayers(){
     const src = S.players || {};
     const rosa = (typeof window.fioRosterFull==='function')
@@ -1028,7 +1084,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
       const snapRole = normRole(p.role || rp.role || '');
       const custom = rp.tipo==='manuale' || Object.prototype.hasOwnProperty.call(customPlayers, name);
-      return { name, snapRole, min, dist, sedute, partite, solo, custom, tipo: rp.tipo || '' };
+      return { name, snapRole, min, dist, sedute, partite, solo,
+        pres: presenze(months), custom, tipo: rp.tipo || '' };
     });
     return result.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
   }
@@ -1262,7 +1319,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const keep = host.scrollTop;
     /* Le gare stanno subito sotto il carico: sono le due facce della stessa
        stagione, quanto ha lavorato e quanto ha giocato. */
-    host.innerHTML = secCarico(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
+    host.innerHTML = secCarico(pl) + secPresenze(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
     host.scrollTop = keep; // mantiene la posizione tra i redraw
     wireSheet(pl);
   }
@@ -1295,6 +1352,52 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!righe.length) return '';
     return '<p class="sh-sub">Fuori dal gruppo, gia\' contate nelle sedute</p>'+
       '<table class="ttbl fuori">'+righe.join('')+'</table>';
+  }
+
+  /* Le presenze della stagione, contate da sole. Finora "quante ne ha fatte"
+     si sapeva solo a occhio, sfogliando il carico mese per mese: qui sta tutto
+     in una tabella, e i numeri fanno somma esatta con le giornate di squadra.
+     Il fisio non c'e': la disponibilita' qui sotto e' una fotografia di oggi,
+     non uno storico, e inventarsi un conteggio sarebbe peggio che non darlo.
+     Chi quel giorno era dal fisioterapista e non ha lavorato risulta assente,
+     che e' quello che dicono i dati. */
+  const PRES_ORD = [
+    ['squadra', 'Col gruppo'],
+    ['diff',    'Differenziato'],
+    ['rtp',     'Col rieducatore (rtp)'],
+    ['FT',      'In prima squadra'],
+    ['naz',     'In nazionale'],
+    ['assente', 'Assente']
+  ];
+  function secPresenze(pl){
+    const p = pl.pres || {};
+    if(!TEAM_DAYS_N){
+      return '<section class="sh-sec">'+
+        '<h3 class="sh-h">Presenze stagione</h3>'+
+        '<div class="sh-none">Nessuna giornata di squadra nei dati GPS caricati.</div>'+
+      '</section>';
+    }
+    const pres = TEAM_DAYS_N - (p.assente||0);
+    const pc = Math.round(pres * 100 / TEAM_DAYS_N);
+    const righe = PRES_ORD
+      .filter(function(r){ return (p[r[0]]||0) > 0; })
+      .map(function(r){
+        return '<tr'+(r[0]==='assente' ? ' class="ass"' : '')+'>'+
+          '<td class="l">'+esc(r[1])+'</td>'+
+          '<td class="v">'+NF0.format(p[r[0]])+'</td>'+
+          '<td class="d">'+(p[r[0]]===1 ? 'giornata' : 'giornate')+'</td></tr>';
+      }).join('');
+    return '<section class="sh-sec">'+
+      '<h3 class="sh-h">Presenze stagione <span class="n">su '+NF0.format(TEAM_DAYS_N)+' giornate di squadra</span></h3>'+
+      '<div class="sh-stats">'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(pres)+'</span><span class="ps-l">Presente</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(p.assente||0)+'</span><span class="ps-l">Assente</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(pc)+'%</span><span class="ps-l">Presenza</span></div>'+
+      '</div>'+
+      (righe ? '<table class="ttbl pres">'+righe+'</table>' : '')+
+      '<p class="sh-cap">Presente vuol dire che quel giorno ha lavorato, anche lontano dal gruppo. '+
+        'Chi era dal fisioterapista senza lavorare rientra fra le assenze: i dati GPS non lo distinguono.</p>'+
+    '</section>';
   }
 
   // sezione 2: anagrafica
@@ -1931,7 +2034,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
 
   /* ---------- le gare di lei (sezione) ----------
-     Il risultato, i marcatori e chi ha giocato il primo tempo si scrivono nel
+     Il risultato, i marcatori e chi e' partita titolare si scrivono nel
      calendario, aprendo la partita, e finiscono in `rs_fio_gare` con la data
      come chiave. Fino ad ora quel dato si leggeva solo li' dentro, nella
      tabella riassuntiva di tutta la rosa: per sapere quanti goal aveva fatto
@@ -1981,11 +2084,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let corpo;
     if(!list.length){
       corpo = '<div class="sh-none">Nessun tabellino la nomina. Il risultato di una gara, '+
-        'i marcatori e chi ha giocato il primo tempo si segnano nel calendario, aprendo la partita.</div>';
+        'i marcatori e chi e\' partita titolare si segnano nel calendario, aprendo la partita.</div>';
     }else{
       corpo = '<div class="sh-stats">'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(list.length)+'</span><span class="ps-l">Gare</span></div>'+
-          '<div class="pstat"><span class="ps-v">'+NF0.format(primo)+'</span><span class="ps-l">1&#176; tempo</span></div>'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(primo)+'</span><span class="ps-l">Da titolare</span></div>'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(goal)+'</span><span class="ps-l">Goal</span></div>'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(assist)+'</span><span class="ps-l">Assist</span></div>'+
         '</div>'+
@@ -1997,7 +2100,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const dx = g.casa ? g.gs : g.gf;
           const dove = g.opp ? (esc(g.opp)+(g.casa ? ' in casa' : ' fuori')) : '';
           const fatti = [];
-          if(g.primo) fatti.push('1&#176; tempo');
+          if(g.primo) fatti.push('titolare');
           if(g.goal){
             const min = g.minuti.filter(function(m){ return m!=null && !isNaN(m); });
             fatti.push((g.goal===1 ? '1 goal' : g.goal+' goal')+(min.length ? ' ('+min.map(function(m){ return m+"'"; }).join(', ')+')' : ''));
