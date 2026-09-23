@@ -317,6 +317,18 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .at-val.up{ color:var(--orange2); }
 .at-val.dn{ color:oklch(74% 0.12 230); }
 .at-sub{ font-size:11px; color:var(--faint); margin-top:4px; }
+/* ---------- esposizione alla velocita' (solo atleta) ---------- */
+.vmax-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:2px 0 9px; }
+.vmax-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:18px; letter-spacing:.4px; color:var(--ink); }
+.vmax-head span{ font-size:11.5px; color:var(--faint); }
+/* quattro riquadri in riga: sotto i 900px scendono a due, sul telefono a uno */
+.vmax-stats{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:18px; }
+@media (max-width:900px){ .vmax-stats{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media (max-width:520px){ .vmax-stats{ grid-template-columns:1fr; } }
+.vm-tile.warn{ background:oklch(68% 0.19 42 / 0.10); border-color:oklch(68% 0.19 42 / 0.30); }
+.vm-tile.warn .at-val{ color:var(--orange2); }
+.vmax-warn{ margin:-8px 0 18px; padding:9px 12px; border-radius:var(--r); font-size:11.5px; line-height:1.5;
+  color:var(--orange2); background:oklch(68% 0.19 42 / 0.10); border:1px solid oklch(68% 0.19 42 / 0.28); }
 /* ---------- ACWR parametro per parametro ---------- */
 .agrid-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:2px 0 9px; }
 .agrid-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:18px; letter-spacing:.4px; color:var(--ink); }
@@ -1311,6 +1323,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
         </div>
         <div class="card-body" style="padding-top:6px">
           <div class="acwr-stats" id="acwr-stats"></div>
+          <div id="vmax-box"></div>
           <div class="agrid-head">
             <h3>ACWR per parametro</h3>
             <span id="acwr-grid-hint"></span>
@@ -3546,7 +3559,82 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
   }
+  /* Esposizione alla velocita'. Il carico dice quanti metri ha corso, non quanto
+     veloce: la colonna SMax sta nel foglio da sempre ma in mezzo a venti colonne, e
+     per sapere da quanto tempo un'atleta non tocca la sua punta bisognava scorrere
+     la griglia riga per riga. Qui escono due numeri soli: da quanti giorni non
+     arriva al 90% e da quanti non arriva al 95% della sua massima di stagione. Le
+     partite restano fuori del tutto, anche dal calcolo della punta: in gara la
+     velocita' la fa la partita, non la programmazione, e quello che interessa e'
+     se in settimana l'ha stimolata. La soglia e' sulla sua massima, non su una
+     tabella di squadra: due atlete con punte diverse non corrono alla stessa
+     velocita'. Si vede solo con un'atleta selezionata, perche' di squadra la punta
+     sarebbe quella della piu' veloce e non direbbe niente a nessuna. */
+  const VMAX_IDX = M.indexOf('SMax (kmh)');
+  const VMAX_GG_ALLARME = 10;
+  const NFKM = new Intl.NumberFormat('it-IT', { minimumFractionDigits:1, maximumFractionDigits:1 });
+  function vmaxDays(){
+    if(VMAX_IDX < 0 || state.level !== 'player') return null;
+    const p = S.players && S.players[state.player];
+    const months = (p && p.months) || [];
+    const gg = [];
+    months.forEach(mon=>{
+      let wk = '';
+      (mon.rows||[]).forEach(r=>{
+        if(r.type==='wk_header'){ wk = r.label||''; return; }
+        if(r.type!=='day') return; // niente partite: contano solo gli allenamenti
+        const v = (r.v && r.v[VMAX_IDX] != null) ? +r.v[VMAX_IDX] : 0;
+        if(!(v > 0)) return;
+        const d = rowDate(r, wk, mon.key);
+        gg.push({ t: d ? d.getTime() : 0, d: d, v: v });
+      });
+    });
+    if(!gg.length) return null;
+    gg.sort((a,b)=> a.t - b.t);
+    let pk = gg[0];
+    gg.forEach(x=>{ if(x.v > pk.v) pk = x; });
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    function since(q){
+      let last = null;
+      gg.forEach(x=>{ if(x.v >= pk.v*q && (!last || x.t > last.t)) last = x; });
+      if(!last || !last.d) return { gg:null, last:null };
+      return { gg: Math.max(0, Math.round((oggi - last.d)/86400000)), last: last };
+    }
+    return { pk: pk, n: gg.length, s90: since(0.90), s95: since(0.95) };
+  }
+  function vmaxTile(o, q){
+    const s = q===90 ? o.s90 : o.s95;
+    const soglia = o.pk.v * (q/100);
+    const alto = (s.gg != null && s.gg >= VMAX_GG_ALLARME);
+    const val = s.gg == null ? '-' : (s.gg === 0 ? 'oggi' : NF0.format(s.gg));
+    const sub = s.gg == null
+      ? 'mai sopra '+NFKM.format(soglia)+' km/h in allenamento'
+      : (s.last ? ('ultima volta il '+shortD(s.last.d)+' a '+NFKM.format(s.last.v)+' km/h') : '');
+    return '<div class="acwr-tile vm-tile'+(alto?' warn':'')+'">'+
+      '<div class="at-lbl">Giorni dal '+q+'%</div>'+
+      '<div class="at-val tnum">'+esc(val)+(s.gg!=null && s.gg>0 ? '<small>gg</small>' : '')+'</div>'+
+      '<div class="at-sub">'+esc(sub)+'</div></div>';
+  }
+  function renderVmax(){
+    const host = document.getElementById('vmax-box'); if(!host) return;
+    const o = vmaxDays();
+    if(!o){ host.innerHTML = ''; return; }
+    const alto = (o.s90.gg != null && o.s90.gg >= VMAX_GG_ALLARME);
+    host.innerHTML = '<div class="vmax-head"><h3>Esposizione alla velocita\'</h3>'+
+        '<span>da quanti giorni non arriva vicino alla sua punta, solo allenamenti: le partite non contano</span></div>'+
+      '<div class="vmax-stats">'+
+        '<div class="acwr-tile"><div class="at-lbl">Punta allenamento</div>'+
+          '<div class="at-val tnum">'+esc(NFKM.format(o.pk.v))+'<small>km/h</small></div>'+
+          '<div class="at-sub">'+(o.pk.d ? 'del '+esc(shortD(o.pk.d))+' &#183; ' : '')+NF0.format(o.n)+(o.n===1?' allenamento':' allenamenti')+' col GPS</div></div>'+
+        vmaxTile(o, 90)+ vmaxTile(o, 95)+
+        '<div class="acwr-tile"><div class="at-lbl">Le soglie</div>'+
+          '<div class="at-val tnum">'+esc(NFKM.format(o.pk.v*0.90))+'<small>e '+esc(NFKM.format(o.pk.v*0.95))+' km/h</small></div>'+
+          '<div class="at-sub">90% e 95% della sua punta, non di una tabella</div></div>'+
+      '</div>'+
+      (alto ? '<p class="vmax-warn">Sono '+NF0.format(o.s90.gg)+' giorni che in allenamento non tocca il 90% della sua punta. Prima di uno sprint massimale serve una giornata di richiamo.</p>' : '');
+  }
   function renderAnalytics(){
+    renderVmax();
     const idx = state.acwrIdx;
     const weeks = seasonWeeks(idx);
     const acwr = computeACWR(weeks);

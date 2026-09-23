@@ -1496,48 +1496,53 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const NFKM = new Intl.NumberFormat('it-IT', { minimumFractionDigits:1, maximumFractionDigits:1 });
   function kmh(v){ return NFKM.format(v); }
   function secVelocita(pl){
-    const all = pl.vmax || [];
+    /* Le partite restano fuori, anche dal calcolo della punta: in gara la velocita'
+       la fa la partita, non la programmazione, e quello che serve sapere e' se in
+       settimana quella punta e' stata stimolata. Con la gara dentro, un'atleta che
+       la domenica tira e poi in settimana non corre mai risultava a posto. */
+    const all = (pl.vmax || []).filter(function(x){ return !x.gara; });
     if(!all.length) return '';
     let pk = all[0];
     all.forEach(function(x){ if(x.v > pk.v) pk = x; });
     const s90 = pk.v * 0.90, s95 = pk.v * 0.95;
-    let n90 = 0, n95 = 0, hs = 0, last90 = null;
+    let n90 = 0, n95 = 0, hs = 0, last90 = null, last95 = null;
     all.forEach(function(x){
       hs += x.hs || 0;
       if(x.v >= s90){ n90++; if(!last90 || x.t > last90.t) last90 = x; }
-      if(x.v >= s95) n95++;
+      if(x.v >= s95){ n95++; if(!last95 || x.t > last95.t) last95 = x; }
     });
     const oggi = new Date(); oggi.setHours(0,0,0,0);
-    const gg = (last90 && last90.d) ? Math.round((oggi - last90.d) / 86400000) : null;
-    const ggTxt = gg == null ? '-' : (gg <= 0 ? 'oggi' : NF0.format(gg));
-    const ggLab = gg == null ? 'Mai sopra il 90%' : (gg <= 0 ? 'Ultima volta sopra il 90%' : (gg === 1 ? 'Giorno dal 90%' : 'Giorni dal 90%'));
+    function daFrom(last){ return (last && last.d) ? Math.max(0, Math.round((oggi - last.d) / 86400000)) : null; }
+    const gg = daFrom(last90), gg95 = daFrom(last95);
+    function ggTxt(n){ return n == null ? '-' : (n <= 0 ? 'oggi' : NF0.format(n)); }
+    function ggLab(n, q){ return n == null ? ('Mai sopra il '+q+'%') : (n <= 0 ? ('Ultima volta sopra il '+q+'%') : (n === 1 ? ('Giorno dal '+q+'%') : ('Giorni dal '+q+'%'))); }
     // le ultime sei giornate, dalla piu' recente: la lettura che si fa a occhio
     const ult = all.slice(-6).reverse().map(function(x){
       const pc = Math.round(x.v * 100 / pk.v);
-      const dett = x.gara ? 'gara' : (x.sg ? SOLO_LAB[x.sg] : 'seduta');
+      const dett = x.sg ? SOLO_LAB[x.sg] : 'seduta';
       return '<tr'+(pc >= 90 ? ' class="hi"' : '')+'>'+
         '<td class="l">'+esc(shortD(x.d) || x.lab)+' &#183; '+esc(dett)+'</td>'+
         '<td class="v">'+esc(kmh(x.v))+' km/h</td>'+
         '<td class="d">'+NF0.format(pc)+'%</td></tr>';
     }).join('');
     const nota = (gg != null && gg >= VMAX_GG_ALLARME)
-      ? '<p class="sh-warn">Sono '+NF0.format(gg)+' giorni che non tocca il 90% della sua punta. Prima di uno sprint massimale serve almeno una giornata di richiamo.</p>'
+      ? '<p class="sh-warn">Sono '+NF0.format(gg)+' giorni che in allenamento non tocca il 90% della sua punta. Prima di uno sprint massimale serve almeno una giornata di richiamo.</p>'
       : '';
     return '<section class="sh-sec">'+
       '<h3 class="sh-h">Esposizione alla velocita\' <span class="n">su '+NF0.format(all.length)+
-        (all.length===1 ? ' giornata' : ' giornate')+' col GPS</span></h3>'+
+        (all.length===1 ? ' allenamento' : ' allenamenti')+' col GPS</span></h3>'+
       '<div class="sh-stats">'+
         '<div class="pstat"><span class="ps-v">'+esc(kmh(pk.v))+'</span><span class="ps-l">Punta km/h</span></div>'+
-        '<div class="pstat"><span class="ps-v">'+esc(ggTxt)+'</span><span class="ps-l">'+esc(ggLab)+'</span></div>'+
-        '<div class="pstat"><span class="ps-v">'+NF0.format(n90)+'</span><span class="ps-l">Giornate &#8805;90%</span></div>'+
-        '<div class="pstat"><span class="ps-v">'+NF0.format(n95)+'</span><span class="ps-l">Giornate &#8805;95%</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+esc(ggTxt(gg))+'</span><span class="ps-l">'+esc(ggLab(gg, 90))+'</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+esc(ggTxt(gg95))+'</span><span class="ps-l">'+esc(ggLab(gg95, 95))+'</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(n90)+' / '+NF0.format(n95)+'</span><span class="ps-l">Sedute &#8805;90% e &#8805;95%</span></div>'+
       '</div>'+
       nota+
-      (ult ? '<p class="sh-sub">Ultime giornate, con la punta del giorno</p><table class="ttbl vmax">'+ult+'</table>' : '')+
-      '<p class="sh-cap">La punta della stagione e\' '+esc(kmh(pk.v))+' km/h'+
-        (pk.d ? ' del '+esc(shortD(pk.d)) : '')+(pk.gara ? ' in gara' : '')+
-        '. Le soglie sono il 90% ('+esc(kmh(s90))+' km/h) e il 95% ('+esc(kmh(s95))+' km/h) della sua punta, non di una tabella di squadra.'+
-        (hs > 0 ? ' In stagione ha corso '+NF0.format(Math.round(hs))+' m sopra il 90% della massima.' : '')+
+      (ult ? '<p class="sh-sub">Ultimi allenamenti, con la punta del giorno</p><table class="ttbl vmax">'+ult+'</table>' : '')+
+      '<p class="sh-cap">La punta in allenamento e\' '+esc(kmh(pk.v))+' km/h'+
+        (pk.d ? ' del '+esc(shortD(pk.d)) : '')+
+        '. Le soglie sono il 90% ('+esc(kmh(s90))+' km/h) e il 95% ('+esc(kmh(s95))+' km/h) della sua punta, non di una tabella di squadra. Le partite non entrano nel conto: in gara la velocita\' la detta la partita.'+
+        (hs > 0 ? ' In allenamento ha corso '+NF0.format(Math.round(hs))+' m sopra il 90% della massima.' : '')+
       '</p>'+
     '</section>';
   }
