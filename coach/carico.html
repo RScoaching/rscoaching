@@ -3829,6 +3829,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const v = m[mk+'||'+scope+'||'+label];
     return (typeof v === 'number') ? v : null;
   }
+  // alcuni export GPS portano la colonna RPE gia' compilata: stessa regola,
+  // vale solo dove non c'e' un numero scritto a mano
+  function rpeFile(mk, scope, label){
+    const m = S && S.rpe_file;
+    if(!m || scope === '_squadra') return null;
+    const v = m[mk+'||'+scope+'||'+label];
+    return (typeof v === 'number') ? v : null;
+  }
   // il numero scritto sulla singola atleta vince; se non c'e' vale quello scritto sulla squadra,
   // cosi' l'RPE di una seduta si puo' battere una volta sola e resta buono per tutte
   function rpeOf(mk, label){
@@ -3840,6 +3848,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(typeof t === 'number') return { v:t, own:false, from:'Preso dall\'RPE scritto sulla squadra' };
       const n = rpeNaz(mk, sc, label);
       if(n != null) return { v:n, own:false, from:'Arriva dal report della nazionale' };
+      const f = rpeFile(mk, sc, label);
+      if(f != null) return { v:f, own:false, from:'Arriva dal file GPS della seduta' };
     }
     return { v:null, own:true, from:'' };
   }
@@ -3986,7 +3996,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         let inh = null;
         if(own == null){
           const t = store[rpeKeyOf(c.mk, '_squadra', c.label)];
-          inh = (typeof t==='number') ? t : rpeNaz(c.mk, n, c.label);
+          inh = (typeof t==='number') ? t : (rpeNaz(c.mk, n, c.label) != null ? rpeNaz(c.mk, n, c.label) : rpeFile(c.mk, n, c.label));
         }
         body += '<td><input class="rpe-in'+(own==null && inh!=null ? ' borrowed' : '')+
                 '" type="number" min="0" max="10" step="0.5" inputmode="decimal"'+
