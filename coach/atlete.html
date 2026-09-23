@@ -435,6 +435,14 @@ table.ttbl.pres td{ padding:5px 0; }
 table.ttbl.pres td.d{ padding-left:8px; }
 table.ttbl.pres tr.ass td{ color:var(--faint); }
 .sh-cap{ margin:10px 0 0; font-size:11.5px; line-height:1.5; color:var(--faint); }
+/* Esposizione alla velocita': le giornate sopra il 90% della propria punta
+   restano in evidenza, il resto sta indietro come nelle altre tabelle. */
+table.ttbl.vmax{ margin-top:2px; }
+table.ttbl.vmax td{ padding:5px 0; }
+table.ttbl.vmax td.d{ padding-left:8px; }
+table.ttbl.vmax tr.hi td.v, table.ttbl.vmax tr.hi td.d{ color:var(--orange2); }
+.sh-warn{ margin:10px 0 0; padding:8px 10px; border-radius:8px; font-size:11.5px; line-height:1.5;
+  color:var(--orange2); background:oklch(68% 0.19 42 / 0.10); border:1px solid oklch(68% 0.19 42 / 0.28); }
 .tgrp{ margin-bottom:14px; }
 .tgrp:last-child{ margin-bottom:0; }
 .tgrp-h{ font-size:11.5px; font-weight:700; color:var(--violet2); margin-bottom:6px; }
@@ -812,6 +820,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   const iMin  = M.indexOf('Minuti') >= 0 ? M.indexOf('Minuti') : 0;
   const iDist = M.indexOf('Dist tot') >= 0 ? M.indexOf('Dist tot') : 1;
+  // La velocita' massima della singola giornata e i metri corsi sopra il 90%
+  // della propria massima. Nei fogli del 2025-26 le ultime colonne non c'erano:
+  // se mancano, l'indice resta a -1 e la sezione non si disegna.
+  const iVmax = M.indexOf('SMax (kmh)');
+  const iHiSp = M.indexOf('Dist 90-100 % Vmax');
 
   // Sigle delle sedute fatte fuori dal gruppo squadra, come in Carico e nel
   // piano: stanno in fondo al nome della riga ("16PM rtp").
@@ -882,6 +895,55 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function todayISO(){
     const d=new Date(), p=n=>String(n).padStart(2,'0');
     return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  }
+
+  /* La data vera di una riga del carico, con la stessa regola di Carico: nel
+     titolo della settimana ("25-31/08") c'e' il mese di chiusura, quello di
+     apertura si ricava quando il primo numero e' piu' alto del secondo. Poi si
+     cerca dentro i sette giorni il numero scritto nella riga ("16PM" -> 16), e
+     le partite, che il numero non ce l'hanno, si trovano col giorno della
+     settimana gia' scritto nel foglio ("Sab"). */
+  const WDI = { 'Lun':0,'Mar':1,'Mer':2,'Gio':3,'Ven':4,'Sab':5,'Dom':6 };
+  function weekStart(week, monthKey){
+    const m = /^(\d{1,2})\s*-\s*(\d{1,2})\/(\d{1,2})$/.exec(String(week||'').trim());
+    if(!m) return null;
+    const y0 = +String(monthKey||'').slice(0,4), m0 = +String(monthKey||'').slice(5,7);
+    if(!y0 || !m0) return null;
+    const d1 = +m[1], d2 = +m[2];
+    let em = +m[3], ey = y0;
+    const gap = em - m0;
+    if(gap < -6) ey = y0 + 1;
+    else if(gap > 6) ey = y0 - 1;
+    let sm = em, sy = ey;
+    if(d1 > d2){ sm = em - 1; if(sm < 1){ sm = 12; sy = ey - 1; } }
+    const d = new Date(sy, sm-1, d1); d.setHours(0,0,0,0);
+    return (d.getMonth() === sm-1 && d.getDate() === d1) ? d : null;
+  }
+  function rowDate(row, week, monthKey){
+    if(row && row.wk0) week = row.wk0;
+    const mon0 = weekStart(week, monthKey);
+    const dm = /^(\d{1,2})/.exec(String(row && row.label || ''));
+    if(mon0){
+      if(dm){
+        const n = +dm[1];
+        for(let i=0;i<7;i++){
+          const d = new Date(mon0); d.setDate(d.getDate()+i);
+          if(d.getDate() === n) return d;
+        }
+      }
+      const w = WDI[row && row.wd];
+      if(w != null){ const d = new Date(mon0); d.setDate(d.getDate()+w); return d; }
+    }
+    if(!dm) return null;
+    const y = +String(monthKey||'').slice(0,4), mo = +String(monthKey||'').slice(5,7);
+    if(!y || !mo) return null;
+    const d = new Date(y, mo-1, +dm[1]); d.setHours(0,0,0,0);
+    return (d.getMonth() === mo-1) ? d : null;
+  }
+  function shortD(d){
+    if(!d) return '';
+    const p = n=>String(n).padStart(2,'0');
+    return p(d.getDate())+'/'+p(d.getMonth()+1);
   }
 
   // ---------- registro test (condiviso con la pagina Test) ----------
@@ -1066,8 +1128,29 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // ("16PM rtp"): stessa regola di Carico e del piano. Si contano a parte
       // per poterle mostrare nella scheda, ma restano dentro il totale sedute.
       const solo = { FT:0, diff:0, rtp:0, naz:0 };
+      // Ogni giornata in cui il GPS ha registrato una velocita' massima, con la
+      // data vera: serve per sapere quando e' stata l'ultima volta che e' andata
+      // vicino alla propria punta, che e' il dato che manca quando si programma
+      // uno sprint dopo due settimane di lavoro aerobico.
+      const vmax = [];
       months.forEach(m=>{
+        let wk = '';
         (m.rows||[]).forEach(r=>{
+          if(r.type==='wk_header'){ wk = r.label || ''; return; }
+          if(iVmax >= 0 && (r.type==='day' || r.type==='match')){
+            const sv = (r.v && r.v[iVmax] != null) ? +r.v[iVmax] : 0;
+            if(sv > 0){
+              const d = rowDate(r, wk, m.key);
+              const lab = String(r.label||'');
+              const sg = SOLO_RE.exec(lab);
+              vmax.push({
+                d: d, t: d ? d.getTime() : 0, v: sv,
+                hs: (iHiSp >= 0 && r.v && r.v[iHiSp] != null) ? (+r.v[iHiSp]||0) : 0,
+                gara: r.type === 'match',
+                lab: lab, sg: sg ? sg[1] : ''
+              });
+            }
+          }
           if(r.type==='day'){
             sedute++;
             const sg = SOLO_RE.exec(String(r.label||''));
@@ -1084,7 +1167,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
       const snapRole = normRole(p.role || rp.role || '');
       const custom = rp.tipo==='manuale' || Object.prototype.hasOwnProperty.call(customPlayers, name);
-      return { name, snapRole, min, dist, sedute, partite, solo,
+      vmax.sort(function(a,b){ return a.t - b.t; });
+      return { name, snapRole, min, dist, sedute, partite, solo, vmax,
         pres: presenze(months), custom, tipo: rp.tipo || '' };
     });
     return result.sort((a,b)=> disp(a.name).localeCompare(disp(b.name),'it'));
@@ -1319,7 +1403,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const keep = host.scrollTop;
     /* Le gare stanno subito sotto il carico: sono le due facce della stessa
        stagione, quanto ha lavorato e quanto ha giocato. */
-    host.innerHTML = secCarico(pl) + secPresenze(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
+    host.innerHTML = secCarico(pl) + secVelocita(pl) + secPresenze(pl) + secGare(pl) + secAnagrafica(pl) + secDisp(pl) + secProfilo(pl) + secInfortuni(pl) + secTest(pl) + secSintesi(pl) + secRosa(pl);
     host.scrollTop = keep; // mantiene la posizione tra i redraw
     wireSheet(pl);
   }
@@ -1397,6 +1481,64 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       (righe ? '<table class="ttbl pres">'+righe+'</table>' : '')+
       '<p class="sh-cap">Presente vuol dire che quel giorno ha lavorato, anche lontano dal gruppo. '+
         'Chi era dal fisioterapista senza lavorare rientra fra le assenze: i dati GPS non lo distinguono.</p>'+
+    '</section>';
+  }
+
+  /* Esposizione alla velocita'. Un'atleta che non tocca la propria punta da due
+     settimane non e' pronta per uno sprint massimale, e finora quel numero non
+     stava scritto da nessuna parte: si leggeva riga per riga nel carico, con
+     venti colonne davanti. Qui c'e' la punta della stagione, quante giornate ha
+     passato sopra il 90% e sopra il 95% di quella punta, e da quanti giorni non
+     ci arriva. La soglia e' sulla sua massima, non su una tabella: due atlete
+     con punte diverse non si allenano alla stessa velocita'. */
+  const VMAX_GG_ALLARME = 10;
+  // in colonna le velocita' stanno incolonnate solo con un decimale sempre scritto
+  const NFKM = new Intl.NumberFormat('it-IT', { minimumFractionDigits:1, maximumFractionDigits:1 });
+  function kmh(v){ return NFKM.format(v); }
+  function secVelocita(pl){
+    const all = pl.vmax || [];
+    if(!all.length) return '';
+    let pk = all[0];
+    all.forEach(function(x){ if(x.v > pk.v) pk = x; });
+    const s90 = pk.v * 0.90, s95 = pk.v * 0.95;
+    let n90 = 0, n95 = 0, hs = 0, last90 = null;
+    all.forEach(function(x){
+      hs += x.hs || 0;
+      if(x.v >= s90){ n90++; if(!last90 || x.t > last90.t) last90 = x; }
+      if(x.v >= s95) n95++;
+    });
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    const gg = (last90 && last90.d) ? Math.round((oggi - last90.d) / 86400000) : null;
+    const ggTxt = gg == null ? '-' : (gg <= 0 ? 'oggi' : NF0.format(gg));
+    const ggLab = gg == null ? 'Mai sopra il 90%' : (gg <= 0 ? 'Ultima volta sopra il 90%' : (gg === 1 ? 'Giorno dal 90%' : 'Giorni dal 90%'));
+    // le ultime sei giornate, dalla piu' recente: la lettura che si fa a occhio
+    const ult = all.slice(-6).reverse().map(function(x){
+      const pc = Math.round(x.v * 100 / pk.v);
+      const dett = x.gara ? 'gara' : (x.sg ? SOLO_LAB[x.sg] : 'seduta');
+      return '<tr'+(pc >= 90 ? ' class="hi"' : '')+'>'+
+        '<td class="l">'+esc(shortD(x.d) || x.lab)+' &#183; '+esc(dett)+'</td>'+
+        '<td class="v">'+esc(kmh(x.v))+' km/h</td>'+
+        '<td class="d">'+NF0.format(pc)+'%</td></tr>';
+    }).join('');
+    const nota = (gg != null && gg >= VMAX_GG_ALLARME)
+      ? '<p class="sh-warn">Sono '+NF0.format(gg)+' giorni che non tocca il 90% della sua punta. Prima di uno sprint massimale serve almeno una giornata di richiamo.</p>'
+      : '';
+    return '<section class="sh-sec">'+
+      '<h3 class="sh-h">Esposizione alla velocita\' <span class="n">su '+NF0.format(all.length)+
+        (all.length===1 ? ' giornata' : ' giornate')+' col GPS</span></h3>'+
+      '<div class="sh-stats">'+
+        '<div class="pstat"><span class="ps-v">'+esc(kmh(pk.v))+'</span><span class="ps-l">Punta km/h</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+esc(ggTxt)+'</span><span class="ps-l">'+esc(ggLab)+'</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(n90)+'</span><span class="ps-l">Giornate &#8805;90%</span></div>'+
+        '<div class="pstat"><span class="ps-v">'+NF0.format(n95)+'</span><span class="ps-l">Giornate &#8805;95%</span></div>'+
+      '</div>'+
+      nota+
+      (ult ? '<p class="sh-sub">Ultime giornate, con la punta del giorno</p><table class="ttbl vmax">'+ult+'</table>' : '')+
+      '<p class="sh-cap">La punta della stagione e\' '+esc(kmh(pk.v))+' km/h'+
+        (pk.d ? ' del '+esc(shortD(pk.d)) : '')+(pk.gara ? ' in gara' : '')+
+        '. Le soglie sono il 90% ('+esc(kmh(s90))+' km/h) e il 95% ('+esc(kmh(s95))+' km/h) della sua punta, non di una tabella di squadra.'+
+        (hs > 0 ? ' In stagione ha corso '+NF0.format(Math.round(hs))+' m sopra il 90% della massima.' : '')+
+      '</p>'+
     '</section>';
   }
 
