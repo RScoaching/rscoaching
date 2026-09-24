@@ -2418,7 +2418,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
   /* Il riassunto dell'individuale serve in due fogli: nella casella del mese e
      nella riga della settimana. Si scrive una volta sola. */
   function idpShort(s){
-    const ind = idpOf(s);
+    const ind = idpFits(s) ? idpOf(s) : [];
     if(!ind.length) return '';
     return ind.map(function(r){
       const m = Number(r.min)||0;
@@ -2434,7 +2434,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const out = [];
     (list||[]).forEach(function(s){
       if(filt === 'idp'){
-        const ind = idpOf(s);
+        const ind = idpFits(s) ? idpOf(s) : [];
         if(!ind.length) return;
         out.push({
           t: ind.length + (ind.length===1 ? ' atleta' : ' atlete'),
@@ -3120,7 +3120,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(plan && s.fz) badges += '<span class="pl-fzbadge">Scheda forza</span>';
     /* Chi resta dopo la seduta si vede dal cartellino: e' un impegno in piu'
        sulla giornata, e va saputo prima di aprire il dettaglio. */
-    if(!s.only_fix){
+    /* L'individuale sta sulla chiave giorno+slot: senza questo controllo la
+       stessa scheda comparirebbe anche sul blocco di forza dello stesso
+       momento, che con quel lavoro non c'entra niente. */
+    if(!s.only_fix && idpFits(s)){
       const ni = idpCount(s);
       if(ni) badges += '<span class="pl-idpbadge">'+ni+' indiv.</span>';
     }
@@ -3722,7 +3725,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
     tog('pl-epctrow', !gara);
     tog('pl-ephzrow', !gara);
     tog('pl-ediffrow', !gara);
-    tog('pl-eidprow', !gara);
+    /* L'individuale segue la stessa regola del dettaglio: solo sedute di campo,
+       niente in palestra e niente in gara. */
+    tog('pl-eidprow', !gara && !IDP_NO[selT.value]);
     const h = document.getElementById('pl-etitle');
     if(h) h.textContent = gara ? 'Modifica la gara' : 'Modifica blocco';
     const lp = document.getElementById('pl-eplab');
@@ -4147,6 +4152,17 @@ window.RS_ROSTER = window.RS_ROSTER || [
     idpWrite(all);
   }
   function idpCount(s){ return idpOf(s).length; }
+  /* L'individuale a fine seduta e' roba di campo: si fa dopo la seduta di
+     squadra, con chi resta a lavorare sul suo. In palestra quel lavoro e' gia'
+     la scheda di forza, e in gara non esiste. Tenerla ovunque riempiva la
+     pagina di schede vuote e faceva finire lo stesso lavoro in due posti. */
+  const IDP_NO = { forza:1, riposo:1, gara:1 };
+  function idpFits(s){
+    if(!s) return false;
+    if(s.fz) return false;
+    if(s.is_match || s.kind==='match' || s.kind==='riposo') return false;
+    return !IDP_NO[s.type];
+  }
   /* Dentro le esercitazioni del GPS l'individuale si chiama IDP: quando in una
      seduta compare quel taglio, il foglio dice gia' chi e' rimasta e per quanti
      minuti. Da qui la scheda si riempie da sola e al preparatore resta da dire
@@ -4995,8 +5011,10 @@ window.RS_ROSTER = window.RS_ROSTER || [
         (gah ? 'Modifica il risultato' : 'Segna il risultato')+'</span></button></div>';
     }
     /* Il programma apre la parte tecnica: e' quello che si era deciso di fare,
-       e va letto prima di quello che poi e' successo in campo. */
-    const pgh = pgPanel(s);
+       e va letto prima di quello che poi e' successo in campo. Su una gara non
+       esiste: possesso, rondos e lavoro aerobico sono cose della seduta, e se
+       quel giorno si allena chi non e' convocata va scritta una seduta a parte. */
+    const pgh = s.is_match ? '' : pgPanel(s);
     h += pgh;
     /* La giornata registrata ha preso dentro il blocco del planner: il
        programma si corregge da qui, senza dover cercare un secondo cartellino
@@ -5010,10 +5028,13 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const fzh = fzPanel(fzOf(s));
     h += fzh;
     /* L'individuale sta dopo la forza e prima dei dati GPS: e' l'ultima cosa
-       che si decide della seduta, ed e' comunque roba scritta, non misurata. */
-    const idph = idpPanel(s);
+       che si decide della seduta, ed e' comunque roba scritta, non misurata.
+       Vale solo per la seduta di squadra in campo: in palestra il lavoro
+       singolo e' gia' la scheda di forza, e in gara non esiste. */
+    const idpOk = !s.is_match && !s.only_fix && idpFits(s);
+    const idph = idpOk ? idpPanel(s) : '';
     h += idph;
-    if(!s.only_fix){
+    if(idpOk){
       /* Se il GPS di quel giorno ha un taglio IDP, l'individuale c'e' stata
          davvero: qui si dice, cosi' non resta da scrivere senza accorgersene. */
       const gps = idph ? [] : idpGps(s);
