@@ -2648,6 +2648,34 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     return out;
   }
+  /* Chi rappresenta il reparto in quella giornata.
+     La media su tutte schiacciava il dato verso il basso: se in una seduta da
+     novanta minuti tre difensori lavorano tutto e uno si ferma a venti, la media
+     del reparto non e' piu' quella di un allenamento, e' una via di mezzo che
+     nessuna ha fatto. Lo stesso in partita, dove chi entra all'ottantesimo
+     abbassa la media di chi l'ha giocata tutta.
+     Quindi si guarda chi ha fatto di piu' in quella giornata: si prende il
+     minutaggio piu' alto del gruppo e si tengono solo le righe che ci arrivano.
+     Se ci arriva una sola atleta il reparto e' lei, se ci arrivano in due o in
+     tre si fa la media fra loro. Con i minuti tutti uguali o senza il dato dei
+     minuti si torna a mediare tutto, che e' il comportamento di prima. */
+  const UNIT_MIN_TOL = 1; // un minuto di scarto e' la stessa seduta, non un'altra
+  function unitPick(rows){
+    const iMin = M.indexOf('Minuti');
+    if(iMin < 0 || rows.length < 2) return rows;
+    let top = null;
+    rows.forEach(function(r){
+      const v = (r && r.v) ? r.v[iMin] : null;
+      if(v == null || !isFinite(v)) return;
+      if(top == null || v > top) top = v;
+    });
+    if(top == null || top <= 0) return rows;
+    const keep = rows.filter(function(r){
+      const v = (r && r.v) ? r.v[iMin] : null;
+      return v != null && isFinite(v) && (top - v) <= UNIT_MIN_TOL;
+    });
+    return keep.length ? keep : rows;
+  }
   function unitBuild(role){
     const names = unitNames(role);
     const idx = unitIndex(names);
@@ -2665,7 +2693,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         }
         if(r.type==='day' || r.type==='match'){
           const hit = idx[tm.key+'||'+String(r.label==null?'':r.label).trim()] || [];
-          const row = { label:r.label, type:r.type, wd:r.wd||'', v:unitMean(hit), unit:true, un:hit.length };
+          const use = unitPick(hit);
+          const row = { label:r.label, type:r.type, wd:r.wd||'', v:unitMean(use), unit:true,
+            un:use.length, unTot:hit.length };
           rows.push(row);
           if(r.type==='day') train.push(row);
           week.push(row); month.push(row);
@@ -3881,7 +3911,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const nn = unitNames(state.unit).length;
       note.innerHTML = 'Medie del reparto <b>'+esc(unitLabel(state.unit))+'</b>, '+
         (nn ? (nn===1 ? 'una sola atleta' : nn+' atlete') : 'nessuna atleta')+' col ruolo scritto in Atlete. '+
-        'Ogni seduta e\' la media di chi ha lavorato col gruppo: i differenziati, gli FT, gli RTP e le sedute in nazionale restano fuori. '+
+        'Ogni giornata prende chi ha lavorato di piu\': si guarda il minutaggio piu\' alto del reparto e si tiene chi ci arriva, '+
+        'una sola se e\' una sola, la media fra loro se sono in piu\'. Cosi\' il reparto resta un allenamento intero e non una via di mezzo. '+
+        'I differenziati, gli FT, gli RTP e le sedute in nazionale restano fuori. '+
         'L\'RPE qui si legge e basta, e\' quello della squadra: per scriverlo vai sull\'atleta. '+
         'Sedute '+dove+': '+nSed+', con RPE: '+nRpe+'.';
       return;
@@ -4752,10 +4784,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(r) bits.push(esc(r));
       bits.push('Fiorentina Primavera U19W');
     } else if(state.level === 'unit'){
-      // sul foglio del reparto deve restare scritto quante atlete ci sono dentro:
-      // una media di due non si legge come una media di sei
+      // sul foglio del reparto deve restare scritto quante atlete ci sono dentro,
+      // e che il numero di ogni giornata e' di chi ha lavorato di piu', non di tutte
       const nn = unitNames(state.unit).length;
-      bits.push('Reparto &#183; media di ' + nn + (nn === 1 ? ' atleta' : ' atlete'));
+      bits.push('Reparto &#183; ' + nn + (nn === 1 ? ' atleta' : ' atlete') + ', chi ha lavorato di piu\'');
       bits.push('Fiorentina Primavera U19W');
     } else {
       bits.push('Tutta la squadra');
@@ -5557,7 +5589,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const mon = activeMonth();
     const who = whoName();
     const role = state.level==='player' ? roleOf(state.player)
-      : (state.level==='unit' ? ('reparto, media di '+unitNames(state.unit).length+' atlete') : '');
+      : (state.level==='unit' ? ('reparto, '+unitNames(state.unit).length+' atlete, chi ha lavorato di piu\'') : '');
     const VIO='#5b2d90', VIOL='#efe7f7', BRD='#d9d2e6', MUT='#6b6472', EMB='#faf1ea', EMBT='#b8531f', KEYBG='#fbf3db';
     const V = VIS();
     const ncol = V.length + 1;
@@ -5614,7 +5646,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(state.level==='team') return '<b>Fiorentina Primavera U19W</b> &#183; Stagione '+esc(S.stagione||'');
     if(state.level==='unit'){
       const nn = unitNames(state.unit).length;
-      return '<b>'+esc(unitLabel(state.unit))+'</b> &#183; media di '+nn+(nn===1?' atleta':' atlete')+' &#183; Fiorentina Primavera U19W';
+      return '<b>'+esc(unitLabel(state.unit))+'</b> &#183; '+nn+(nn===1?' atleta':' atlete')+', chi ha lavorato di piu\' &#183; Fiorentina Primavera U19W';
     }
     return '<b>'+esc(disp(state.player||''))+'</b> &#183; Fiorentina Primavera U19W';
   }
