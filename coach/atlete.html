@@ -234,6 +234,19 @@ select.picker:hover{ border-color:var(--border3); }
   font-size:10.5px; font-weight:600; color:oklch(74% 0.13 152);
   background:oklch(70% 0.18 152 / 0.11); border:1px solid oklch(70% 0.18 152 / 0.26);
 }
+/* Rientro in corso e velocita' ferma da troppo: due cose che si vogliono
+   vedere dall'elenco, senza aprire la scheda di ognuna. */
+.flag-rtp{
+  display:inline-flex; align-items:center; gap:5px; margin-top:5px; margin-right:5px; padding:3px 9px; border-radius:999px;
+  font-size:10.5px; font-weight:600; color:var(--violet2);
+  background:var(--violet-bg); border:1px solid var(--violet-border);
+}
+.flag-vel{
+  display:inline-flex; align-items:center; gap:5px; margin-top:5px; margin-right:5px; padding:3px 9px; border-radius:999px;
+  font-size:10.5px; font-weight:600; color:oklch(82% 0.13 85);
+  background:oklch(78% 0.15 85 / 0.11); border:1px solid oklch(78% 0.15 85 / 0.28);
+}
+.flag-vel svg{ width:11px; height:11px; }
 .pcard.off{ opacity:.62; }
 
 /* ---------- stati di disponibilita' (token semantici) ---------- */
@@ -1334,6 +1347,18 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // le aggregate stanno in fondo all'elenco: il segno dice perche'
       const aggHtml = (pl.tipo === 'sporadica' && !isOff)
         ? '<span class="flag-agg" title="Sale con la squadra solo ogni tanto">Aggregata</span>' : '';
+      /* Chi sta ancora col rieducatore lo si vede da qui: l'episodio e' aperto
+         finche' dall'ultima seduta rtp non e' tornata col gruppo. */
+      const ep = isOff ? null : rtpEpisodio(pl);
+      const rtpHtml = (ep && ep.grpDopo === 0)
+        ? '<span class="flag-rtp" title="Ultima seduta col rieducatore il '+esc(shortD(ep.end.d))+'">Rientro in corso</span>' : '';
+      /* Quanti giorni non tocca il 90% della sua punta: si accende solo oltre la
+         soglia, altrimenti l'elenco si riempie di segni che non dicono niente. */
+      const ggV = ggSenzaVel(pl);
+      const velHtml = (ggV != null && ggV >= VMAX_GG_ALLARME && !isOff)
+        ? '<span class="flag-vel" title="Giorni dall\'ultimo allenamento sopra il 90% della sua punta">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg>'+
+            NF0.format(ggV)+' gg dal 90%</span>' : '';
       return ''+
       '<article class="pcard reveal'+(isOff?' off':'')+'" style="--i:'+Math.min(i,16)+'" data-name="'+esc(pl.name)+'" role="button" tabindex="0" aria-label="Apri la scheda di '+esc(disp(pl.name))+'">'+
         '<div class="pcard-top">'+
@@ -1345,7 +1370,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
             '<span class="role-wrap'+(unassigned?' unassigned':'')+'">'+
               '<select class="role-select" data-name="'+esc(pl.name)+'" aria-label="Ruolo di '+esc(disp(pl.name))+'">'+opts+'</select>'+
             '</span>'+
-            injHtml+offHtml+aggHtml+
+            injHtml+rtpHtml+offHtml+aggHtml+velHtml+
           '</div>'+
         '</div>'+
         '<div class="pstats">'+
@@ -1522,6 +1547,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // in colonna le velocita' stanno incolonnate solo con un decimale sempre scritto
   const NFKM = new Intl.NumberFormat('it-IT', { minimumFractionDigits:1, maximumFractionDigits:1 });
   function kmh(v){ return NFKM.format(v); }
+  /* Giorni dall'ultimo allenamento sopra il 90% della sua punta. Stesso conto
+     della sezione Esposizione alla velocita', tirato fuori perche' serve anche
+     all'elenco. Torna null quando non c'e' nemmeno una giornata utile. */
+  function ggSenzaVel(pl){
+    const all = (pl.vmax || []).filter(function(x){ return !x.gara; });
+    if(!all.length) return null;
+    let pk = all[0];
+    all.forEach(function(x){ if(x.v > pk.v) pk = x; });
+    const s90 = pk.v * 0.90;
+    let last = null;
+    all.forEach(function(x){ if(x.v >= s90 && (!last || x.t > last.t)) last = x; });
+    if(!last || !last.d) return null;
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    return Math.max(0, Math.round((oggi - last.d) / 86400000));
+  }
   function secVelocita(pl){
     /* Le partite restano fuori, anche dal calcolo della punta: in gara la velocita'
        la fa la partita, non la programmazione, e quello che serve sapere e' se in
