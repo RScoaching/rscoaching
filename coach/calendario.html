@@ -258,6 +258,24 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .sec-head h2{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:22px;
   letter-spacing:.5px; color:var(--ink); line-height:1; }
 .sec-head .sec-n{ font-size:11.5px; color:var(--faint); }
+/* Il quadro della stagione sopra l'elenco: sei numeri in riga, poi la prossima
+   gara e, quando serve, la nota sulle partite senza tabellino. */
+.fxsum{ margin-bottom:14px; padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); box-shadow: var(--shadow-sm); }
+.fxsum:empty{ display:none; }
+.fxsum-stats{ display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+.fxs{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.fxs-v{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:24px; line-height:1;
+  letter-spacing:.5px; color:var(--ink); font-variant-numeric:tabular-nums; }
+.fxs-v.win{ color:var(--green); }
+.fxs-v.loss{ color:var(--orange2); }
+.fxs-v.draw{ color:var(--muted); }
+.fxs-l{ font-size:10.5px; color:var(--faint); line-height:1.3; }
+.fxsum-next{ margin:12px 0 0; padding-top:11px; border-top:1px solid var(--border2);
+  font-size:12.5px; line-height:1.5; color:var(--ink); }
+.fxsum-cap{ margin:5px 0 0; font-size:11.5px; line-height:1.5; color:var(--muted); }
+@media (max-width:860px){ .fxsum-stats{ grid-template-columns:repeat(3,1fr); } }
+@media (max-width:460px){ .fxsum-stats{ grid-template-columns:repeat(2,1fr); } }
 .fxlist{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
 .fxrow{ display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border);
   border-radius:var(--r); box-shadow: var(--shadow-sm); padding:11px 14px; cursor:pointer;
@@ -1090,6 +1108,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
           <h2>Calendario partite</h2>
           <span class="sec-n" id="fix-n"></span>
         </div>
+        <div class="fxsum" id="fixsum"></div>
         <div class="fxlist" id="fixlist"></div>
         <div class="garep">
           <button type="button" class="garep-h" id="garep-t" aria-expanded="false" aria-controls="garep-b">
@@ -1861,6 +1880,58 @@ window.RS_ROSTER = window.RS_ROSTER || [
   }
 
   // ---------- fixtures ----------
+  /* Sopra l'elenco delle partite, il quadro della stagione. E' il conto che si
+     rifa' a mente ogni volta che qualcuno chiede "come stiamo andando": quante
+     giocate sulle totali, vinte, pareggiate, perse, gol fatti e subiti, e la
+     prossima gara con i giorni che mancano. Conta solo le gare con il risultato
+     segnato: una giocata senza tabellino non entra nel bilancio, e il numero
+     delle giocate lo dice a parte. */
+  function renderFixSum(fx, nextF){
+    const host = document.getElementById('fixsum');
+    if(!host) return;
+    let giocate = 0, segnate = 0, v = 0, n = 0, p = 0, gf = 0, gs = 0;
+    fx.forEach(function(f){
+      if(f.data >= TODAY_KEY) return;
+      giocate++;
+      const r = gaRec(f.data);
+      if(!r) return;
+      segnate++;
+      const a = Number(r.gf)||0, b = Number(r.gs)||0;
+      gf += a; gs += b;
+      if(a > b) v++; else if(a < b) p++; else n++;
+    });
+    if(!fx.length){ host.innerHTML = ''; return; }
+    const diff = gf - gs;
+    const dtxt = (diff > 0 ? '+' : '') + diff;
+    let pross = '';
+    if(nextF){
+      const td = parseDate(TODAY_KEY), fd = parseDate(nextF.data);
+      const gg = (td && fd) ? Math.round((fd - td) / 86400000) : null;
+      const q = (gg===0) ? 'oggi' : (gg===1 ? 'domani' : (gg!=null ? 'fra '+gg+' giorni' : ''));
+      const avv = nextF.avversario || (nextF.casa ? nextF.away : nextF.home) || '';
+      pross = '<p class="fxsum-next">Prossima gara '+esc(q)+
+        (avv ? ', con ' + esc(avv) : '')+
+        (fd ? ' &#183; '+esc(cap(DTF_SHORT.format(fd).replace('.','')))+
+          ' &#183; '+(nextF.casa ? 'in casa' : 'in trasferta') : '')+'.</p>';
+    }else{
+      pross = '<p class="fxsum-next">Non ci sono altre gare in calendario.</p>';
+    }
+    const manca = giocate - segnate;
+    const nota = manca > 0
+      ? '<p class="fxsum-cap">'+(manca===1
+          ? 'Una gara giocata non ha ancora il risultato, quindi resta fuori dal bilancio.'
+          : esc(String(manca))+' gare giocate non hanno ancora il risultato, quindi restano fuori dal bilancio.')+'</p>'
+      : '';
+    host.innerHTML =
+      '<div class="fxsum-stats">'+
+        '<div class="fxs"><span class="fxs-v">'+giocate+' / '+fx.length+'</span><span class="fxs-l">Gare giocate</span></div>'+
+        '<div class="fxs"><span class="fxs-v win">'+v+'</span><span class="fxs-l">'+(v===1?'Vinta':'Vinte')+'</span></div>'+
+        '<div class="fxs"><span class="fxs-v draw">'+n+'</span><span class="fxs-l">'+(n===1?'Pareggiata':'Pareggiate')+'</span></div>'+
+        '<div class="fxs"><span class="fxs-v loss">'+p+'</span><span class="fxs-l">'+(p===1?'Persa':'Perse')+'</span></div>'+
+        '<div class="fxs"><span class="fxs-v">'+gf+' &#183; '+gs+'</span><span class="fxs-l">Gol fatti e subiti</span></div>'+
+        '<div class="fxs"><span class="fxs-v'+(diff>0?' win':(diff<0?' loss':''))+'">'+esc(dtxt)+'</span><span class="fxs-l">Differenza reti</span></div>'+
+      '</div>'+ pross + nota;
+  }
   function renderFixtures(){
     const host = document.getElementById('fixlist');
     const fx = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
@@ -1869,6 +1940,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
        quanti giorni mancano, che e' il conto che si fa a mente ogni volta. */
     const nextF = fx.find(function(f){ return f.data >= TODAY_KEY; });
     const nextIso = nextF ? nextF.data : '';
+    renderFixSum(fx, nextF);
     host.innerHTML = fx.map(f=>{
       const dt = parseDate(f.data);
       const dlab = dt ? cap(DTF_SHORT.format(dt).replace('.','')) : f.data;
