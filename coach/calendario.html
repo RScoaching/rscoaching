@@ -727,6 +727,16 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
 .pl-idpcard input[type="text"]{ background:var(--surface); min-height:32px; font-size:12px; }
 .pl-idpempty{ font-size:11.5px; color:var(--faint); line-height:1.45; padding:2px 0; }
 .pl-idpfoot{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+/* La riga del GPS e quella del lavoro a gruppi stanno sopra le schede: si
+   riempie una volta sola e poi si corregge solo chi fa eccezione. */
+.pl-idpgps{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:9px 11px;
+  border:1px solid var(--violet-border); border-radius:11px; background:var(--violet-bg); }
+.pl-idpgps .t{ font-size:11.5px; color:var(--violet2); font-weight:600; line-height:1.4; flex:1 1 auto; }
+.pl-idpgps .btn{ flex:0 0 auto; }
+.pl-idpgrp{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pl-idpgrp input[type="text"]{ flex:1 1 170px; min-height:32px; font-size:12px; background:var(--surface); }
+.pl-idpgrp .pl-idpmwrap{ margin-left:0; }
+.pl-idpgrp input[type="number"]{ width:58px; min-height:30px; text-align:right; background:var(--surface); }
 .pl-idptot{ font-size:11.5px; color:var(--muted); }
 .pl-idptot b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
 /* Risultato, goal e assist (P192). Nel dettaglio il punteggio sta in alto con
@@ -1153,7 +1163,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
         </select>
       </div>
     </div>
-    <div class="pl-dgrid2">
+    <div class="pl-dgrid2" id="pl-epctrow">
       <div class="pl-drow">
         <label for="pl-epct">Intensita %</label>
         <input id="pl-epct" type="number" min="0" max="120" step="5" placeholder="opzionale">
@@ -1167,7 +1177,26 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       <label for="pl-ecomp">Competizione</label>
       <select id="pl-ecomp"></select>
     </div>
-    <div class="pl-drow">
+    <!-- schermata gara: quando il blocco e' una partita non servono le fasi
+         della seduta, serve sapere contro chi si gioca e dove -->
+    <div class="pl-dgrid2" id="pl-egarow" hidden>
+      <div class="pl-drow">
+        <label for="pl-eopp">Contro chi si gioca</label>
+        <input id="pl-eopp" type="text" maxlength="40" placeholder="es. Juventus" autocomplete="off">
+      </div>
+      <div class="pl-drow">
+        <label for="pl-ecasa">Campo</label>
+        <select id="pl-ecasa">
+          <option value="1">In casa</option>
+          <option value="0">In trasferta</option>
+        </select>
+      </div>
+    </div>
+    <div class="pl-drow" id="pl-etabrow" hidden>
+      <label>Tabellino</label>
+      <button type="button" class="svbtn" id="pl-etab"><span>Apri il tabellino</span></button>
+    </div>
+    <div class="pl-drow" id="pl-ephzrow">
       <label>Contenuto seduta</label>
       <div class="pl-phz">
         <div class="pl-phz-list" id="pl-ephases"></div>
@@ -1194,7 +1223,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       </div>
     </div>
     <div class="pl-drow">
-      <label>Giocatrici coinvolte</label>
+      <label id="pl-eplab">Giocatrici coinvolte</label>
       <div class="pl-plpick">
         <div class="pl-plsel" id="pl-eplayers"></div>
         <div class="pl-plfoot">
@@ -1207,13 +1236,13 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       <label for="pl-enote">Note</label>
       <textarea id="pl-enote" placeholder="es. campo, obiettivo della seduta"></textarea>
     </div>
-    <div class="pl-drow">
+    <div class="pl-drow" id="pl-ediffrow">
       <label for="pl-ediff">Differenziate (mini sessione)</label>
       <textarea id="pl-ediff" placeholder="es. lavoro individuale per infortunate, portieri, rientri"></textarea>
     </div>
     <!-- l'individuale si scrive quando si scrive la seduta, non solo dopo: da
          qui si apre la stessa scheda che sta nel dettaglio della giornata -->
-    <div class="pl-drow">
+    <div class="pl-drow" id="pl-eidprow">
       <label>Individuale a fine seduta</label>
       <button type="button" class="svbtn" id="pl-eidp"><span>Aggiungi l'individuale</span></button>
     </div>
@@ -1249,6 +1278,12 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
       <h3>Individuale a fine seduta</h3>
       <span class="pl-ddate" id="pl-idpdate"></span>
     </div>
+    <!-- il GPS di quella seduta sa gia' chi ha fatto IDP e per quanti minuti:
+         invece di riscrivere i nomi uno per uno si prendono da li' -->
+    <div class="pl-idpgps" id="pl-idpgps" hidden>
+      <span class="t" id="pl-idpgpst"></span>
+      <button type="button" class="btn" id="pl-idpgpsb">Prendi dal GPS</button>
+    </div>
     <div class="pl-drow">
       <label>Chi resta dopo la seduta</label>
       <div class="pl-plpick">
@@ -1257,6 +1292,19 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
           <button type="button" class="btn pl-plall" id="pl-idpclear">Nessuna</button>
           <span class="pl-pltot" id="pl-idpsel"></span>
         </div>
+      </div>
+    </div>
+    <!-- a gruppi: se tre atlete fanno la stessa cosa per dieci minuti si scrive
+         una volta sola invece di aprire scheda per scheda -->
+    <div class="pl-drow">
+      <label for="pl-idpgt">Stesso lavoro per tutte</label>
+      <div class="pl-idpgrp">
+        <input id="pl-idpgt" type="text" maxlength="40" placeholder="tema, es. Conduzione" autocomplete="off">
+        <span class="pl-idpmwrap">
+          <input id="pl-idpgm" type="number" min="0" max="90" step="5" inputmode="numeric" placeholder="0" aria-label="Minuti per tutte">
+          <span>min</span>
+        </span>
+        <button type="button" class="btn" id="pl-idpgb">Applica a tutte</button>
       </div>
     </div>
     <div class="pl-drow">
@@ -1659,6 +1707,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
         if(hit.pct==null && m.pct!=null) hit.pct = Number(m.pct);
         if(!hit.note && m.note) hit.note = m.note;
         if(!hit.comp_gara && m.comp_gara) hit.comp_gara = m.comp_gara;
+        if(!hit.opp && m.opp) hit.opp = m.opp;
+        if(hit.casa==null && m.casa!=null) hit.casa = !!m.casa;
         // su una gara il nome resta quello della competizione, non il tipo
         if(!hit.is_match) hit.type = m.type || '';
         hit.group = m.group || '';
@@ -1678,6 +1728,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         svolto: !!m.svolto,
         note: m.note || '',
         comp_gara: m.comp_gara || '',
+        opp: m.opp || '', casa: (m.casa==null ? null : !!m.casa),
         type: m.type || '', group: m.group || '', diff: m.diff || '',
         /* Le atlete e le fasi stavano nel blocco salvato ma non arrivavano
            fin qui, quindi i cartellini del planner non riuscivano a dire chi
@@ -2295,7 +2346,20 @@ window.RS_ROSTER = window.RS_ROSTER || [
         const fasi = (Array.isArray(s.phases)?s.phases:[]).map(function(p){
           return sesShort(p.t) + (p.m ? ' '+p.m+"'" : '');
         }).join(', ');
-        const note = [s.note||'', fasi].filter(Boolean).join(' - ');
+        /* Il foglio della settimana e' quello che va in borsa: se dice solo il
+           campo, la palestra e l'individuale restano fuori e in campo mancano.
+           Qui entrano tutti e tre, nella stessa riga del giorno. */
+        const f = fzOf(s);
+        const fzr = f ? (f.rows||[]).filter(fzHasEx) : [];
+        const forza = fzr.map(function(r){
+          const es = String(r.ex||'').trim();
+          const sr = String(r.serie||'').trim(), rp = String(r.rip||'').trim();
+          return es + ((sr||rp) ? ' '+[sr,rp].filter(Boolean).join('x') : '');
+        }).filter(Boolean).join(', ');
+        const ind = idpShort(s);
+        const note = [s.note||'', fasi,
+          (forza ? 'Forza: '+forza : ''),
+          (ind ? 'Individuale: '+ind : '')].filter(Boolean).join(' - ');
         rows += '<tr class="brk">'+
           (i===0 ? dayCell : '<td class="l"></td><td></td>')+
           '<td>'+esc(s.slot||'-')+'</td>'+
@@ -2350,7 +2414,18 @@ window.RS_ROSTER = window.RS_ROSTER || [
      seduta. Chiedere un foglio solo e leggerlo di traverso non funziona: con
      tutto dentro, la casella di un giorno di doppia seduta diventa illeggibile. */
   const MP_FILT = ['campo','forza','tutto','idp'];
-  const MP_LAB  = { campo:'Solo campo', forza:'Solo forza', tutto:'Campo e forza', idp:'Solo individuale' };
+  const MP_LAB  = { campo:'Solo campo', forza:'Solo forza', tutto:'Campo, forza e individuale', idp:'Solo individuale' };
+  /* Il riassunto dell'individuale serve in due fogli: nella casella del mese e
+     nella riga della settimana. Si scrive una volta sola. */
+  function idpShort(s){
+    const ind = idpOf(s);
+    if(!ind.length) return '';
+    return ind.map(function(r){
+      const m = Number(r.min)||0;
+      const temi = (Array.isArray(r.temi) ? r.temi : []).join('/');
+      return plNome(r.n) + (m ? " "+m+"'" : '') + (temi ? ' '+temi : '');
+    }).join(', ');
+  }
   let mpFilt = 'tutto';
   function mpIsForza(s){ return !!(s.fz || s.type === 'forza'); }
   /* Quello che va scritto dentro la casella, gia' filtrato. Ogni blocco e' una
@@ -2403,6 +2478,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
         s: sub,
         pct: pctOf(s)
       });
+      /* "Tutto" vuol dire tutto: campo, palestra e chi e' rimasto dopo. Sta in
+         un blocco a parte perche' l'individuale non e' la seduta di squadra. */
+      if(filt === 'tutto'){
+        const ind = idpShort(s);
+        if(ind) out.push({ t:'Individuale', s:ind, pct:null });
+      }
     });
     return out;
   }
@@ -2938,7 +3019,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
       kind: meta.k, title:'', type: type,
       pct: null, load: null, note:'', svolto:false,
       group: PL.group||'', diff:'', phases:[], players:[],
-      comp_gara: (type==='gara') ? (FIX_BY_DATE[dateIso] ? 'campionato' : 'amichevole') : ''
+      comp_gara: (type==='gara') ? (FIX_BY_DATE[dateIso] ? 'campionato' : 'amichevole') : '',
+      opp: (type==='gara' && FIX_BY_DATE[dateIso]) ? fixOpp(FIX_BY_DATE[dateIso]) : '',
+      casa: (type==='gara' && FIX_BY_DATE[dateIso]) ? !!FIX_BY_DATE[dateIso].casa : true
     };
     s.manual.push(rec); saveStore(s); return rec.id;
   }
@@ -2951,7 +3034,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(!m) return false;
     PL_CLIP = { slot:m.slot||'', kind:m.kind||'training', title:m.title||'', type:m.type||'',
       pct:(m.pct==null?null:m.pct), load:(m.load==null?null:m.load), note:m.note||'', group:m.group||'', diff:m.diff||'',
-      comp_gara:m.comp_gara||'',
+      comp_gara:m.comp_gara||'', opp:m.opp||'', casa:(m.casa==null?true:!!m.casa),
       phases:clone(m.phases||[]), players:clone(m.players||[]) };
     return true;
   }
@@ -2969,6 +3052,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
        "Forza massimale": dice quale lavoro e', mentre il tipo direbbe solo
        "Forza" come tutte le altre. */
     if(s.fz && s.title) return s.title;
+    /* Una gara scritta a mano vale per chi si affronta: il tipo direbbe solo
+       "Gara", il nome dell'avversario dice quale partita e'. */
+    if(s.type==='gara' && s.opp) return (s.casa===false ? '@ ' : 'vs ') + s.opp;
     if(s.type && SES[s.type]) return SES[s.type].l;
     if(s.title) return s.title;
     if(s.is_match) return compLabel(s) || 'Gara';
@@ -3580,6 +3666,11 @@ window.RS_ROSTER = window.RS_ROSTER || [
       selC.innerHTML = COMP_ORDER.map(function(k){ return '<option value="'+k+'">'+esc(COMP[k])+'</option>'; }).join('');
       selC.value = m.comp_gara || (m.kind==='amichevole' ? 'amichevole' : (FIX_BY_DATE[m.data] ? 'campionato' : 'amichevole'));
     }
+    const fx = FIX_BY_DATE[m.data];
+    const inO = document.getElementById('pl-eopp');
+    if(inO) inO.value = m.opp || (fx ? fixOpp(fx) : (m.title||''));
+    const selH = document.getElementById('pl-ecasa');
+    if(selH) selH.value = (m.casa==null ? (fx ? (fx.casa?'1':'0') : '1') : (m.casa?'1':'0'));
     plCompRow();
     document.getElementById('pl-eslot').value = m.slot||'';
     document.getElementById('pl-epct').value = (m.pct==null?'':m.pct);
@@ -3602,22 +3693,50 @@ window.RS_ROSTER = window.RS_ROSTER || [
   }
   function plRefreshIdpBtn(){
     const b = document.getElementById('pl-eidp'); if(!b) return;
-    const n = idpCount(plEditSes());
+    const ses = plEditSes();
+    const n = idpCount(ses);
     b.classList.toggle('on', n>0);
-    b.innerHTML = '<span>'+(n ? (n+' '+(n===1?'atleta resta':'atlete restano')+' dopo la seduta') : 'Aggiungi l\'individuale')+'</span>';
+    let lab;
+    if(n) lab = n+' '+(n===1?'atleta resta':'atlete restano')+' dopo la seduta';
+    else {
+      const g = idpGps(ses).length;
+      lab = g ? ('Il GPS segna IDP per '+g+' '+(g===1?'atleta':'atlete')+': compila') : 'Aggiungi l\'individuale';
+    }
+    b.innerHTML = '<span>'+esc(lab)+'</span>';
   }
-  /* La riga della competizione ha senso solo se il blocco e' una gara: sulle
-     altre attivita' resta chiusa invece di chiedere una cosa che non serve. */
+  /* Una gara non e' una seduta: non ha fasi, non ha intensita' in percentuale,
+     non ha differenziate ne' individuale a fine seduta. Quando il blocco e' una
+     partita la scheda cambia faccia e chiede solo contro chi si gioca, dove, in
+     che competizione, piu' le convocate e il tabellino. */
   function plCompRow(){
-    const row = document.getElementById('pl-ecomprow');
     const selT = document.getElementById('pl-etype');
-    if(!row || !selT) return;
-    if(selT.value==='gara') row.removeAttribute('hidden'); else row.setAttribute('hidden','');
+    if(!selT) return;
+    const gara = selT.value==='gara';
+    function tog(id, on){
+      const el = document.getElementById(id); if(!el) return;
+      if(on) el.removeAttribute('hidden'); else el.setAttribute('hidden','');
+    }
+    tog('pl-ecomprow', gara);
+    tog('pl-egarow', gara);
+    tog('pl-etabrow', gara);
+    tog('pl-epctrow', !gara);
+    tog('pl-ephzrow', !gara);
+    tog('pl-ediffrow', !gara);
+    tog('pl-eidprow', !gara);
+    const h = document.getElementById('pl-etitle');
+    if(h) h.textContent = gara ? 'Modifica la gara' : 'Modifica blocco';
+    const lp = document.getElementById('pl-eplab');
+    if(lp) lp.textContent = gara ? 'Convocate' : 'Giocatrici coinvolte';
+    const nt = document.getElementById('pl-enote');
+    if(nt) nt.placeholder = gara ? 'es. campo, orario, note sulla gara' : 'es. campo, obiettivo della seduta';
   }
-  function plSaveEdit(){
-    if(plEditId==null) return;
+  function plSaveEdit(){ if(plSaveEdit2()){ plEditId = null; plAfterMutate(); } }
+  /* Salva senza chiudere: serve al tabellino, che si apre sopra la scheda della
+     gara e deve trovare l'avversario appena scritto. */
+  function plSaveEdit2(){
+    if(plEditId==null) return false;
     const s = loadStore(); const m = s.manual.find(x=> String(x.id)===String(plEditId));
-    if(!m) return;
+    if(!m) return false;
     const t = document.getElementById('pl-etype').value;
     const meta = SES[t] || SES.squadra;
     const raw = document.getElementById('pl-epct').value;
@@ -3632,6 +3751,14 @@ window.RS_ROSTER = window.RS_ROSTER || [
     m.type = t;
     m.kind = (cg==='amichevole') ? 'amichevole' : meta.k;
     m.title = m.fz ? (m.title || '') : '';
+    /* L'avversario e il campo restano scritti anche se poi il blocco torna
+       seduta: se si rimette gara non si deve riscrivere tutto da capo. */
+    if(t==='gara'){
+      const eo = document.getElementById('pl-eopp');
+      const eh = document.getElementById('pl-ecasa');
+      m.opp = eo ? eo.value.trim() : (m.opp||'');
+      m.casa = eh ? (eh.value==='1') : (m.casa==null?true:!!m.casa);
+    }
     m.slot = document.getElementById('pl-eslot').value;
     m.pct  = (pct && pct>0) ? pct : null;
     m.load = (pct && pct>0) ? Math.round(pct/100*SCALE) : null;
@@ -3640,7 +3767,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     m.group = document.getElementById('pl-egroup').value;
     m.phases = phasesClean(plEditPhases);
     m.players = plEditPlayers.slice();
-    saveStore(s); plEditId = null; plAfterMutate();
+    saveStore(s); return true;
   }
 
   // ---- dialog dettaglio ----
@@ -4020,6 +4147,25 @@ window.RS_ROSTER = window.RS_ROSTER || [
     idpWrite(all);
   }
   function idpCount(s){ return idpOf(s).length; }
+  /* Dentro le esercitazioni del GPS l'individuale si chiama IDP: quando in una
+     seduta compare quel taglio, il foglio dice gia' chi e' rimasta e per quanti
+     minuti. Da qui la scheda si riempie da sola e al preparatore resta da dire
+     solo su cosa hanno lavorato. */
+  function idpGps(s){
+    const ex = exOf(s); if(!ex || !Array.isArray(ex.drills)) return [];
+    const min = Object.create(null);
+    ex.drills.forEach(function(d){
+      if(!d || !/\bIDP\b/i.test(String(d.descrizione||''))) return;
+      const at = d.atlete; if(!at) return;
+      Object.keys(at).forEach(function(nm){
+        const m = vArr(at[nm], IX_MIN);
+        min[nm] = (min[nm]||0) + (m==null ? 0 : m);
+      });
+    });
+    return Object.keys(min).map(function(nm){
+      return { n:nm, min:Math.round(min[nm]) };
+    }).sort(function(a,b){ return plNome(a.n).localeCompare(plNome(b.n)); });
+  }
   function idpCarenze(n){
     try{
       const b = window.fioBio ? window.fioBio()[String(n)] : null;
@@ -4249,6 +4395,21 @@ window.RS_ROSTER = window.RS_ROSTER || [
         idpRenderCards();
       });
     }
+    const gps = document.getElementById('pl-idpgpsb');
+    if(gps) gps.addEventListener('click', function(){
+      idpTakeGps(); idpRenderPick(); idpRenderCards();
+      toast('Individuale presa dal GPS');
+    });
+    const gb = document.getElementById('pl-idpgb');
+    if(gb) gb.addEventListener('click', function(){
+      if(!idpApplyAll()) toast('Scrivi il tema o i minuti, e scegli almeno un\'atleta');
+    });
+    /* Invio dentro il tema di gruppo applica, non salva la scheda. */
+    const gt = document.getElementById('pl-idpgt');
+    if(gt) gt.addEventListener('keydown', function(e){
+      if(e.key!=='Enter') return;
+      e.preventDefault(); idpApplyAll();
+    });
     const clr = document.getElementById('pl-idpclear');
     if(clr) clr.addEventListener('click', function(){ idpDraft = []; idpRenderPick(); idpRenderCards(); });
     const cnc = document.getElementById('pl-idpcancel');
@@ -4275,8 +4436,54 @@ window.RS_ROSTER = window.RS_ROSTER || [
       dl.innerHTML = esc(dt ? cap(DTF_LONG.format(dt)) : (s.data||'')) +
         (s.slot ? ' &#183; '+esc(s.slot) : '');
     }
+    /* Prima apertura su una seduta che il GPS segna come IDP: le schede
+       nascono gia' con i nomi e i minuti veri, senza cancellare niente di
+       quello che era stato scritto a mano. */
+    idpGpsList = idpGps(s);
+    if(!idpDraft.length && idpGpsList.length) idpTakeGps();
+    idpRenderGps();
+    const gt = document.getElementById('pl-idpgt'); if(gt) gt.value = '';
+    const gm = document.getElementById('pl-idpgm'); if(gm) gm.value = '';
     idpRenderPick(); idpRenderCards();
     if(typeof idpDlg.showModal==='function') idpDlg.showModal(); else idpDlg.setAttribute('open','');
+  }
+  let idpGpsList = [];
+  function idpRenderGps(){
+    const box = document.getElementById('pl-idpgps'); if(!box) return;
+    const lab = document.getElementById('pl-idpgpst');
+    if(!idpGpsList.length){ box.setAttribute('hidden',''); return; }
+    box.removeAttribute('hidden');
+    const n = idpGpsList.length;
+    if(lab) lab.textContent = 'Il foglio GPS segna IDP per '+n+' '+(n===1?'atleta':'atlete')+': '+
+      idpGpsList.map(function(r){ return plNome(r.n); }).join(', ')+'.';
+  }
+  /* Prendere dal GPS aggiunge chi manca e sistema i minuti, senza toccare i
+     temi gia' scelti a mano. */
+  function idpTakeGps(){
+    idpGpsList.forEach(function(g){
+      let r = idpFind(g.n);
+      if(!r){ r = { n:g.n, temi:[], min:0, note:'' }; idpDraft.push(r); }
+      if(g.min>0) r.min = Math.max(0, Math.min(90, g.min));
+    });
+  }
+  /* Stesso lavoro per tutte: il tema e i minuti vanno su ogni scheda aperta,
+     poi si corregge solo chi ha fatto altro. */
+  function idpApplyAll(){
+    const gt = document.getElementById('pl-idpgt');
+    const gm = document.getElementById('pl-idpgm');
+    const tema = gt ? gt.value.trim() : '';
+    const raw = gm ? gm.value : '';
+    const min = (raw==='') ? null : Math.max(0, Math.min(90, Math.round(Number(raw)||0)));
+    if(!tema && min==null) return false;
+    if(!idpDraft.length) return false;
+    idpDraft.forEach(function(r, i){
+      if(tema) idpAddTema(i, tema);
+      if(min!=null) r.min = min;
+    });
+    if(gt) gt.value = '';
+    if(gm) gm.value = '';
+    idpRenderCards();
+    return true;
   }
   function idpSave(){
     if(!idpCur) return;
@@ -4330,6 +4537,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(s && s.fix){
       const t = fixTeams(s.fix);
       return { casa:t.casa, home:t.home, away:t.away, opp:(t.casa ? t.away : t.home) };
+    }
+    /* Gara scritta a mano: l'avversario e il campo li ha messi il preparatore
+       nella scheda della gara, non ci sono nel calendario ufficiale. */
+    if(s && s.opp){
+      const casa = (s.casa==null) ? true : !!s.casa;
+      return { casa:casa, home:(casa?'Fiorentina':s.opp), away:(casa?s.opp:'Fiorentina'), opp:s.opp };
     }
     const opp = (s && s.title) ? s.title : 'Avversario';
     return { casa:true, home:'Fiorentina', away:opp, opp:opp };
@@ -4801,8 +5014,16 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const idph = idpPanel(s);
     h += idph;
     if(!s.only_fix){
+      /* Se il GPS di quel giorno ha un taglio IDP, l'individuale c'e' stata
+         davvero: qui si dice, cosi' non resta da scrivere senza accorgersene. */
+      const gps = idph ? [] : idpGps(s);
+      if(gps.length){
+        h += '<div class="pl-idpgps"><span class="t">Il foglio GPS segna IDP per '+gps.length+' '+
+          (gps.length===1?'atleta':'atlete')+': '+esc(gps.map(function(r){ return plNome(r.n); }).join(', '))+
+          '. Resta da scrivere su cosa hanno lavorato.</span></div>';
+      }
       h += '<div class="pl-dedit"><button class="svbtn" type="button" id="pl-detidp"><span>'+
-        (idph ? 'Modifica l\'individuale' : 'Aggiungi l\'individuale')+'</span></button></div>';
+        (idph ? 'Modifica l\'individuale' : (gps.length ? 'Compila l\'individuale' : 'Aggiungi l\'individuale'))+'</span></button></div>';
     }
     const ex = s.only_fix ? null : exOf(s);
     if(exHasDetail(ex)) h += exPanel(ex);
@@ -4941,6 +5162,18 @@ window.RS_ROSTER = window.RS_ROSTER || [
       if(form) form.addEventListener('submit', ()=> plSaveEdit());   // method="dialog" chiude da solo
       const selT = document.getElementById('pl-etype');
       if(selT) selT.addEventListener('change', plCompRow);
+      /* Il tabellino della gara si apre dalla stessa scheda: prima si salva
+         quello che c'e' scritto, altrimenti l'avversario appena digitato non
+         arriverebbe dentro il risultato. */
+      const tab = document.getElementById('pl-etab');
+      if(tab) tab.addEventListener('click', function(){
+        if(plEditId==null) return;
+        plSaveEdit2();
+        const m = loadStore().manual.find(x=> String(x.id)===String(plEditId));
+        if(!m) return;
+        gaOpen({ data:m.data, slot:m.slot||'', is_match:true, manual:true,
+          opp:m.opp||'', casa:(m.casa==null?true:!!m.casa), comp_gara:m.comp_gara||'' });
+      });
       const cancel = document.getElementById('pl-ecancel');
       if(cancel) cancel.addEventListener('click', ()=> plDialog.close());
       const del = document.getElementById('pl-edel');
