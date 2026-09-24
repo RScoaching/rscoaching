@@ -152,11 +152,18 @@ a{ color:inherit; text-decoration:none; }
 .mchip b{ font-family:'Bebas Neue',sans-serif; font-size:18px; font-weight:400; color:var(--ink); letter-spacing:.4px; }
 .mchip .ml{ color:var(--muted); }
 .next-strip{ margin-top:16px; padding:13px 15px; border-radius:var(--r); background:var(--surface3);
-  border:1px solid var(--border2); display:flex; align-items:center; gap:12px; }
+  border:1px solid var(--border2); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .next-strip .ns-lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; }
 .next-strip .ns-match{ font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--ink); letter-spacing:.4px; }
 .next-strip .ns-when{ margin-left:auto; text-align:right; font-size:12px; color:var(--muted); }
 .next-strip .ns-when b{ display:block; font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--orange2); letter-spacing:.5px; }
+/* Sotto la prossima gara, quello che il campo ha gia' detto: dove si gioca,
+   com'e' finita l'ultima e il bilancio della stagione fin qui. */
+.next-strip .ns-note{ flex:1 1 100%; margin-top:2px; padding-top:9px; border-top:1px solid var(--border2);
+  font-size:12px; line-height:1.5; color:var(--muted); }
+.next-strip .ns-note b{ color:var(--ink); font-weight:600; }
+.next-strip .ns-note .ns-w{ color:var(--green); font-weight:600; }
+.next-strip .ns-note .ns-l{ color:var(--orange2); font-weight:600; }
 
 /* checklist */
 .checklist{ display:flex; flex-direction:column; gap:2px; }
@@ -2215,6 +2222,45 @@ window.FORZA = window.FORZA || { roster:[] };
     )).join('');
   }
 
+  /* Sotto la prossima gara si legge quello che il campo ha gia' detto: dove si
+     gioca, com'e' finita l'ultima e come sta andando la stagione. I risultati li
+     segna il mister dal Calendario e restano nel browser (`rs_fio_gare` della
+     stagione), qui si leggono soltanto. Le gare giocate senza tabellino non
+     entrano nel bilancio: meglio un conto su meno partite che un conto sbagliato.
+     Quando non c'e' ancora nessun risultato segnato resta solo casa/trasferta. */
+  function gareSegnate(){
+    try{
+      const k = window.fioKey ? window.fioKey('rs_fio_gare') : 'rs_fio_gare';
+      const v = JSON.parse(localStorage.getItem(k) || '{}');
+      return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+    }catch(e){ return {}; }
+  }
+  function bilancioHTML(nf){
+    const dove = nf && nf.casa === false ? 'In trasferta' : (nf && nf.casa ? 'In casa' : '');
+    const seg = gareSegnate();
+    let v = 0, n = 0, p = 0, ultima = null;
+    fixtures.forEach(function(f){
+      if(!f || !f.data || f.data >= TSTR) return;
+      const r = seg[String(f.data)];
+      if(!r || typeof r !== 'object') return;
+      const gf = Number(r.gf) || 0, gs = Number(r.gs) || 0;
+      if(gf > gs) v++; else if(gf < gs) p++; else n++;
+      if(!ultima || f.data > ultima.f.data) ultima = { f:f, gf:gf, gs:gs };
+    });
+    const bits = [];
+    if(dove) bits.push(dove + '.');
+    if(ultima){
+      const cls = ultima.gf > ultima.gs ? 'ns-w' : (ultima.gf < ultima.gs ? 'ns-l' : '');
+      const chi = ultima.f.avversario || (ultima.f.casa ? ultima.f.away : ultima.f.home) || '';
+      bits.push('Ultima gara ' + esc(itShort(parse(ultima.f.data))) +
+        (chi ? ' con ' + esc(chi) : '') + ', ' +
+        '<span class="' + cls + '">' + ultima.gf + ' &#183; ' + ultima.gs + '</span>.');
+      bits.push('Stagione <b>' + v + 'V ' + n + 'N ' + p + 'P</b> sulle gare col risultato segnato.');
+    }
+    if(!bits.length) return '';
+    return '<div class="ns-note">' + bits.join(' ') + '</div>';
+  }
+
   function renderFocus(){
     const badge = {
       match:{cls:'s-match', txt:'Giorno gara'},
@@ -2255,14 +2301,20 @@ window.FORZA = window.FORZA || { roster:[] };
       meta += '<div class="mchip"><span class="ml">Ultima seduta</span><b style="font-size:14px">'+esc(itShort(parse(lastSession.data)))+'</b><span class="ml">'+NF.format(+lastSession.load||0)+' u.a.</span></div>';
     }
 
+    /* La striscia si apre anche quando il calendario e' finito: finora spariva del
+       tutto e con lei spariva il bilancio della stagione, che serve lo stesso. */
     let nextStrip = '';
+    const note = bilancioHTML(nextFix);
     if(nextFix){
       const fd = parse(nextFix.data);
       const gg = Math.round((fd - NOW)/86400000);
       const when = gg===0?'oggi':gg===1?'domani':('tra '+gg+' gg');
       const match = esc(nextFix.home||'Fiorentina')+' - '+esc(nextFix.away||nextFix.avversario||'');
       nextStrip = '<div class="next-strip"><div><div class="ns-lbl">Prossimo impegno</div><div class="ns-match">'+match+'</div></div>'+
-        '<div class="ns-when">'+esc(itShort(fd))+'<b>'+when+'</b></div></div>';
+        '<div class="ns-when">'+esc(itShort(fd))+'<b>'+when+'</b></div>'+ note +'</div>';
+    } else if(note){
+      nextStrip = '<div class="next-strip"><div><div class="ns-lbl">Prossimo impegno</div>'+
+        '<div class="ns-match">Nessuna gara in calendario</div></div>'+ note +'</div>';
     }
 
     document.getElementById('focus-main').innerHTML =
