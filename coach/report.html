@@ -457,7 +457,6 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
    sono una sotto l'altra. Solo a schermo. */
 .ex-al{ display:block; margin:4px 0 0 26px; font-size:12px; font-weight:500; color:var(--orange2); }
 .ex-ok{ display:block; margin:4px 0 0 26px; font-size:12px; color:var(--muted); font-weight:400; }
-.ex-nr{ display:block; margin:4px 0 0 26px; font-size:12px; color:var(--faint); font-weight:400; font-style:italic; }
 
 /* ---------- tempi morti ----------
    Full Training contro la somma delle esercitazioni. Quattro numeri in fila come
@@ -486,7 +485,7 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
   .tm-c{ border-left:0; border-top:1px solid var(--border2); }
   .tm-c:first-child{ border-top:0; }
 }
-@media print{ .rsec-tm, .ex-al, .ex-ok, .ex-nr{ display:none !important; } }
+@media print{ .rsec-tm, .ex-al, .ex-ok{ display:none !important; } }
 
 /* ---------- image preview modal ---------- */
 dialog.imgmodal{ border:0; padding:0; background:transparent; max-width:min(94vw,680px); width:100%; margin:auto; }
@@ -3153,6 +3152,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* Le serie si cercano prima nel loro campo, poi nello step e nelle note:
        c'e' chi scrive "2 x 3' rec 1'" dove capita. */
     const fonti = [t.serie, t.step, t.note].map(function(x){ return String(x||''); });
+    /* "3x1' a testa" sono turni: ognuna lavora un minuto per volta mentre le
+       altre aspettano, e la durata dell'esercitazione non si ricava. Lo stesso
+       per coppie, gruppi e rotazioni. In quei casi il controllo non si fa. */
+    const TURNI = /a\s+test[ae]|a\s+coppi[ae]|a\s+grupp[oi]|a\s+turn[oi]|per\s+(?:atleta|giocatric\w*|coppi[ae]|grupp[oi]|squadr[ae])|ciascun|ognun|rotazion/i;
+    if(fonti.some(function(f){ return TURNI.test(f); })) return null;
     let m = null, serie = '';
     fonti.some(function(f){
       const q = /(\d+)\s*[x\u00d7*]\s*(.+)$/i.exec(f);
@@ -3216,8 +3220,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   /* Sotto ogni esercitazione il controllo si vede sempre, non solo quando
      qualcosa non torna: se non si vedesse niente non si saprebbe se il conto
      e' in linea o se non e' stato fatto. Tre casi: sfora (arancio), torna
-     (grigio), oppure serie e recupero sono scritti ma non si riesce a leggerne
-     la durata, e allora lo si dice con l'esempio di come scriverli. */
+     (grigio). Quando la durata non si ricava non si scrive niente: capita col
+     solo tempo totale o coi turni a testa, e non e' un errore. */
   function tmAlertRiga(d){
     const x = tmSforo(d);
     if(x){
@@ -3233,10 +3237,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return '<span class="ex-ok">Previsti '+esc(tmFmt(a.min))+' ('+esc(tmScritto(a))+(a.stima ? ', letto in minuti' : '')+'), il GPS dice '+
         esc(tmFmt(vero))+(meno > tol ? ': '+esc(tmFmt(meno))+' in meno del previsto.' : ': in linea.')+'</span>';
     }
-    const t = tmDet(d);
-    if(t.serie || t.rec){
-      return '<span class="ex-nr">Serie e recupero ci sono ma non ne leggo la durata. Per il controllo scrivi per esempio 2 x 3\' e 1\'.</span>';
-    }
+    // quando non si ricava la durata (tempo totale, turni a testa) non si scrive niente
     return '';
   }
   // la seduta grezza dell'archivio, con il Full Training e le atlete di ogni taglio
@@ -3344,7 +3345,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const c = tmConto(s, tmGrezza(iso, s.slot));
       const sfori = s.drills.map(function(d){ return { d:d, x:tmSforo(d) }; })
         .filter(function(o){ return !!o.x; });
-      const conOrario = s.drills.filter(function(d){ return !!tmAtteso(d); }).length;
       if(!c && !sfori.length) return;
       let h = '';
       if(sess.length > 1){
@@ -3390,9 +3390,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(c && c.insieme.length){
         note.push('contate una volta sola perche\' fatte nello stesso momento: '+
           c.insieme.map(function(b){ return b.nomi.join(' e '); }).join('; '));
-      }
-      if(!conOrario){
-        note.push('per il controllo dei recuperi scrivi serie e recupero in Esercitazioni, per esempio 2 x 3\' e 1\'');
       }
       if(note.length){
         h += '<p class="tm-nota">'+note.map(function(t){
