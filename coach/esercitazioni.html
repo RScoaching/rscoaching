@@ -416,6 +416,9 @@ table.gtbl tfoot td.nm{ color:var(--ink); }
 .dnote .nf input::placeholder{ color:var(--faint); }
 .dnote .nf input:hover{ border-color:var(--border3); }
 .dnote .nf input:focus{ border-color:var(--orange); }
+.dnote .nins{ display:flex; align-items:center; gap:9px; margin-top:10px; font-size:12.5px; color:var(--muted);
+  cursor:pointer; min-height:32px; }
+.dnote .nins input{ width:17px; height:17px; margin:0; accent-color:var(--violet); cursor:pointer; flex:0 0 17px; }
 .dnote .nsaved{ margin-top:7px; font-size:11px; color:var(--green); opacity:0; transition:opacity .2s var(--ease); }
 .dnote .nsaved.on{ opacity:1; }
 /* il foglio del mister: la scansione della seduta cosi' come l'ha disegnata lui */
@@ -1601,9 +1604,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       ? '<div class="nfrom">'+(ered===1?'Un campo arriva':'Ne arrivano '+ered)+
         ' dalla scheda <b>'+esc(d.descrizione||'')+'</b> in archivio. Scrivendo qui sopra vale solo per questa seduta.</div>'
       : '';
+    /* Squadra divisa: due esercitazioni nello stesso momento, su due gruppi. Il
+       report dei tempi morti le conta una volta sola, la piu' lunga, invece di
+       sommarle come se fossero una dopo l'altra. Vale solo per la seduta, non
+       va in archivio: dipende da come e' andata quel giorno. */
+    const insieme = String(v.insieme||'') === '1';
+    const cInsieme = '<label class="nins"><input type="checkbox" data-f="insieme"'+(insieme ? ' checked' : '')+'>'+
+      '<span>Fatta nello stesso momento dell\'esercitazione sopra, con un altro gruppo</span></label>';
     return '<div class="dnote" data-k="'+esc(k)+'"><div class="nh">Dettagli della proposta</div><div class="ng">'+
       campi+
-      '</div><div class="nsaved">Salvato su questo dispositivo</div>'+from+'</div>';
+      '</div>'+cInsieme+'<div class="nsaved">Salvato su questo dispositivo</div>'+from+'</div>';
   }
 
   /* La scansione del foglio del mister sta in coach/prev/seduta-<data>-<slot>.jpg
@@ -2226,13 +2236,15 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const k = lib || box.getAttribute('data-k');
       const flash = box.querySelector('.nsaved');
       let ft;
+      // il clic sulla scritta della casella non deve chiudere la scheda
+      box.querySelectorAll('.nins').forEach(l=> l.addEventListener('click', e=> e.stopPropagation()));
       box.querySelectorAll('input[data-f]').forEach(inp=>{
         inp.addEventListener('click', e=> e.stopPropagation());
         inp.addEventListener('keydown', e=> e.stopPropagation());
         inp.addEventListener('change', ()=>{
           const all = lib ? loadLib() : loadDet();
           const rec = all[k] || (all[k] = {});
-          const v = inp.value.trim();
+          const v = inp.type === 'checkbox' ? (inp.checked ? '1' : '') : inp.value.trim();
           if(v) rec[inp.getAttribute('data-f')] = v; else delete rec[inp.getAttribute('data-f')];
           if(!Object.keys(rec).length) delete all[k];
           if(lib) saveLib(all); else saveDet(all);
