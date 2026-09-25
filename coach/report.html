@@ -452,6 +452,41 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 .ex-n{ font-weight:600; color:var(--ink); }
 .ex-d{ display:block; margin:3px 0 0 26px; font-size:12px; color:var(--muted); font-weight:400; }
 .ex-nt{ display:block; margin:2px 0 0 26px; font-size:12px; color:var(--faint); font-weight:400; }
+/* Il recupero scritto non torna con la durata vera: sta sotto il nome, dove si
+   legge gia' quello che il mister ha scritto, cosi' la cifra e la sua smentita
+   sono una sotto l'altra. Solo a schermo. */
+.ex-al{ display:block; margin:4px 0 0 26px; font-size:12px; font-weight:500; color:var(--orange2); }
+
+/* ---------- tempi morti ----------
+   Full Training contro la somma dei tagli, atleta per atleta. Tre numeri in fila
+   come la fascia in cima, poi i gruppi quando la seduta era divisa e sotto i
+   recuperi che non tornano. Solo a schermo: la stampa non la chiama. */
+.tm-slot{ font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); margin:18px 0 8px; }
+.tm-slot:first-child{ margin-top:0; }
+.tm-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+  border:1px solid var(--border2); border-radius:var(--r); background:var(--surface2); }
+.tm-c{ padding:13px 16px 14px; border-left:1px solid var(--border2); min-width:0; }
+.tm-c:first-child{ border-left:0; }
+.tm-c .l{ font-size:10.5px; color:var(--muted); font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+.tm-c .v{ font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:.5px; color:var(--ink);
+  line-height:1.02; margin-top:7px; font-variant-numeric:tabular-nums; }
+.tm-c .v small{ font-family:'Inter',sans-serif; font-size:12px; font-weight:600; color:var(--muted); margin-left:4px; letter-spacing:0; }
+.tm-c .s{ font-size:11.5px; color:var(--faint); margin-top:3px; }
+.tm-c.hi .v{ color:var(--orange2); }
+.tm-grp{ margin-top:12px; }
+.tm-grp td .gn{ display:block; font-size:11.5px; color:var(--faint); font-weight:400; margin-top:2px; white-space:normal; }
+.tm-al{ list-style:none; margin:12px 0 0; padding:0; display:grid; gap:6px; }
+.tm-al li{ font-size:12.5px; line-height:1.5; color:var(--text); padding:8px 12px; border-radius:var(--r-sm);
+  background:oklch(68% 0.19 42 / 0.09); border:1px solid oklch(68% 0.19 42 / 0.24); }
+.tm-al li b{ color:var(--ink); }
+.tm-al li .d{ color:var(--orange2); font-weight:700; }
+.tm-nota{ margin:10px 0 0; font-size:11.5px; line-height:1.55; color:var(--faint); }
+@media (max-width:640px){
+  .tm-c{ border-left:0; border-top:1px solid var(--border2); }
+  .tm-c:first-child{ border-top:0; }
+}
+@media print{ .rsec-tm, .ex-al{ display:none !important; } }
 
 /* ---------- image preview modal ---------- */
 dialog.imgmodal{ border:0; padding:0; background:transparent; max-width:min(94vw,680px); width:100%; margin:auto; }
@@ -3010,7 +3045,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return p.join(' · ');
   }
-  function exTableHTML(s){
+  // aSchermo: true solo dalla pagina. La stampa la chiama senza, e sul foglio
+  // l'avviso dei recuperi non va.
+  function exTableHTML(s, aSchermo){
     const head = '<thead><tr><th style="text-align:left">Esercitazione</th>'+
       EX_COLS.map(function(c){ return '<th>'+esc(c.l)+'</th>'; }).join('')+'</tr></thead>';
     const tot = EX_COLS.map(function(){ return 0; });
@@ -3030,6 +3067,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<span class="ex-n">'+esc(d.nome || 'Esercitazione')+'</span>'+
         (det ? '<span class="ex-d">'+esc(det)+'</span>' : '')+
         (nota ? '<span class="ex-nt">'+esc(nota)+'</span>' : '')+
+        (aSchermo === true ? tmAlertRiga(d) : '')+
       '</td>'+tds+'</tr>';
     }).join('');
     const totCells = EX_COLS.map(function(c, ci){
@@ -3053,12 +3091,241 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function exSecHTML(m){
     const sess = exSessioni(cfIso(m.meta.dateStr), m.meta.ap || '');
     const corpo = sess.length
-      ? sess.map(exTableHTML).join('')
+      ? sess.map(function(s){ return exTableHTML(s, true); }).join('')
       : '<p class="cf-void">Per questa data non ci sono esercitazioni registrate. Si scrivono nella pagina Esercitazioni e compaiono qui da sole.</p>';
     return '<div class="rsec rsec-ex"><div class="rsec-head"><h3>Le esercitazioni</h3>'+
       '<span class="rsec-n">nome, serie e metraggi presi dalla pagina Esercitazioni, nello stesso ordine</span></div>'+
       corpo+'</div>';
   }
+  /* TEMPI MORTI E RECUPERI CHE NON TORNANO. Solo a schermo.
+     Il Full Training e' la seduta dal primo all'ultimo minuto col GPS acceso; i
+     tagli sono le esercitazioni. La differenza sono i tempi fra un'esercitazione
+     e l'altra: spiegazioni, cambi di campo, acqua, pettorine. Il conto si fa
+     atleta per atleta e non sulla seduta intera, perche' quando la squadra e'
+     divisa due gruppi lavorano insieme su due esercitazioni diverse: sommare i
+     tagli di tutti e due darebbe una seduta piu' lunga del Full Training. Ogni
+     atleta somma solo i tagli in cui c'e' lei, e il suo Full Training e' il suo.
+     Le atlete col Full Training ma in nessun taglio restano fuori dal conto:
+     per loro la seduta sarebbe tutta tempo morto, e non e' vero. */
+  const EX_LS_LIB = 'rs_fio_eserc_lib';   // scheda d'archivio per nome, da Esercitazioni
+  // lo stesso nome ridotto all'osso della pagina Esercitazioni (exKey)
+  function tmNomeKey(desc){
+    let t = String(desc==null?'':desc).toLowerCase();
+    if(t.normalize) t = t.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return t
+      .replace(/\(\s*\d+\s*\)\s*$/, '')
+      .replace(/[^a-z0-9+]+/g, ' ')
+      .replace(/\s*\+\s*/g, '+')
+      .trim().replace(/\s+/g, ' ');
+  }
+  // serie e recupero: quelli della seduta, e dove mancano quelli della scheda
+  // d'archivio, come fa la pagina Esercitazioni
+  function tmDet(d){
+    const lib = (exLS(EX_LS_LIB) || {})[tmNomeKey(d && d.nome)] || {};
+    const o = {};
+    ['serie','rec'].forEach(function(k){
+      const v = String((d && d.det && d.det[k]) || '').trim();
+      o[k] = v || String(lib[k] || '').trim();
+    });
+    return o;
+  }
+  /* Una durata scritta a mano, in minuti. Vale 3', 3 min, 1'30, 1'30", 45",
+     45'', 90 sec, 90 s, con la virgola o col punto. Una cifra senza unita' non
+     e' una durata: "4 x 3" sono ripetizioni, e i metri non si confondono coi
+     minuti perche' la sola "m" non conta. */
+  const TM_DUR_SRC = '(\\d+(?:\\.\\d+)?)\\s*(?:(\'\'|"|”|sec\\w*|s\\b)|(\'|’|min\\w*)(?:(\\d{2})(?:\'\'|"|”)?)?)';
+  function tmMinuti(m){
+    if(!m) return null;
+    const n = +m[1];
+    if(!isFinite(n)) return null;
+    if(m[2]) return n / 60;
+    return n + (m[4] ? (+m[4]) / 60 : 0);
+  }
+  function tmDurata(t, inizio){
+    const s = String(t||'').toLowerCase().replace(/(\d),(\d)/g, '$1.$2');
+    return tmMinuti(new RegExp((inizio ? '^\\s*' : '') + TM_DUR_SRC).exec(s));
+  }
+  /* Quanto doveva durare: S serie da T con R di recupero fra una e l'altra,
+     cioe' S x T + (S - 1) x R. Si calcola solo quando c'e' tutto: serie, durata
+     con l'unita' e recupero. Il recupero si legge dal suo campo, oppure dentro la
+     riga delle serie dopo "rec" ("2x3' rec 1'"). */
+  function tmAtteso(d){
+    const t = tmDet(d);
+    const m = /(\d+)\s*[x×*]\s*(.+)$/i.exec(String(t.serie||''));
+    if(!m) return null;
+    const S = +m[1];
+    const T = tmDurata(m[2], true);
+    if(!(S >= 2) || !(T > 0)) return null;
+    let R = tmDurata(t.rec, false);
+    if(R == null){
+      const r = /rec\w*\.?\s*:?\s*(.+)$/i.exec(String(t.serie||''));
+      if(r) R = tmDurata(r[1], false);
+    }
+    if(R == null) return null;
+    return { S:S, T:T, R:R, min: S*T + (S-1)*R };
+  }
+  // i minuti in etichetta: 7', 4'30"
+  function tmFmt(min){
+    const tot = Math.round(Math.max(0, min) * 60);
+    const mm = Math.floor(tot / 60), ss = tot % 60;
+    if(!ss) return mm + '\'';
+    return mm + '\'' + (ss < 10 ? '0' : '') + ss + '"';
+  }
+  /* Il margine prima di parlare: il taglio del GPS parte e finisce a mano, un
+     minuto o un decimo dell'esercitazione si perdono comunque fra fischio e
+     tasto. Sotto quello non e' un recupero lungo, e' il cronometro. */
+  function tmSforo(d){
+    const a = tmAtteso(d);
+    const vero = exVal(d.load, 'Minuti');
+    if(!a || vero == null) return null;
+    const tol = Math.max(1, a.min * 0.10);
+    const piu = vero - a.min;
+    if(piu <= tol) return null;
+    return { a:a, vero:vero, piu:piu };
+  }
+  function tmAlertRiga(d){
+    const x = tmSforo(d);
+    if(!x) return '';
+    return '<span class="ex-al">Scritto '+esc(x.a.S+'x'+tmFmt(x.a.T)+' con '+tmFmt(x.a.R)+' di recupero')+
+      ', cioe\' '+esc(tmFmt(x.a.min))+'. Il GPS dice '+esc(tmFmt(x.vero))+
+      ': '+esc(tmFmt(x.piu))+' in piu\' di recupero.</span>';
+  }
+  // la seduta grezza dell'archivio, con Full Training, gruppi e atlete per taglio
+  function tmGrezza(iso, slot){
+    const E = (window.ESERC && typeof window.ESERC==='object') ? window.ESERC : {};
+    const base = Array.isArray(E.sessions) ? E.sessions : [];
+    return base.find(function(s){
+      return String(s && s.date||'').slice(0,10) === iso &&
+             String(s.slot||'').toUpperCase() === String(slot||'').toUpperCase();
+    }) || null;
+  }
+  function tmConto(raw){
+    const E = (window.ESERC && typeof window.ESERC==='object') ? window.ESERC : {};
+    const cols = Array.isArray(E.load_cols) ? E.load_cols : [];
+    const mi = cols.indexOf('Minuti');
+    const fa = raw && raw.ft && raw.ft.atlete;
+    if(mi < 0 || !fa || typeof fa !== 'object') return null;
+    const drills = Array.isArray(raw.drills) ? raw.drills : [];
+    function minDi(v){
+      const n = Array.isArray(v) ? Number(v[mi]) : Number(v && v.Minuti);
+      return isFinite(n) ? n : 0;
+    }
+    const per = [], grp = {};
+    let fuori = 0;
+    Object.keys(fa).forEach(function(nome){
+      const ft = minDi(fa[nome]);
+      if(!(ft > 0)) return;
+      let net = 0;
+      const dove = [];
+      drills.forEach(function(d, i){
+        const v = d && d.atlete && d.atlete[nome];
+        if(!v) return;
+        const mm = minDi(v);
+        if(mm > 0){ net += mm; dove.push(i); }
+      });
+      if(!dove.length){ fuori++; return; }
+      per.push({ nome:nome, ft:ft, net:net });
+      const k = dove.join(',');
+      const g = grp[k] || (grp[k] = { idx:dove, atlete:[], ft:0, net:0 });
+      g.atlete.push(nome); g.ft += ft; g.net += net;
+    });
+    if(!per.length) return null;
+    const media = function(k){ return per.reduce(function(a, p){ return a + p[k]; }, 0) / per.length; };
+    const gruppi = Object.keys(grp).map(function(k){
+      const g = grp[k], n = g.atlete.length;
+      return { idx:g.idx, atlete:g.atlete, ft:g.ft/n, net:g.net/n,
+               nomi:g.idx.map(function(i){ return String((drills[i] && drills[i].descrizione) || '').trim(); }) };
+    }).sort(function(a, b){ return b.atlete.length - a.atlete.length; });
+    const ft = media('ft'), net = media('net');
+    return { n:per.length, fuori:fuori, ft:ft, net:net, pausa:Math.max(0, ft - net),
+             cambi:Math.max(0, gruppi[0].idx.length - 1), gruppi:gruppi };
+  }
+  function tmCella(l, v, u, s, hi){
+    return '<div class="tm-c'+(hi ? ' hi' : '')+'"><div class="l">'+esc(l)+'</div>'+
+      '<div class="v">'+v+(u ? '<small>'+esc(u)+'</small>' : '')+'</div>'+
+      (s ? '<div class="s">'+s+'</div>' : '')+'</div>';
+  }
+  function tmSecHTML(m){
+    const iso = cfIso(m.meta.dateStr);
+    const sess = exSessioni(iso, m.meta.ap || '');
+    const blocchi = [];
+    sess.forEach(function(s){
+      const c = tmConto(tmGrezza(iso, s.slot));
+      const sfori = s.drills.map(function(d){ return { d:d, x:tmSforo(d) }; })
+        .filter(function(o){ return !!o.x; });
+      const conOrario = s.drills.filter(function(d){ return !!tmAtteso(d); }).length;
+      if(!c && !sfori.length) return;
+      let h = '';
+      if(sess.length > 1){
+        h += '<div class="tm-slot">'+esc(s.slot==='AM' ? 'Mattino' : (s.slot==='PM' ? 'Pomeriggio' : (s.slot || 'Seduta')))+'</div>';
+      }
+      if(c){
+        const pct = c.ft > 0 ? Math.round(c.pausa / c.ft * 100) : 0;
+        const aCambio = c.cambi > 0 ? c.pausa / c.cambi : 0;
+        h += '<div class="tm-row">'+
+          tmCella('Full Training', NF0.format(Math.round(c.ft)), 'min', 'la seduta dal primo all\'ultimo minuto') +
+          tmCella('Nei tagli', NF0.format(Math.round(c.net)), 'min', 'la somma delle esercitazioni fatte') +
+          tmCella('Tempi morti', NF0.format(Math.round(c.pausa)), 'min',
+            esc(pct+'% della seduta'), pct >= 15) +
+          (c.cambi > 0
+            ? tmCella('A ogni cambio', esc(tmFmt(aCambio)), '',
+                esc(c.cambi+(c.cambi === 1 ? ' cambio' : ' cambi')+' di esercitazione'))
+            : '') +
+        '</div>';
+        if(c.gruppi.length > 1){
+          h += '<div class="tbl-wrap tbl-scroll tm-grp"><table class="dt"><thead><tr>'+
+            '<th style="text-align:left">Gruppo</th><th>Full Training</th><th>Nei tagli</th><th>Tempi morti</th>'+
+            '</tr></thead><tbody>'+
+            c.gruppi.map(function(g){
+              const p = Math.max(0, g.ft - g.net);
+              return '<tr><td style="text-align:left"><span class="ex-n">'+
+                  esc(g.atlete.length+(g.atlete.length === 1 ? ' atleta' : ' atlete'))+'</span>'+
+                  '<span class="gn">'+esc(g.nomi.join(', '))+'</span>'+
+                  '<span class="gn">'+esc(g.atlete.join(', '))+'</span></td>'+
+                '<td><span class="v eq">'+NF0.format(Math.round(g.ft))+'<span class="mu">min</span></span></td>'+
+                '<td><span class="v eq">'+NF0.format(Math.round(g.net))+'<span class="mu">min</span></span></td>'+
+                '<td><span class="v eq">'+NF0.format(Math.round(p))+'<span class="mu">min</span></span></td></tr>';
+            }).join('')+
+            '</tbody></table></div>';
+        }
+      }
+      if(sfori.length){
+        const tot = sfori.reduce(function(a, o){ return a + o.x.piu; }, 0);
+        h += '<ul class="tm-al">'+sfori.map(function(o){
+          const x = o.x;
+          return '<li><b>'+esc(o.d.nome || 'Esercitazione')+'</b>: scritto '+
+            esc(x.a.S+'x'+tmFmt(x.a.T)+' con '+tmFmt(x.a.R)+' di recupero')+', cioe\' '+esc(tmFmt(x.a.min))+
+            '. Il GPS dice '+esc(tmFmt(x.vero))+': <span class="d">'+esc(tmFmt(x.piu))+' in piu\'</span>, '+
+            'i recuperi sono stati piu\' lunghi del previsto.</li>';
+        }).join('')+'</ul>';
+        if(sfori.length > 1){
+          h += '<p class="tm-nota">In tutto '+esc(tmFmt(tot))+' di recupero in piu\' rispetto a quello scritto.</p>';
+        }
+      }
+      const note = [];
+      if(c && c.fuori){
+        note.push(c.fuori+(c.fuori === 1 ? ' atleta ha' : ' atlete hanno')+
+          ' il Full Training ma nessun taglio, e resta fuori dal conto');
+      }
+      if(!conOrario){
+        note.push('per controllare i recuperi scrivi serie e recupero in Esercitazioni, per esempio 2 x 3\' e 1\'');
+      }
+      if(c){
+        note.push('media di '+c.n+(c.n === 1 ? ' atleta' : ' atlete')+
+          ', ognuna col suo Full Training e i soli tagli in cui c\'era');
+      }
+      if(note.length){
+        const t = note.join('; ');
+        h += '<p class="tm-nota">'+esc(t.charAt(0).toUpperCase() + t.slice(1))+'.</p>';
+      }
+      blocchi.push(h);
+    });
+    if(!blocchi.length) return '';
+    return '<div class="rsec rsec-tm"><div class="rsec-head"><h3>Tempi morti</h3>'+
+      '<span class="rsec-n">quanto della seduta non e\' finito nelle esercitazioni</span></div>'+
+      blocchi.join('')+'</div>';
+  }
+
   // le stesse righe in testo, per il foglio che si porta via
   function exTesto(m){
     const out = [];
@@ -3233,7 +3500,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const desc = conDesc ? String(dailyDesc||'').trim() : '';
     const sess = exSessioni(cfIso(meta.dateStr), meta.ap || '');
     const exBody = sess.length
-      ? sess.map(exTableHTML).join('')
+      ? sess.map(function(s){ return exTableHTML(s, false); }).join('')
       : '<p class="pvoid">Per questa seduta non ci sono esercitazioni registrate.</p>';
     /* Accanto ai due titoli sta scritto quante sono. Il numero delle atlete che
        hanno fatto la seduta e quello di chi e' rimasta fuori dal conto della
@@ -3440,7 +3707,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        mister apre il documento, poi si legge cosa si e' fatto in sala e poi
        cosa si e' fatto in campo. A schermo la riga non si vede. */
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
-      forzaRigaHTML(m)+exSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
+      forzaRigaHTML(m)+exSecHTML(m)+tmSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
     fogSistema(host, fk);
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
