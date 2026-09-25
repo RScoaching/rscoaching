@@ -603,6 +603,29 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
 #rprint .rf-l + .rf-h{ margin-top:7px; }
 #rprint .rf-l b{ font-weight:600; color:#141414; }
 #rprint .rf-l i{ font-style:normal; color:#8a847c; }
+/* Quello che sta sotto la scansione - la forza e le esercitazioni - e' l'unica
+   parte della facciata che puo' stringersi senza perdere niente: sono righe di
+   tabella, non una figura. Prima cresceva libera e quando la seduta aveva la
+   forza piu' sei o sette esercitazioni la facciata sforava, quindi si
+   rimpiccioliva tutta insieme e il foglio del mister, che e' la cosa che si
+   guarda per prima, diventava piccolo con lei. Adesso queste misure passano da
+   variabili: si abbassano di un passo per volta finche' la pagina non rientra,
+   e la scansione resta grande come quando le esercitazioni sono due o tre. */
+#rprint .psheet{ --lo-fs:11.5px; --lo-pad:7px; --lo-th:8px; --lo-gap:16px;
+  --lo-sub:9.5px; --lo-ex:9.5px; }
+#rprint .plow .psec{ margin-bottom:var(--lo-gap); }
+#rprint .plow .psec:last-child{ margin-bottom:0; }
+#rprint .plow .psec-h{ padding-bottom:calc(var(--lo-pad) - 1px);
+  margin-bottom:calc(var(--lo-gap) * .7); }
+#rprint .plow table.dt{ font-size:var(--lo-fs); }
+#rprint .plow table.dt tbody td{ padding:var(--lo-pad) 8px; }
+#rprint .plow table.dt thead th{ padding:var(--lo-th) 8px; }
+#rprint .plow .ex-d, #rprint .plow .ex-nt{ font-size:var(--lo-sub); }
+#rprint .plow .ex-slot{ font-size:var(--lo-ex); margin:calc(var(--lo-gap) * .6) 0 5px; }
+#rprint .plow .ex-slot:first-child{ margin-top:0; }
+#rprint .plow .rforza{ margin-bottom:var(--lo-gap); padding:calc(var(--lo-pad) - 2px) 10px; }
+#rprint .plow .rf-l{ font-size:var(--lo-ex); }
+#rprint .plow .pdesc{ font-size:var(--lo-fs); }
 /* le tabelle: filetti sottili e niente riquadro, come in un referto */
 #rprint .tbl-wrap{ border:0; border-top:1px solid #141414; border-bottom:1px solid #141414;
   border-radius:0; overflow:visible; }
@@ -3112,6 +3135,27 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
      riempire la riga invece di lasciare una fascia bianca a destra. Due o tre
      passaggi bastano, la scala non scende sotto 0,55 perche' piu' piccolo di
      cosi' non si leggerebbe. */
+  /* I passi con cui si stringe quello che sta sotto la scansione. Il primo e'
+     la misura di sempre, quella che si vede quando la seduta ha due o tre
+     esercitazioni: da li' si scende solo se serve. L'ultimo e' il limite sotto
+     cui una tabella stampata non si legge piu' in campo. */
+  const LOW_STEP = [
+    { fs:11.5, pad:7,   th:8,   gap:16, sub:9.5, ex:9.5 },
+    { fs:11,   pad:6,   th:7,   gap:14, sub:9,   ex:9   },
+    { fs:10.5, pad:5,   th:6,   gap:12, sub:8.5, ex:8.5 },
+    { fs:10,   pad:4.5, th:5.5, gap:11, sub:8,   ex:8   },
+    { fs:9.5,  pad:4,   th:5,   gap:10, sub:7.5, ex:7.5 },
+    { fs:9,    pad:3.5, th:4.5, gap:9,  sub:7,   ex:7   }
+  ];
+  function lowStep(sec, p){
+    const st = sec.style;
+    st.setProperty('--lo-fs',  p.fs+'px');
+    st.setProperty('--lo-pad', p.pad+'px');
+    st.setProperty('--lo-th',  p.th+'px');
+    st.setProperty('--lo-gap', p.gap+'px');
+    st.setProperty('--lo-sub', p.sub+'px');
+    st.setProperty('--lo-ex',  p.ex+'px');
+  }
   function pAdatta(host){
     const PG = Math.floor(PG_H);
     Array.prototype.forEach.call(host.querySelectorAll('.psheet'), function(sec){
@@ -3122,7 +3166,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       fit.style.height = 'auto';
       fit.style.width = '100%';
       fit.style.transform = 'none';
-      const nat = fit.getBoundingClientRect().height;
+      let nat = fit.getBoundingClientRect().height;
+      /* Se sfora e la facciata ha la scatola di sotto, il primo rimedio non e'
+         rimpicciolire tutto: si stringono le righe della forza e delle
+         esercitazioni, un passo per volta, finche' la pagina non rientra. Le
+         tabelle reggono un corpo piu' piccolo, la scansione del mister no: e'
+         una fotografia di numeri scritti a mano e sotto una certa misura non si
+         legge piu'. Quasi sempre bastano uno o due passi e la scala resta a 1,
+         cioe' il foglio del mister esce grande come sulle sedute corte. */
+      const low = sec.querySelector('.plow');
+      if(low && nat > PG){
+        for(let i=1; i<LOW_STEP.length && nat > PG; i++){
+          lowStep(sec, LOW_STEP[i]);
+          nat = fit.getBoundingClientRect().height;
+        }
+      }
       /* Poi si stringe quel tanto che basta perche' ci stia. Il margine dello
          0,5 per cento copre le differenze fra il testo a schermo e quello del
          motore di stampa; sotto 0,55 non si scende perche' piu' piccolo non si
@@ -3194,11 +3252,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        quel giorno non c'e' stata forza torna stringa vuota e sul foglio non
        resta niente. Solo squadra: qui si stampa la scheda della seduta, gli
        esercizi e i carichi di gruppo, mai i numeri della singola atleta. */
+    /* La scansione resta figlia diretta della colonna, perche' e' lei l'elemento
+       elastico che si prende lo spazio che avanza. Tutto quello che le sta sotto
+       entra invece in una scatola sola: cosi' pAdatta puo' stringere quella e
+       lasciare stare la figura, invece di rimpicciolire la facciata intera. */
     return [
       fog+
-        (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
-        forzaRigaHTML({ meta:meta })+
-        pSecHTML('Le esercitazioni', '', exBody),
+        '<div class="plow">'+
+          (desc ? pSecHTML('Descrizione della seduta', '', '<p class="pdesc">'+esc(desc)+'</p>') : '')+
+          forzaRigaHTML({ meta:meta })+
+          pSecHTML('Le esercitazioni', '', exBody)+
+        '</div>',
       carico
     ];
   }
