@@ -416,6 +416,13 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atq em{ font-style:normal; font-weight:600; color:var(--text); }
 .tg-atq b{ color:var(--ink); font-weight:700; }
 .tg-atq .no b{ color:var(--orange2); }
+/* da quanto tempo non tocca la sua punta di velocita'. Sta sotto la quota della
+   prossima seduta perche' e' l'altra meta' della stessa decisione: i metri dicono
+   quanto ha corso, questa riga dice se ha corso forte. */
+.tg-atvx{ font-size:11px; color:var(--muted); margin-top:6px; }
+.tg-atvx em{ font-style:normal; color:var(--faint); }
+.tg-atvx b{ color:var(--ink); font-weight:700; }
+.tg-atvx .old b{ color:var(--orange2); }
 .tg-atc .src{ font-size:10.5px; color:var(--faint); margin-top:6px; }
 /* Qui dentro c'erano anche le aree di prevenzione e mobilita', per atleta e per
    gruppo. Sono uscite: Oggi serve per il carico fisico, e la prevenzione ha gia'
@@ -6545,13 +6552,20 @@ window.FORZA = window.FORZA || { roster:[] };
   // piu' lo alza a mano. WKX e' la scelta di squadra, WKX_P quella della singola
   // atleta e la sua chiave e' il nome del foglio.
   const WKX_OPTS  = [1.5, 2, 2.5, 3, 3.5, 4];
+  // Accelerazioni e decelerazioni vogliono gradini piu' alti: sotto le tre volte la
+  // gara le accelerazioni non si allenano, e le decelerazioni partono da due.
+  const WKX_OPTS_MET = {
+    acc: [3, 3.5, 4, 4.5, 5, 5.5, 6],
+    dec: [2, 2.5, 3, 3.5, 4, 4.5, 5]
+  };
+  function wkxOpts(k){ return WKX_OPTS_MET[k] || WKX_OPTS; }
   const WKX_DEF   = { hi:2, mid:2.5, dist:3.5, acc:4, dec:4 };
   const WKX_KEY   = K('rs_fio_wkx_all');
   const WKX_P_KEY = K('rs_fio_wkx');
 
-  function wkxVal(v){
+  function wkxVal(v, k){
     const n = Number(v);
-    return WKX_OPTS.indexOf(n) >= 0 ? n : 0;
+    return wkxOpts(k).indexOf(n) >= 0 ? n : 0;
   }
 
   function wkxRead(key){
@@ -6566,7 +6580,7 @@ window.FORZA = window.FORZA || { roster:[] };
     const o = {};
     WK_MET.forEach(function(k){ o[k] = WKX_DEF[k]; });
     const v = wkxRead(WKX_KEY);
-    Object.keys(o).forEach(function(k){ const n = wkxVal(v[k]); if(n) o[k] = n; });
+    Object.keys(o).forEach(function(k){ const n = wkxVal(v[k], k); if(n) o[k] = n; });
     return o;
   })();
 
@@ -6577,7 +6591,7 @@ window.FORZA = window.FORZA || { roster:[] };
       const src = v[nome];
       if(!src || typeof src !== 'object') return;
       const o = {};
-      WK_MET.forEach(function(k){ const n = wkxVal(src[k]); if(n) o[k] = n; });
+      WK_MET.forEach(function(k){ const n = wkxVal(src[k], k); if(n) o[k] = n; });
       if(Object.keys(o).length) out[nome] = o;
     });
     return out;
@@ -7206,7 +7220,7 @@ window.FORZA = window.FORZA || { roster:[] };
   // Le pillole della scelta. Senza nome sono quelle di squadra, con il nome quelle
   // della singola atleta: cambia solo l'attributo che l'handler legge.
   function wkxPills(k, val, name){
-    return '<div class="tg-xp">'+WKX_OPTS.map(function(v){
+    return '<div class="tg-xp">'+wkxOpts(k).map(function(v){
       return '<button type="button" class="tg-x'+(v === val ? ' on' : '')+'" data-xk="'+k+'" data-xv="'+v+'"'+
         (name ? ' data-xn="'+esc(name)+'"' : '')+'>'+wkxLbl(v)+'</button>';
     }).join('')+'</div>';
@@ -7486,6 +7500,74 @@ window.FORZA = window.FORZA || { roster:[] };
      si scende alla squadra. Il gradino scelto viene restituito insieme ai numeri
      perche' la scheda lo deve scrivere: un obiettivo che non dice da dove viene non e'
      un obiettivo, e' un numero. */
+  /* DA QUANTO NON TOCCA LA SUA PUNTA.
+     Le barre di questa card dicono quanti metri ha corso, non quanto veloce. La
+     colonna SMax sta nell'archivio del carico da sempre, ma per sapere da quanto
+     un'atleta non si avvicina alla sua massima bisognava aprire un'altra pagina e
+     scorrere la griglia riga per riga. Qui escono due numeri soli, gli stessi del
+     Carico: da quanti giorni non arriva al 90% e da quanti non arriva al 95%
+     della sua punta di stagione. Le partite restano fuori del tutto, anche dal
+     calcolo della punta: in gara la velocita' la fa la partita, non la
+     programmazione, e quello che interessa e' se in settimana l'ha stimolata. La
+     soglia e' sulla sua massima, non su una tabella di squadra: due atlete con
+     punte diverse non corrono alla stessa velocita'. */
+  const VMX_GG_ALLARME = 10;
+  const NFVX = new Intl.NumberFormat('it-IT', { minimumFractionDigits:1, maximumFractionDigits:1 });
+  let VMX_MAP = null;
+  function vmxAll(){
+    if(VMX_MAP) return VMX_MAP;
+    VMX_MAP = {};
+    const P  = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+    const MF = (window.SNAP && Array.isArray(window.SNAP.metrics_full)) ? window.SNAP.metrics_full : [];
+    const ix = MF.indexOf('SMax (kmh)');
+    if(!P || ix < 0) return VMX_MAP;
+    const oggi = parse(TSTR);
+    Object.keys(P).forEach(function(nome){
+      const gg = [];
+      ((P[nome] && P[nome].months) || []).forEach(function(mo){
+        let wk = '';
+        (mo.rows || []).forEach(function(r){
+          if(r.type === 'wk_header'){ wk = r.label || ''; return; }
+          if(r.type !== 'day' || !Array.isArray(r.v)) return; // niente partite
+          const v = r.v[ix] != null ? Number(r.v[ix]) : 0;
+          if(!(v > 0)) return;
+          const d = gpsRowDate(r, wk, mo.key);
+          if(!d) return;
+          gg.push({ t:d.getTime(), d:d, v:v });
+        });
+      });
+      if(!gg.length) return;
+      gg.sort(function(a, b){ return a.t - b.t; });
+      let pk = gg[0];
+      gg.forEach(function(x){ if(x.v > pk.v) pk = x; });
+      function since(q){
+        let last = null;
+        gg.forEach(function(x){ if(x.v >= pk.v * q && (!last || x.t > last.t)) last = x; });
+        if(!last) return null;
+        return Math.max(0, Math.round((oggi - last.d) / 86400000));
+      }
+      VMX_MAP[nome] = { pk:pk.v, n:gg.length, g90:since(0.90), g95:since(0.95) };
+    });
+    return VMX_MAP;
+  }
+
+  // La riga in chiaro dentro la scheda. Niente riga se di quell'atleta non c'e'
+  // nemmeno un allenamento con la velocita' scritta: un "mai" non aiuta nessuno.
+  function vmxRiga(nome){
+    const o = vmxAll()[nome];
+    if(!o) return '';
+    function pezzo(g, q){
+      if(g == null) return '<span class="old"><em>'+q+'% della punta</em> <b>mai</b></span>';
+      const vecchio = g >= VMX_GG_ALLARME;
+      return '<span'+(vecchio ? ' class="old"' : '')+'><em>'+q+'%</em> <b>'+
+        (g === 0 ? 'oggi' : g + (g === 1 ? ' giorno' : ' giorni'))+'</b></span>';
+    }
+    return '<div class="tg-atvx tnum" title="Da quanti giorni non arriva a quella quota della sua punta di stagione, '+
+      NFVX.format(o.pk)+' km/h. Contano solo gli allenamenti, le partite restano fuori.">'+
+      '<em>punta</em> <b>'+NFVX.format(o.pk)+'</b> km/h &#183; senza toccare il '+
+      pezzo(o.g90, 90)+' &#183; il '+pezzo(o.g95, 95)+'</div>';
+  }
+
   function atBase(p){
     const rk  = TG_REF[p.role] ? p.role : 'Squadra';
     const ref = TG_REF[rk];
@@ -8133,6 +8215,7 @@ window.FORZA = window.FORZA || { roster:[] };
             '<div class="tg-att tnum">'+txt+'</div>'+
             dfx+
             qta+
+            vmxRiga(r.name)+
           '</div>'+
           ed+
         '</div>';
@@ -8398,7 +8481,7 @@ window.FORZA = window.FORZA || { roster:[] };
       const px = t.closest('.tg-x');
       if(px){
         const k = px.getAttribute('data-xk');
-        const v = wkxVal(px.getAttribute('data-xv'));
+        const v = k ? wkxVal(px.getAttribute('data-xv'), k) : 0;
         const n = px.getAttribute('data-xn') || '';
         if(!k || !v) return;
         if(n){

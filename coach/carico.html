@@ -329,6 +329,20 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .vm-tile.warn .at-val{ color:var(--orange2); }
 .vmax-warn{ margin:-8px 0 18px; padding:9px 12px; border-radius:var(--r); font-size:11.5px; line-height:1.5;
   color:var(--orange2); background:oklch(68% 0.19 42 / 0.10); border:1px solid oklch(68% 0.19 42 / 0.28); }
+/* ---------- preseason a confronto ---------- */
+.pre-tab{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.pre-tab th, .pre-tab td{ padding:7px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; }
+.pre-tab th{ background:var(--tb-head); color:var(--muted); font-size:11px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.03em; position:sticky; top:0; z-index:1; }
+.pre-tab th:first-child, .pre-tab td:first-child{ text-align:left; white-space:normal; }
+.pre-tab tbody tr:nth-child(even) td{ background:var(--tb-alt); }
+.pre-tab tbody tr:hover td{ background:var(--tb-hover); }
+.pre-tab td{ color:var(--ink); }
+.pre-tab td.num{ font-variant-numeric:tabular-nums; }
+.pre-tab td.old{ color:var(--muted); }
+.pre-d{ font-variant-numeric:tabular-nums; font-weight:700; color:var(--muted); }
+.pre-note{ margin:11px 0 0; font-size:11.5px; line-height:1.55; color:var(--faint); }
+.pre-empty{ margin:4px 0; font-size:12.5px; color:var(--muted); line-height:1.55; }
 /* ---------- ACWR parametro per parametro ---------- */
 .agrid-head{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:2px 0 9px; }
 .agrid-head h3{ margin:0; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:18px; letter-spacing:.4px; color:var(--ink); }
@@ -1260,6 +1274,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
         <button class="snav" type="button" data-sec="chart-card" title="Il grafico grande, un parametro per volta sul periodo scelto">Andamento</button>
         <button class="snav" type="button" data-sec="mini-card" title="Otto parametri sotto gli occhi, ognuno col suo istogramma">Parametri chiave</button>
         <button class="snav" type="button" data-sec="acwr-card" title="Quanto e' salito il carico rispetto alle ultime quattro settimane">Rischio carico</button>
+        <button class="snav" type="button" data-sec="pre-card" id="pre-nav" hidden title="La preseason di quest'anno messa accanto a quella dell'anno scorso">Preseason</button>
         <button class="snav" type="button" data-sec="grid-card" title="La griglia del mese, giorno per giorno, con RPE e TL">Griglia del mese</button>
       </nav>
 
@@ -1361,8 +1376,29 @@ table.bulk td.bulk-no{ color:var(--faint); }
         </div>
       </section>
 
+      <!-- preseason a confronto: si accende solo se in memoria c'e' l'archivio
+           della stagione prima, cioe' solo quando si guarda la 26-27 -->
+      <section class="card reveal" id="pre-card" style="--i:4" hidden>
+        <div class="card-head">
+          <h2>Preseason a confronto</h2>
+          <span class="hint" id="pre-hint">la stessa finestra di mesi, quest'anno e l'anno scorso</span>
+          <span class="spacer"></span>
+          <div class="chart-tools">
+            <div class="field">
+              <select class="picker" id="pre-mode" aria-label="Cosa contare nel confronto">
+                <option value="all">Solo allenamenti</option>
+                <option value="tot">Allenamenti e partite</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card-body" style="padding-top:6px">
+          <div id="pre-box"></div>
+        </div>
+      </section>
+
       <!-- uguale identico grid -->
-      <section class="card reveal" id="grid-card" style="--i:4">
+      <section class="card reveal" id="grid-card" style="--i:5">
         <div class="card-head">
           <h2 id="grid-title">Monitoraggio</h2>
           <span class="hint" id="grid-hint">griglia mensile · giorno per giorno</span>
@@ -3663,8 +3699,217 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '</div>'+
       (alto ? '<p class="vmax-warn">Sono '+NF0.format(o.s90.gg)+' giorni che in allenamento non tocca il 90% della sua punta. Prima di uno sprint massimale serve una giornata di richiamo.</p>' : '');
   }
+  // ---------- preseason a confronto ----------
+  /* La preparazione e' l'unico pezzo di stagione che si puo' davvero mettere
+     accanto a quello dell'anno prima: stesse settimane, stesso scopo, nessuna
+     partita di campionato a spostare il carico. L'archivio della 25-26 resta
+     raggiungibile solo perche' la sidebar se lo mette da parte prima di riversarci
+     sopra la stagione nuova (window.FIO_PREV_SNAP): se non c'e', la scheda resta
+     spenta e non se ne parla piu'.
+     I mesi si pescano dalla coda della chiave e non dalla posizione, cosi' la
+     finestra resta luglio-agosto-settembre tutto l'anno e la scheda non diventa
+     di nascosto un confronto di stagione intera.
+     Il confronto e' per seduta e non sul totale: un anno sono 38 allenamenti,
+     l'altro 36, e sommare e basta direbbe che si e' lavorato di piu' quando si e'
+     soltanto lavorato piu' volte. I totali restano nei riquadri sopra, che e' il
+     posto giusto per il volume. */
+  const PRE_MM = ['07','08','09'];
+  const PRE_NOMI = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                    'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+  let preConPartite = false;
+  function prePrev(){
+    const P = window.FIO_PREV_SNAP;
+    if(!P || !P.team || !(P.team.months||[]).length) return null;
+    // se l'archivio e' della stagione che si sta gia' guardando non c'e' niente da confrontare
+    if(String(P.stagione||'') === String(S.stagione||'')) return null;
+    return P;
+  }
+  function preMesi(months){
+    return (months||[]).filter(m=> PRE_MM.indexOf(String(m.key||'').slice(-2)) >= 0);
+  }
+  function preAgg(months, metrics, sumFlags, conPartite){
+    const mesi = preMesi(months);
+    if(!mesi.length) return null;
+    let iMin = -1;
+    for(let i=0;i<metrics.length;i++){ if(String(metrics[i]||'').toLowerCase().indexOf('minut')===0){ iMin = i; break; } }
+    const som = {}, cnt = {}, mx = {}, flag = {};
+    metrics.forEach((nm,i)=>{ flag[nm] = (sumFlags||[])[i] === 1; });
+    let nAll = 0, nPart = 0;
+    mesi.forEach(mon=>{
+      (mon.rows||[]).forEach(r=>{
+        const all = r.type === 'day', par = r.type === 'match';
+        if(!all && !par) return;
+        if(par && !conPartite) return;
+        const v = r.v || [];
+        /* una riga senza minuti e' un giorno scritto sul foglio ma non lavorato:
+           contarla abbasserebbe tutte le medie senza che sia successo niente */
+        const min = (iMin>=0 && v[iMin]!=null && isFinite(v[iMin])) ? +v[iMin] : 0;
+        if(!(min > 0)) return;
+        if(all) nAll++; else nPart++;
+        metrics.forEach((nm, i)=>{
+          const x = v[i];
+          if(x == null || !isFinite(x)) return;
+          som[nm] = (som[nm]||0) + (+x);
+          cnt[nm] = (cnt[nm]||0) + 1;
+          if(mx[nm] == null || +x > mx[nm]) mx[nm] = +x;
+        });
+      });
+    });
+    if(!(nAll + nPart)) return null;
+    return { mesi: mesi.map(m=> m.key), n: nAll + nPart, nAll: nAll, nPart: nPart,
+             som: som, cnt: cnt, mx: mx, flag: flag };
+  }
+  // il valore di un parametro su una seduta media
+  function preVal(a, nm){
+    if(!a) return null;
+    const low = String(nm||'').toLowerCase();
+    /* il ritmo di corsa non e' la media delle medie: sono i metri veri sui minuti veri */
+    if(low.indexOf('m/min') >= 0){
+      const d = a.som['Dist tot'], m = a.som['Minuti'];
+      return (d != null && m) ? d/m : null;
+    }
+    /* la punta di velocita' non si somma e non si media: e' la piu' alta toccata */
+    if(low.indexOf('smax') === 0) return (a.mx[nm] != null) ? a.mx[nm] : null;
+    const c = a.cnt[nm] || 0;
+    if(!c) return null;
+    return a.flag[nm] ? (a.som[nm] / a.n) : (a.som[nm] / c);
+  }
+  function preNum(v){
+    if(v == null || !isFinite(v)) return '-';
+    return (Math.abs(v) >= 100 ? NF0 : NF1).format(v);
+  }
+  function preMesiTxt(keys){
+    const nomi = [];
+    (keys||[]).forEach(k=>{
+      const n = PRE_NOMI[(+String(k).slice(-2)) - 1];
+      if(n && nomi.indexOf(n) < 0) nomi.push(n);
+    });
+    if(!nomi.length) return '';
+    if(nomi.length === 1) return nomi[0];
+    return nomi.slice(0,-1).join(', ') + ' e ' + nomi[nomi.length-1];
+  }
+  function preAtletaPrec(P, nome){
+    const pl = P.players || {};
+    if(pl[nome]) return pl[nome];
+    if(typeof window.fioChiaveAtleta !== 'function') return null;
+    const k = window.fioChiaveAtleta(nome);
+    const names = Object.keys(pl);
+    for(let i=0;i<names.length;i++){ if(window.fioChiaveAtleta(names[i]) === k) return pl[names[i]]; }
+    return null;
+  }
+  function preTile(lbl, val, un, sub){
+    return '<div class="acwr-tile"><div class="at-lbl">'+esc(lbl)+'</div>'+
+      '<div class="at-val tnum">'+esc(val)+(un ? '<small>'+esc(un)+'</small>' : '')+'</div>'+
+      '<div class="at-sub">'+esc(sub)+'</div></div>';
+  }
+  function renderPreseason(){
+    const card = document.getElementById('pre-card');
+    const host = document.getElementById('pre-box');
+    const nav  = document.getElementById('pre-nav');
+    const hint = document.getElementById('pre-hint');
+    if(!card || !host) return;
+    function spegni(){ card.hidden = true; if(nav) nav.hidden = true; host.innerHTML = ''; }
+    const P = prePrev();
+    if(!P) return spegni();
+    /* per reparto il confronto non regge: i ruoli della rosa cambiano da un anno
+       all'altro e si finirebbe per mettere accanto due gruppi di persone diverse.
+       Squadra e singola atleta invece sono la stessa cosa in tutti e due gli anni. */
+    const perAtleta = (state.level === 'player' && state.player);
+    let mNow, mOld, chi;
+    if(perAtleta){
+      const pn = (S.players || {})[state.player];
+      const po = preAtletaPrec(P, state.player);
+      mNow = (pn && pn.months) || [];
+      mOld = (po && po.months) || [];
+      chi  = disp(state.player);
+    }else{
+      mNow = S.team.months || [];
+      mOld = P.team.months || [];
+      chi  = state.level === 'unit' ? 'squadra' : 'squadra';
+    }
+    const aNow = preAgg(mNow, M, S.sum_flags, preConPartite);
+    if(!aNow) return spegni();
+    const aOld = preAgg(mOld, P.metrics_full, P.sum_flags, preConPartite);
+    card.hidden = false; if(nav) nav.hidden = false;
+    const mesiTxt = preMesiTxt(aNow.mesi.concat(aOld ? aOld.mesi : []));
+    const annoN = String(S.stagione || '');
+    const annoO = String(P.stagione || '');
+    if(hint) hint.textContent = mesiTxt + ' di ' + annoO + ' e di ' + annoN + ', ' + chi;
+
+    let h = '<div class="vmax-head"><h3>Quanto si e\' lavorato</h3>'+
+      '<span>'+esc(mesiTxt)+', '+esc(chi)+' &#183; '+(preConPartite ? 'allenamenti e partite' : 'solo allenamenti')+'</span></div>';
+    const minN = aNow.som['Minuti'], minO = aOld ? aOld.som['Minuti'] : null;
+    const dstN = aNow.som['Dist tot'], dstO = aOld ? aOld.som['Dist tot'] : null;
+    h += '<div class="vmax-stats">'+
+      preTile('Allenamenti', NF0.format(aNow.nAll), '', aOld ? ('nel '+annoO+' erano '+NF0.format(aOld.nAll)) : 'nessun confronto') +
+      preTile('Partite', NF0.format(aNow.nPart), '', aOld ? ('nel '+annoO+' erano '+NF0.format(aOld.nPart)) : 'nessun confronto') +
+      preTile('Minuti in tutto', minN != null ? NF0.format(minN) : '-', 'min',
+              (minO != null) ? ('nel '+annoO+' erano '+NF0.format(minO)) : 'nessun confronto') +
+      preTile('Distanza in tutto', dstN != null ? NF0.format(dstN/1000) : '-', 'km',
+              (dstO != null) ? ('nel '+annoO+' erano '+NF0.format(dstO/1000)+' km') : 'nessun confronto') +
+      '</div>';
+
+    if(!aOld){
+      h += '<p class="pre-empty">'+esc(perAtleta
+        ? (chi+' nella preseason '+annoO+' non ha dati: o non era in rosa, o non ha lavorato in quei mesi. I riquadri sopra sono solo di quest\'anno.')
+        : ('Della preseason '+annoO+' non c\'e\' niente in archivio, quindi non c\'e\' niente da mettere a confronto.'))+'</p>';
+      host.innerHTML = h;
+      return;
+    }
+
+    /* i parametri sono quelli chiave, scelti dal mister una volta sola per tutta
+       la pagina, piu' i minuti che aprono sempre la lista. Quelli che nei fogli
+       della 25-26 non esistono restano fuori: sei colonne su venti sono nate
+       quest'anno e affiancarle al vuoto non direbbe niente. */
+    const righe = [];
+    const visti = {};
+    function addRiga(nm, un){
+      if(!nm || visti[nm]) return;
+      if(P.metrics_full.indexOf(nm) < 0) return;
+      visti[nm] = 1;
+      righe.push({ nm: nm, un: un || '' });
+    }
+    addRiga('Minuti', 'min');
+    keyOrder.forEach(i=> addRiga(metName(i), metUnit(i)));
+    let fuori = 0;
+    keyOrder.forEach(i=>{ if(P.metrics_full.indexOf(metName(i)) < 0) fuori++; });
+
+    h += '<div class="agrid-head"><h3>Parametro per parametro</h3>'+
+      '<span>valori di una seduta media, cosi\' il confronto tiene anche con un numero di sedute diverso</span></div>'+
+      '<div class="tscroll"><table class="pre-tab"><thead><tr>'+
+      '<th>Parametro</th><th>'+esc(annoO)+'</th><th>'+esc(annoN)+'</th><th>Differenza</th>'+
+      '</tr></thead><tbody>';
+    righe.forEach(r=>{
+      const vo = preVal(aOld, r.nm), vn = preVal(aNow, r.nm);
+      let d = '-';
+      if(vo != null && vn != null && vo !== 0){
+        const p = (vn - vo) / Math.abs(vo) * 100;
+        d = (p > 0 ? '+' : '') + NF1.format(p) + '%';
+      }
+      h += '<tr><td>'+esc(r.nm)+(r.un ? ' <small>'+esc(r.un)+'</small>' : '')+'</td>'+
+        '<td class="num old">'+esc(preNum(vo))+'</td>'+
+        '<td class="num">'+esc(preNum(vn))+'</td>'+
+        '<td class="num"><span class="pre-d">'+esc(d)+'</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<p class="pre-note">La differenza non e\' un voto: piu\' carico non vuol dire meglio e meno carico non vuol dire peggio. '+
+      'Dice solo di quanto si e\' spostata la seduta media rispetto all\'anno scorso, negli stessi mesi.'+
+      (fuori ? ' '+esc(NF0.format(fuori))+(fuori===1 ? ' parametro chiave resta fuori perche\' nei fogli ' : ' parametri chiave restano fuori perche\' nei fogli ')+esc(annoO)+' non c\'era.' : '')+
+      '</p>';
+    host.innerHTML = h;
+  }
+  (function(){
+    const sel = document.getElementById('pre-mode');
+    if(!sel) return;
+    sel.addEventListener('change', ()=>{
+      preConPartite = (sel.value === 'tot');
+      renderPreseason();
+    });
+  })();
+
   function renderAnalytics(){
     renderVmax();
+    renderPreseason();
     const idx = state.acwrIdx;
     const weeks = seasonWeeks(idx);
     const acwr = computeACWR(weeks);
@@ -4730,7 +4975,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     let first = true;
     Array.prototype.slice.call(host.children).forEach(function(el){
       if(!el.classList || !el.classList.contains('card')) return;
-      if(el.classList.contains('print-off')) return;
+      if(el.classList.contains('print-off') || el.hidden) return;
       const box = document.createElement('div');
       /* le schede piu' alte di una facciata si dividono da sole: il guscio attorno non deve
          provare a tenerle intere, se no il browser le butta tutte sulla pagina dopo */
@@ -4967,6 +5212,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     { id:'chart-card', lbl:'Andamento',           txt:'Il grafico grande, un parametro per volta sul periodo scelto.', def:false },
     { id:'mini-card',  lbl:'Parametri chiave',    txt:'Un istogramma per ogni parametro chiave.', def:true },
     { id:'acwr-card',  lbl:'Rischio carico ACWR', txt:'Rapporto acuto/cronico, monotonia, strain e i tre grafici.', def:true },
+    { id:'pre-card',   lbl:'Preseason a confronto', txt:'La preseason di quest\'anno accanto a quella dell\'anno scorso, parametro per parametro. Compare solo quando in memoria c\'e\' anche l\'archivio della stagione prima.', def:false },
     { id:'grid-card',  lbl:'Griglia del mese',    txt:'La tabella giorno per giorno, con RPE e TL nelle ultime due colonne. Il corpo si adatta da solo per far stare tutti i parametri in larghezza e mette due microcicli per pagina, senza mai tagliare una settimana a meta\'.', def:true }
   ];
   /* Le etichette parlano di mese perche' e' il caso normale. Con la finestra mobile
@@ -5037,6 +5283,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const sel = pdfRead();
     let h = '';
     PDF_BLOCKS.forEach(b=>{
+      // un blocco spento a schermo non esiste nemmeno sul foglio: metterlo nell'elenco
+      // farebbe promettere una pagina che poi esce bianca
+      const el0 = document.getElementById(b.id);
+      if(el0 && el0.hidden) return;
       const on = !!sel[b.id];
       h += '<label class="pdf-row'+(on?'':' off')+'"><input type="checkbox" data-pdf="'+b.id+'"'+(on?' checked':'')+'>'+
            '<span class="pdf-txt">'+esc(pdfWord(b.lbl))+'<small>'+esc(pdfWord(b.txt))+'</small></span></label>';
@@ -5776,7 +6026,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // La pagina e' fatta di cinque blocchi uno sotto l'altro e per arrivare in fondo
   // servono parecchi giri di rotella. L'indice resta agganciato sotto l'intestazione,
   // porta al blocco con un tocco e mentre si scorre accende la voce di dove si e'.
-  const SECN = ['kpis','chart-card','mini-card','acwr-card','grid-card'];
+  const SECN = ['kpis','chart-card','mini-card','acwr-card','pre-card','grid-card'];
   function navTop(){
     const tb = document.querySelector('.topbar');
     // sopra i 900 pixel l'intestazione resta agganciata, sotto no e al suo posto
@@ -5801,13 +6051,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function currentSection(nav){
     const line = secOffset(nav) + 12;
-    let best = SECN[0];
-    SECN.forEach(id=>{
+    // un blocco spento non sta nel flusso e il suo rettangolo e' tutto a zero: se lo
+    // si contasse, l'indice si accenderebbe su una voce che non si vede nemmeno.
+    const vive = SECN.filter(id=>{ const el = document.getElementById(id); return el && !el.hidden; });
+    if(!vive.length) return SECN[0];
+    let best = vive[0];
+    vive.forEach(id=>{
       const el = document.getElementById(id);
       if(el && el.getBoundingClientRect().top <= line) best = id;
     });
     // in fondo alla pagina l'ultimo blocco puo' non arrivare mai alla linea: lo accendiamo lo stesso
-    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 6) best = SECN[SECN.length-1];
+    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 6) best = vive[vive.length-1];
     return best;
   }
   { const nav = document.getElementById('secnav');

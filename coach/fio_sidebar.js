@@ -1573,6 +1573,27 @@ window.applyStagioneData = function() {
     });
   }
 
+  // Stessa ragione, un gradino piu' in la': l'overlay non copia i dati in un
+  // oggetto nuovo, li riversa dentro quello gia' in uso, quindi appena passa di
+  // qui il carico della 25/26 non e' piu' raggiungibile da nessuna pagina. Per
+  // confrontare la preseason di quest'anno con quella dell'anno scorso serve
+  // tenere un riferimento ai mesi vecchi prima che spariscano. Sono gli stessi
+  // oggetti, non una copia: non si scrive niente, si legge soltanto. Il guscio
+  // vuoto che le pagine dichiarano quando carico_data.js non c'e' non vale la
+  // pena di tenerlo, quindi si salva solo se dentro ci sono mesi veri.
+  window.FIO_PREV_SNAP = null;
+  if (window.SNAP && window.SNAP.team && (window.SNAP.team.months || []).length) {
+    window.FIO_PREV_SNAP = {
+      stagione: window.SNAP.stagione || '2025-26',
+      metrics_full: window.SNAP.metrics_full || [],
+      metrics_short: window.SNAP.metrics_short || [],
+      metrics_unit: window.SNAP.metrics_unit || [],
+      sum_flags: window.SNAP.sum_flags || [],
+      team: window.SNAP.team,
+      players: window.SNAP.players || {}
+    };
+  }
+
   var S = window.SNAP;
   if (S) {
     if (!overlay(S, window.SNAP_2627)) {
