@@ -3127,153 +3127,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return o;
   }
-  /* Una durata scritta a mano, in minuti. Vale 3', 3 min, 1'30, 1'30", 45",
-     45'', 90 sec, 90 s, con la virgola o col punto. Una cifra senza unita' non
-     e' una durata: "4 x 3" sono ripetizioni, e i metri non si confondono coi
-     minuti perche' la sola "m" non conta. */
-  const TM_DUR_SRC = '(\\d+(?:\\.\\d+)?)\\s*(?:(\'\'|"|\u201d|sec\\w*|s\\b)|(\'|\u2019|min\\w*)(?:(\\d{2})(?:\'\'|"|\u201d)?)?)';
-  function tmMinuti(m){
-    if(!m) return null;
-    const n = +m[1];
-    if(!isFinite(n)) return null;
-    if(m[2]) return n / 60;
-    return n + (m[4] ? (+m[4]) / 60 : 0);
-  }
-  function tmDurata(t, inizio){
-    const s = String(t||'').toLowerCase().replace(/(\d),(\d)/g, '$1.$2');
-    return tmMinuti(new RegExp((inizio ? '^\\s*' : '') + TM_DUR_SRC).exec(s));
-  }
-  /* Una somma di pezzi: "3x1'30 + 1x1'" sono tre da 1'30" e uno da 1'. Ogni
-     pezzo e' un numero di volte (se manca vale una) e una durata. Se anche un
-     solo pezzo non si capisce, non si legge niente: meglio nessun conto che uno
-     sbagliato. senzaUnita, quando c'e', decide cosa vale un numero senza unita'. */
-  function tmPezzi(txt, senzaUnita){
-    const parti = String(txt||'').split('+');
-    const out = [];
-    for(let i = 0; i < parti.length; i++){
-      const q = /^\s*(?:(\d+)\s*[x×*]\s*)?(\S.*?)\s*$/i.exec(parti[i]);
-      if(!q) return null;
-      const volte = q[1] ? +q[1] : 1;
-      let dur = tmDurata(q[2], true);
-      // un pezzo solo puo' avere parole davanti: "passivo 1'"
-      if(dur == null && parti.length === 1 && !q[1]) dur = tmDurata(q[2], false);
-      if(dur == null && senzaUnita){
-        const n = /^\s*(\d+(?:[.,]\d+)?)(?![\d.,]*\s*(?:m\b|mt|metri|rip))/i.exec(q[2]);
-        if(n) dur = senzaUnita(+n[1].replace(',', '.'));
-      }
-      if(!(dur > 0) || !(volte >= 1)) return null;
-      out.push({ volte:volte, dur:dur, conX:!!q[1] });
-    }
-    return out.length ? out : null;
-  }
-  function tmSomma(p){ return p.reduce(function(a, x){ return a + x.volte * x.dur; }, 0); }
-  /* Quanto doveva durare: il lavoro scritto piu' i recuperi. Il lavoro puo'
-     essere una serie sola (2x3') o una somma (3x1'30 + 1x1'). Il recupero puo'
-     essere un tempo solo, e allora sta fra un pezzo di lavoro e l'altro (quattro
-     pezzi, tre recuperi), oppure scritto per esteso come il lavoro (3x1'30 +
-     1x1'), e allora vale quello che c'e' scritto. Il recupero si legge dal suo
-     campo, oppure dentro la riga delle serie dopo "rec" ("2x3' rec 1'"). */
-  function tmAtteso(d){
-    const t = tmDet(d);
-    /* Le serie si cercano prima nel loro campo, poi nello step e nelle note:
-       c'e' chi scrive "2 x 3' rec 1'" dove capita. */
-    const fonti = [t.serie, t.step, t.note].map(function(x){ return String(x||''); });
-    /* "3x1' a testa" sono turni: ognuna lavora un minuto per volta mentre le
-       altre aspettano, e la durata dell'esercitazione non si ricava. Lo stesso
-       per coppie, gruppi e rotazioni. In quei casi il controllo non si fa. */
-    const TURNI = /a\s+test[ae]|a\s+coppi[ae]|a\s+grupp[oi]|a\s+turn[oi]|per\s+(?:atleta|giocatric\w*|coppi[ae]|grupp[oi]|squadr[ae])|ciascun|ognun|rotazion/i;
-    if(fonti.some(function(f){ return TURNI.test(f); })) return null;
-    /* il lavoro e' il testo prima di "rec", e deve avere una serie (2x3') o una
-       somma di tempi con l'unita' (4' + 3'). "7c6+3j" non e' una serie. */
-    let lavTxt = '', fonte = '';
-    fonti.some(function(f){
-      const l = f.split(/\brec/i)[0];
-      if(/\d\s*[x×*]\s*\d/.test(l) || /\d\s*(?:'|’|min\w*|"|”|sec\w*)\s*\+/i.test(l)){
-        lavTxt = l; fonte = f; return true;
-      }
-      return false;
-    });
-    if(!lavTxt) return null;
-    let lav = tmPezzi(lavTxt, null), stima = false;
-    /* Senza unita' ("3 x 4") il numero puo' essere minuti o ripetizioni. Lo si
-       prende per minuti solo se torna con il GPS: il lavoro deve stare fra meta'
-       e tutta la durata vera dell'esercitazione. Quattro ripetizioni da 3 in un
-       RSA di cinque minuti non tornano, e il conto non si fa. */
-    if(!lav){
-      const vero = exVal(d.load, 'Minuti');
-      const prova = vero != null ? tmPezzi(lavTxt, function(n){ return n; }) : null;
-      if(prova){
-        const tot = tmSomma(prova);
-        if(tot >= vero * 0.5 && tot <= vero * 1.05){ lav = prova; stima = true; }
-      }
-    }
-    if(!lav) return null;
-    const volte = lav.reduce(function(a, x){ return a + x.volte; }, 0);
-    if(volte < 2) return null;
-    let recTxt = String(t.rec||'').trim();
-    if(!recTxt){
-      [fonte].concat(fonti).some(function(f){
-        const r = /rec\w*\.?\s*:?\s*(.+)$/i.exec(f);
-        if(r){ recTxt = r[1]; return true; }
-        return false;
-      });
-    }
-    if(!recTxt) return null;
-    /* recupero scritto senza unita': fino a 5 sono minuti, sopra sono secondi */
-    const rec = tmPezzi(recTxt, function(n){ return n <= 5 ? n : n / 60; });
-    if(!rec) return null;
-    const esteso = rec.length > 1 || rec[0].conX;
-    const lavMin = tmSomma(lav);
-    const recMin = esteso ? tmSomma(rec) : (volte - 1) * rec[0].dur;
-    return { lav:lav, rec:rec, esteso:esteso, stima:stima, lavMin:lavMin, recMin:recMin, min:lavMin + recMin };
-  }
-  // i minuti in etichetta: 7', 4'30"
-  function tmFmt(min){
-    const tot = Math.round(Math.max(0, min) * 60);
-    const mm = Math.floor(tot / 60), ss = tot % 60;
-    if(!ss) return mm + '\'';
-    return mm + '\'' + (ss < 10 ? '0' : '') + ss + '"';
-  }
-  /* Il margine prima di parlare: il taglio del GPS parte e finisce a mano, un
-     minuto o un decimo dell'esercitazione si perdono comunque fra fischio e
-     tasto. Sotto quello non e' un recupero lungo, e' il cronometro. */
+  /* Il conto di quanto doveva durare sta in fio_sidebar.js (window.fioTempi),
+     lo stesso che Esercitazioni mostra mentre si scrivono serie e recupero:
+     una copia sola, cosi' le due pagine non possono dire cose diverse. */
+  const FTEMPI = window.fioTempi;
+  function tmAtteso(d){ return FTEMPI ? FTEMPI.atteso(tmDet(d), exVal(d.load, 'Minuti')) : null; }
+  function tmFmt(min){ return FTEMPI ? FTEMPI.fmt(min) : String(Math.round(min))+'\''; }
+  function tmScritto(a){ return FTEMPI ? FTEMPI.scritto(a) : ''; }
+  function tmControllo(d){ return FTEMPI ? FTEMPI.controllo(tmDet(d), exVal(d.load, 'Minuti')) : null; }
   function tmSforo(d){
-    const a = tmAtteso(d);
-    const vero = exVal(d.load, 'Minuti');
-    if(!a || vero == null) return null;
-    const tol = Math.max(1, a.min * 0.10);
-    const piu = vero - a.min;
-    if(piu <= tol) return null;
-    return { a:a, vero:vero, piu:piu };
+    const c = tmControllo(d);
+    return (c && c.esito === 'sfora') ? { a:c.a, vero:c.vero, piu:c.diff } : null;
   }
-  function tmPezziTxt(p){
-    return p.map(function(x){ return (x.volte > 1 || x.conX) ? x.volte+'x'+tmFmt(x.dur) : tmFmt(x.dur); }).join(' + ');
-  }
-  function tmScritto(a){
-    return tmPezziTxt(a.lav)+' con '+(a.esteso ? 'recuperi '+tmPezziTxt(a.rec) : tmFmt(a.rec[0].dur)+' di recupero');
-  }
-  /* Sotto ogni esercitazione il controllo si vede sempre, non solo quando
-     qualcosa non torna: se non si vedesse niente non si saprebbe se il conto
-     e' in linea o se non e' stato fatto. Tre casi: sfora (arancio), torna
-     (grigio). Quando la durata non si ricava non si scrive niente: capita col
-     solo tempo totale o coi turni a testa, e non e' un errore. */
+  /* Sotto ogni esercitazione il controllo si vede sempre quando si puo' fare:
+     arancio se sfora, grigio se torna. Quando la durata non si ricava non si
+     scrive niente: capita col solo tempo totale o coi turni a testa. */
   function tmAlertRiga(d){
-    const x = tmSforo(d);
-    if(x){
-      return '<span class="ex-al">Scritto '+esc(tmScritto(x.a))+(x.a.stima ? ', letto in minuti' : '')+
-        ', cioe\' '+esc(tmFmt(x.a.min))+'. Il GPS dice '+esc(tmFmt(x.vero))+
-        ': '+esc(tmFmt(x.piu))+' in piu\' di recupero.</span>';
+    const c = tmControllo(d);
+    if(!c) return '';
+    if(c.esito === 'sfora'){
+      return '<span class="ex-al">Scritto '+esc(tmScritto(c.a))+
+        ', cioe\' '+esc(tmFmt(c.a.min))+'. Il GPS dice '+esc(tmFmt(c.vero))+
+        ': '+esc(tmFmt(c.diff))+' in piu\' di recupero.</span>';
     }
-    const a = tmAtteso(d);
-    const vero = exVal(d.load, 'Minuti');
-    if(a && vero != null){
-      const meno = a.min - vero;
-      const tol = Math.max(1, a.min * 0.10);
-      return '<span class="ex-ok">Previsti '+esc(tmFmt(a.min))+' ('+esc(tmScritto(a))+(a.stima ? ', letto in minuti' : '')+'), il GPS dice '+
-        esc(tmFmt(vero))+(meno > tol ? ': '+esc(tmFmt(meno))+' in meno del previsto.' : ': in linea.')+'</span>';
-    }
-    // quando non si ricava la durata (tempo totale, turni a testa) non si scrive niente
-    return '';
+    return '<span class="ex-ok">Previsti '+esc(tmFmt(c.a.min))+' ('+esc(tmScritto(c.a))+'), il GPS dice '+
+      esc(tmFmt(c.vero))+(c.esito === 'meno' ? ': '+esc(tmFmt(-c.diff))+' in meno del previsto.' : ': in linea.')+'</span>';
   }
   // la seduta grezza dell'archivio, con il Full Training e le atlete di ogni taglio
   function tmGrezza(iso, slot){
@@ -3405,7 +3283,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(sfori.length){
         h += '<ul class="tm-al">'+sfori.map(function(o){
           const x = o.x;
-          return '<li><b>'+esc(o.d.nome || 'Esercitazione')+'</b>: scritto '+esc(tmScritto(x.a))+(x.a.stima ? ', letto in minuti' : '')+
+          return '<li><b>'+esc(o.d.nome || 'Esercitazione')+'</b>: scritto '+esc(tmScritto(x.a))+
             ', cioe\' '+esc(tmFmt(x.a.min))+'. Il GPS dice '+esc(tmFmt(x.vero))+
             ': <span class="d">'+esc(tmFmt(x.piu))+' in piu\'</span>, i recuperi sono stati piu\' lunghi del previsto.</li>';
         }).join('')+'</ul>';

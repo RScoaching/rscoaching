@@ -1860,6 +1860,126 @@ window.fioPageDataFiles = function() {
   return out;
 };
 
+// ---------- quanto doveva durare un'esercitazione ----------
+// Serie e recupero scritti a mano in Esercitazioni, letti per sapere quanto
+// doveva durare l'esercitazione e metterlo accanto ai minuti del GPS. Sta qui
+// perche' serve a due pagine: Esercitazioni lo mostra mentre si scrive, il
+// report giornaliero lo usa nei tempi morti. Una copia sola del conto, cosi'
+// le due pagine non possono dire due cose diverse sullo stesso taglio.
+//   atteso(t, vero): t = { serie, rec, step, note }, vero = minuti del GPS.
+//   controllo(t, vero): atteso piu' l'esito, 'sfora', 'meno' o 'linea'.
+//   fmt(min): 7', 4'30".   scritto(a): "3x1'30" + 1x1' con 1' di recupero".
+window.fioTempi = (function() {
+  // Una durata scritta a mano, in minuti: 3', 3 min, 1'30, 1'30", 45", 45'',
+  // 90 sec, 90 s. La sola "m" non vale, per non confondere i metri coi minuti.
+  var DUR = '(\\d+(?:\\.\\d+)?)\\s*(?:(\'\'|"|\\u201d|sec\\w*|s\\b)|(\'|\\u2019|min\\w*)(?:(\\d{2})(?:\'\'|"|\\u201d)?)?)';
+  function durata(txt, inizio) {
+    var s = String(txt || '').toLowerCase().replace(/(\d),(\d)/g, '$1.$2');
+    var m = new RegExp((inizio ? '^\\s*' : '') + DUR).exec(s);
+    if (!m) return null;
+    var n = +m[1];
+    if (!isFinite(n)) return null;
+    if (m[2]) return n / 60;
+    return n + (m[4] ? (+m[4]) / 60 : 0);
+  }
+  // Una somma di pezzi: "3x1'30 + 1x1'". Se un pezzo non si capisce, niente.
+  function pezzi(txt, senzaUnita) {
+    var parti = String(txt || '').split('+');
+    var out = [];
+    for (var i = 0; i < parti.length; i++) {
+      var q = /^\s*(?:(\d+)\s*[x×*]\s*)?(\S.*?)\s*$/i.exec(parti[i]);
+      if (!q) return null;
+      var volte = q[1] ? +q[1] : 1;
+      var dur = durata(q[2], true);
+      // un pezzo solo puo' avere parole davanti: "passivo 1'"
+      if (dur == null && parti.length === 1 && !q[1]) dur = durata(q[2], false);
+      if (dur == null && senzaUnita) {
+        var n = /^\s*(\d+(?:[.,]\d+)?)(?![\d.,]*\s*(?:m\b|mt|metri|rip))/i.exec(q[2]);
+        if (n) dur = senzaUnita(+n[1].replace(',', '.'));
+      }
+      if (!(dur > 0) || !(volte >= 1)) return null;
+      out.push({ volte: volte, dur: dur, conX: !!q[1] });
+    }
+    return out.length ? out : null;
+  }
+  function somma(p) {
+    var t = 0;
+    for (var i = 0; i < p.length; i++) t += p[i].volte * p[i].dur;
+    return t;
+  }
+  // "3x1' a testa" sono turni: la durata dell'esercitazione non si ricava.
+  var TURNI = /a\s+test[ae]|a\s+coppi[ae]|a\s+grupp[oi]|a\s+turn[oi]|per\s+(?:atleta|giocatric\w*|coppi[ae]|grupp[oi]|squadr[ae])|ciascun|ognun|rotazion/i;
+  // Lavoro scritto piu' recuperi. Il recupero come tempo solo sta fra un pezzo
+  // di lavoro e l'altro (quattro pezzi, tre recuperi); scritto per esteso, con
+  // una x o con un +, vale quello che c'e' scritto. Senza unita' il lavoro si
+  // prende per minuti solo se torna col GPS (fra meta' e tutta la durata vera);
+  // il recupero senza unita' fino a 5 e' in minuti, sopra in secondi.
+  function atteso(t, vero) {
+    t = t || {};
+    var fonti = [t.serie, t.step, t.note].map(function(x) { return String(x || ''); });
+    if (fonti.some(function(f) { return TURNI.test(f); })) return null;
+    var lavTxt = '', fonte = '';
+    fonti.some(function(f) {
+      var l = f.split(/\brec/i)[0];
+      if (/\d\s*[x×*]\s*\d/.test(l) || /\d\s*(?:'|’|min\w*|"|”|sec\w*)\s*\+/i.test(l)) {
+        lavTxt = l; fonte = f; return true;
+      }
+      return false;
+    });
+    if (!lavTxt) return null;
+    var lav = pezzi(lavTxt, null), stima = false;
+    if (!lav && vero != null && isFinite(vero)) {
+      var prova = pezzi(lavTxt, function(n) { return n; });
+      if (prova) {
+        var tot = somma(prova);
+        if (tot >= vero * 0.5 && tot <= vero * 1.05) { lav = prova; stima = true; }
+      }
+    }
+    if (!lav) return null;
+    var volte = 0;
+    lav.forEach(function(x) { volte += x.volte; });
+    if (volte < 2) return null;
+    var recTxt = String(t.rec || '').trim();
+    if (!recTxt) {
+      [fonte].concat(fonti).some(function(f) {
+        var r = /rec\w*\.?\s*:?\s*(.+)$/i.exec(f);
+        if (r) { recTxt = r[1]; return true; }
+        return false;
+      });
+    }
+    if (!recTxt) return null;
+    var rec = pezzi(recTxt, function(n) { return n <= 5 ? n : n / 60; });
+    if (!rec) return null;
+    var esteso = rec.length > 1 || rec[0].conX;
+    var lavMin = somma(lav);
+    var recMin = esteso ? somma(rec) : (volte - 1) * rec[0].dur;
+    return { lav: lav, rec: rec, esteso: esteso, stima: stima, lavMin: lavMin, recMin: recMin, min: lavMin + recMin };
+  }
+  // Il margine prima di parlare: il taglio del GPS parte e finisce a mano, un
+  // minuto o un decimo dell'esercitazione si perdono comunque fra fischio e tasto.
+  function controllo(t, vero) {
+    var a = atteso(t, vero);
+    if (!a || vero == null || !isFinite(vero)) return null;
+    var tol = Math.max(1, a.min * 0.10);
+    var diff = vero - a.min;
+    return { a: a, vero: vero, diff: diff, esito: diff > tol ? 'sfora' : (-diff > tol ? 'meno' : 'linea') };
+  }
+  function fmt(min) {
+    var tot = Math.round(Math.max(0, min) * 60);
+    var mm = Math.floor(tot / 60), ss = tot % 60;
+    if (!ss) return mm + '\'';
+    return mm + '\'' + (ss < 10 ? '0' : '') + ss + '"';
+  }
+  function pezziTxt(p) {
+    return p.map(function(x) { return (x.volte > 1 || x.conX) ? x.volte + 'x' + fmt(x.dur) : fmt(x.dur); }).join(' + ');
+  }
+  function scritto(a) {
+    return pezziTxt(a.lav) + ' con ' + (a.esteso ? 'recuperi ' + pezziTxt(a.rec) : fmt(a.rec[0].dur) + ' di recupero') +
+      (a.stima ? ', letto in minuti' : '');
+  }
+  return { atteso: atteso, controllo: controllo, fmt: fmt, scritto: scritto };
+})();
+
 // Legge i file dati online senza passare dalla cache e dice quali sono cambiati
 // rispetto a quelli caricati adesso.
 window.fioProbeData = function() {
