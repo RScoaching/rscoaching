@@ -6799,14 +6799,16 @@ window.FORZA = window.FORZA || { roster:[] };
      allenamento. Se il martedi' esce meglio del preventivo i giorni dopo devono
      calare, se esce scarso quei metri vanno riportati avanti: e' esattamente il
      lavoro che un preparatore fa a mano il mercoledi' mattina guardando il file.
-     Per farlo serve il misurato, e il misurato non sta in `byDate`, che dallo
-     snapshot del calendario porta solo il carico complessivo del giorno. Sta nei
-     file delle esercitazioni, riga Full Training dell'atleta quando c'e' e somma
-     delle sue esercitazioni quando manca, piu' le righe del lavoro fuori squadra
-     ("4AM diff", "12AM FT") che nel file di gruppo non compaiono. Sono le stesse
-     due fonti che legge la card atleta per atleta, lette per giorno invece che per
-     settimana. La lettura grezza e' per nome e non dipende dal ruolo scelto, cosi'
-     si fa una volta sola e cambiando ruolo si rifa' solo la media. */
+     Il misurato e' la riga Full Training di ogni atleta, e solo quella: e' lo
+     stesso numero che il Carico mostra per la squadra, e i due devono tornare.
+     Prima qui entravano anche le atlete presenti solo in qualche taglio (chi
+     rientra e fa attivazione e possesso, chi fa solo l'IDP) e le righe del lavoro
+     fuori squadra ("4AM diff", "12AM FT"). Sono minuti parziali o sedute a parte:
+     nella media del gruppo la tiravano giu', e il 22/09 la tabella segnava 42 m
+     sopra i 23 km/h contro i 61 del Carico. Quelle righe restano dove servono,
+     nella card atleta per atleta, che conta la settimana della singola.
+     La lettura grezza e' per nome e non dipende dal ruolo scelto, cosi' si fa una
+     volta sola e cambiando ruolo si rifa' solo la media. */
   let WKG_RAW = null;
   function wkgRaw(){
     if(WKG_RAW) return WKG_RAW;
@@ -6835,37 +6837,9 @@ window.FORZA = window.FORZA || { roster:[] };
       E.sessions.forEach(function(s){
         const d = String(s.date || '');
         if(d < d0 || d > d1) return;
-        const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
-        const vis = {};
-        Object.keys(ft).forEach(function(n){ vis[n] = 1; add(d, n, ft[n], ix); });
-        (s.drills || []).forEach(function(dr){
-          if(dr.dup) return;
-          const a = dr.atlete || {};
-          Object.keys(a).forEach(function(n){ if(!vis[n]) add(d, n, a[n], ix); });
-        });
-      });
-    }
-
-    const P  = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
-    const MF = (window.SNAP && Array.isArray(window.SNAP.metrics_full)) ? window.SNAP.metrics_full : [];
-    if(P && MF.length){
-      const jx = {};
-      AT_MET.forEach(function(m){ jx[m.k] = MF.indexOf(m.col); });
-      Object.keys(P).forEach(function(nome){
-        const mesi = (P[nome] && P[nome].months) || [];
-        mesi.forEach(function(mo){
-          let wk = '';
-          (mo.rows || []).forEach(function(r){
-            if(r.type === 'wk_header'){ wk = r.label || ''; return; }
-            if(r.type !== 'day' || !Array.isArray(r.v)) return;
-            if(!SOLO_RE.test(String(r.label || '').trim())) return;
-            const dd = gpsRowDate(r, wk, mo.key);
-            if(!dd) return;
-            const k = dstr(dd);
-            if(k < d0 || k > d1) return;
-            add(k, nome, r.v, jx);
-          });
-        });
+        // mattina e pomeriggio dello stesso giorno si sommano sull'atleta
+        const ft = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
+        Object.keys(ft).forEach(function(n){ add(d, n, ft[n], ix); });
       });
     }
 
