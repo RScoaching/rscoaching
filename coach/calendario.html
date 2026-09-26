@@ -2052,9 +2052,34 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '<div class="fxs"><span class="fxs-v'+(diff>0?' win':(diff<0?' loss':''))+'">'+esc(dtxt)+'</span><span class="fxs-l">Differenza reti</span></div>'+
       '</div>'+ pross + nota;
   }
+  /* Le gare scritte a mano in Pianificazione, da oggi in avanti. Il calendario
+     ufficiale conosce solo le gare che il GPS ha gia' registrato, quindi la gara
+     di domenica, finche' non e' giocata, esiste solo qui. Si prendono solo le
+     future: quelle passate diventano ufficiali col file del GPS, e un'amichevole
+     gia' giocata non deve entrare nel bilancio del campionato. */
+  function fixAMano(){
+    const out = [];
+    manualDiStagione(loadStore().manual).forEach(function(m){
+      if(!m || !m.data || m.data < TODAY_KEY) return;
+      const kind = String(m.kind || '');
+      if(kind !== 'match' && kind !== 'amichevole') return;
+      if(FIX.some(function(f){ return f.data === m.data; })) return;
+      if(out.some(function(f){ return f.data === m.data; })) return;
+      let opp = String(m.opp || '').trim();
+      let casa = (m.casa == null) ? null : !!m.casa;
+      const tt = /^\s*(vs|@)\s+(.+)$/i.exec(String(m.title || ''));
+      if(!opp && tt) opp = tt[2].trim();
+      if(casa == null && tt) casa = tt[1].toLowerCase() === 'vs';
+      if(casa == null) casa = true;
+      out.push({ data:m.data, avversario:opp, casa:casa, aMano:true,
+        amichevole: kind === 'amichevole' || m.type === 'amichevole' || m.comp_gara === 'amichevole',
+        home: casa ? 'Fiorentina' : (opp || 'Avversario'), away: casa ? (opp || 'Avversario') : 'Fiorentina' });
+    });
+    return out;
+  }
   function renderFixtures(){
     const host = document.getElementById('fixlist');
-    const fx = FIX.slice().sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+    const fx = FIX.concat(fixAMano()).sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
     document.getElementById('fix-n').textContent = fx.length + (fx.length===1?' partita':' partite');
     /* La prima gara non ancora passata e' la prossima: si evidenzia e si dice
        quanti giorni mancano, che e' il conto che si fa a mente ogni volta. */
@@ -2095,6 +2120,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
         '</span>'+
         '<span class="fx-tags">'+
           '<span class="fx-tag '+(casa?'casa':'via')+'">'+(casa?'casa':'trasferta')+'</span>'+
+          (f.amichevole ? '<span class="fx-tag via">amichevole</span>' : '')+
           gtag+
         '</span>'+
       '</div>';
@@ -3204,7 +3230,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(s.is_match) return compLabel(s) || 'Gara';
     return KIND_LABEL[s.kind] || 'Seduta';
   }
-  function plAfterMutate(){ plRender(); }
+  function plAfterMutate(){ plRender(); renderFixtures(); }
 
   /* Lo slot di una giornata arriva dal nome del file GPS, e quando li' dentro
      non c'e' ne' AM ne' PM la pipeline scrive AM per riempire il campo. Sulle

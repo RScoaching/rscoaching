@@ -155,6 +155,7 @@ a{ color:inherit; text-decoration:none; }
   border:1px solid var(--border2); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .next-strip .ns-lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; }
 .next-strip .ns-match{ font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--ink); letter-spacing:.4px; }
+.next-strip .ns-ami{ font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:6px; text-transform:none; }
 .next-strip .ns-when{ margin-left:auto; text-align:right; font-size:12px; color:var(--muted); }
 .next-strip .ns-when b{ display:block; font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--orange2); letter-spacing:.5px; }
 /* Sotto la prossima gara, quello che il campo ha gia' detto: dove si gioca,
@@ -1912,9 +1913,11 @@ window.FORZA = window.FORZA || { roster:[] };
   const LS_CAL = 'rs_fio_calendario';
   let PIAN = {};
   let PIAN_M = {};
+  let PIAN_MX = {};
   function pianLoad(){
     PIAN = {};
     PIAN_M = {};
+    PIAN_MX = {};
     let s = null;
     try{ s = JSON.parse(localStorage.getItem(LS_CAL) || 'null'); }catch(e){}
     const man = (s && Array.isArray(s.manual)) ? s.manual : [];
@@ -1924,6 +1927,17 @@ window.FORZA = window.FORZA || { roster:[] };
       const tipo = String(m.type || '');
       if(kind === 'match' || kind === 'amichevole'){
         PIAN_M[String(m.data)] = tipo || (kind === 'amichevole' ? 'amichevole' : 'gara');
+        /* Anche contro chi e dove: servono alla striscia del prossimo impegno.
+           L'avversario e' nel campo scritto nella scheda della gara; se manca si
+           prova il titolo del blocco, che il Calendario scrive "vs Sassuolo" o
+           "@ Sassuolo". */
+        let opp = String(m.opp || '').trim();
+        let casa = (m.casa == null) ? null : !!m.casa;
+        const tt = /^\s*(vs|@)\s+(.+)$/i.exec(String(m.title || ''));
+        if(!opp && tt) opp = tt[2].trim();
+        if(casa == null && tt) casa = tt[1].toLowerCase() === 'vs';
+        PIAN_MX[String(m.data)] = { data:String(m.data), avversario:opp, casa:casa,
+          amichevole: kind === 'amichevole' || tipo === 'amichevole', aMano:true };
         return;
       }
       if(kind === 'riposo' || tipo === 'riposo') return;
@@ -2169,7 +2183,23 @@ window.FORZA = window.FORZA || { roster:[] };
   let state = todayState();
 
   // prossimo impegno (partita)
-  const nextFix = fixtures.find(f=> f.data>=TSTR) || null;
+  /* La prossima gara. Il calendario ufficiale (fixtures) conosce solo le gare che
+     il GPS ha gia' registrato: quella di domenica, finche' non e' giocata, esiste
+     solo nel Calendario, scritta a mano. Qui entrano tutte e due le fonti; se lo
+     stesso giorno e' in entrambe vale l'ufficiale, che ha gia' casa e trasferta. */
+  const nextFix = (function(){
+    const cand = fixtures.filter(function(f){ return f && f.data >= TSTR; });
+    Object.keys(PIAN_MX).forEach(function(ds){
+      if(ds < TSTR) return;
+      if(cand.some(function(f){ return f.data === ds; })) return;
+      const g = PIAN_MX[ds];
+      cand.push({ data:ds, avversario:g.avversario, casa:g.casa, amichevole:g.amichevole, aMano:true,
+        home: g.casa === false ? (g.avversario || '') : 'Fiorentina',
+        away: g.casa === false ? 'Fiorentina' : (g.avversario || '') });
+    });
+    cand.sort(function(a, b){ return a.data < b.data ? -1 : (a.data > b.data ? 1 : 0); });
+    return cand[0] || null;
+  })();
 
   // ultime sedute con carico
   const recent = dates.filter(d=> d.load>0).slice(-6);
@@ -2316,7 +2346,12 @@ window.FORZA = window.FORZA || { roster:[] };
       const fd = parse(nextFix.data);
       const gg = Math.round((fd - NOW)/86400000);
       const when = gg===0?'oggi':gg===1?'domani':('tra '+gg+' gg');
-      const match = esc(nextFix.home||'Fiorentina')+' - '+esc(nextFix.away||nextFix.avversario||'');
+      /* senza avversario scritto non si lascia "Fiorentina - " a meta': si dice
+         che c'e' una gara, o un'amichevole */
+      const match = (nextFix.aMano && !nextFix.avversario)
+        ? (nextFix.amichevole ? 'Amichevole' : 'Gara')+' a calendario'
+        : esc(nextFix.home||'Fiorentina')+' - '+esc(nextFix.away||nextFix.avversario||'')+
+          (nextFix.amichevole ? ' <span class="ns-ami">amichevole</span>' : '');
       nextStrip = '<div class="next-strip"><div><div class="ns-lbl">Prossimo impegno</div><div class="ns-match">'+match+'</div></div>'+
         '<div class="ns-when">'+esc(itShort(fd))+'<b>'+when+'</b></div>'+ note +'</div>';
     } else if(note){
