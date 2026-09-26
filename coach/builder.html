@@ -39,6 +39,20 @@
 
 
 /* ══ COSTRUZIONE RAPIDA ══ */
+.pz-more{position:relative;display:inline-block;}
+.rp-head{position:relative;z-index:5;}
+.pz-menu.sx{right:auto;left:0;}
+.pz-more>summary{list-style:none;cursor:pointer;}
+.pz-more>summary::-webkit-details-marker{display:none;}
+.pz-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:230px;padding:6px;border-radius:10px;background:#17121F;border:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column;}
+.pz-menu button{all:unset;padding:9px 11px;border-radius:7px;font:500 13px 'Inter',sans-serif;color:var(--text);cursor:pointer;}
+.pz-menu button:hover,.pz-menu button:focus-visible{background:rgba(255,255,255,.06);}
+.pz-menu button.del{color:#FF8A8A;border-top:1px solid rgba(255,255,255,.08);margin-top:4px;border-radius:0 0 7px 7px;}
+.pz-av{margin:0 0 14px;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,106,46,.35);background:rgba(255,106,46,.05);display:flex;flex-direction:column;gap:10px;}
+.pz-av-r{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.pz-av-l{font:600 11px 'Inter',sans-serif;color:var(--muted);min-width:92px;}
+.pz-av .pz-mode.dl{border-style:dashed;}
+.pz-av p{margin:0;font-size:12px;color:var(--muted);line-height:1.5;}
 .pz-modes{display:flex;align-items:center;gap:6px;margin:4px 0 12px;flex-wrap:wrap;}
 .pz-mode{padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);color:var(--text);font:600 12px 'Inter',sans-serif;cursor:pointer;}
 .pz-mode.on{background:rgba(255,106,46,.16);border-color:rgba(255,106,46,.6);color:#FFD3BF;}
@@ -205,7 +219,8 @@ body::before{
 @keyframes dp{0%,100%{opacity:.2;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
 
 /* Main layout */
-.main{flex:1;display:flex;overflow:hidden;position:relative;z-index:1;}
+.main{flex:1;min-width:0;display:flex;overflow:hidden;position:relative;z-index:1;}
+#app{min-width:0;}
 
 /* LEFT PANEL - Program browser */
 .left-panel{
@@ -336,7 +351,7 @@ body::before{
 
 /* RIGHT PANEL - Editor canvas */
 .right-panel{
-  flex:1;
+  flex:1;min-width:0;
   background:var(--content);
   overflow-y:auto;height:100vh;
   position:relative;
@@ -363,7 +378,7 @@ body::before{
   animation:fadeUp .3s .05s ease both;
 }
 .week-tabs{
-  display:flex;gap:5px;
+  display:flex;gap:5px;min-width:0;
   overflow-x:auto;padding-bottom:2px;
   flex:1;
   scrollbar-width:none;
@@ -846,15 +861,18 @@ document.addEventListener('DOMContentLoaded',function(){
             <div class="rp-sub" id="ed-prog-meta">-</div>
           </div>
           <div class="rp-actions">
- <button class="btn btn-outline btn-sm" onclick="openModal('edit-prog')">Modifica</button>
- <button class="btn btn-blue btn-sm" onclick="openModal('assign')">Atleti</button>
- <button class="btn btn-outline btn-sm" onclick="openModal('copy-prog')">Copia</button>
- <button class="btn btn-amber btn-sm" id="archive-btn" onclick="toggleArchive()">Archivia</button>
- <button class="btn btn-amber btn-sm" onclick="openModal('week-progress')">Avanza</button>
- <button class="btn btn-teal btn-sm" onclick="openModal('gen-meso')">Genera</button>
- <button class="btn btn-purple btn-sm" onclick="exportWhatsApp()">WA</button>
- <button class="btn btn-outline btn-sm" onclick="exportBuilderPDF()">PDF</button>
-            <button class="btn btn-red btn-sm" onclick="deleteProgram()">Elimina</button>
+            <button class="btn btn-teal btn-sm" id="pz-rifai" onclick="openStudioDaProg()" hidden title="Riapre la scheda con cui e' nato il programma">Rifai dalla scheda</button>
+            <button class="btn btn-outline btn-sm" onclick="openModal('edit-prog')">Modifica</button>
+            <button class="btn btn-blue btn-sm" onclick="openModal('assign')">Atleti</button>
+            <button class="btn btn-outline btn-sm" onclick="exportBuilderPDF()">PDF</button>
+            <details class="pz-more" ontoggle="if(this.open){const m=this.querySelector('.pz-menu');m.classList.toggle('sx',this.getBoundingClientRect().right<250);}"><summary class="btn btn-outline btn-sm">Altro</summary>
+              <div class="pz-menu" onclick="this.parentNode.open=false">
+                <button type="button" onclick="openModal('gen-meso')">Genera settimane da una base</button>
+                <button type="button" onclick="openModal('copy-prog')">Copia il programma</button>
+                <button type="button" onclick="exportWhatsApp()">Testo per WhatsApp</button>
+                <button type="button" id="archive-btn" onclick="toggleArchive()">Archivia</button>
+                <button type="button" class="del" onclick="deleteProgram()">Elimina il programma</button>
+              </div></details>
           </div>
         </div>
 
@@ -1480,7 +1498,8 @@ function renderEditor(){
   document.getElementById('ed-prog-meta').textContent=`${sp.icon} ${sp.label}${catStr} · ${wks} settiman${wks===1?'a':'e'} · Atleti: ${assigned}${archStr}`;
   // Archive button text
   const archBtn=document.getElementById('archive-btn');
-  if(archBtn){archBtn.textContent=p.archived?'Riattiva':'Archivia';archBtn.className=p.archived?'btn btn-teal btn-sm':'btn btn-amber btn-sm';}
+  if(archBtn)archBtn.textContent=p.archived?'Riattiva il programma':'Archivia il programma';
+  const rif=document.getElementById('pz-rifai');if(rif)rif.hidden=!p.intake;
   renderWeekTabs();
   renderWeekContent();
 }
@@ -1538,9 +1557,11 @@ function renderWeekContent(){
  <button class="btn btn-outline btn-sm" onclick="openModal('templates','${currentWid}')">Template</button>
  <button class="btn btn-outline btn-sm" onclick="openModal('edit-week','${currentWid}')">Sett.</button>
  <button class="btn btn-outline btn-sm" onclick="copyWeek('${currentWid}')">Copia</button>
+        <button class="btn btn-teal btn-sm" onclick="pzAvToggle('${currentWid}')" title="Copia questa settimana nelle seguenti, con la progressione">Porta avanti</button>
         <button class="btn btn-red btn-sm" onclick="deleteWeek('${currentWid}')">Elimina</button>
       </div>
     </div>
+    ${pzAvWid===currentWid?pzAvPanel(currentWid):''}
     ${pzMode==='griglia'?pzGriglia(currentWid,currentWeek):`<div class="sessions-grid" id="sessions-grid">${sessions.map(([sid,s])=>renderSessionCard(currentWid,sid,s)).join('')}</div>`}
     <div class="add-row"${pzMode==='griglia'?' hidden':''}>
       ${(()=>{
@@ -3926,13 +3947,31 @@ function stDaAtleta(aid){
   }
   return I;
 }
-window.openStudio=async function(aid){
-  try{const s=await get(ref(db,'athlete_intake'));stIntake=s.val()||{};}catch(e){stIntake={};}
-  stI=aid?stDaAtleta(aid):stDefault();
-  if(aid)await stCarenzeDaSalute(aid);
+let stRifai=null; // programma da rifare dalla sua scheda
+function stApri(){
+  document.querySelector('#studio .pz-kicker').textContent=stRifai?'Rifai dalla scheda':'Nuova programmazione';
+  document.getElementById('pz-crea').textContent=stRifai?'Rifai il programma':'Crea il programma';
   document.getElementById('studio').classList.add('open');
   document.body.classList.add('studio-on');
   stRender();
+}
+window.openStudio=async function(aid){
+  try{const s=await get(ref(db,'athlete_intake'));stIntake=s.val()||{};}catch(e){stIntake={};}
+  stRifai=null;
+  stI=aid?stDaAtleta(aid):stDefault();
+  if(aid)await stCarenzeDaSalute(aid);
+  stApri();
+};
+// riapre la scheda con cui e' nato il programma: si cambia una scelta e il
+// programma si ricostruisce al suo posto (Ctrl+Z nella griglia lo riporta com'era)
+window.openStudioDaProg=function(){
+  const p=programs[currentProgId];if(!p||!p.intake){showToast('Questo programma non ha una scheda');return;}
+  stRifai=currentProgId;
+  stI=Object.assign(stDefault(),JSON.parse(JSON.stringify(p.intake)));
+  ['giorni','carenze','attrezzi','sqGiorni'].forEach(k=>{if(stI[k]!=null&&!Array.isArray(stI[k])&&typeof stI[k]==='object')stI[k]=Object.values(stI[k]);});
+  if(p.startDate)stI.inizio=p.startDate;
+  stI.nomeProg=p.name||'';
+  stApri();
 };
 // le carenze partono dagli infortuni in corso della scheda Salute
 async function stCarenzeDaSalute(aid){
@@ -4104,6 +4143,18 @@ window.creaDaStudio=async function(){
     const P=stProposta(I),B=stCostruisci(I,P);
     const nome=String(I.nomeProg||'').trim()||stNomeAuto();
     const scheda=JSON.parse(JSON.stringify(Object.assign({},I,{aid})));
+    if(stRifai&&programs[stRifai]){
+      if(!confirm('Le settimane di questo programma vengono ricostruite dalla scheda. Le modifiche fatte a mano si perdono (Ctrl+Z nella griglia le riporta). Procedo?'))return;
+      const pid=stRifai,up={};
+      up[`programs/${pid}/weeks`]=B.weeks;up[`programs/${pid}/duration`]=P.N;up[`programs/${pid}/startDate`]=I.inizio;
+      up[`programs/${pid}/intake`]=scheda;up[`programs/${pid}/name`]=nome;up[`programs/${pid}/sport`]=B.sport;up[`programs/${pid}/category`]=B.category;
+      pzUndo.push({multi:pzPrima(up)});
+      await update(ref(db),up);
+      await set(ref(db,'athlete_intake/'+aid),scheda);
+      closeStudio();currentWeekIdx=0;
+      showToast('Programma rifatto: '+P.N+' settimane');
+      return;
+    }
     const r=push(ref(db,'programs'));
     await set(r,{name:nome,sport:B.sport,category:B.category,duration:P.N,
       notes:ST_OBJ[I.obiettivo]+(I.obiettivo==='gara'?' '+ST_DIST[I.garaDist]+(I.garaData?' il '+I.garaData:''):'')+'. '+ST_LIV[I.livello]+', '+P.T.n+' sedute a settimana.',
@@ -4324,6 +4375,66 @@ window.pzAvanti=async function(r,step){
   if(!Object.keys(up).length){showToast(step?'La prima settimana non ha una percentuale da cui partire':'Niente da portare avanti');return;}
   pzUndo.push({multi:pzPrima(up)});
   await update(ref(db),up);showToast(step?'Progressione +'+String(step).replace('.',',')+'% applicata':'Copiata in tutte le settimane');
+};
+
+// ── PORTA AVANTI: la settimana nelle seguenti, con la progressione ──
+/* Si imposta bene una settimana e la si porta nelle settimane dopo in un
+   colpo: ogni settimana di carico sale di un passo (percentuale, una
+   ripetizione o mezzo punto di RPE), quelle di scarico prendono la versione
+   alleggerita. Gli esercizi di prevenzione restano uguali. */
+let pzAvWid=null,pzAvSel=null,pzAvModo='pct';
+const PZ_AV_MODI=[['uguale','Uguale'],['pct','+2,5% a settimana'],['rip','+1 ripetizione'],['rpe','RPE +0,5']];
+function pzIsDl(w){return /scarico|deload|taper|gara/i.test((w&&w.label)||'');}
+function pzR25(x){return Math.round(x/2.5)*2.5;}
+// sposta un numero o un intervallo ("8", "8-10", "7-8"); il resto (30-45", max) resta com'e'
+function pzSposta(v,d,max,intero){
+  const t=String(v).trim();
+  if(!/^\d+(?:[.,]\d+)?(?:\s*-\s*\d+(?:[.,]\d+)?)?$/.test(t))return v;
+  return t.split('-').map(n=>{const x=Math.min(max,parseFloat(n.replace(',','.'))+d);return String(intero?Math.round(x):Math.round(x*2)/2);}).join('-');
+}
+window.pzAvToggle=function(wid){pzAvWid=pzAvWid===wid?null:wid;pzAvSel=null;renderWeekContent();};
+function pzAvPanel(wid){
+  const W=pzWeeks(),i=W.findIndex(([k])=>k===wid),dopo=W.slice(i+1);
+  if(!dopo.length)return `<div class="pz-av"><p>Questa e' l'ultima settimana: non c'e' niente dopo in cui portarla.</p></div>`;
+  if(!pzAvSel)pzAvSel=new Set(dopo.filter(([,w])=>!pzIsDl(w)).map(([k])=>k));
+  return `<div class="pz-av">
+    <div class="pz-av-r"><span class="pz-av-l">Settimane</span>${dopo.map(([k,w])=>`<button type="button" class="pz-mode${pzAvSel.has(k)?' on':''}${pzIsDl(w)?' dl':''}" onclick="pzAvWk('${k}')" title="${stEsc(w.label||'')}">S${W.findIndex(([x])=>x===k)+1}${pzIsDl(w)?' scarico':''}</button>`).join('')}</div>
+    <div class="pz-av-r"><span class="pz-av-l">Progressione</span>${PZ_AV_MODI.map(([k,l])=>`<button type="button" class="pz-mode${pzAvModo===k?' on':''}" onclick="pzAvM('${k}')">${l}</button>`).join('')}
+      <span class="pz-sp" style="flex:1"></span><button type="button" class="btn btn-teal btn-sm" onclick="pzAvApplica('${wid}')">Applica a ${pzAvSel.size} settiman${pzAvSel.size===1?'a':'e'}</button></div>
+    <p>Le settimane scelte prendono le sedute di questa, al posto delle loro. Quelle di scarico, se le scegli, ricevono meno serie, 10 punti di percentuale e 2 di RPE in meno. Ctrl+Z torna indietro.</p></div>`;
+}
+window.pzAvWk=function(k){pzAvSel.has(k)?pzAvSel.delete(k):pzAvSel.add(k);renderWeekContent();};
+window.pzAvM=function(m){pzAvModo=m;renderWeekContent();};
+function pzAvEx(e,k,modo,dl){
+  const x=Object.assign({},e);
+  if(/^Prevenzione/.test(e.cue||''))return x;
+  const p=parseFloat(x.pct);
+  if(dl){
+    if(+x.sets>2)x.sets=Math.max(2,Math.round(x.sets*0.6));
+    if(isFinite(p))x.pct=String(Math.max(40,pzR25(p-10)));
+    if(x.rpe)x.rpe=pzSposta(x.rpe,-2,10);
+    return x;
+  }
+  if(modo==='pct'&&isFinite(p))x.pct=String(Math.min(95,pzR25(p+2.5*k)));
+  if(modo==='rip'&&x.reps)x.reps=pzSposta(x.reps,k,99,true);
+  if(modo==='rpe'&&x.rpe)x.rpe=pzSposta(x.rpe,0.5*k,10);
+  return x;
+}
+window.pzAvApplica=async function(wid){
+  const W=pzWeeks(),src=programs[currentProgId].weeks[wid];
+  if(!pzAvSel||!pzAvSel.size){showToast('Scegli almeno una settimana');return;}
+  const up={};let k=0;
+  W.forEach(([w2,w])=>{
+    if(!pzAvSel.has(w2))return;
+    const dl=pzIsDl(w);if(!dl)k++;
+    const ss=JSON.parse(JSON.stringify(src.sessions||{}));
+    Object.values(ss).forEach(s=>{if(s.exercises)Object.keys(s.exercises).forEach(eid=>{s.exercises[eid]=pzAvEx(s.exercises[eid],k,pzAvModo,dl);});});
+    up[`programs/${currentProgId}/weeks/${w2}/sessions`]=ss;
+  });
+  pzUndo.push({multi:pzPrima(up)});
+  await update(ref(db),up);
+  const n=Object.keys(up).length;pzAvWid=null;pzAvSel=null;
+  showToast('Settimana portata su '+n+' settiman'+(n===1?'a':'e'));
 };
 
 // ── eventi: si scrive, si salva quando si esce dalla cella ────────
