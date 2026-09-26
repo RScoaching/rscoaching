@@ -1,4 +1,4 @@
-// RS.Coaching — Shared Sidebar · Premium Glass Design
+// RS.Coaching - Shared Sidebar · Premium Glass Design
 window.SIDEBAR_HTML = `
 <div class="sb-mob-bar" id="sb-mob-bar">
   <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
@@ -28,25 +28,25 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon">◈</span><span class="nav-lbl-text">Gruppi</span>
     </a>
     <a class="nav-item" aria-label="Analytics" href="./index.html?goto=analytics" data-page="analytics">
-      <span class="nav-icon">📊</span><span class="nav-lbl-text">Analytics</span>
+      <span class="nav-icon">&#9684;</span><span class="nav-lbl-text">Analytics</span>
     </a>
     <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" aria-label="Program Builder" href="./builder.html" data-page="builder">
-      <span class="nav-icon">🔨</span><span class="nav-lbl-text">Program Builder</span>
+      <span class="nav-icon">&#9635;</span><span class="nav-lbl-text">Program Builder</span>
     </a>
     <a class="nav-item" aria-label="Planner Settimanale" href="./planner.html" data-page="planner">
-      <span class="nav-icon">📅</span><span class="nav-lbl-text">Planner Settimanale</span>
+      <span class="nav-icon">&#9636;</span><span class="nav-lbl-text">Planner Settimanale</span>
     </a>
     <div class="nav-lbl">Comunicazione</div>
     <a class="nav-item" aria-label="Chat" href="./index.html?goto=chat-global" data-page="chat">
-      <span class="nav-icon">💬</span><span class="nav-lbl-text">Chat</span>
+      <span class="nav-icon">&#9677;</span><span class="nav-lbl-text">Chat</span>
     </a>
     <div class="nav-lbl">Risorse</div>
     <a class="nav-item" aria-label="Database Esercizi" href="./index.html?goto=database" data-page="database">
-      <span class="nav-icon">🗄</span><span class="nav-lbl-text">Database Esercizi</span>
+      <span class="nav-icon">&#9637;</span><span class="nav-lbl-text">Database Esercizi</span>
     </a>
     <a class="nav-item" aria-label="Strumenti S&C" href="./index.html?goto=tools" data-page="tools">
-      <span class="nav-icon">🧮</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
+      <span class="nav-icon">&#9671;</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
     </a>
     <a class="nav-item" aria-label="Tutte le sedute" href="./index.html?goto=sessions" data-page="sessions">
       <span class="nav-icon">≡</span><span class="nav-lbl-text">Tutte le sedute</span>
