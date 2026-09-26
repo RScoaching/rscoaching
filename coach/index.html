@@ -378,6 +378,49 @@ body::after{
 .test-name{font-size:10px;font-weight:600;color:var(--text);margin-bottom:3px;}
 .test-val{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--white);}
 .test-date{font-size:10px;color:var(--muted);margin-top:1px;}
+/* le card dei test sono tasti: si aprono col dito e con la tastiera */
+button.test-card{display:block;width:100%;text-align:left;font-family:inherit;color:inherit;}
+.test-card:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
+.test-card.vuoto{opacity:.55;border-style:dashed;}
+.test-card.vuoto:hover{opacity:1;}
+.test-val small{font-family:'Inter',sans-serif;font-size:11px;font-weight:600;color:var(--muted);margin-left:3px;}
+.tline{display:flex;gap:6px;align-items:center;min-height:15px;margin-top:1px;}
+.tdelta{font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);}
+.tdelta.up{color:var(--green);}
+.tdelta.down{color:var(--red);}
+.tpr{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--gold);}
+.tsp{color:var(--muted);height:26px;margin:4px 0 2px;}
+.tsp.up{color:var(--green);}
+.tsp.down{color:var(--red);}
+.tspark{width:100%;height:26px;display:block;}
+.trank{font-size:10px;color:var(--purple);margin-top:3px;font-variant-numeric:tabular-nums;}
+.test-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+/* profilo fisico: la figura a sinistra, la spiegazione a destra */
+.tprof{display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:18px;align-items:center;padding:14px 16px;margin-bottom:14px;border:1px solid rgba(139,92,246,.22);border-radius:14px;background:rgba(139,92,246,.05);}
+.tprof.slim{display:block;}
+.tradar{width:100%;height:auto;display:block;}
+.tprof-h{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.6px;color:var(--white);margin-bottom:6px;}
+.tprof p{font-size:12px;line-height:1.55;color:var(--text);margin:0 0 10px;max-width:60ch;}
+.tprof-list{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px;}
+.tprof-list span{font-size:12px;color:var(--text);}
+.tprof-list b{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--purple);margin-right:3px;letter-spacing:.4px;}
+.tprof-list i{font-style:normal;color:var(--muted);font-size:10.5px;margin-left:4px;}
+@media(max-width:640px){.tprof{grid-template-columns:1fr;}}
+/* dettaglio di un test */
+.tdet-sub{font-size:12px;color:var(--muted);margin:-10px 0 14px;line-height:1.5;}
+.tdet-chart{height:170px;margin-bottom:14px;}
+.tdet-tab{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px;}
+.tdet-tab th{text-align:left;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);}
+.tdet-tab td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);}
+.tdet-tab .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.tdet-tab td b{color:var(--white);}
+.tdet-tab .nt{color:var(--muted);font-size:11px;}
+.tdet-tab .x{width:28px;text-align:right;}
+.tdel{background:none;border:0;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px;}
+.tdel:hover{color:var(--red);background:rgba(244,63,94,.1);}
+.tdet-vuoto{font-size:12px;color:var(--muted);margin:0 0 14px;}
+.tdet-add{padding-top:12px;border-top:1px solid var(--border);}
+.tdet-h{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;}
 
 /* ── Session list ── */
 .sess-item{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);}
@@ -1049,7 +1092,9 @@ onValue(ref(db,'athletes'),s=>{
 });
 onValue(ref(db,'sessions'),s=>{sessions=s.val()||{};renderAll();});
 onValue(ref(db,'groups'),s=>{groups=s.val()||{};renderAll();});
-onValue(ref(db,'tests'),s=>{tests=s.val()||{};});
+onValue(ref(db,'tests'),s=>{tests=s.val()||{};refreshTests();});
+onValue(ref(db,'test_history'),s=>{testHistory=s.val()||{};refreshTests();});
+onValue(ref(db,'test_defs'),s=>{testDefs=s.val()||{};refreshTests();});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom overrides only
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
@@ -1488,12 +1533,194 @@ function renderDetOverview(aid,a,aSess,aCi){
   <div style="height:110px;position:relative;"><canvas id="det-rpe-canvas"></canvas></div>`;
 }
 
-function renderDetTests(aid){
-  const t=tests[aid]||{};
-  const TEST_DEF=['Sprint 10m','Sprint 20m','Sprint 30m','CMJ','SJ','Drop Jump','Yo-Yo IR1','Illinois Agility','5-10-5','Back Squat 1RM','Trap Bar 1RM','Front Squat 1RM','Hip Thrust 1RM','Nordic Hamstring'];
-  const all=[...new Set([...TEST_DEF,...Object.keys(t)])];
-  return `<div class="test-grid">${all.map(n=>{const r=t[n]||{};return `<div class="test-card" onclick="openModal('test','${aid}','${n}')"><div class="test-name">${n}</div><div class="test-val">${r.val||'-'}</div><div class="test-date">${r.date||'Aggiungi'}</div></div>`;}).join('')}</div>`;
+// ── TEST: storico, verso, confronto col gruppo, profilo
+/* Ogni test sa in che unita' si misura e in che verso si migliora: nello sprint
+   il tempo che scende e' un miglioramento, nel salto e' il contrario. Senza
+   questo il colore del "delta" direbbe il falso a meta' dei test. `cat` mette
+   il test in una delle cinque qualita' del profilo fisico. */
+const TEST_META={
+  'Sprint 10m':{u:'s',dir:-1,cat:'velocita',dec:2},'Sprint 20m':{u:'s',dir:-1,cat:'velocita',dec:2},'Sprint 30m':{u:'s',dir:-1,cat:'velocita',dec:2},
+  'CMJ':{u:'cm',dir:1,cat:'salto',dec:1},'SJ':{u:'cm',dir:1,cat:'salto',dec:1},'Drop Jump':{u:'cm',dir:1,cat:'salto',dec:1},
+  'Yo-Yo IR1':{u:'m',dir:1,cat:'resistenza',dec:0},
+  'Illinois Agility':{u:'s',dir:-1,cat:'agilita',dec:2},'5-10-5':{u:'s',dir:-1,cat:'agilita',dec:2},
+  'Back Squat 1RM':{u:'kg',dir:1,cat:'forza',dec:1},'Trap Bar 1RM':{u:'kg',dir:1,cat:'forza',dec:1},'Front Squat 1RM':{u:'kg',dir:1,cat:'forza',dec:1},
+  'Hip Thrust 1RM':{u:'kg',dir:1,cat:'forza',dec:1},'Nordic Hamstring':{u:'N',dir:1,cat:'forza',dec:0}
+};
+const TEST_CATS=[['velocita','Velocita\''],['agilita','Agilita\''],['salto','Salto'],['resistenza','Resistenza'],['forza','Forza']];
+let testHistory={},testDefs={};
+function testMeta(n){return TEST_META[n]||testDefs[testKey(n)]||{u:'',dir:1,cat:'',dec:2};}
+// le chiavi del database non accettano . $ # [ ] /
+function testKey(n){return String(n||'').replace(/[.$#\[\]\/]/g,'_').trim();}
+function numVal(v){const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:null;}
+function itDateTs(d){const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d||'').trim());return m?new Date(+m[3],+m[2]-1,+m[1],12).getTime():null;}
+function fmtNum(v,dec){return v==null?'-':v.toFixed(dec==null?2:dec).replace('.',',');}
+// tutte le misure di un atleta su un test, dalla piu' vecchia: lo storico nuovo
+// piu' il valore singolo di prima, se non e' gia' dentro lo storico
+function testSerie(aid,name){
+  const k=testKey(name);
+  const h=Object.entries((testHistory[aid]||{})[k]||{}).map(([id,r])=>({id,val:numVal(r.val),raw:r.raw||String(r.val),date:r.date||'',ts:r.ts||itDateTs(r.date)||0,notes:r.notes||''}))
+    .filter(r=>r.val!=null);
+  const leg=(tests[aid]||{})[name];
+  if(leg&&numVal(leg.val)!=null){
+    const lv=numVal(leg.val),lts=itDateTs(leg.date)||0;
+    if(!h.some(r=>r.val===lv&&(r.date===leg.date||!leg.date)))h.push({id:null,val:lv,raw:String(leg.val),date:leg.date||'',ts:lts,notes:leg.notes||'',legacy:true});
+  }
+  return h.sort((a,b)=>a.ts-b.ts);
 }
+function testNames(aid){
+  const set=new Set([...Object.keys(TEST_META),...Object.keys(tests[aid]||{})]);
+  Object.keys(testHistory[aid]||{}).forEach(k=>set.add(k));
+  Object.values(testDefs).forEach(d=>d&&d.name&&set.add(d.name));
+  return [...set];
+}
+function isBetter(m,a,b){return m.dir<0?a<b:a>b;}
+// posizione nel gruppo sull'ultima misura di ognuno
+function testRank(aid,name){
+  const m=testMeta(name);
+  const vals=Object.keys(athletes).map(id=>{const s=testSerie(id,name);return s.length?{id,v:s[s.length-1].val}:null;}).filter(Boolean);
+  const me=vals.find(x=>x.id===aid);
+  if(!me||vals.length<2)return null;
+  const sorted=vals.slice().sort((a,b)=>m.dir<0?a.v-b.v:b.v-a.v);
+  const pos=sorted.findIndex(x=>x.id===aid)+1;
+  const arr=vals.map(x=>x.v).sort((a,b)=>a-b);
+  const med=arr.length%2?arr[(arr.length-1)/2]:(arr[arr.length/2-1]+arr[arr.length/2])/2;
+  // percentile: quota del gruppo che fa peggio, 0-100
+  const peggio=vals.filter(x=>x.id!==aid&&isBetter(m,me.v,x.v)).length;
+  const pari=vals.filter(x=>x.id!==aid&&x.v===me.v).length;
+  const pct=Math.round((peggio+pari/2)/(vals.length-1)*100);
+  return {pos,n:vals.length,med,pct};
+}
+function sparkSVG(pts,dir){
+  if(pts.length<2)return '';
+  const w=100,h=26,p=3;
+  const vs=pts.map(x=>x.val),mn=Math.min(...vs),mx=Math.max(...vs),rg=mx-mn||1;
+  const xy=pts.map((x,i)=>[p+i*(w-2*p)/(pts.length-1),h-p-(dir<0?(mx-x.val):(x.val-mn))/rg*(h-2*p)]);
+  const d=xy.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const l=xy[xy.length-1];
+  return `<svg class="tspark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="${l[0].toFixed(1)}" cy="${l[1].toFixed(1)}" r="2.2" fill="currentColor"/></svg>`;
+}
+// profilo fisico: per ogni qualita' la media dei percentili nel gruppo
+function testProfilo(aid){
+  const out=[];
+  TEST_CATS.forEach(([c,lbl])=>{
+    const ps=testNames(aid).filter(n=>testMeta(n).cat===c).map(n=>testRank(aid,n)).filter(Boolean).map(r=>r.pct);
+    if(ps.length)out.push({c,lbl,v:Math.round(ps.reduce((t,x)=>t+x,0)/ps.length),n:ps.length});
+  });
+  return out;
+}
+function radarSVG(prof){
+  const N=prof.length,R=78,cx=110,cy=100;
+  const pt=(i,r)=>{const a=-Math.PI/2+i*2*Math.PI/N;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+  let g='';
+  [25,50,75,100].forEach(q=>{g+=`<polygon points="${prof.map((_,i)=>pt(i,R*q/100).map(v=>v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="rgba(255,255,255,${q===50?.16:.07})" stroke-width="1"/>`;});
+  prof.forEach((_,i)=>{const e=pt(i,R);g+=`<line x1="${cx}" y1="${cy}" x2="${e[0].toFixed(1)}" y2="${e[1].toFixed(1)}" stroke="rgba(255,255,255,.07)"/>`;});
+  g+=`<polygon points="${prof.map((x,i)=>pt(i,R*Math.max(4,x.v)/100).map(v=>v.toFixed(1)).join(',')).join(' ')}" fill="rgba(139,92,246,.22)" stroke="#A78BFA" stroke-width="2"/>`;
+  prof.forEach((x,i)=>{const q=pt(i,R*Math.max(4,x.v)/100);g+=`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3" fill="#A78BFA"/>`;
+    const e=pt(i,R+16);const anc=Math.abs(e[0]-cx)<6?'middle':(e[0]<cx?'end':'start');
+    g+=`<text x="${e[0].toFixed(1)}" y="${(e[1]+4).toFixed(1)}" text-anchor="${anc}" font-size="10.5" font-weight="600" fill="#CAC3B7">${x.lbl} ${x.v}</text>`;});
+  return `<svg viewBox="0 0 220 200" class="tradar" role="img" aria-label="Profilo fisico rispetto al gruppo">${g}</svg>`;
+}
+function renderDetTests(aid){
+  const prof=testProfilo(aid);
+  let top='';
+  if(prof.length>=3){
+    top=`<div class="tprof"><div class="tprof-fig">${radarSVG(prof)}</div><div class="tprof-txt"><div class="tprof-h">Profilo fisico</div>
+      <p>Per ogni qualita' la posizione nel gruppo, da 0 a 100: 50 e' la meta' del gruppo, 100 vuol dire meglio di tutti. Conta l'ultima misura di ognuno, e il verso del test (nello sprint vince il tempo piu' basso).</p>
+      <div class="tprof-list">${prof.map(x=>`<span><b>${x.v}</b> ${x.lbl}<i>${x.n} ${x.n===1?'test':'test'}</i></span>`).join('')}</div></div></div>`;
+  }else if(prof.length){
+    top=`<div class="tprof slim"><div class="tprof-h">Profilo fisico</div><div class="tprof-list">${prof.map(x=>`<span><b>${x.v}</b> ${x.lbl}</span>`).join('')}</div><p>Il profilo completo compare con almeno tre qualita' misurate e confrontabili col gruppo.</p></div>`;
+  }
+  const names=testNames(aid).sort((a,b)=>{
+    const ca=TEST_CATS.findIndex(c=>c[0]===testMeta(a).cat),cb=TEST_CATS.findIndex(c=>c[0]===testMeta(b).cat);
+    return (ca<0?99:ca)-(cb<0?99:cb);
+  });
+  const cards=names.map(n=>{
+    const m=testMeta(n),s=testSerie(aid,n);
+    const nq=athEsc(n).replace(/'/g,'&#39;');
+    if(!s.length)return `<button type="button" class="test-card vuoto" onclick="openTestDet('${aid}','${nq}')"><div class="test-name">${athEsc(n)}</div><div class="test-val">-</div><div class="test-date">Aggiungi misura</div></button>`;
+    const last=s[s.length-1],prev=s.length>1?s[s.length-2]:null;
+    const best=s.reduce((b,x)=>isBetter(m,x.val,b.val)?x:b,s[0]);
+    let delta='';
+    if(prev){const d=last.val-prev.val;const up=d!==0&&isBetter(m,last.val,prev.val);
+      delta=`<span class="tdelta ${d===0?'':(up?'up':'down')}">${d>0?'+':''}${fmtNum(d,m.dec)}${m.u?' '+m.u:''}</span>`;}
+    const pr=s.length>1&&best===last?'<span class="tpr">record</span>':'';
+    const rk=testRank(aid,n);
+    return `<button type="button" class="test-card" onclick="openTestDet('${aid}','${nq}')">
+      <div class="test-name">${athEsc(n)}</div>
+      <div class="test-val">${fmtNum(last.val,m.dec)}<small>${athEsc(m.u)}</small></div>
+      <div class="tline">${delta}${pr}</div>
+      <div class="tsp ${prev?(isBetter(m,last.val,prev.val)?'up':(last.val===prev.val?'':'down')):''}">${sparkSVG(s.slice(-8),m.dir)}</div>
+      <div class="test-date">${athEsc(last.date||'')}${s.length>1?' &#183; '+s.length+' misure':''}</div>
+      ${rk?`<div class="trank">${rk.pos}&#176; su ${rk.n} &#183; mediana ${fmtNum(rk.med,m.dec)}</div>`:''}
+    </button>`;
+  }).join('');
+  return top+`<div class="test-grid">${cards}</div>
+    <button type="button" class="btn btn-outline btn-sm" onclick="openNewTest('${aid}')">+ Nuovo test</button>`;
+}
+function refreshTests(){if(currentAid){const el=document.getElementById('det-tests');if(el&&el.style.display!=='none')el.innerHTML=renderDetTests(currentAid);}}
+
+// dettaglio di un test: storico con i delta, grafico, nuova misura
+window.openTestDet=function(aid,name){
+  const m=testMeta(name),s=testSerie(aid,name),rk=testRank(aid,name);
+  const mb=document.getElementById('modal-body');
+  const oggi=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const righe=s.slice().reverse().map((r,i,arr)=>{
+    const pr=arr[i+1];let d='';
+    if(pr){const x=r.val-pr.val;d=`<span class="tdelta ${x===0?'':(isBetter(m,r.val,pr.val)?'up':'down')}">${x>0?'+':''}${fmtNum(x,m.dec)}</span>`;}
+    return `<tr><td>${athEsc(r.date||'-')}</td><td class="n"><b>${fmtNum(r.val,m.dec)}</b> ${athEsc(m.u)}</td><td class="n">${d}</td><td class="nt">${athEsc(r.notes||'')}</td>
+      <td class="x">${r.id?`<button type="button" class="tdel" aria-label="Elimina misura del ${athEsc(r.date)}" onclick="delTestMisura('${aid}','${athEsc(name).replace(/'/g,'&#39;')}','${r.id}')">&#215;</button>`:''}</td></tr>`;
+  }).join('');
+  mb.innerHTML=`<h3>${athEsc(name)}</h3>
+    <div class="tdet-sub">${athEsc(athletes[aid]?.name||'')} &#183; ${m.dir<0?'meglio se scende':'meglio se sale'}${m.u?' &#183; in '+athEsc(m.u):''}${rk?' &#183; '+rk.pos+'&#176; su '+rk.n+' nel gruppo, mediana '+fmtNum(rk.med,m.dec):''}</div>
+    ${s.length>1?`<div class="tdet-chart"><canvas id="tdet-canvas"></canvas></div>`:''}
+    ${s.length?`<table class="tdet-tab"><thead><tr><th>Data</th><th class="n">Valore</th><th class="n">Dalla precedente</th><th>Note</th><th></th></tr></thead><tbody>${righe}</tbody></table>`:'<p class="tdet-vuoto">Nessuna misura ancora.</p>'}
+    <div class="tdet-add"><div class="tdet-h">Nuova misura</div>
+      <div class="grid2"><div class="field"><label>Valore${m.u?' ('+athEsc(m.u)+')':''}</label><input id="m-tval" inputmode="decimal" placeholder="es. ${m.u==='s'?'1,82':m.u==='cm'?'38,5':'80'}"></div>
+      <div class="field"><label>Data</label><input id="m-tdate" value="${oggi}" placeholder="gg/mm/aaaa"></div></div>
+      <div class="field"><label>Note</label><input id="m-tnotes" placeholder="condizioni, superficie, scarpe"></div>
+    </div>
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button><button class="btn btn-orange" onclick="saveTest('${aid}','${athEsc(name).replace(/'/g,'&#39;')}')">Salva misura</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  if(s.length>1)setTimeout(()=>{
+    const c=document.getElementById('tdet-canvas');if(!c||!window.Chart)return;
+    const ds=[{label:athletes[aid]?.name||'',data:s.map(r=>r.val),borderColor:'#FF6A2E',backgroundColor:'rgba(255,106,46,.10)',borderWidth:2,fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#FF6A2E'}];
+    if(rk)ds.push({label:'mediana gruppo',data:s.map(()=>rk.med),borderColor:'rgba(167,139,250,.8)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false});
+    new Chart(c,{type:'line',data:{labels:s.map(r=>r.date),datasets:ds},options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:!!rk,labels:{color:'#8E8678',font:{size:10},boxWidth:12}}},
+      scales:{x:{ticks:{color:'#8E8678',font:{size:9}},grid:{display:false}},y:{reverse:m.dir<0,ticks:{color:'#8E8678',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}}}}});
+  },60);
+};
+window.openNewTest=function(aid){
+  const mb=document.getElementById('modal-body');
+  mb.innerHTML=`<h3>Nuovo test</h3>
+    <div class="field"><label>Nome del test</label><input id="m-ntname" placeholder="es. Sprint 40m, Salto in lungo"></div>
+    <div class="grid2"><div class="field"><label>Unita'</label><input id="m-ntu" placeholder="s, cm, kg, m"></div>
+    <div class="field"><label>Si migliora quando</label><select id="m-ntdir"><option value="1">il valore sale</option><option value="-1">il valore scende</option></select></div></div>
+    <div class="field"><label>Qualita'</label><select id="m-ntcat"><option value="">Nessuna</option>${TEST_CATS.map(([c,l])=>`<option value="${c}">${l}</option>`).join('')}</select></div>
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveNewTest('${aid}')">Crea test</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+};
+window.saveNewTest=async function(aid){
+  const name=document.getElementById('m-ntname').value.trim().replace(/[.$#\[\]\/]/g,' ').replace(/\s+/g,' ');
+  if(!name){showToast('Scrivi il nome del test');return;}
+  const u=document.getElementById('m-ntu').value.trim().slice(0,8);
+  const dir=+document.getElementById('m-ntdir').value===-1?-1:1;
+  const cat=document.getElementById('m-ntcat').value||'';
+  await set(ref(db,`test_defs/${testKey(name)}`),{name,u,dir,cat,dec:u==='s'?2:1});
+  showToast('Test '+name+' creato');
+  openTestDet(aid,name);
+};
+window.delTestMisura=async function(aid,name,id){
+  if(!confirm('Eliminare questa misura?'))return;
+  await remove(ref(db,`test_history/${aid}/${testKey(name)}/${id}`));
+  // il valore singolo che legge l'app atleti torna quello piu' recente rimasto
+  const rest=testSerie(aid,name).filter(r=>r.id!==id&&!r.legacy);
+  const last=rest[rest.length-1];
+  if(last)await update(ref(db,`tests/${aid}/${name}`),{val:last.raw||String(last.val),date:last.date,notes:last.notes||null});
+  else await remove(ref(db,`tests/${aid}/${name}`));
+  showToast('Misura eliminata');
+  openTestDet(aid,name);refreshTests();
+};
 
 // ── MASSIMALI (1RM) - coach-set per-athlete 1RM, stored in the shared rm_records
 // node so the athlete's session view resolves @%1RM prescriptions straight to kg.
@@ -2228,11 +2455,7 @@ window.openModal=function(type,...args){
       </div>
       <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveGroup('${editId||''}')">Salva →</button></div>`;
   } else if(type==='test'){
-    const [aid,tName]=args;const t=tests[aid]?.[tName]||{};
-    mb.innerHTML=`<h3>${tName}</h3>
-      <div class="grid2"><div class="field"><label>Valore (sec / kg / cm...)</label><input id="m-tval" value="${t.val||''}" placeholder="-"></div><div class="field"><label>Data test</label><input id="m-tdate" value="${t.date||''}" placeholder="gg/mm/aaaa"></div></div>
-      <div class="field"><label>Note</label><textarea id="m-tnotes">${t.notes||''}</textarea></div>
-      <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveTest('${aid}','${tName}')">Salva →</button></div>`;
+    const [aid,tName]=args;openTestDet(aid,tName);return;
   } else if(type==='addExercise'){
     mb.innerHTML=`<h3>Nuovo Esercizio</h3>
       <div class="grid2"><div class="field"><label>Nome esercizio</label><input id="m-exname" placeholder="Es. Trap Bar Jump"></div><div class="field"><label>Categoria</label><select id="m-excat">${['Squat','Hinge','Unilaterale','Potenza','Pliometria','Spinta','Tirata','Core','Conditioning','Altro'].map(c=>`<option>${c}</option>`).join('')}</select></div></div>
@@ -2276,11 +2499,23 @@ window.saveGroup=async function(editId){
   closeModal();showToast('Gruppo salvato!');
 };
 window.saveTest=async function(aid,tName){
-  const val=document.getElementById('m-tval').value.trim();if(!val){showToast('Inserisci un valore');return;}
+  const raw=document.getElementById('m-tval').value.trim();
+  const val=numVal(raw);
+  if(val==null){showToast('Scrivi un valore numerico');return;}
   const date=document.getElementById('m-tdate').value.trim()||new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
-  await update(ref(db,`tests/${aid}/${tName}`),{val,date,notes:document.getElementById('m-tnotes').value.trim()||null});
-  closeModal();showToast(`${tName} salvato!`);
-  if(currentAid===aid){document.getElementById('det-tests').innerHTML=renderDetTests(aid);}
+  const ts=itDateTs(date)||Date.now();
+  const notes=document.getElementById('m-tnotes').value.trim()||null;
+  // la prima volta che si scrive nello storico ci entra anche la misura di prima
+  const serie=testSerie(aid,tName);
+  const leg=serie.find(r=>r.legacy);
+  if(leg)await push(ref(db,`test_history/${aid}/${testKey(tName)}`),{val:leg.val,raw:leg.raw,date:leg.date,ts:leg.ts||0,notes:leg.notes||null});
+  await push(ref(db,`test_history/${aid}/${testKey(tName)}`),{val,raw,date,ts,notes});
+  // l'app atleti legge il valore singolo: resta quello della misura piu' recente
+  const tutte=serie.filter(r=>!r.legacy).concat(leg?[leg]:[]).concat([{val,raw,date,ts,notes}]).sort((a,b)=>a.ts-b.ts);
+  const last=tutte[tutte.length-1];
+  await update(ref(db,`tests/${aid}/${tName}`),{val:last.raw||String(last.val),date:last.date,notes:last.notes||null});
+  showToast(tName+' salvato');
+  openTestDet(aid,tName);refreshTests();
 };
 window.saveNewExercise=async function(){
   const name=document.getElementById('m-exname').value.trim();if(!name){showToast('Inserisci nome');return;}
