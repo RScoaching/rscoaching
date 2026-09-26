@@ -485,6 +485,11 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
   .tm-c{ border-left:0; border-top:1px solid var(--border2); }
   .tm-c:first-child{ border-top:0; }
 }
+/* la tabella del periodo: righe cliccabili, portano al giorno */
+.tm-per{ margin-top:12px; }
+.tm-per tr.tm-go{ cursor:pointer; }
+.tm-per tr.tm-go:focus-visible{ outline:2px solid var(--orange); outline-offset:-2px; }
+.tm-per .tm-hi{ color:var(--orange2); }
 @media print{ .rsec-tm, .ex-al, .ex-ok{ display:none !important; } }
 
 /* ---------- image preview modal ---------- */
@@ -2085,7 +2090,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.titolo)+'</h3>'+
         (s.nota ? '<span class="rsec-n">'+esc(s.nota)+'</span>' : '')+'</div>'+s.corpo+'</div>';
     }).join('');
-    host.innerHTML = p.headHTML + '<div class="rbody">'+p.kpisHTML+secs+p.footHTML+'</div>';
+    /* I tempi morti sono della seduta di squadra: con una sola atleta scelta non
+       hanno senso, e restano fuori. Solo a schermo, la stampa non li chiama. */
+    const scope = document.getElementById('sel-scope').value || TEAM;
+    const tm = scope === TEAM ? tmMeseHTML(document.getElementById('sel-month').value || '') : '';
+    host.innerHTML = p.headHTML + '<div class="rbody">'+p.kpisHTML+secs+tm+p.footHTML+'</div>';
+    host.querySelectorAll('[data-tmgo]').forEach(function(tr){
+      tr.addEventListener('click', function(){ tmApri(tr.getAttribute('data-tmgo')); });
+      tr.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); tmApri(tr.getAttribute('data-tmgo')); }
+      });
+    });
   }
 
   // ---------- export CSV ----------
@@ -3315,6 +3330,101 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return '<div class="rsec rsec-tm"><div class="rsec-head"><h3>Tempi morti</h3>'+
       '<span class="rsec-n">Full Training contro la somma delle esercitazioni</span></div>'+
       blocchi.join('')+'</div>';
+  }
+
+  /* TEMPI MORTI DEL PERIODO, nella Sintesi di squadra. Solo a schermo.
+     Lo stesso conto del report giornaliero, seduta per seduta, messo in fila:
+     la media del periodo, la seduta piu' dispersiva e quella piu' asciutta, e
+     quanti recuperi scritti sono stati sforati. Una riga per seduta, e la riga
+     apre quel giorno nel report giornaliero, dove c'e' il dettaglio. */
+  function tmPeriodo(monthKey){
+    const E = (window.ESERC && typeof window.ESERC==='object') ? window.ESERC : {};
+    const base = Array.isArray(E.sessions) ? E.sessions : [];
+    const out = [];
+    base.forEach(function(raw){
+      const iso = String(raw && raw.date||'').slice(0,10);
+      if(!iso || (monthKey && iso.slice(0,7) !== monthKey)) return;
+      const slot = String(raw.slot||'').toUpperCase();
+      const sv = exSessioni(iso, slot).filter(function(x){ return x.slot === slot; })[0];
+      if(!sv) return;
+      const c = tmConto(sv, raw);
+      if(!c) return;
+      let sfori = 0, piu = 0;
+      sv.drills.forEach(function(d){ const x = tmSforo(d); if(x){ sfori++; piu += x.piu; } });
+      out.push({ iso:iso, slot:slot, c:c, sfori:sfori, piu:piu });
+    });
+    out.sort(function(a, b){ return (a.iso+a.slot).localeCompare(b.iso+b.slot); });
+    return out;
+  }
+  function tmMeseHTML(monthKey){
+    const L = tmPeriodo(monthKey);
+    if(!L.length) return '';
+    const pct = function(r){ return r.c.ft > 0 ? r.c.pausa / r.c.ft * 100 : 0; };
+    const media = L.reduce(function(a, r){ return a + r.c.pausa; }, 0) / L.length;
+    const mediaPct = L.reduce(function(a, r){ return a + pct(r); }, 0) / L.length;
+    /* gli estremi solo fra le sedute con almeno un cambio: con un'esercitazione
+       sola i tempi morti sono zero per forza, e non dicono niente */
+    const conCambi = L.filter(function(r){ return r.c.cambi > 0; });
+    const E2 = conCambi.length ? conCambi : L;
+    const peggio = E2.reduce(function(a, r){ return pct(r) > pct(a) ? r : a; }, E2[0]);
+    const meglio = E2.reduce(function(a, r){ return pct(r) < pct(a) ? r : a; }, E2[0]);
+    const nSfori = L.reduce(function(a, r){ return a + r.sfori; }, 0);
+    const piu = L.reduce(function(a, r){ return a + r.piu; }, 0);
+    const gg = function(r){
+      const p = r.iso.split('-');
+      return p[2]+'/'+p[1]+(r.slot ? ' '+r.slot : '');
+    };
+    let h = '<div class="tm-row">'+
+      tmCella('Tempi morti medi', NF0.format(Math.round(media)), 'min',
+        esc(NF0.format(Math.round(mediaPct))+'% della seduta, su '+L.length+(L.length === 1 ? ' seduta' : ' sedute')), mediaPct >= 15) +
+      tmCella('La piu\' dispersiva', esc(gg(peggio)), '',
+        esc(NF0.format(Math.round(peggio.c.pausa))+' min, '+NF0.format(Math.round(pct(peggio)))+'%')) +
+      tmCella('La piu\' asciutta', esc(gg(meglio)), '',
+        esc(NF0.format(Math.round(meglio.c.pausa))+' min, '+NF0.format(Math.round(pct(meglio)))+'%')) +
+      tmCella('Recuperi sforati', NF0.format(nSfori), '',
+        nSfori ? esc(tmFmt(piu)+' in piu\' in tutto') : 'fra quelli scritti in Esercitazioni') +
+    '</div>';
+    h += '<div class="tbl-wrap tbl-scroll tm-per"><table class="dt"><thead><tr>'+
+      '<th style="text-align:left">Seduta</th><th>Full Training</th><th>Esercitazioni</th><th>Tempi morti</th><th>Quota</th><th>Recuperi sforati</th>'+
+      '</tr></thead><tbody>'+
+      L.map(function(r){
+        const q = pct(r);
+        const cell = function(v, u){ return '<td><span class="v eq">'+v+(u ? '<span class="mu">'+u+'</span>' : '')+'</span></td>'; };
+        return '<tr class="tm-go" tabindex="0" role="button" data-tmgo="'+esc(r.iso+'|'+r.slot)+'"'+
+            ' title="Apri il report di questa seduta">'+
+          '<td style="text-align:left"><span class="ex-n">'+esc(gg(r))+'</span></td>'+
+          cell(NF0.format(Math.round(r.c.ft)), 'min')+
+          cell(NF0.format(Math.round(r.c.net)), 'min')+
+          cell(NF0.format(Math.round(r.c.pausa)), 'min')+
+          '<td><span class="v eq'+(q >= 15 ? ' tm-hi' : '')+'">'+NF0.format(Math.round(q))+'<span class="mu">%</span></span></td>'+
+          (r.sfori ? cell(esc(r.sfori+', '+tmFmt(r.piu)), '') : '<td><span class="cell-na">-</span></td>')+
+        '</tr>';
+      }).join('')+
+      '</tbody></table></div>';
+    h += '<p class="tm-nota">Lo stesso conto del report giornaliero: Full Training di chi ha finito con la squadra contro la somma delle esercitazioni, IDP e lavori di poche esclusi. Un clic sulla riga apre la seduta.</p>';
+    return '<div class="rsec rsec-tm"><div class="rsec-head"><h3>Tempi morti</h3>'+
+      '<span class="rsec-n">seduta per seduta, nel periodo scelto</span></div>'+h+'</div>';
+  }
+  // dalla riga della Sintesi al report giornaliero di quella seduta
+  function tmApri(key){
+    const p = String(key||'').split('|');
+    const iso = p[0], slot = p[1] || '';
+    if(!iso) return;
+    setMode('giorno');
+    const ms = document.getElementById('sel-month');
+    ms.value = iso.slice(0,7);
+    fillSessions();
+    const q = iso.split('-');
+    const dd = q[2]+'/'+q[1]+'/'+q[0];
+    const parte = slot === 'AM' ? 'Mattino' : (slot === 'PM' ? 'Pomeriggio' : '');
+    const ss = document.getElementById('sel-session');
+    const opt = [].slice.call(ss.options).filter(function(o){
+      return o.text.indexOf(dd) >= 0 && (!parte || o.text.indexOf(parte) >= 0);
+    })[0];
+    if(opt) ss.value = opt.value;
+    daysCambiate();
+    render();
+    window.scrollTo({ top:0, behavior:'smooth' });
   }
 
   // le stesse righe in testo, per il foglio che si porta via
