@@ -420,6 +420,28 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 .tdel:hover{color:var(--red);background:rgba(244,63,94,.1);}
 .tdet-vuoto{font-size:12px;color:var(--muted);margin:0 0 14px;}
 .tdet-add{padding-top:12px;border-top:1px solid var(--border);}
+.ana{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;align-items:stretch;margin-bottom:12px;}
+.ana-c{padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025);}
+.ana-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted);}
+.ana-v{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.5px;color:var(--white);line-height:1.1;margin-top:3px;}
+.ana-v small{font-family:'Inter',sans-serif;font-size:11px;font-weight:600;color:var(--muted);margin-left:4px;letter-spacing:0;}
+.ana-s{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.ana-d{color:var(--text);font-variant-numeric:tabular-nums;}
+.ana-btn{align-self:center;justify-self:start;}
+/* massimali */
+.rm-intro{font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 12px;max-width:70ch;}
+.rm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;}
+.rm-row{display:grid;grid-template-columns:1fr 90px;grid-template-rows:auto auto;gap:6px 12px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025);}
+.rm-main{min-width:0;}
+.rm-name{font-weight:700;font-size:13px;color:var(--white);}
+.rm-val{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--primary);line-height:1.1;letter-spacing:.5px;}
+.rm-val small{font-family:'Inter',sans-serif;font-size:11px;color:var(--muted);margin-left:3px;letter-spacing:0;}
+.rm-none{font-family:'Inter',sans-serif;font-size:12px;color:var(--muted);}
+.rm-sub{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:10.5px;color:var(--muted);}
+.rm-rel{color:var(--purple);font-weight:700;font-variant-numeric:tabular-nums;}
+.rm-row .tsp{align-self:center;}
+.rm-set{grid-column:1 / -1;display:flex;gap:6px;}
+.rm-set input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.04);color:var(--white);font-size:13px;}
 .tdet-h{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:10px;}
 
 /* ── Session list ── */
@@ -1095,6 +1117,7 @@ onValue(ref(db,'groups'),s=>{groups=s.val()||{};renderAll();});
 onValue(ref(db,'tests'),s=>{tests=s.val()||{};refreshTests();});
 onValue(ref(db,'test_history'),s=>{testHistory=s.val()||{};refreshTests();});
 onValue(ref(db,'test_defs'),s=>{testDefs=s.val()||{};refreshTests();});
+onValue(ref(db,'body_log'),s=>{bodyLog=s.val()||{};refreshOverview();});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom overrides only
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};});
@@ -1476,7 +1499,7 @@ window.openAthlete=function(aid,silent){
       <div class="det-av">${ini(a.name)}</div>
       <div style="flex:1;">
         <div class="det-name">${a.name} <span class="lv ${LV_C[lv]}">${LV_L[lv]}</span></div>
-        <div class="det-meta">${a.role||'-'} · ${a.team||'-'} · Mc #${a.micro||1}${a.dob?' · '+a.dob:''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}</div>
+        <div class="det-meta">${a.role||'-'} · ${a.team||'-'} · Mc #${a.micro||1}${a.dob?' · '+(athEta(a.dob)!=null?athEta(a.dob)+' anni':a.dob):''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}</div>
         <div class="det-link" onclick="copyLink('${link}')">Copia link atleta</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -1516,12 +1539,79 @@ function readinessInfo(aid){
 function rdyColor(s){return s>=70?'var(--green)':s>=40?'var(--amber)':'var(--red)';}
 function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:(ri.last?ri.last.r.score:null);}
 
+// ── ANAGRAFICA: eta', altezza, peso con lo storico
+/* Il peso cambia e serve due volte: per leggere la forza relativa (kg sollevati
+   per chilo di peso) e per accorgersi di un calo o di un aumento. Per questo non
+   e' un campo solo ma un registro, `body_log/{aid}`, e vale l'ultima pesata.
+   L'altezza cambia poco e sta nella scheda atleta (`alt`, in cm). */
+let bodyLog={};
+function athEta(dob){
+  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(dob||'').trim());
+  if(!m)return null;
+  const n=new Date(+m[3],+m[2]-1,+m[1]),o=new Date();
+  let e=o.getFullYear()-n.getFullYear();
+  if(o.getMonth()<n.getMonth()||(o.getMonth()===n.getMonth()&&o.getDate()<n.getDate()))e--;
+  return e>=0&&e<100?e:null;
+}
+function athPesi(aid){
+  return Object.entries(bodyLog[aid]||{}).map(([id,r])=>({id,kg:numVal(r.kg),date:r.date||'',ts:r.ts||itDateTs(r.date)||0})).filter(r=>r.kg>0).sort((a,b)=>a.ts-b.ts);
+}
+function athPeso(aid){const p=athPesi(aid);return p.length?p[p.length-1]:null;}
+function renderAnagrafica(aid,a){
+  const eta=athEta(a.dob),p=athPesi(aid),last=p[p.length-1];
+  // variazione rispetto alla pesata di circa un mese prima
+  let dPeso='';
+  if(last){
+    const rif=p.filter(x=>x.ts<=last.ts-21*DAYMS).pop()||(p.length>1?p[0]:null);
+    if(rif&&rif!==last){const d=last.kg-rif.kg;dPeso=`<span class="ana-d">${d>0?'+':''}${fmtNum(d,1)} kg da ${athEsc(rif.date)}</span>`;}
+  }
+  const cell=(l,v,sub)=>`<div class="ana-c"><div class="ana-l">${l}</div><div class="ana-v">${v}</div>${sub?`<div class="ana-s">${sub}</div>`:''}</div>`;
+  return `<div class="ana">
+    ${cell('Eta\'',eta!=null?eta+'<small>anni</small>':'-',a.dob?athEsc(a.dob):'data di nascita da inserire')}
+    ${cell('Altezza',a.alt?athEsc(a.alt)+'<small>cm</small>':'-','')}
+    ${cell('Peso',last?fmtNum(last.kg,1)+'<small>kg</small>':'-',last?(dPeso||'pesata del '+athEsc(last.date)):'nessuna pesata')}
+    ${cell('Sedute attese',athFreq(a)+'<small>a settimana</small>',a.freq?'':'valore di base')}
+    <button type="button" class="btn btn-outline btn-sm ana-btn" onclick="openBody('${aid}')">Peso e altezza</button>
+  </div>`;
+}
+window.openBody=function(aid){
+  const a=athletes[aid]||{},p=athPesi(aid).slice().reverse();
+  const oggi=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('modal-body').innerHTML=`<h3>Peso e altezza</h3>
+    <div class="grid2"><div class="field"><label>Peso (kg)</label><input id="m-bkg" inputmode="decimal" placeholder="es. 58,5"></div>
+    <div class="field"><label>Data della pesata</label><input id="m-bdate" value="${oggi}"></div></div>
+    <div class="field"><label>Altezza (cm)</label><input id="m-balt" inputmode="numeric" value="${athEsc(a.alt||'')}" placeholder="es. 168"></div>
+    ${p.length?`<table class="tdet-tab"><thead><tr><th>Data</th><th class="n">Peso</th><th></th></tr></thead><tbody>${p.map(r=>`<tr><td>${athEsc(r.date)}</td><td class="n"><b>${fmtNum(r.kg,1)}</b> kg</td><td class="x"><button type="button" class="tdel" aria-label="Elimina pesata del ${athEsc(r.date)}" onclick="delPeso('${aid}','${r.id}')">&#215;</button></td></tr>`).join('')}</tbody></table>`:''}
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button><button class="btn btn-orange" onclick="saveBody('${aid}')">Salva</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+};
+window.saveBody=async function(aid){
+  const kg=numVal(document.getElementById('m-bkg').value);
+  const alt=numVal(document.getElementById('m-balt').value);
+  const date=document.getElementById('m-bdate').value.trim()||new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  if(kg==null&&alt==null){showToast('Scrivi il peso o l\'altezza');return;}
+  if(kg!=null&&(kg<25||kg>200)){showToast('Il peso sembra sbagliato');return;}
+  if(alt!=null&&(alt<100||alt>230)){showToast('L\'altezza sembra sbagliata');return;}
+  if(kg!=null)await push(ref(db,`body_log/${aid}`),{kg,date,ts:itDateTs(date)||Date.now()});
+  if(alt!=null&&String(alt)!==String(athletes[aid]?.alt||''))await update(ref(db,`athletes/${aid}`),{alt:Math.round(alt)});
+  showToast('Salvato');openBody(aid);refreshOverview();
+};
+window.delPeso=async function(aid,id){
+  if(!confirm('Eliminare questa pesata?'))return;
+  await remove(ref(db,`body_log/${aid}/${id}`));openBody(aid);refreshOverview();
+};
+function refreshOverview(){
+  if(!currentAid)return;
+  const el=document.getElementById('det-ana');
+  if(el)el.outerHTML=`<div id="det-ana">${renderAnagrafica(currentAid,athletes[currentAid]||{})}</div>`;
+}
+
 function renderDetOverview(aid,a,aSess,aCi){
   const ci7=aCi.filter(c=>c.ts>Date.now()-7*864e5);
   const avgRpe=aSess.filter(s=>s.rpe).length?(aSess.filter(s=>s.rpe).reduce((t,s)=>t+s.rpe,0)/aSess.filter(s=>s.rpe).length).toFixed(1):'-';
   const avgSleep=ci7.filter(c=>c.sonno).length?(ci7.filter(c=>c.sonno).reduce((t,c)=>t+c.sonno,0)/ci7.filter(c=>c.sonno).length).toFixed(1):'-';
   const avgFat=ci7.filter(c=>c.fatica).length?(ci7.filter(c=>c.fatica).reduce((t,c)=>t+c.fatica,0)/ci7.filter(c=>c.fatica).length).toFixed(1):'-';
-  return `<div class="metrics" style="margin-bottom:12px;">
+  return `<div id="det-ana">${renderAnagrafica(aid,a)}</div><div class="metrics" style="margin-bottom:12px;">
     <div class="metric m-orange"><div class="metric-lbl">Sessioni</div><div class="metric-val">${aSess.length}</div></div>
     <div class="metric m-purple"><div class="metric-lbl">RPE medio</div><div class="metric-val">${avgRpe}</div></div>
     <div class="metric m-blue"><div class="metric-lbl">Sonno 7gg</div><div class="metric-val">${avgSleep}</div></div>
@@ -1741,24 +1831,48 @@ async function loadMaxesPanel(aid){
       await set(ref(db,`rm_exercises/${aid}`),seed);
     }
     const recs=recS.val()||{};
-    const best={};
-    Object.values(recs).forEach(er=>Object.values(er||{}).forEach(r=>{if(r&&r.exName&&(!best[r.exName]||r.value>best[r.exName]))best[r.exName]=r.value;}));
-    el.innerHTML=renderMaxes(aid,best);
-  }catch(e){console.error(e);el.innerHTML='<div style="padding:20px;color:var(--red);font-size:13px;">Errore nel caricamento dei massimali.</div>';}
+    // tutti i massimali registrati per alzata, dal piu' vecchio: dalle sedute
+    // dell'atleta e da quelli scritti qui
+    const serie={};
+    Object.values(recs).forEach(er=>Object.values(er||{}).forEach(r=>{
+      const v=numVal(r&&r.value);
+      if(!r||!r.exName||v==null)return;
+      (serie[r.exName]=serie[r.exName]||[]).push({val:v,ts:r.ts||itDateTs(r.date)||0,date:r.date||'',by:r.by||r.type||''});
+    }));
+    Object.values(serie).forEach(a=>a.sort((x,y)=>x.ts-y.ts));
+    el.innerHTML=renderMaxes(aid,serie);
+  }catch(e){console.error(e);el.innerHTML='<div class="empty">Errore nel caricamento dei massimali.</div>';}
 }
-function renderMaxes(aid,best){
-  const rows=MAIN_LIFTS.map((name,i)=>{
-    const cur=best[name];
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card2);margin-bottom:8px;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:13px;color:var(--text);">${name}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px;">${cur?`1RM attuale <strong style="color:var(--primary);">${cur} kg</strong>`:'Nessun 1RM impostato'}</div>
+function renderMaxes(aid,serie){
+  const peso=athPeso(aid);
+  const nomi=[...new Set([...MAIN_LIFTS,...Object.keys(serie)])];
+  const rows=nomi.map(name=>{
+    const s=serie[name]||[];
+    const i=MAIN_LIFTS.indexOf(name);
+    const best=s.length?Math.max(...s.map(x=>x.val)):null;
+    const last=s[s.length-1];
+    // il miglioramento: il record contro il migliore che c'era prima dell'ultimo record
+    let delta='';
+    if(s.length>1){
+      const idx=s.findIndex(x=>x.val===best);
+      const prima=s.slice(0,idx).reduce((m,x)=>Math.max(m,x.val),-1);
+      if(prima>0&&best>prima)delta=`<span class="tdelta up">+${fmtNum(best-prima,1)} kg</span>`;
+    }
+    const rel=(best&&peso)?`<span class="rm-rel" title="Chili sollevati per chilo di peso corporeo">${fmtNum(best/peso.kg,2)} x peso</span>`:'';
+    const spark=s.length>1?`<div class="tsp up">${sparkSVG(s.slice(-8),1)}</div>`:'';
+    const input=i>=0?`<div class="rm-set"><input type="number" inputmode="decimal" id="cmax-${i}" placeholder="${best||'kg'}" aria-label="Nuovo 1RM ${athEsc(name)}"><button class="btn btn-sm btn-orange" onclick="saveCoachMax('${aid}',${i})">Salva</button></div>`:'';
+    return `<div class="rm-row">
+      <div class="rm-main">
+        <div class="rm-name">${athEsc(name)}</div>
+        <div class="rm-val">${best?fmtNum(best,best%1?1:0)+'<small>kg</small>':'<span class="rm-none">nessun 1RM</span>'}</div>
+        <div class="rm-sub">${delta}${rel}${last?`<span>${athEsc(last.date)}${s.length>1?' &#183; '+s.length+' registrati':''}</span>`:''}</div>
       </div>
-      <input type="number" inputmode="decimal" id="cmax-${i}" placeholder="${cur||'kg'}" style="width:78px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;text-align:center;">
-      <button class="btn btn-sm" style="background:var(--primary);color:#000;border:none;" onclick="saveCoachMax('${aid}',${i})">Salva</button>
+      ${spark}
+      ${input}
     </div>`;
   }).join('');
-  return `<div style="margin-bottom:12px;font-size:12px;color:var(--muted);line-height:1.5;">Imposta il massimale (1RM) per le alzate principali. L'atleta vedrà il carico in kg, calcolato dalle percentuali dei programmi, direttamente nella seduta.</div>${rows}`;
+  return `<p class="rm-intro">Il massimale per le alzate principali. L'atleta vede i carichi in kg calcolati dalle percentuali dei programmi. Si aggiorna anche da solo quando l'atleta registra un record in seduta.${peso?'':' Con il peso inserito compare anche la forza relativa.'}</p>
+    <div class="rm-grid">${rows}</div>`;
 }
 window.saveCoachMax=async function(aid,i){
   const name=MAIN_LIFTS[i];
