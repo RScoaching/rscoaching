@@ -188,6 +188,7 @@ body.studio-on{overflow:hidden;}
 .pz-tab em{font-style:normal;color:var(--purple);}
 .pz-list{list-style:none;display:flex;flex-direction:column;gap:7px;}
 .pz-list li{font-size:12px;color:var(--text);line-height:1.45;}
+.pz-list i{font-style:normal;color:var(--muted);}
 .pz-list b{display:block;color:var(--white);font-size:12.5px;}
 .pz-list span{color:var(--muted);}
 @media(max-width:1100px){
@@ -3817,16 +3818,40 @@ function stTest(I){
   return t;
 }
 
-// ── prevenzione sulle carenze ─────────────────────────────────────
-/* Dalla libreria della prevenzione Fiorentina: per ogni carenza gli esercizi
-   di quella zona, di rinforzo nei giorni di forza e di mobilita' nei giorni di
-   corsa, con la dose della libreria. Senza attrezzi si scartano quelli che
-   chiedono macchine, pesi o elastici. Due esercizi a seduta, a rotazione, cosi'
-   in una settimana si toccano tutte le carenze. */
+// ── prevenzione per tipo di seduta e carenze ─────────────────────
+/* Dalla libreria della prevenzione Fiorentina. Ogni seduta apre con
+   un'attivazione (mobilita') e chiude con il rinforzo, e i due cambiano col
+   tipo di allenamento: la corsa lavora su piede, caviglia e polpaccio, la
+   parte bassa su anca, hamstring e core, la parte alta su colonna e spalle,
+   lo sport su hamstring e adduttori (Nordic e Copenhagen, come negli
+   schemi di prevenzione del calcio). Le carenze segnate passano davanti alla
+   base. Gli esercizi restano gli stessi per tutto un blocco, cosi' si
+   imparano e si vedono progredire, e cambiano col blocco dopo; la dose sale
+   dal primo blocco agli altri e cala nello scarico. Senza attrezzi si
+   scartano quelli che chiedono macchine, pesi o elastici. */
 const ST_PREV_ATTR=/machine|macchina|castello|pressa|trx|bosu|fitball|acquabag|aquabag|cavo|cavi|multipower|smith|panca|leg press/i;
+const ST_PREV_BASE={
+  corsa:{att:['piede','caviglia'],rin:['polpaccio','piede','glutei']},
+  lower:{att:['anca','caviglia'],rin:['hamstring','core','adduttori']},
+  upper:{att:['colonna','spalle'],rin:['spalle','core']},
+  full:{att:['anca','colonna'],rin:['core','hamstring','spalle']},
+  sport:{att:['anca','caviglia'],rin:['hamstring','adduttori','caviglia']},
+  esplo:{att:['caviglia','anca'],rin:['caviglia','ginocchio','adduttori']}
+};
+const ST_PREV_LBL={corsa:'Corsa',lower:'Forza parte bassa',upper:'Forza parte alta',full:'Total body',sport:'Forza per lo sport',esplo:'Esplosivita\''};
+// gli esercizi con piu' prove alle spalle vengono prima
+const ST_PREV_PRIO={hamstring:/nordic/i,adduttori:/copenhagen/i,polpaccio:/calf raise|eccentric|heel raise/i,caviglia:/eccentriche polpaccio|monopodal|equilibri|propriocet|knee to wall/i,core:/plank|dead bug|pallof|bird/i};
+function stPrevRuolo(ruolo){
+  if(ruolo==='corsa')return 'corsa';
+  if(/^UP/.test(ruolo))return 'upper';
+  if(/^(LOW|RUN)/.test(ruolo))return 'lower';
+  if(ruolo==='SPORT_F')return 'sport';
+  if(ruolo==='SPORT_P')return 'esplo';
+  return 'full';
+}
 function stPrevLista(I,zona,tipo){
   const db=window.PREV_DB||[];
-  return db.filter(x=>x.z&&x.z.includes(zona)&&x.t===tipo).filter(x=>{
+  const l=db.filter(x=>x.z&&x.z.includes(zona)&&x.t===tipo).filter(x=>{
     if(I.materiale==='palestra')return true;
     if(ST_PREV_ATTR.test(x.n))return false;
     if(/kettlebell|\bkb\b/i.test(x.n)&&!stHa(I,'kettlebell'))return false;
@@ -3835,23 +3860,60 @@ function stPrevLista(I,zona,tipo){
     if(/sbarra|trazion/i.test(x.n)&&!stHa(I,'sbarra'))return false;
     return true;
   });
+  const pr=ST_PREV_PRIO[zona];
+  return pr?l.filter(x=>pr.test(x.n)).concat(l.filter(x=>!pr.test(x.n))):l;
 }
-function stPrev(I,tipoSeduta,i){
-  if(!I.carenze.length)return [];
-  const tipo=tipoSeduta==='corsa'?'mobilita':'rinforzo';
-  const dose=(window.PREV_DOSE||{})[tipo]||'3x10';
-  const out=[];
-  for(let j=0;j<2;j++){
-    const z=I.carenze[(i*2+j)%I.carenze.length];
-    let l=stPrevLista(I,z,tipo);if(!l.length)l=stPrevLista(I,z,tipo==='mobilita'?'rinforzo':'mobilita');
-    if(!l.length)continue;
-    const e=l[(i+j)%l.length];
-    if(out.some(o=>o.name===e.n))continue;
-    const m=/^(\d+)x(.+)$/.exec(dose);
-    out.push({name:e.n,sets:m?+m[1]:2,reps:m?m[2]:dose,cue:'Prevenzione '+((ST_CAR.find(c=>c[0]===z)||[0,z])[1]).toLowerCase(),prev:true});
-  }
-  return out;
+function stPrevDose(nome,tipo,bi,dl){
+  const iso=/isometri|plank|tenuta|hold|wall sit|ponte/i.test(nome);
+  const sets=dl?2:tipo==='mobilita'?2:bi===0?2:3;
+  let reps;
+  if(tipo==='mobilita')reps=iso?'30"':'8 per lato';
+  else if(/nordic/i.test(nome))reps=bi===0?'3-5':'5-6';
+  else if(/copenhagen/i.test(nome))reps=bi===0?'15-20"':'25-30"';
+  else if(iso)reps=bi===0?'20-30"':'30-40"';
+  else if(/eccentric/i.test(nome))reps='8 lente';
+  else reps=bi===0?'10':'12';
+  return {sets,reps};
 }
+// famiglie che la seduta puo' avere gia' nel corpo principale
+const ST_PREV_COPRE={hamstring:/nordic|hamstring curl/i,adduttori:/copenhagen|adductor/i,polpaccio:/heel raise|calf raise/i};
+const ST_PREV_FAM=[/nordic/i,/copenhagen/i,/heel raise|calf raise/i,/plank/i,/hip thrust|bridge|ponte/i];
+function stPrevBlocco(I,ruolo,ctx){
+  const cat=stPrevRuolo(ruolo),B=ST_PREV_BASE[cat];
+  const bi=ctx.bi||0,gi=ctx.gi||0,dl=!!ctx.dl;
+  const gia=(ctx.nomi||[]).map(n=>String(n));
+  const usati=new Set();
+  const dup=n=>usati.has(n)||gia.some(g=>g.toLowerCase()===n.toLowerCase()||ST_PREV_FAM.some(f=>f.test(g)&&f.test(n)));
+  const car=I.carenze||[];
+  const zLbl=z=>((ST_CAR.find(c=>c[0]===z)||[0,z])[1]).toLowerCase();
+  // le carenze restano sempre in testa; la base gira da una seduta all'altra
+  const giro=(fisse,base)=>{const b=base.filter(z=>!fisse.includes(z));return fisse.concat(b.slice(gi%Math.max(1,b.length)),b.slice(0,gi%Math.max(1,b.length)));};
+  const scegli=(zone,tipo,n,alt)=>{
+    const out=[];
+    for(let j=0;out.length<n&&j<zone.length;j++){
+      const z=zone[j];
+      // la zona che il corpo della seduta lavora gia' non si ripete
+      if(tipo==='rinforzo'&&ST_PREV_COPRE[z]&&gia.some(g=>ST_PREV_COPRE[z].test(g)))continue;
+      let l=stPrevLista(I,z,tipo);if(!l.length&&alt)l=stPrevLista(I,z,alt);
+      l=l.filter(x=>!dup(x.n));if(!l.length)continue;
+      // Nordic, Copenhagen e simili restano per tutto il programma e crescono di dose
+      const pr=ST_PREV_PRIO[z];
+      const e=tipo==='rinforzo'&&pr&&pr.test(l[0].n)&&/nordic|copenhagen/i.test(l[0].n)?l[0]:l[(bi+gi)%Math.min(l.length,4)];
+      usati.add(e.n);
+      const d=stPrevDose(e.n,e.t,bi,dl);
+      out.push({name:e.n,sets:d.sets,reps:d.reps,z,prev:true,zona:zLbl(z)});
+    }
+    return out;
+  };
+  const corta=+I.minuti&&+I.minuti<=45;
+  const attZ=giro(car.filter(z=>stPrevLista(I,z,'mobilita').length).slice(gi%Math.max(1,car.length)).concat(car.filter(z=>stPrevLista(I,z,'mobilita').length)),B.att).filter((z,i,a)=>a.indexOf(z)===i);
+  const att=scegli(attZ,'mobilita',1,'stretching').map(e=>Object.assign(e,{cue:'Prevenzione, attivazione: '+e.zona}));
+  const rinZ=giro(car,B.rin);
+  const rin=scegli(rinZ,'rinforzo',corta?1:(car.length>1?3:2)).map(e=>Object.assign(e,{cue:'Prevenzione: '+e.zona}));
+  return {cat,att,rin};
+}
+// compatibile con chi chiedeva solo la lista: attivazione e rinforzo in fila
+function stPrev(I,tipoSeduta,i){const b=stPrevBlocco(I,tipoSeduta==='corsa'?'corsa':'FB_A',{gi:i});return b.att.concat(b.rin);}
 
 // ── la proposta completa ──────────────────────────────────────────
 function stProposta(I){
@@ -3883,6 +3945,7 @@ function stCostruisci(I,P){
   P.fasi.forEach((w,wi)=>{
     const sessions={};
     let ord=0;
+    const bi=P.fasi.slice(0,wi).filter(x=>x.tipo==='scarico').length,dl=w.tipo==='scarico'||w.tipo==='taper';
     const lbl='S'+w.n+' '+w.fase+(w.tipo==='scarico'?' scarico':w.tipo==='taper'?' taper':w.tipo==='gara'?' gara':'');
     // test d'ingresso nella prima settimana, e di nuovo in fondo se non c'e' una gara
     const conTest=wi===0||(wi===P.fasi.length-1&&I.obiettivo!=='gara'&&P.fasi.length>=6);
@@ -3899,13 +3962,13 @@ function stCostruisci(I,P){
       }
       if(g.tipo==='corsa'){
         const c=stCorsa(I,w,g.ruolo,P.kmW[wi]||0,P.rit,P.T.nC);
-        const prev=stPrev(I,'corsa',wi*7+gi);
-        const exs={};prev.forEach((e,i)=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};});
-        sessions['s'+ord]={name:c.nome,type:'corsa',order:ord,dayOfWeek:g.d,notes:(P.kmW[wi]?'Settimana da circa '+P.kmW[wi]+' km. ':'')+(prev.length?'Dopo la corsa la prevenzione.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
+        const pb=stPrevBlocco(I,'corsa',{bi,gi,dl});
+        const exs={};pb.att.concat(pb.rin).forEach((e,i)=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};});
+        sessions['s'+ord]={name:c.nome,type:'corsa',order:ord,dayOfWeek:g.d,notes:(P.kmW[wi]?'Settimana da circa '+P.kmW[wi]+' km. ':'')+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
       }
       const tpl=ST_TPL[g.ruolo]||ST_TPL.FB_A;
       const exs={};let i=0;
-      const prevA=stPrev(I,'pesi',wi*7+gi);
+      const corpo=[];
       tpl.forEach(([slot,ruolo])=>{
         let name=stEs(I,slot);
         // l'esercizio obiettivo prende il posto della prima alzata principale che gli somiglia
@@ -3917,9 +3980,12 @@ function stCostruisci(I,P){
         const pr=stPrescr(I,w,ruolo);
         const e={name,sets:pr.sets,reps:pr.reps,order:i};
         if(pr.pct)e.pct=pr.pct;if(pr.rpe)e.rpe=pr.rpe;if(pr.rest)e.rest=pr.rest;if(pr.cue)e.cue=pr.cue;
-        exs['e'+i]=e;i++;
+        corpo.push(e);
       });
-      prevA.forEach(e=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};i++;});
+      // attivazione in apertura, rinforzo in chiusura, senza doppioni del corpo
+      const pb=stPrevBlocco(I,g.ruolo,{bi,gi,dl,nomi:corpo.map(e=>e.name)});
+      pb.att.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})).concat(corpo,pb.rin.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})))
+        .forEach(e=>{exs['e'+i]=Object.assign(e,{order:i});i++;});
       sessions['s'+ord]={name:g.nome,type:'pesi',order:ord,dayOfWeek:g.d,notes:(g.md?g.md+'. ':'')+(w.tipo==='scarico'?'Settimana di scarico: volume ridotto, tecnica.':''),exercises:exs};ord++;
     });
     weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(P.kmW[wi]?' · circa '+P.kmW[wi]+' km':''),sessions};
@@ -4024,7 +4090,7 @@ function stForm(){
     (I.obiettivo==='gara'?stRiga('Gara',stChips('garaDist',Object.entries(ST_DIST)))+stRiga('Data e tempo',`<span class="pz-inline">${stIn('garaData','gg/mm/aaaa',100)} obiettivo ${stIn('garaTempo','h:mm:ss',80)}</span>`):'')+
     (I.obiettivo==='forza'?stRiga('Esercizio',`<select class="pz-in pz-sel" data-st-sel="liftObj">${ST_LIFT.map(x=>`<option${I.liftObj===x?' selected':''}>${x}</option>`).join('')}</select> <span class="pz-inline">da ${stIn('liftDa','kg',56,'decimal')} a ${stIn('liftA','kg',56,'decimal')} kg</span>`):'')+`</section>`;
   h+=`<section class="pz-sec"><h4><b>6</b>Carenze da prevenire</h4>`+stChips('carenze',ST_CAR,true)+
-    `<p class="pz-hint">Gli infortuni in corso nella scheda Salute sono gia' segnati. Ogni seduta chiude con due esercizi della libreria di prevenzione su queste zone.</p></section>`;
+    `<p class="pz-hint">Gli infortuni in corso nella scheda Salute sono gia' segnati. Ogni seduta apre con un'attivazione e chiude con il rinforzo, scelti per il tipo di seduta: queste zone passano davanti.</p></section>`;
   h+=`<section class="pz-sec"><h4><b>7</b>Periodo</h4>`+
     stRiga('Inizio',stIn('inizio','gg/mm/aaaa',100))+
     (I.obiettivo==='gara'&&stDate(I.garaData)?stRiga('Settimane',`<b class="pz-fix">${stSettimane(I)}</b> fino alla gara`):stRiga('Settimane',stChips('settimane',[[4,'4'],[6,'6'],[8,'8'],[10,'10'],[12,'12'],[16,'16']])))+
@@ -4084,8 +4150,21 @@ function stAnteprima(){
   }
   // test e prevenzione
   h+=`<div class="pz-card two"><div><div class="pz-ch">Test d'ingresso <em>prima settimana</em></div><ul class="pz-list">${P.test.map(t=>`<li><b>${stEsc(t[0])}</b><span>${stEsc(t[1])}</span></li>`).join('')||'<li>Nessun test</li>'}</ul></div>
-    <div><div class="pz-ch">Prevenzione</div>${I.carenze.length?`<ul class="pz-list">${I.carenze.map(z=>{const l=stPrevLista(I,z,'rinforzo').slice(0,3).map(x=>x.n);return `<li><b>${stEsc((ST_CAR.find(c=>c[0]===z)||[0,z])[1])}</b><span>${stEsc(l.join(', ')||'nessun esercizio con questo materiale')}</span></li>`;}).join('')}</ul>`:'<p class="pz-cap">Nessuna carenza segnata.</p>'}</div></div>`;
+    <div><div class="pz-ch">Prevenzione <em>per tipo di seduta</em></div>${stPrevAnteprima(I,P)}</div></div>`;
   return h;
+}
+function stPrevAnteprima(I,P){
+  const visti=new Set(),righe=[];
+  P.tipo.forEach((g,gi)=>{
+    const r=g.tipo==='corsa'?'corsa':g.ruolo,cat=stPrevRuolo(r);
+    if(visti.has(cat))return;visti.add(cat);
+    const nomi=g.tipo==='corsa'?[]:(ST_TPL[g.ruolo]||ST_TPL.FB_A).map(([slot])=>stEs(I,slot));
+    const b=stPrevBlocco(I,r,{bi:0,gi,nomi});
+    const f=l=>l.map(e=>stEsc(e.name)+' <i>'+e.sets+'x'+stEsc(e.reps)+'</i>').join(', ');
+    righe.push(`<li><b>${ST_PREV_LBL[cat]}</b><span>${b.att.length?'Prima: '+f(b.att)+'. ':''}${b.rin.length?'Dopo: '+f(b.rin)+'.':''}</span></li>`);
+  });
+  const car=I.carenze.length?'<p class="pz-cap">Davanti a tutto: '+I.carenze.map(z=>stEsc(((ST_CAR.find(c=>c[0]===z)||[0,z])[1]).toLowerCase())).join(', ')+'. Gli esercizi cambiano a ogni blocco, la dose sale dal secondo.</p>':'<p class="pz-cap">Nessuna carenza segnata: vale la base per il tipo di seduta. Gli esercizi cambiano a ogni blocco.</p>';
+  return `<ul class="pz-list">${righe.join('')||'<li>Nessuna seduta</li>'}</ul>`+car;
 }
 function stRender(keepScroll){
   const f=document.getElementById('pz-form'),p=document.getElementById('pz-prev');
@@ -4262,6 +4341,7 @@ function pzGriglia(wid,w){
         <span class="pz-st">${stEsc((SESS_TYPES[tipo]||{}).label||tipo)}</span>
         <span class="pz-sp"></span>
         ${tipo==='corsa'?`<button type="button" class="pz-b" onclick="openModal('edit-corsa','${wid}','${sid}')">Fasi corsa</button>`:''}
+        <button type="button" class="pz-b" onclick="pzPrevSess('${wid}','${sid}')" title="Attivazione in apertura e rinforzo in chiusura, per il tipo di seduta e le carenze della scheda">Prevenzione</button>
         <button type="button" class="pz-b" onclick="pzDupSess('${wid}','${sid}')" title="Duplica la seduta">Duplica</button>
         <button type="button" class="pz-b del" onclick="pzDelSess('${wid}','${sid}')" aria-label="Elimina seduta">&#215;</button>
       </div>`;
@@ -4304,6 +4384,37 @@ window.pzDelEx=async function(wid,sid,eid){
   const prima=programs[currentProgId].weeks[wid].sessions[sid].exercises[eid];
   pzUndo.push({path:pzBase(wid,sid)+'/exercises/'+eid,prima:JSON.parse(JSON.stringify(prima))});
   await remove(ref(db,pzBase(wid,sid)+'/exercises/'+eid));
+};
+// rifa' la prevenzione di una seduta: toglie quella che c'e' e mette
+// attivazione in testa e rinforzo in fondo, dalla scheda del programma
+function pzRuoloSess(p,s){
+  if(s.type==='corsa')return 'corsa';
+  const n=String(s.name||'').toLowerCase();
+  if(/esplosiv|pliometr|salt/.test(n))return 'SPORT_P';
+  if(p.sport==='sc')return 'SPORT_F';
+  if(/alta|upper|spinta|tirata|petto|dorso|braccia/.test(n))return 'UP_A';
+  if(/gambe|bassa|lower|squat|stacco/.test(n))return 'LOW_A';
+  if(/corsa|run/.test(n))return 'RUN_A';
+  return 'FB_A';
+}
+window.pzPrevSess=async function(wid,sid){
+  const p=programs[currentProgId],s=p.weeks[wid].sessions[sid];
+  const I=Object.assign(stDefault(),p.intake?JSON.parse(JSON.stringify(p.intake)):{materiale:'palestra'});
+  if(!Array.isArray(I.carenze))I.carenze=I.carenze?Object.values(I.carenze):[];
+  if(!Array.isArray(I.attrezzi))I.attrezzi=I.attrezzi?Object.values(I.attrezzi):[];
+  const W=pzWeeks(),wi=W.findIndex(([k])=>k===wid);
+  const bi=W.slice(0,wi).filter(([,w])=>pzIsDl(w)).length,dl=pzIsDl(p.weeks[wid]);
+  const corpo=pzExs(s).filter(([,e])=>!/^Prevenzione/.test(e.cue||'')).map(([,e])=>e);
+  const gi=pzSess(p.weeks[wid]).findIndex(([k])=>k===sid);
+  const b=stPrevBlocco(I,pzRuoloSess(p,s),{bi,gi,dl,nomi:corpo.map(e=>e.name)});
+  const nuovi={};let i=0;
+  const pulito=e=>{const o={};['name','sets','reps','pct','rpe','rest','cue','setRows','complexGroup','complexLabel'].forEach(k=>{if(e[k]!=null)o[k]=e[k];});return o;};
+  b.att.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})).concat(corpo.map(pulito),b.rin.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})))
+    .forEach(e=>{nuovi['e'+String(i).padStart(2,'0')]=Object.assign(e,{order:i});i++;});
+  const path=pzBase(wid,sid)+'/exercises',up={[path]:nuovi};
+  pzUndo.push({multi:pzPrima(up)});
+  await update(ref(db),up);
+  showToast('Prevenzione: '+(b.att.length+b.rin.length)+' esercizi ('+ST_PREV_LBL[b.cat].toLowerCase()+')');
 };
 async function pzQuick(el){
   const o=pzParse(el.value,true);
