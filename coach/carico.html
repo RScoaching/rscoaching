@@ -780,6 +780,12 @@ dialog.cols-dialog::backdrop{ background:oklch(0% 0 0 / 0.58); backdrop-filter:b
 .rpe-in:hover{ border-color:var(--violet-border); }
 .rpe-in:focus{ outline:none; border-color:var(--violet); box-shadow:0 0 0 3px var(--violet-bg); }
 .rpe-in.borrowed{ color:var(--muted); border-style:dashed; }
+.gk-btn{ margin-left:8px; padding:2px 8px; border-radius:6px; border:1px solid var(--border2); background:transparent;
+  color:var(--muted); font-family:inherit; font-size:10.5px; font-weight:600; line-height:1.4; cursor:pointer; vertical-align:middle; }
+.gk-btn:hover{ color:var(--text); border-color:currentColor; }
+tr.gk-off td{ opacity:.55; }
+tr.gk-off .lb{ text-decoration:line-through; }
+.gk-tag{ margin-left:8px; font-size:10.5px; font-weight:700; letter-spacing:.3px; text-transform:uppercase; color:var(--muted); }
 table.grid th.rpe-h, table.grid td.rpe-c{ border-left:1px solid var(--border2); }
 table.grid td.rpe-c{ padding-top:4px; padding-bottom:4px; }
 .rpe-note{ font-size:12px; color:var(--faint); line-height:1.55; margin:10px 2px 0; max-width:78ch; }
@@ -852,6 +858,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
 
 /* ---------- print (PDF pulito, tema chiaro) ---------- */
 @media print{
+  .gk-btn, .gk-tag, tr.gk-off{ display:none !important; }
   /* foglio orizzontale: nell'A4 in verticale i parametri non ci stavano e la griglia
      ripartiva da capo pagina dopo pagina. Orizzontale ne fa entrare molti di piu'.
      Il margine del foglio e' zero perche' data, ora, titolo e indirizzo del file li
@@ -2550,6 +2557,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const ov = gkMinOf(name, tm.key, r.label);
           const tv = (r.v && typeof r.v[MIN_IDX]==='number' && isFinite(r.v[MIN_IDX])) ? r1(r.v[MIN_IDX]) : null;
           const v = gkBlank();
+          // zero minuti vuol dire che quel giorno il portiere non c'era: la seduta resta a
+          // schermo per poterla rimettere, ma esce dai totali, dai conti e dalla stampa
+          if(ov===0){ rows.push({ label:r.label, type:'gk_off', wd:r.wd||'', v:v, gk:true, seed:tv, was:r.type }); return; }
           v[MIN_IDX] = (ov!=null) ? ov : tv;
           const row = { label:r.label, type:r.type, wd:r.wd||'', v:v, gk:true, seed:tv };
           rows.push(row);
@@ -3788,6 +3798,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         body += wkHeadHTML(V, wkNow);
         return;
       }
+      if(r.type==='gk_off'){
+        const tx = dayLabel(Object.assign({}, r, {type:r.was||'day'}), rowDate(r, wkNow, rmk));
+        body += '<tr class="r-day gk-off" data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+
+                '<span class="lb">'+esc(tx)+'</span><span class="gk-tag">assente</span>'+
+                '<button class="gk-btn" type="button" data-gkon="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Rimette la seduta con i minuti della squadra">Presente</button></td>';
+        V.forEach(i=>{ body += '<td class="num tnum">'+(i===MIN_IDX ? '0' : '')+'</td>'; });
+        if(on) body += pad;
+        body += '</tr>';
+        return;
+      }
       const cls = ROWCLS[r.type] || 'r-day';
       const sg = soloOf(r.label);
       // la seduta fuori squadra non ha una scheda seduta: non c'e' la squadra
@@ -3816,6 +3836,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         }
         extra = ' draggable="true" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'"';
       }
+      if(gkOn() && (r.type==='day' || r.type==='match'))
+        lb += '<button class="gk-btn" type="button" data-gkoff="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Il portiere non c\'era: la seduta esce dai suoi totali e dalla stampa">Assente</button>';
       body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
       // sul portiere i minuti si scrivono a mano: la casella parte dal tempo della squadra
@@ -3884,7 +3906,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
     });
     // minuti del portiere: si salvano e si rifanno i totali del mese
+    const gkRifai = ()=>{ gkSeed(state.player); applyMoves(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid(); };
+    host.querySelectorAll('.gk-btn[data-gkoff]').forEach(b=> b.addEventListener('click', ()=>{
+      gkMinSet(state.player, rowMk(b), b.getAttribute('data-gkoff'), 0); gkRifai();
+    }));
+    host.querySelectorAll('.gk-btn[data-gkon]').forEach(b=> b.addEventListener('click', ()=>{
+      gkMinSet(state.player, rowMk(b), b.getAttribute('data-gkon'), null); gkRifai();
+    }));
     host.querySelectorAll('.rpe-in[data-gk]').forEach(inp=>{
+      // si salva a ogni tasto: se si stampa subito (anche con Ctrl+P) il numero c'e' gia'
+      inp.addEventListener('input', ()=>{ const v = gkNum(inp.value); if(v!==0) gkMinSet(state.player, rowMk(inp), inp.getAttribute('data-gk'), v); });
       inp.addEventListener('change', ()=>{
         gkMinSet(state.player, rowMk(inp), inp.getAttribute('data-gk'), gkNum(inp.value));
         gkSeed(state.player);
@@ -4319,10 +4350,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const cl = tb.cloneNode(true);
     printTrimRows(cl);
     // sul foglio l'RPE e' un numero, non una casella da riempire
+    cl.querySelectorAll('tr.gk-off').forEach(tr=> tr.parentNode && tr.parentNode.removeChild(tr));
+    cl.querySelectorAll('.gk-btn, .gk-tag').forEach(n=> n.parentNode && n.parentNode.removeChild(n));
     cl.querySelectorAll('input.rpe-in').forEach(inp=>{
       const sp = document.createElement('span');
       sp.className = 'tnum';
-      const v = rpeNum(inp.getAttribute('value'));
+      // i minuti del portiere non sono un RPE: niente tetto a 10
+      const v = inp.hasAttribute('data-gk') ? gkNum(inp.getAttribute('value')) : rpeNum(inp.getAttribute('value'));
       sp.textContent = (v==null) ? '-' : NF.format(v);
       inp.parentNode.replaceChild(sp, inp);
     });
@@ -4848,6 +4882,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     printMonthPush(PDF_PERS[sel.per] || 0);
     const names = sel.who;
     if(names.length >= 2){ buildMultiSheets(names); return; }
+    // i minuti del portiere appena scritti devono gia' stare nei TOT del foglio
+    if(gkOn()){
+      document.querySelectorAll('.rpe-in[data-gk]').forEach(inp=>{
+        if(inp.value === inp.defaultValue) return;
+        gkMinSet(state.player, inp.getAttribute('data-mk') || state.monthKey, inp.getAttribute('data-gk'), gkNum(inp.value));
+      });
+      gkSeed(state.player); applyMoves(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
+    }
     pdfApply();
     printHeadTag();
     buildGridSheets();
