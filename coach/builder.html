@@ -73,6 +73,16 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pz-ss.warn{color:#FDBA74;}
 .pz-t th.kg,.pz-t td.kg{width:64px;text-align:center;color:#FFB089;font-variant-numeric:tabular-nums;font-size:12px;}
 .pz-t td.kg i{color:var(--muted);font-style:normal;}
+.pz-c.sel{background:rgba(255,106,46,.16);border-color:rgba(255,106,46,.35);}
+.pz-t th.fa,.pz-t td.fa{width:112px;text-align:center;font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pz-t td.fa .ok{color:#86EFAC;}
+.pz-t td.fa .meno{color:#FDBA74;}
+.pz-t td.fa em{font-style:normal;color:var(--muted);}
+.pz-t td.fa .no{color:var(--muted);font-style:normal;}
+.pz-done{font-size:11px;font-weight:600;color:#86EFAC;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.28);padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.pz-todo{font-size:11px;color:var(--muted);border:1px dashed rgba(255,255,255,.15);padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.pz-chip2.fatta{box-shadow:inset 0 0 0 1px rgba(34,197,94,.55);}
+.pz-chip2.fatta span{color:#86EFAC;}
 .pz-c.lb{width:34px;padding:5px 2px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);}
 .pz-c.lb::placeholder{color:var(--muted);opacity:.8;}
 .pz-t tr.cx .pz-c.lb{color:var(--primary2);background:rgba(255,106,46,.10);}
@@ -4431,7 +4441,7 @@ function pzToolbar(){
   const hint={griglia:'Si usa come Excel: frecce, Invio, Ctrl+D',progressione:'Shift+Invio porta il valore avanti',mappa:'Trascina per spostare, con Alt copi',schede:''}[pzMode]||'';
   return `<div class="pz-modes" role="tablist">${[['schede','Schede'],['griglia','Griglia'],['progressione','Progressione'],['mappa','Mappa']].map(([k,l],i)=>`<button type="button" class="pz-mode${pzMode===k?' on':''}" onclick="pzSetMode('${k}')" title="Tasto ${i+1}">${l}</button>`).join('')}
     <span class="pz-mhint">${hint}</span>
-    ${pzMode==='griglia'||pzMode==='progressione'?pzKgHead():''}
+    ${pzMode!=='schede'?pzKgHead():''}
     <button type="button" class="pz-mode" onclick="pzPalette('')" title="Cerca un comando, un programma, un modello">Comandi <kbd>Ctrl K</kbd></button>
     <button type="button" class="pz-mode" onclick="pzAiuto()" title="Scorciatoie">?</button>
     <button type="button" class="pz-mode" onclick="pzAnnulla()" title="Ctrl+Z">Annulla</button></div>`;
@@ -4528,14 +4538,27 @@ function pzWeekBar(w){
   if(sp>=6&&ti<sp*0.75)av.push('Poca tirata rispetto alla spinta ('+ti+' contro '+sp+' serie)');
   if(lim){const lunghe=pzSess(w).filter(([,s])=>pzStatSess(s).min>lim*1.1).map(([,s])=>s.name);if(lunghe.length)av.push('Oltre i '+lim+'\' disponibili: '+lunghe.join(', '));}
   return `<div class="pz-ws">
-    <div class="pz-ws-n"><span><b>${o.sed}</b> sedute</span><span><b>${o.serie}</b> serie</span><span><b>${pzMinTxt(o.min)}</b> stimate</span>${o.nl?`<span><b>${o.nl}</b> sollevamenti al <b>${Math.round(o.pctW/o.nl)}%</b> medio</span>`:''}</div>
+    <div class="pz-ws-n"><span><b>${o.sed}</b> sedute${pzHaLog()?` (<b>${pzSess(w).filter(([sid])=>pzLog(currentWeekIdx,sid)).length}</b> fatte da ${stEsc((athletes[pzKgAid]?.name||'').split(' ')[0])})`:''}</span><span><b>${o.serie}</b> serie</span><span><b>${pzMinTxt(o.min)}</b> stimate</span>${o.nl?`<span><b>${o.nl}</b> sollevamenti al <b>${Math.round(o.pctW/o.nl)}%</b> medio</span>`:''}</div>
     <div class="pz-ws-g">${gr}</div>
     ${av.length?`<div class="pz-ws-a">${av.map(stEsc).join('. ')}.</div>`:''}
   </div>`;
 }
 
 // massimali degli atleti del programma, per scrivere i kg accanto alle percentuali
-const pzRM={};let pzKgAid=null;
+const pzRM={},pzLogs={};let pzKgAid=null;
+// pianificato e fatto: l'ultima volta che l'atleta ha chiuso quella seduta di quella settimana
+function pzLog(wi,sid){const L=pzKgAid&&pzLogs[pzKgAid];if(!L||L.pid!==currentProgId)return null;return L.l.find(l=>l.weekIdx===wi&&l.sessId===sid)||null;}
+function pzHaLog(){const L=pzKgAid&&pzLogs[pzKgAid];return !!(L&&L.pid===currentProgId&&L.l.length);}
+function pzFatto(e,log){
+  if(!log||!log.exerciseData)return '';
+  const d=log.exerciseData[e.name];if(!Array.isArray(d)||!d.length)return log?'<i class="no">-</i>':'';
+  const kg=d.map(x=>+x.kg).filter(x=>x>0),pian=+e.sets||0;
+  const mn=Math.min(...kg),mx=Math.max(...kg),f=x=>String(x).replace('.',',');
+  const rpe=d.map(x=>+x.rpe).filter(Boolean),rm=rpe.length?Math.round(rpe.reduce((a,b)=>a+b,0)/rpe.length*2)/2:null;
+  const alto=rm&&pzNum(e.rpe)&&rm>=pzNum(e.rpe)+1.5;
+  const cls=pian&&d.length<pian?'meno':alto?'meno':'ok';
+  return `<span class="${cls}" title="${d.map(x=>(x.kg||'-')+' kg x '+(x.reps||'-')+(x.rpe?' RPE '+x.rpe:'')).join(', ')}">${d.length}${pian?'/'+pian:''} · ${kg.length?(mn===mx?f(mx):f(mn)+'-'+f(mx)):'-'}${rm?' <em>@'+f(rm)+'</em>':''}</span>`;
+}
 const PZ_FAM=[['front',/front squat|squat frontale/],['squat',/squat/],['rdl',/\brdl\b|romanian|stacco rumeno/],['stacco',/deadlift|stacco/],['panca',/bench press|panca piana|^panca$/],['ohp',/military|overhead press|strict press|lento avanti|shoulder press/],['trazioni',/pull ?-?up|trazion|chin ?-?up/],['thrust',/hip thrust/],['clean',/power clean|hang clean|girata/]];
 function pzFam(n){n=String(n||'').toLowerCase().trim();if(/goblet|split|bulgar|pistol|jump|bodyweight|corpo libero|single leg|dumbbell|manubri|kettlebell/.test(n))return 'x:'+n;const f=PZ_FAM.find(([,r])=>r.test(n));return f?f[0]:'x:'+n;}
 async function pzCaricaRM(){
@@ -4543,6 +4566,12 @@ async function pzCaricaRM(){
   const ids=Object.keys(p.assignedTo||{}).filter(id=>athletes[id]);
   if(!ids.includes(pzKgAid))pzKgAid=ids[0]||null;
   let nuovo=false;
+  await Promise.all(ids.filter(id=>!pzLogs[id]||pzLogs[id].pid!==currentProgId).map(async id=>{
+    try{
+      const v=(await get(ref(db,'session_logs/'+id))).val()||{};
+      pzLogs[id]={pid:currentProgId,l:Object.values(v).filter(l=>l&&l.progId===currentProgId).sort((a,b)=>(b.ts||0)-(a.ts||0))};nuovo=true;
+    }catch(e){pzLogs[id]={pid:currentProgId,l:[]};}
+  }));
   await Promise.all(ids.filter(id=>!pzRM[id]).map(async id=>{
     try{
       const v=(await get(ref(db,'rm_records/'+id))).val()||{};const m={};
@@ -4574,7 +4603,7 @@ function pzKgHead(){
   const p=programs[currentProgId]||{};const ids=Object.keys(p.assignedTo||{}).filter(id=>athletes[id]);
   if(!ids.length)return '';
   const conRM=id=>pzRM[id]&&Object.keys(pzRM[id]).length;
-  return `<label class="pz-kgsel">Kg per <select onchange="pzKgSel(this.value)">${ids.map(id=>`<option value="${id}"${id===pzKgAid?' selected':''}>${stEsc(athletes[id].name)}${pzRM[id]&&!conRM(id)?' (senza massimali)':''}</option>`).join('')}</select></label>`;
+  return `<label class="pz-kgsel" title="Kg dai suoi massimali e sedute fatte">Atleta <select onchange="pzKgSel(this.value)">${ids.map(id=>`<option value="${id}"${id===pzKgAid?' selected':''}>${stEsc(athletes[id].name)}${pzRM[id]&&!conRM(id)?' (senza massimali)':''}</option>`).join('')}</select></label>`;
 }
 
 // ── GRIGLIA della settimana ──────────────────────────────────────
@@ -4582,11 +4611,13 @@ function pzGriglia(wid,w){
   const ss=pzSess(w);
   const G=ST_GG;
   const lim=+(((programs[currentProgId]||{}).intake||{}).minuti)||0;
+  const conF=pzHaLog();
   let h=pzDatalist()+pzWeekBar(w)+`<div class="pz-grid" id="pz-grid">`;
   ss.forEach(([sid,s],si)=>{
     const exs=pzExs(s);
     const tipo=s.type||'pesi';
     const st=pzStatSess(s);
+    const log=conF?pzLog(currentWeekIdx,sid):null;
     const lungo=lim&&st.min>lim*1.1;
     h+=`<div class="pz-sess t-${tipo}" data-sess="${sid}">
       <div class="pz-sh">
@@ -4595,6 +4626,7 @@ function pzGriglia(wid,w){
           <option value="">Ogni giorno</option>${G.map((g,i)=>`<option value="${i}"${s.dayOfWeek===i?' selected':''}>${ST_GGL[i]}</option>`).join('')}</select>
         <span class="pz-st">${stEsc((SESS_TYPES[tipo]||{}).label||tipo)}</span>
         <span class="pz-ss${lungo?' warn':''}"${lungo?` title="Piu' lunga dei ${lim}' disponibili"`:''}>${st.es?st.es+' es · '+st.serie+' serie · ':''}${st.min?'~'+pzMinTxt(st.min):''}</span>
+        ${conF?(log?`<span class="pz-done" title="${stEsc(athletes[pzKgAid]?.name||'')}">Fatta ${stEsc(log.date||'')}${log.duration?' · '+log.duration+'\'':''}${log.avgRpe?' · RPE '+String(log.avgRpe).replace('.',','):''}${log.totalSets?' · '+log.totalSets+' serie':''}</span>`:'<span class="pz-todo">Da fare</span>'):''}
         <span class="pz-sp"></span>
         ${tipo==='corsa'?`<button type="button" class="pz-b" onclick="openModal('edit-corsa','${wid}','${sid}')">Fasi corsa</button>`:''}
         <button type="button" class="pz-b" onclick="pzPrevSess('${wid}','${sid}')" title="Attivazione in apertura e rinforzo in chiusura, per il tipo di seduta e le carenze della scheda">Prevenzione</button>
@@ -4605,14 +4637,14 @@ function pzGriglia(wid,w){
     if(tipo==='corsa'&&Array.isArray(s.corsaFasi)&&s.corsaFasi.length){
       h+=`<div class="pz-corsa">${s.corsaFasi.map(f=>`<span><b>${stEsc(f.tipo)}</b> ${stEsc(f.reps?f.reps+' x '+(f.repDist||''):f.dist||'')}${f.zona?' '+stEsc(f.zona):''}${f.pace||f.repPace?' @'+stEsc(f.repPace||f.pace):''}${f.recTime?' rec '+stEsc(f.recTime):''}</span>`).join('')}</div>`;
     }
-    h+=`<table class="pz-t"><thead><tr><th class="n" title="Numero, o lettera del superset: A1, A2">#</th><th>Esercizio</th><th>Serie</th><th>Ripetizioni</th><th>% 1RM</th><th class="kg">Kg</th><th>RPE</th><th>Recupero</th><th>Note</th><th></th></tr></thead><tbody>`;
+    h+=`<table class="pz-t"><thead><tr><th class="n" title="Numero, o lettera del superset: A1, A2">#</th><th>Esercizio</th><th>Serie</th><th>Ripetizioni</th><th>% 1RM</th><th class="kg">Kg</th><th>RPE</th><th>Recupero</th><th>Note</th>${conF?'<th class="fa" title="Serie fatte su pianificate, kg usati, RPE medio">Fatto</th>':''}<th></th></tr></thead><tbody>`;
     exs.forEach(([eid,e],i)=>{
       const c=(f,t)=>`<td><input class="pz-c${t?' '+t:''}" value="${stEsc(e[f]==null?'':e[f])}" data-pz="ex" data-f="${f}" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" ${f==='name'?'list="pz-exlist"':''} aria-label="${f}"></td>`;
       const gr=e.complexGroup?' cx':'';
-      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}"><td class="n"><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"></td>${c('name','nm')}${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}
+      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}"><td class="n"><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"></td>${c('name','nm')}${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}${conF?`<td class="fa">${pzFatto(e,log)}</td>`:''}
         <td class="x"><button type="button" class="pz-x" onclick="pzDelEx('${wid}','${sid}','${eid}')" aria-label="Elimina esercizio" tabindex="-1">&#215;</button></td></tr>`;
     });
-    h+=`<tr class="add"><td class="n">+</td><td colspan="9"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Scrivi e Invio: A1 Squat 4x6 @75% r2' - spinta dal pavimento. Si possono incollare piu' righe, anche da Excel"></td></tr></tbody></table></div>`;
+    h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Scrivi e Invio: A1 Squat 4x6 @75% r2' - spinta dal pavimento. Si possono incollare piu' righe, anche da Excel"></td></tr></tbody></table></div>`;
   });
   h+=`<div class="pz-addsess">Aggiungi seduta: ${Object.entries(SESS_TYPES).map(([k,v])=>`<button type="button" class="pz-b" onclick="pzAddSess('${wid}','${k}')">${stEsc(v.label)}</button>`).join('')}<button type="button" class="pz-b" onclick="pzPalette('modello ')">Da modello</button></div></div>`;
   return h;
@@ -4764,7 +4796,7 @@ function pzProgressione(){
   }
   // in fondo i conti della seduta settimana per settimana
   const stS=W.map(([,w])=>{const s=pzSess(w)[pzSessIdx];return s?pzStatSess(s[1]):null;});
-  h+=`<tr class="sum"><td class="nm">Serie e durata</td>${stS.map(x=>`<td>${x?x.serie+' · ~'+pzMinTxt(x.min):'-'}</td>`).join('')}<td></td></tr>`;
+  h+=`<tr class="sum"><td class="nm">Serie e durata</td>${stS.map(x=>`<td>${x&&x.es?x.serie+' · ~'+pzMinTxt(x.min):'-'}</td>`).join('')}<td></td></tr>`;
   if(stS.some(x=>x&&x.nl))h+=`<tr class="sum"><td class="nm">Sollevamenti e intensita'</td>${stS.map(x=>`<td>${x&&x.nl?x.nl+' al '+Math.round(x.pctW/x.nl)+'%':'-'}</td>`).join('')}<td></td></tr>`;
   h+=`</tbody></table></div><p class="pz-pnote">Formato di ogni cella: serie x ripetizioni, @percentuale%, RPE, r recupero. Esempio: 4x6 @75% RPE8 r2'. Le settimane di scarico sono segnate e nel "+2,5%" tornano al 60%.</p>`;
   return h;
@@ -4895,16 +4927,16 @@ function pzGrafico(){
    seduta, Ctrl+V su una casella; Canc la elimina, Invio la apre. Doppio
    clic su una casella vuota aggiunge una seduta di forza quel giorno. */
 let pzClip=null,pzDrag=null;
-function pzChip(wid,sid,s){
-  const st=pzStatSess(s);
-  return `<div class="pz-chip2 t-${s.type||'pesi'}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" onclick="pzApriSess('${wid}','${sid}')" title="${stEsc(s.name||'')}"><b>${stEsc(s.name||'Seduta')}</b><span>${st.es?st.es+' es · ':''}${st.min?'~'+pzMinTxt(st.min):stEsc((SESS_TYPES[s.type]||{}).label||'')}</span></div>`;
+function pzChip(wid,sid,s,wi){
+  const st=pzStatSess(s),fatta=wi!=null&&pzLog(wi,sid);
+  return `<div class="pz-chip2 t-${s.type||'pesi'}${fatta?' fatta':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" onclick="pzApriSess('${wid}','${sid}')" title="${stEsc(s.name||'')}"><b>${stEsc(s.name||'Seduta')}</b><span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+' · ':''}${st.es?st.es+' es · ':''}${st.min?'~'+pzMinTxt(st.min):stEsc((SESS_TYPES[s.type]||{}).label||'')}</span></div>`;
 }
 function pzMappa(){
   const W=pzWeeks();if(!W.length)return '';
   let h=`<div class="pz-map"><table class="pz-mt"><thead><tr><th class="w">Settimana</th>${ST_GG.map(g=>`<th>${g}</th>`).join('')}<th>Senza giorno</th><th class="sum">Totale</th></tr></thead><tbody>`;
   W.forEach(([wid,w],wi)=>{
     const ss=pzSess(w),st=pzStatWeek(w);
-    const cella=d=>`<td class="pz-dc" data-w="${wid}" data-d="${d}" tabindex="-1">${ss.filter(([,x])=>d===''?x.dayOfWeek==null||x.dayOfWeek==='':x.dayOfWeek===d).map(([sid,x])=>pzChip(wid,sid,x)).join('')}</td>`;
+    const cella=d=>`<td class="pz-dc" data-w="${wid}" data-d="${d}" tabindex="-1">${ss.filter(([,x])=>d===''?x.dayOfWeek==null||x.dayOfWeek==='':x.dayOfWeek===d).map(([sid,x])=>pzChip(wid,sid,x,wi)).join('')}</td>`;
     h+=`<tr class="${pzIsDl(w)?'dl':''}${wi===currentWeekIdx?' cur':''}"><th class="w"><button type="button" onclick="pzApriSett(${wi})">S${wi+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></button></th>${[0,1,2,3,4,5,6].map(cella).join('')}${cella('')}<td class="sum">${st.sed?`<b>${st.sed}</b> sed · <b>${st.serie}</b> serie<br>~${pzMinTxt(st.min)}`:'-'}</td></tr>`;
   });
   return h+`</tbody></table></div>`;
@@ -5061,8 +5093,8 @@ function pzPalEsegui(i){const c=pzPalL[i];if(!c)return;pzPalChiudi();try{c.run()
 window.pzAiuto=function(){
   const el=pzPalEl();el.classList.add('open');
   const R=[['Ctrl K','Comandi: settimane, sedute, modelli, programmi'],['1 2 3 4','Schede, Griglia, Progressione, Mappa'],['Alt &#8592; &#8594;','Settimana prima e dopo'],['Ctrl Z','Annulla (fino a 40 passi)'],
-    ['&#8593; &#8595; &#8592; &#8594;','Tra le celle della griglia'],['Invio','Salva e scende di una riga'],['Ctrl D','Copia il valore della cella sopra'],['Alt &#8593; &#8595;','Sposta l\'esercizio'],['Alt Shift &#8595;','Duplica l\'esercizio'],['Alt Backspace','Elimina l\'esercizio'],['Esc','Rimette la cella com\'era'],
-    ['A1 Squat 4x6 @75% r2\'','Scrittura veloce con superset, nella riga +'],['Incolla','Piu\' righe o colonne da Excel diventano esercizi'],['Shift Invio','In Progressione: porta il valore nelle settimane seguenti'],
+    ['&#8593; &#8595; &#8592; &#8594;','Tra le celle della griglia'],['Invio','Salva e scende di una riga'],['Ctrl D','Copia il valore della cella sopra'],['Alt &#8593; &#8595;','Sposta l\'esercizio'],['Alt Shift &#8595;','Duplica l\'esercizio'],['Alt Backspace','Elimina l\'esercizio'],['Esc','Rimette la cella com\'era'],['Shift &#8593; &#8595; &#8592; &#8594;','Seleziona piu\' celle (anche Shift+clic)'],['Invio / Canc','Con piu\' celle: scrive il valore in tutte / le svuota'],['Ctrl C','Copia le celle selezionate per Excel'],['Incolla in una cella','Stende un blocco da Excel a partire da li\''],
+    ['A1 Squat 4x6 @75% r2\'','Scrittura veloce con superset, nella riga +'],['Incolla','Piu\' righe o colonne da Excel diventano esercizi'],['Shift Invio','In Progressione: porta il valore nelle settimane seguenti'],['Incolla in Progressione','Righe = esercizi, colonne = settimane; crea quelli che mancano'],
     ['Trascina','In Mappa: sposta la seduta; con Alt la copia'],['Ctrl C / Ctrl V','In Mappa: copia una seduta e incollala in una casella'],['Doppio clic','In Mappa: nuova seduta in quel giorno']];
   document.getElementById('pz-pal-in').value='';
   document.getElementById('pz-pal-l').innerHTML=`<div class="pz-help">${R.map(([k,t])=>`<div><kbd>${k}</kbd><span>${t}</span></div>`).join('')}</div>`;
@@ -5150,6 +5182,121 @@ async function pzEliminaRiga(el){
   pzWant=vicino?{e:vicino[0],f:el.dataset.f}:{q:sid};el.blur();
   await pzDelEx(wid,sid,eid);
 }
+// ── selezione di piu' celle, copia e incolla a blocchi ───────────
+/* Come in Excel: Shift+frecce (o Shift+clic) seleziona un rettangolo di
+   celle a partire da quella attiva. Si scrive il valore e Invio lo mette in
+   tutte, Canc le svuota, Ctrl+C le copia per Excel. Incollare un blocco
+   (piu' righe o colonne) in una cella lo stende sulle celle a partire da li';
+   le righe in piu' diventano esercizi nuovi se si incolla sui nomi. */
+const PZ_F=['complexLabel','name','sets','reps','pct','rpe','rest','cue'];
+let pzSelS=null;
+function pzRigheEx(){return [...document.querySelectorAll('#pz-grid tbody tr[data-e]')];}
+function pzPos(el){const R=pzRigheEx(),r=R.indexOf(el.closest('tr'));return {r,c:PZ_F.indexOf(el.dataset.f)};}
+function pzSelCelle(){
+  if(!pzSelS)return [];
+  const R=pzRigheEx(),{a,b}=pzSelS,out=[];
+  for(let r=Math.min(a.r,b.r);r<=Math.max(a.r,b.r);r++){const row=[];for(let c=Math.min(a.c,b.c);c<=Math.max(a.c,b.c);c++){const x=R[r]&&R[r].querySelector(`.pz-c[data-f="${PZ_F[c]}"]`);if(x)row.push(x);}out.push(row);}
+  return out;
+}
+function pzSelN(){return pzSelCelle().flat().length;}
+function pzSelDisegna(){
+  document.querySelectorAll('.pz-c.sel').forEach(x=>x.classList.remove('sel'));
+  pzSelCelle().flat().forEach(x=>x.classList.add('sel'));
+}
+function pzSelClear(){pzSelS=null;pzSelDisegna();}
+function pzSelEstendi(el,dr,dc){
+  if(!pzSelS){const p=pzPos(el);if(p.r<0)return;pzSelS={a:p,b:{...p}};}
+  const n=pzRigheEx().length;
+  pzSelS.b={r:Math.max(0,Math.min(n-1,pzSelS.b.r+(dr||0))),c:Math.max(0,Math.min(PZ_F.length-1,pzSelS.b.c+(dc||0)))};
+  pzSelDisegna();
+  const k=pzSelN();if(k===2)showToast('Scrivi e Invio per tutte, Canc svuota, Ctrl+C copia');
+}
+function pzValore(f,v,s){
+  v=String(v==null?'':v).trim();
+  if(!v)return null;
+  if(f==='sets')return +v||v;
+  if(f==='pct')return v.replace('%','').replace(',','.').trim();
+  if(f==='rpe')return v.replace(',','.');
+  if(f==='complexLabel')return v.toUpperCase();
+  return v;
+}
+// scrive un insieme di celle {cella: valore} con un solo annulla
+async function pzScriviCelle(coppie){
+  const up={};
+  coppie.forEach(([el,val])=>{
+    const {w,s:sid,e:eid,f}=el.dataset;const sess=programs[currentProgId].weeks[w].sessions[sid];
+    const base=pzBase(w,sid)+'/exercises/'+eid+'/';
+    const v=pzValore(f,val,sess);
+    up[base+f]=v;
+    if(f==='complexLabel')up[base+'complexGroup']=v?pzGruppoCx(sess,v):null;
+  });
+  if(!Object.keys(up).length)return;
+  pzUndo.push({multi:pzPrima(up)});
+  await update(ref(db),up);
+}
+async function pzSelApplica(el,svuota){
+  const celle=pzSelCelle().flat();const v=svuota?'':el.value;
+  pzSelClear();el.defaultValue=el.value;
+  await pzScriviCelle(celle.map(x=>[x,v]));
+  showToast((svuota?'Svuotate ':'Scritto in ')+celle.length+' celle');
+}
+function pzSelCopia(){
+  const t=pzSelCelle().map(r=>r.map(x=>x.value).join('\t')).join('\n');
+  try{navigator.clipboard.writeText(t);}catch(e){}
+  pzClipTxt=t;showToast('Copiate '+pzSelN()+' celle');
+}
+let pzClipTxt='';
+async function pzIncollaCelle(el,testo){
+  const righe=testo.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));
+  const R=pzRigheEx(),p=pzPos(el);if(p.r<0)return;
+  const sid=el.dataset.s,wid=el.dataset.w;
+  const coppie=[],nuove=[];
+  righe.forEach((cols,i)=>{
+    const tr=R[p.r+i];
+    if(!tr||tr.querySelector('.pz-c').dataset.s!==sid){nuove.push(cols);return;}
+    cols.forEach((v,j)=>{const f=PZ_F[p.c+j];const x=f&&tr.querySelector(`.pz-c[data-f="${f}"]`);if(x)coppie.push([x,v]);});
+  });
+  await pzScriviCelle(coppie);
+  // oltre la fine della seduta: se si incolla dai nomi diventano esercizi
+  if(nuove.length&&PZ_F[p.c]==='name')await pzBulk(wid,sid,nuove.map(c=>c.join('\t')));
+  else if(nuove.length)showToast(nuove.length+' righe oltre la fine della seduta non incollate');
+  else showToast('Incollate '+coppie.length+' celle');
+}
+// in Progressione: righe = esercizi, colonne = settimane
+async function pzIncollaProg(el,testo){
+  const righe=testo.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));
+  const r0=+el.dataset.r,w0=+el.dataset.wi,up={},W=pzWeeks(),nuovi={};
+  const nomi=[...document.querySelectorAll('.pz-pt tbody tr:not(.sum) td.nm')].map(t=>t.textContent.trim());
+  righe.forEach((cols,i)=>cols.forEach((v,j)=>{
+    if(!v.trim())return;
+    const c=document.querySelector(`.pz-pc[data-r="${r0+i}"][data-wi="${w0+j}"]`);
+    const o=pzParse(v,false);
+    if(!c){
+      // la settimana ha la seduta ma non ancora l'esercizio: lo si crea
+      const wk=W[w0+j],ss=wk&&pzSess(wk[1])[pzSessIdx],nome=nomi[r0+i];if(!ss||!nome)return;
+      const base=pzBase(wk[0],ss[0])+'/exercises/';nuovi[ss[0]]=(nuovi[ss[0]]||0)+1;
+      up[base+push(ref(db,base)).key]={name:nome,sets:o.sets||3,reps:o.reps||'',pct:o.pct||null,rpe:o.rpe||null,rest:o.rest||null,order:pzExs(ss[1]).length+nuovi[ss[0]]-1};
+      return;
+    }
+    const {w,s:sid,e:eid}=c.dataset;
+    const prima=programs[currentProgId].weeks[w].sessions[sid].exercises[eid];
+    up[pzBase(w,sid)+'/exercises/'+eid]=Object.assign({},prima,{sets:o.sets||prima.sets||null,reps:o.reps||'',pct:o.pct||null,rpe:o.rpe||null,rest:o.rest||null});
+  }));
+  if(!Object.keys(up).length)return;
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);
+  showToast('Incollate '+Object.keys(up).length+' celle');
+}
+document.addEventListener('mousedown',e=>{
+  const x=e.target.closest&&e.target.closest('.pz-c');
+  if(!x||x.dataset.pz!=='ex'){if(!e.target.closest||!e.target.closest('#pz-grid'))pzSelClear();return;}
+  const a=document.activeElement;
+  if(e.shiftKey&&a&&a.classList&&a.classList.contains('pz-c')&&a!==x){
+    e.preventDefault();if(!pzSelS){const p=pzPos(a);pzSelS={a:p,b:{...p}};}
+    pzSelS.b=pzPos(x);pzSelDisegna();return;
+  }
+  pzSelClear();
+});
+
 function pzTyping(el){return el&&el.matches&&el.matches('input,textarea,select,[contenteditable="true"]');}
 document.addEventListener('keydown',e=>{
   const el=e.target;
@@ -5176,6 +5323,15 @@ document.addEventListener('keydown',e=>{
   if(el.dataset.pz==='pcell'&&(e.key==='ArrowUp'||e.key==='ArrowDown')){
     e.preventDefault();const nx=document.querySelector(`.pz-pc[data-r="${+el.dataset.r+(e.key==='ArrowUp'?-1:1)}"][data-wi="${el.dataset.wi}"]`);if(nx){nx.focus();nx.select();}return;}
   if(el.dataset.pz!=='ex')return;
+  if(e.shiftKey&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();pzSelEstendi(el,e.key==='ArrowUp'?-1:1,0);return;}
+  if(e.shiftKey&&!e.altKey&&(e.key==='ArrowRight'||e.key==='ArrowLeft')&&(pzSelS||el.selectionStart===el.selectionEnd&&(e.key==='ArrowRight'?el.selectionEnd===el.value.length:el.selectionStart===0))){e.preventDefault();pzSelEstendi(el,0,e.key==='ArrowLeft'?-1:1);return;}
+  if(pzSelS&&pzSelN()>1){
+    if(e.key==='Enter'){e.preventDefault();pzSelApplica(el);return;}
+    if((e.key==='Delete'||e.key==='Backspace')&&el.value===el.defaultValue){e.preventDefault();pzSelApplica(el,true);return;}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){e.preventDefault();pzSelCopia();return;}
+    if(e.key==='Escape'){pzSelClear();return;}
+  }
+  if(/^Arrow/.test(e.key)&&!e.shiftKey)pzSelClear();
   if(e.altKey&&e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();pzDuplicaRiga(el);return;}
   if(e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();pzMuoviRiga(el,e.key==='ArrowUp'?-1:1);return;}
   if(e.altKey&&(e.key==='Backspace'||e.key==='Delete')){e.preventDefault();pzEliminaRiga(el);return;}
@@ -5198,11 +5354,14 @@ document.addEventListener('keydown',e=>{
 });
 // incolla piu' righe: nella riga "+" o in una cella diventano esercizi
 document.addEventListener('paste',e=>{
-  const el=e.target;if(!el||!el.dataset||(el.dataset.pz!=='quick'&&el.dataset.pz!=='ex'))return;
+  const el=e.target;if(!el||!el.dataset||!['quick','ex','pcell'].includes(el.dataset.pz))return;
   const t=(e.clipboardData||window.clipboardData).getData('text');
-  if(!/\n/.test(t.trim()))return;
+  const blocco=/\n/.test(t.trim())||/\t/.test(t);
+  if(!blocco)return;
   e.preventDefault();
-  pzBulk(el.dataset.w,el.dataset.s,t.split(/\r?\n/).filter(x=>x.trim()));
+  if(el.dataset.pz==='quick')pzBulk(el.dataset.w,el.dataset.s,t.split(/\r?\n/).filter(x=>x.trim()));
+  else if(el.dataset.pz==='ex')pzIncollaCelle(el,t);
+  else pzIncollaProg(el,t);
 });
 document.addEventListener('change',async e=>{
   const el=e.target;if(!el||!el.dataset||!el.dataset.pz)return;
