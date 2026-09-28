@@ -1,7 +1,51 @@
 // RS.Coaching - Shared Sidebar · Premium Glass Design
+// ── ICONE: un set solo, tratto 1,75, angoli arrotondati (disegno Lucide, licenza ISC) ──
+// window.rsIcon('nome') restituisce l'SVG in linea, alto quanto il testo.
+window.RSI = {
+  dashboard:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  atleti:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  gruppi:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  analytics:'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>',
+  builder:'<path d="M14.4 14.4 9.6 9.6"/><path d="M18.66 21.49a2 2 0 1 1-2.83-2.83l-1.77 1.77a2 2 0 1 1-2.83-2.83l6.37-6.36a2 2 0 1 1 2.83 2.83l-1.77 1.76a2 2 0 1 1 2.83 2.83z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.4 12.77a2 2 0 1 1-2.83-2.83l1.77-1.77a2 2 0 1 1-2.83-2.83l2.83-2.83a2 2 0 1 1 2.83 2.83l1.77-1.77a2 2 0 1 1 2.83 2.83z"/>',
+  planner:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
+  chat:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  libreria:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  strumenti:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M16 14v4M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/>',
+  sedute:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  cambia:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  // tipi di seduta
+  pesi:'<path d="M14.4 14.4 9.6 9.6"/><path d="M18.66 21.49a2 2 0 1 1-2.83-2.83l-1.77 1.77a2 2 0 1 1-2.83-2.83l6.37-6.36a2 2 0 1 1 2.83 2.83l-1.77 1.76a2 2 0 1 1 2.83 2.83z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.4 12.77a2 2 0 1 1-2.83-2.83l1.77-1.77a2 2 0 1 1-2.83-2.83l2.83-2.83a2 2 0 1 1 2.83 2.83l1.77-1.77a2 2 0 1 1 2.83 2.83z"/>',
+  corsa:'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+  sprint:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  conditioning:'<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
+  recupero:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sport:'<circle cx="12" cy="12" r="10"/><path d="m12 7 4.5 3.3-1.7 5.2H9.2l-1.7-5.2z"/><path d="M12 2v5M21.5 9.5l-5 .8M17.5 20l-2.7-4.5M6.5 20l2.7-4.5M2.5 9.5l5 .8"/>',
+  ibrido:'<path d="M17 3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2"/><path d="M7 21a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2"/><path d="M5 11h14"/><path d="M12 3v18"/>',
+  // azioni comuni
+  piu:'<path d="M12 5v14M5 12h14"/>',
+  chiudi:'<path d="M18 6 6 18M6 6l12 12"/>',
+  copia:'<rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  cestino:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  cerca:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  su:'<path d="m18 15-6-6-6 6"/>',
+  giu:'<path d="m6 9 6 6 6-6"/>',
+  avvisa:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  ok:'<path d="M20 6 9 17l-5-5"/>',
+  test:'<path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/>'
+};
+window.rsIcon = function(n, cls) {
+  const p = window.RSI[n]; if (!p) return '';
+  return '<svg class="rsi' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+};
+// ogni elemento con data-rsi="nome" riceve l'icona (anche quelli aggiunti dopo, con rsIconFill)
+window.rsIconFill = function(root) {
+  (root || document).querySelectorAll('[data-rsi]').forEach(function(el){ if (!el.firstElementChild) el.innerHTML = window.rsIcon(el.getAttribute('data-rsi')); });
+};
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', function(){ window.rsIconFill(); });
 window.SIDEBAR_HTML = `
 <div class="sb-mob-bar" id="sb-mob-bar">
-  <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">&#9776;</button>
+  <button class="sb-ham" id="sb-ham-btn" aria-label="Apri menu">${window.rsIcon('menu')}</button>
   <div class="rs-logo sm">
     <svg class="rs-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect width="36" height="36" rx="10" fill="url(#rsGsbM)"/><rect x="9" y="20" width="4.2" height="7" rx="2.1" fill="#fff" opacity=".55"/><rect x="15.9" y="15" width="4.2" height="12" rx="2.1" fill="#fff" opacity=".8"/><rect x="22.8" y="9" width="4.2" height="18" rx="2.1" fill="#fff"/><defs><linearGradient id="rsGsbM" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF8A4D"/><stop offset="1" stop-color="#E2611C"/></linearGradient></defs></svg>
     <div class="rs-word"><b>RS</b><span>COACHING</span></div>
@@ -19,37 +63,37 @@ window.SIDEBAR_HTML = `
   <div class="nav-s">
     <div class="nav-lbl">Overview</div>
     <a class="nav-item" aria-label="Dashboard" href="./index.html" data-page="dashboard">
-      <span class="nav-icon">⊞</span><span class="nav-lbl-text">Dashboard</span>
+      <span class="nav-icon">${window.rsIcon('dashboard')}</span><span class="nav-lbl-text">Dashboard</span>
     </a>
     <a class="nav-item" aria-label="Atleti" href="./index.html?goto=athletes" data-page="athletes">
-      <span class="nav-icon">◎</span><span class="nav-lbl-text">Atleti</span>
+      <span class="nav-icon">${window.rsIcon('atleti')}</span><span class="nav-lbl-text">Atleti</span>
     </a>
     <a class="nav-item" aria-label="Gruppi" href="./index.html?goto=groups" data-page="groups">
-      <span class="nav-icon">◈</span><span class="nav-lbl-text">Gruppi</span>
+      <span class="nav-icon">${window.rsIcon('gruppi')}</span><span class="nav-lbl-text">Gruppi</span>
     </a>
     <a class="nav-item" aria-label="Analytics" href="./index.html?goto=analytics" data-page="analytics">
-      <span class="nav-icon">&#9684;</span><span class="nav-lbl-text">Analytics</span>
+      <span class="nav-icon">${window.rsIcon('analytics')}</span><span class="nav-lbl-text">Analytics</span>
     </a>
     <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" aria-label="Program Builder" href="./builder.html" data-page="builder">
-      <span class="nav-icon">&#9635;</span><span class="nav-lbl-text">Program Builder</span>
+      <span class="nav-icon">${window.rsIcon('builder')}</span><span class="nav-lbl-text">Program Builder</span>
     </a>
     <a class="nav-item" aria-label="Planner Settimanale" href="./planner.html" data-page="planner">
-      <span class="nav-icon">&#9636;</span><span class="nav-lbl-text">Planner Settimanale</span>
+      <span class="nav-icon">${window.rsIcon('planner')}</span><span class="nav-lbl-text">Planner Settimanale</span>
     </a>
     <div class="nav-lbl">Comunicazione</div>
     <a class="nav-item" aria-label="Chat" href="./index.html?goto=chat-global" data-page="chat">
-      <span class="nav-icon">&#9677;</span><span class="nav-lbl-text">Chat</span>
+      <span class="nav-icon">${window.rsIcon('chat')}</span><span class="nav-lbl-text">Chat</span>
     </a>
     <div class="nav-lbl">Risorse</div>
     <a class="nav-item" aria-label="Database Esercizi" href="./index.html?goto=database" data-page="database">
-      <span class="nav-icon">&#9637;</span><span class="nav-lbl-text">Database Esercizi</span>
+      <span class="nav-icon">${window.rsIcon('libreria')}</span><span class="nav-lbl-text">Database Esercizi</span>
     </a>
     <a class="nav-item" aria-label="Strumenti S&C" href="./index.html?goto=tools" data-page="tools">
-      <span class="nav-icon">&#9671;</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
+      <span class="nav-icon">${window.rsIcon('strumenti')}</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
     </a>
     <a class="nav-item" aria-label="Tutte le sedute" href="./index.html?goto=sessions" data-page="sessions">
-      <span class="nav-icon">≡</span><span class="nav-lbl-text">Tutte le sedute</span>
+      <span class="nav-icon">${window.rsIcon('sedute')}</span><span class="nav-lbl-text">Tutte le sedute</span>
     </a>
   </div>
   <div class="sb-foot">
@@ -135,7 +179,10 @@ window.SIDEBAR_CSS = `
   font-weight:600;
   box-shadow:inset 0 0 0 1px rgba(255,106,46,.14);
 }
-.nav-icon{font-size:14px;opacity:.55;flex-shrink:0;transition:opacity .2s;}
+.nav-icon{display:inline-flex;width:18px;height:18px;opacity:.6;flex-shrink:0;transition:opacity .2s;}
+.nav-icon .rsi{width:18px;height:18px;}
+.rsi{width:1.15em;height:1.15em;vertical-align:-.2em;flex-shrink:0;}
+.sb-ham .rsi{width:22px;height:22px;vertical-align:middle;}
 .nav-item.active .nav-icon,.nav-item:hover .nav-icon{opacity:1;}
 .sb-foot{
   padding:12px 14px 14px;
