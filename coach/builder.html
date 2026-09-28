@@ -1183,8 +1183,8 @@ window._refreshBldExDl=function(dlId, progType, sessType){
 };
 const WEEK_LABELS=['Accumulo','Intensificazione','Deload','Picco','Competizione','Trasformazione','Mantenimento'];
 const COND_TYPES=['EMOM','AMRAP','Tabata','For Time','Testo libero'];
-const RUNNING_TYPES=['Attivazione','Riscaldamento','Fondo Lento','Progressivo','Ripetute','Soglia','Interval Training','Long Run','Fartlek','Collinare','Defaticamento','Testo libero'];
-const INTERVAL_TYPES=['Ripetute','Interval Training'];
+const RUNNING_TYPES=['Attivazione','Riscaldamento','Fondo Lento','Progressivo','Ripetute','Soglia','Passo gara','Ripetute in salita','Interval Training','Long Run','Fartlek','Collinare','Allunghi','Defaticamento','Testo libero'];
+const INTERVAL_TYPES=['Ripetute','Interval Training','Passo gara','Ripetute in salita','Fartlek','Allunghi'];
 const RUNNING_ZONES=[
   {id:'Z1',label:'Z1 - Recupero Attivo',pct:'60-70% FC'},
   {id:'Z2',label:'Z2 - Aerobica Base',pct:'70-80% FC'},
@@ -2011,8 +2011,7 @@ function renderCorsaBlock(wid,sid,s){
     return fasi.map((f,i)=>{
       const zcol=ZCOL[f.zona]||'var(--muted)';
       const hasInterval=f.reps||f.repDist||f.repPace;
-      const hasRec=f.recDist||f.recTime||f.recPace;
-      return `<div class="ex-block" style="border-left:3px solid ${f.zona?zcol:'var(--border)'};padding-left:10px;margin-bottom:4px;">
+      return `<div class="ex-block" style="margin-bottom:4px;">
         <div class="ex-block-head">
           <div style="flex:1;">
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
@@ -2023,17 +2022,7 @@ function renderCorsaBlock(wid,sid,s){
               ${f.dist?`<span>${f.dist}</span>`:''}
               ${f.pace?`<span>${f.pace} /km</span>`:''}
             </div>
-            ${hasInterval?`<div class="ex-params" style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;margin-top:3px;color:var(--green);">
-              ${f.reps?`<span>${f.reps}×</span>`:''}
-              ${f.repDist?`<span>${f.repDist}</span>`:''}
-              ${f.repPace?`<span>@ ${f.repPace}</span>`:''}
-            </div>`:''}
-            ${hasRec?`<div class="ex-params" style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;margin-top:2px;color:var(--muted);">
-              <span>Rec:</span>
-              ${f.recDist?`<span>${f.recDist}</span>`:''}
-              ${f.recTime?`<span>${f.recTime}</span>`:''}
-              ${f.recPace?`<span>@ ${f.recPace}</span>`:''}
-            </div>`:''}
+            ${hasInterval?`<div class="ex-params" style="font-size:11px;margin-top:3px;color:var(--white);">${stEsc(stCorsaTesto(f))}</div>`:''}
             ${f.note?`<div class="ex-params" style="margin-top:3px;font-size:10px;color:var(--muted);font-style:italic;">${f.note}</div>`:''}
           </div>
         </div>
@@ -2226,6 +2215,8 @@ window.applyBlock=applyBlock;
 
 window.openModal=function(type,...args){
   const mb=document.getElementById('modal-body');
+  // l'editor della corsa ha piu' campi per riga: modale piu' largo
+  mb.style.maxWidth=type==='edit-corsa'?'min(760px,calc(100vw - 32px))':'';mb.style.width=type==='edit-corsa'?'760px':'';
   const progId=currentProgId;
   const p=programs[progId];
 
@@ -2568,66 +2559,90 @@ window.openModal=function(type,...args){
       :(s.corsaTipo?[{tipo:s.corsaTipo,zona:s.corsaZona||'',dist:s.corsaDist||'',pace:s.corsaPace||'',note:s.corsaNote||''}]:[{}]);
     const fasiTypeSel=(cur)=>RUNNING_TYPES.map(t=>`<option value="${t}"${cur===t?' selected':''}>${t}</option>`).join('');
     const fasiZonSel=(cur)=>`<option value="">-</option>`+RUNNING_ZONES.map(z=>`<option value="${z.id}"${cur===z.id?' selected':''}>${z.label}</option>`).join('');
-    const isIntv=(t)=>INTERVAL_TYPES.includes(t);
-    const buildFaseRow=(f={},i)=>`<div class="fase-row" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:10px 10px 8px;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;">Fase ${i+1}</span>
-        <button style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;line-height:1;" onclick="removeFase(this)">×</button>
+    const isIntv=(t,f)=>INTERVAL_TYPES.includes(t)||!!(f&&(f.reps||f.repDist||f.repPace));
+    const REC_TIPI=['trotto','camminata','da fermo'];
+    const recSel=cur=>`<option value="">-</option>`+REC_TIPI.concat(cur&&!REC_TIPI.includes(cur)?[cur]:[]).map(t=>`<option value="${stEsc(t)}"${cur===t?' selected':''}>${stEsc(t)}</option>`).join('');
+    const ic=d=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+    const fld=(lbl,cls,val,ph,w)=>`<div class="field" style="margin-bottom:0;min-width:0;${w?'grid-column:span 1':'grid-column:span 2'}"><label>${lbl}</label><input class="${cls}" value="${stEsc(val||'')}" placeholder="${ph}" oninput="window._faseSum(this)"></div>`;
+    const buildFaseRow=(f={},i)=>`<div class="fase-row" style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-bottom:8px;">
+        <span class="fase-n" style="font-size:11px;font-weight:700;color:var(--muted);padding-bottom:9px;min-width:16px;">${i+1}</span>
+        <div class="field" style="margin-bottom:0;flex:1 1 150px;min-width:0;"><label>Tipo</label><select class="fase-tipo" onchange="window._toggleIntervalFields(this)">${fasiTypeSel(f.tipo)}</select></div>
+        <div class="field" style="margin-bottom:0;flex:1 1 150px;min-width:0;"><label>Zona</label><select class="fase-zona" onchange="window._faseSum(this)">${fasiZonSel(f.zona)}</select></div>
+        <button type="button" class="btn btn-outline btn-sm" title="Sposta su" aria-label="Sposta su" onclick="window._moveFase(this,-1)">${ic('M18 15l-6-6-6 6')}</button>
+        <button type="button" class="btn btn-outline btn-sm" title="Sposta giu" aria-label="Sposta giu" onclick="window._moveFase(this,1)">${ic('M6 9l6 6 6-6')}</button>
+        <button type="button" class="btn btn-outline btn-sm" title="Togli la fase" aria-label="Togli la fase" onclick="removeFase(this)">${ic('M18 6L6 18M6 6l12 12')}</button>
       </div>
-      <div class="grid2" style="margin-bottom:6px;">
-        <div class="field" style="margin-bottom:0;"><label>Tipo</label><select class="fase-tipo" onchange="window._toggleIntervalFields(this)">${fasiTypeSel(f.tipo)}</select></div>
-        <div class="field" style="margin-bottom:0;"><label>Zona</label><select class="fase-zona">${fasiZonSel(f.zona)}</select></div>
+      <div class="fase-cont-fields" style="display:${isIntv(f.tipo,f)?'none':'grid'};grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px;">
+        ${fld('Distanza o tempo','fase-dist',f.dist,'Es. 8 km o 40\'')}${fld('Passo','fase-pace',f.pace,'Es. 5:30-5:50',150)}
       </div>
-      <div class="grid2" style="margin-bottom:6px;">
-        <div class="field" style="margin-bottom:0;"><label>Distanza / Volume</label><input class="fase-dist" value="${f.dist||''}" placeholder="Es. 3 km totali"></div>
-        <div class="field" style="margin-bottom:0;"><label>Pace target</label><input class="fase-pace" value="${f.pace||''}" placeholder="Es. 4:30-4:50"></div>
-      </div>
-      <!-- Interval-specific fields -->
-      <div class="fase-interval-fields" style="display:${isIntv(f.tipo)?'block':'none'};border-top:1px solid var(--border);padding-top:8px;margin-top:2px;margin-bottom:6px;">
-        <div style="font-size:9px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Dettaglio Ripetute</div>
-        <div class="grid2" style="margin-bottom:6px;">
-          <div class="field" style="margin-bottom:0;"><label>N° Ripetute</label><input class="fase-reps" value="${f.reps||''}" placeholder="Es. 5"></div>
-          <div class="field" style="margin-bottom:0;"><label>Distanza / Rep</label><input class="fase-repDist" value="${f.repDist||''}" placeholder="Es. 400 m"></div>
+      <div class="fase-interval-fields" style="display:${isIntv(f.tipo,f)?'block':'none'};margin-bottom:8px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px;">
+          ${fld('Serie','fase-serie',f.serie,'1',70)}${fld('Ripetizioni','fase-reps',f.reps,'Es. 5',90)}${fld('Distanza o tempo','fase-repDist',f.repDist,'Es. 1000 m o 3\'')}${fld('Passo','fase-repPace',f.repPace,'Es. 4:10',120)}
         </div>
-        <div class="grid2" style="margin-bottom:6px;">
-          <div class="field" style="margin-bottom:0;"><label>Pace lavoro</label><input class="fase-repPace" value="${f.repPace||''}" placeholder="Es. 3:45 /km"></div>
-          <div class="field" style="margin-bottom:0;"><label>Recupero (dist.)</label><input class="fase-recDist" value="${f.recDist||''}" placeholder="Es. 200 m"></div>
-        </div>
-        <div class="grid2" style="margin-bottom:0;">
-          <div class="field" style="margin-bottom:0;"><label>Recupero (tempo)</label><input class="fase-recTime" value="${f.recTime||''}" placeholder="Es. 90 sec"></div>
-          <div class="field" style="margin-bottom:0;"><label>Pace rec</label><input class="fase-recPace" value="${f.recPace||''}" placeholder="Es. jogging"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;">
+          ${fld('Recupero','fase-recTime',[f.recTime,f.recDist].filter(Boolean).join(' '),'Es. 90" o 200 m')}
+          <div class="field" style="margin-bottom:0;min-width:0;"><label>Recupero come</label><select class="fase-recPace" onchange="window._faseSum(this)">${recSel(f.recPace||'')}</select></div>
+          ${fld('Fra le serie','fase-recSerie',f.recSerie,'Es. 3\' camminata')}
         </div>
       </div>
-      <div class="field" style="margin-bottom:0;"><label>Note fase</label><input class="fase-note" value="${f.note||''}" placeholder="Es. mantenere ritmo costante"></div>
+      <div class="field" style="margin-bottom:6px;"><label>Note</label><input class="fase-note" value="${stEsc(f.note||'')}" placeholder="Es. tutte allo stesso passo"></div>
+      <div class="fase-sum" style="font-size:12px;color:var(--white);min-height:16px;">${stEsc(stCorsaTesto(f))}</div>
     </div>`;
-    mb.innerHTML=`<h3>Modifica Corsa / Running</h3>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Aggiungi una o più fasi per strutturare la sessione (es. riscaldamento + blocco principale + defaticamento).<br>Suggerimento: scrivi <code>{nome}</code> nei campi pace o note per richiamare una variabile del gruppo (es. ritmi 1000m, zone FC).</div>
+    // blocchi pronti: la struttura, il passo lo mette il preparatore
+    const PRONTI=[
+      ['Soglia a blocchi 3 x 8\'',{tipo:'Soglia',zona:'Z4',reps:'3',repDist:'8\'',recTime:'90"',recPace:'trotto',note:'sostenuto ma controllato, tutte allo stesso passo'}],
+      ['VO2max 5 x 1000 m',{tipo:'Ripetute',zona:'Z5',reps:'5',repDist:'1000 m',recTime:'2\'30"',recPace:'trotto',note:'ritmo del 3000-5000'}],
+      ['Serie di 400: 2 x 5 x 400 m',{tipo:'Ripetute',zona:'Z5',serie:'2',reps:'5',repDist:'400 m',recTime:'60"',recPace:'trotto',recSerie:'3\' camminata',note:'veloci e sciolte'}],
+      ['Passo gara 3 x 2 km',{tipo:'Passo gara',zona:'Z4',reps:'3',repDist:'2 km',recTime:'2\'',recPace:'trotto',note:'passo gara esatto'}],
+      ['Salite 8 x 60"',{tipo:'Ripetute in salita',zona:'Z4',reps:'8',repDist:'60"',recTime:'discesa',recPace:'trotto',note:'salita del 5-7%, postura alta'}],
+      ['Salite brevi 8 x 10"',{tipo:'Ripetute in salita',zona:'Z5',reps:'8',repDist:'10-12"',recTime:'2\'',recPace:'camminata',note:'salita ripida, a tutta'}],
+      ['Fartlek 10 x 1\' / 1\'',{tipo:'Fartlek',zona:'Z3',reps:'10',repDist:'1\' svelto',recTime:'1\'',recPace:'trotto'}],
+      ['Piramide 400-800-1200-800-400',{tipo:'Ripetute',zona:'Z5',reps:'1',repDist:'400-800-1200-800-400 m',recTime:'meta\' del tempo',recPace:'trotto'}],
+      ['Allunghi 6 x 80 m',{tipo:'Allunghi',zona:'Z3',reps:'6',repDist:'80 m',recTime:'ritorno al passo',recPace:'camminata',note:'scioltezza, non sprint'}],
+      ['Riscaldamento 15\'',{tipo:'Riscaldamento',zona:'Z1',dist:'15\'',note:'corsa lenta, andature e 4 allunghi'}],
+      ['Defaticamento 10\'',{tipo:'Defaticamento',zona:'Z1',dist:'10\'',note:'corsa lenta'}]];
+    mb.innerHTML=`<h3>Modifica corsa</h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ogni fase e' un pezzo della seduta, dal riscaldamento al defaticamento. Le ripetute si scrivono per esteso: serie, ripetizioni, distanza o tempo, passo, recupero e recupero fra le serie. Sotto ogni fase si legge come la vedra' l'atleta. Nei campi si puo' scrivere <code>{nome}</code> per richiamare una variabile del gruppo.</div>
       <div id="m-fasi-list">${initFasi.map((f,i)=>buildFaseRow(f,i)).join('')}</div>
-      <button class="btn btn-outline btn-sm" onclick="window._addFase()" style="width:100%;margin-bottom:14px;">+ Aggiungi fase</button>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn btn-outline btn-sm" onclick="window._addFase()" style="flex:1;">Aggiungi fase</button>
+        <select class="btn btn-outline btn-sm" style="flex:1;" onchange="window._addPronto(this)"><option value="">Aggiungi un blocco pronto</option>${PRONTI.map((x,i)=>`<option value="${i}">${stEsc(x[0])}</option>`).join('')}</select>
+      </div>
       <div class="mactions">
         <button class="btn btn-outline" onclick="closeModal()">Annulla</button>
         <button class="btn btn-teal" onclick="saveCorsa('${wid}','${sid}')">Salva</button>
       </div>`;
-    // Store helper to add phases
     window._buildFaseRow=buildFaseRow;
-    window._addFase=function(){
+    window._addPronto=function(sel){if(sel.value==='')return;window._addFase(Object.assign({},PRONTI[+sel.value][1]));sel.value='';};
+    const rinumera=()=>document.querySelectorAll('#m-fasi-list .fase-row').forEach((r,i)=>{r.querySelector('.fase-n').textContent=i+1;});
+    window._faseLeggi=function(r){
+      const v=c=>r.querySelector('.'+c)?.value||'';
+      const f={tipo:v('fase-tipo'),zona:v('fase-zona'),note:v('fase-note')};
+      if(r.querySelector('.fase-interval-fields').style.display!=='none'){f.serie=v('fase-serie');f.reps=v('fase-reps');f.repDist=v('fase-repDist');f.repPace=v('fase-repPace');f.recTime=v('fase-recTime');f.recPace=v('fase-recPace');f.recSerie=v('fase-recSerie');}
+      else{f.dist=v('fase-dist');f.pace=v('fase-pace');}
+      return f;
+    };
+    window._faseSum=function(el){const r=el.closest('.fase-row');r.querySelector('.fase-sum').textContent=stCorsaTesto(window._faseLeggi(r));};
+    window._addFase=function(f){
       const list=document.getElementById('m-fasi-list');
-      const idx=list.querySelectorAll('.fase-row').length;
-      list.insertAdjacentHTML('beforeend',buildFaseRow({},idx));
-      // Renumber labels
-      list.querySelectorAll('.fase-row').forEach((r,i)=>{r.querySelector('span').textContent='Fase '+(i+1);});
+      list.insertAdjacentHTML('beforeend',buildFaseRow(f||{},list.querySelectorAll('.fase-row').length));
+      rinumera();
+    };
+    window._moveFase=function(btn,d){
+      const r=btn.closest('.fase-row'),o=d<0?r.previousElementSibling:r.nextElementSibling;
+      if(!o)return;if(d<0)o.before(r);else o.after(r);rinumera();
     };
     window.removeFase=function(btn){
-      const row=btn.closest('.fase-row');
       const list=document.getElementById('m-fasi-list');
-      if(list.querySelectorAll('.fase-row').length<=1)return;// keep at least 1
-      row.remove();
-      list.querySelectorAll('.fase-row').forEach((r,i)=>{r.querySelector('span').textContent='Fase '+(i+1);});
+      if(list.querySelectorAll('.fase-row').length<=1)return;
+      btn.closest('.fase-row').remove();rinumera();
     };
     window._toggleIntervalFields=function(sel){
-      const row=sel.closest('.fase-row');
-      const intFields=row.querySelector('.fase-interval-fields');
-      if(intFields){intFields.style.display=INTERVAL_TYPES.includes(sel.value)?'block':'none';}
+      const row=sel.closest('.fase-row'),on=INTERVAL_TYPES.includes(sel.value);
+      row.querySelector('.fase-interval-fields').style.display=on?'block':'none';
+      row.querySelector('.fase-cont-fields').style.display=on?'none':'grid';
+      window._faseSum(sel);
     };
 
   } else if(type==='week-progress'){
@@ -3055,31 +3070,13 @@ window.saveCond=async function(wid,sid){
 
 window.saveCorsa=async function(wid,sid){
   const rows=[...document.querySelectorAll('#m-fasi-list .fase-row')];
-  const corsaFasi=rows.map(r=>{
-    const f={
-      tipo:r.querySelector('.fase-tipo')?.value||'',
-      zona:r.querySelector('.fase-zona')?.value||'',
-      dist:r.querySelector('.fase-dist')?.value||'',
-      pace:r.querySelector('.fase-pace')?.value||'',
-      note:r.querySelector('.fase-note')?.value||''
-    };
-    const intEl=r.querySelector('.fase-interval-fields');
-    if(intEl&&intEl.style.display!=='none'){
-      const v=(cls)=>r.querySelector('.'+cls)?.value||'';
-      f.reps=v('fase-reps');
-      f.repDist=v('fase-repDist');
-      f.repPace=v('fase-repPace');
-      f.recDist=v('fase-recDist');
-      f.recTime=v('fase-recTime');
-      f.recPace=v('fase-recPace');
-    }
-    return f;
-  });
+  // campi vuoti fuori: nessuno dei lettori (app atleta, planner, stampa) ne ha bisogno
+  const corsaFasi=rows.map(r=>{const f=window._faseLeggi(r);Object.keys(f).forEach(k=>{if(f[k]==='')delete f[k];});if(!f.serie||+f.serie<=1){delete f.serie;delete f.recSerie;}return f;}).filter(f=>Object.keys(f).length);
   await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),{
     corsaFasi,
     corsaTipo:null,corsaZona:null,corsaDist:null,corsaPace:null,corsaNote:null
   });
-  closeModal();showToast('Corsa salvata!');
+  closeModal();showToast('Corsa salvata');
 };
 
 window.toggleAssign=async function(athId,progId){
@@ -3378,8 +3375,7 @@ window.exportBuilderPDF=function(){
             +'<div class="run-kv-row">'
             +(f.dist?'<div class="run-kv"><span class="kv-k">Distanza</span><span class="kv-v">'+esc(f.dist)+'</span></div>':'')
             +(f.pace?'<div class="run-kv"><span class="kv-k">Pace</span><span class="kv-v">'+esc(f.pace)+' /km</span></div>':'')
-            +(hasIntv?'<div class="run-kv"><span class="kv-k">Ripetute</span><span class="kv-v">'+(f.reps?esc(f.reps)+'×':'')+' '+esc(f.repDist||'')+' '+(f.repPace?'@ '+esc(f.repPace):'')+'</span></div>':'')
-            +(hasRec?'<div class="run-kv"><span class="kv-k">Recupero</span><span class="kv-v">'+esc(f.recDist||'')+' '+esc(f.recTime||'')+' '+(f.recPace?'@ '+esc(f.recPace):'')+'</span></div>':'')
+            +(hasIntv?'<div class="run-kv"><span class="kv-k">Blocco</span><span class="kv-v">'+esc(stCorsaTesto(f))+'</span></div>':'')
             +'</div>'
             +(f.note?'<div class="run-fnote">'+esc(f.note)+'</div>':'')
             +'</div>';
@@ -3399,17 +3395,7 @@ window.exportBuilderPDF=function(){
               +(f.dist?'<span class="rf-kv">'+esc(f.dist)+'</span>':'')
               +(f.pace?'<span class="rf-kv muted">'+esc(f.pace)+' /km</span>':'')
               +'</div>'
-              +(hasIntv?'<div class="rf-intv">'
-                +(f.reps?'<span class="intv-chip">'+esc(f.reps)+'×</span>':'')
-                +(f.repDist?'<span class="intv-chip">'+esc(f.repDist)+'</span>':'')
-                +(f.repPace?'<span class="intv-chip">@ '+esc(f.repPace)+'</span>':'')
-                +'</div>':'')
-              +(hasRec?'<div class="rf-rec">'
-                +'<span class="rec-lbl">rec</span>'
-                +(f.recDist?'<span>'+esc(f.recDist)+'</span>':'')
-                +(f.recTime?'<span>'+esc(f.recTime)+'</span>':'')
-                +(f.recPace?'<span>@ '+esc(f.recPace)+'</span>':'')
-                +'</div>':'')
+              +(hasIntv?'<div class="rf-intv"><span class="intv-chip">'+esc(stCorsaTesto(f))+'</span></div>':'')
               +(f.note?'<div class="rf-note">'+esc(f.note)+'</div>':'')
               +'</div>';
           });
@@ -3751,6 +3737,7 @@ function stFasi(I){
   let blk=0,dentro=0;out.forEach(w=>{w.blk=blk;w.pos=Math.min(2,dentro);dentro++;if(w.tipo==='scarico'){blk++;dentro=0;}});
   // posizione dentro la fase: quando la fase cambia a meta' blocco la progressione
   // della nuova fase riparte dal suo primo gradino, non dal terzo
+  const fiC={};out.forEach(w=>{w.fi=fiC[w.fase]||0;if(w.tipo==='carico')fiC[w.fase]=w.fi+1;});
   let fz='',pp=0;out.forEach((w,i)=>{if(w.fase!==fz||(i&&out[i-1].tipo==='scarico')){fz=w.fase;pp=0;}w.pp=Math.min(2,pp);if(w.tipo==='carico')pp++;});
   return out;
 }
@@ -4106,7 +4093,7 @@ function stRitmi(I){
   if(!t5&&stSec(I.t10))t5=stSec(I.t10)*Math.pow(5/10,1.06);
   if(!t5)return null;
   const p5=t5/5;
-  const r={facile:[p5*1.22,p5*1.32],lungo:[p5*1.25,p5*1.35],soglia:p5*1.06,interv:p5*0.99,t5};
+  const r={facile:[p5*1.22,p5*1.32],lungo:[p5*1.25,p5*1.35],soglia:p5*1.06,interv:p5*0.99,rep:p5*0.95,p10:t5*Math.pow(2,1.06)/10,t5};
   const tg=stSec(I.garaTempo),D=+I.garaDist||10;
   r.gara=tg?tg/D:t5*Math.pow(D/5,1.06)/D;
   return r;
@@ -4164,7 +4151,7 @@ function stFase(tipo,zona,dist,pace,note,x){return Object.assign({tipo,zona,dist
    solo per fare i conti dei km. */
 function stPassi(I,rit){
   const pe=rit?(rit.facile[0]+rit.facile[1])/2:({zero:450,princ:400,inter:345,avanz:300}[I.livello]||380);
-  return {pe,soglia:rit?rit.soglia:pe*0.86,interv:rit?rit.interv:pe*0.8,gara:rit?rit.gara:pe*0.88,lungo:rit?(rit.lungo[0]+rit.lungo[1])/2:pe*1.03};
+  return {pe,soglia:rit?rit.soglia:pe*0.86,interv:rit?rit.interv:pe*0.8,rep:rit?rit.rep:pe*0.77,p10:rit?rit.p10:pe*0.84,gara:rit?rit.gara:pe*0.88,lungo:rit?(rit.lungo[0]+rit.lungo[1])/2:pe*1.03};
 }
 function stQuota(I,nC){
   const D=+I.garaDist||10;let q=nC>=5?0.33:nC===4?0.37:0.42;
@@ -4185,13 +4172,8 @@ function stKmRuoli(I,w,kmW,tipo,rit){
     }else if(r==='Medio'){
       const main=scar?0:Math.max(4,Math.min(D>=42?16:12,kmW*0.15));
       o.medMain=Math.round(main);o[r]=scar?Math.max(4,Math.round(kmW*0.13)):Math.round(1.5+main+1.5);
-    }else if(r==='Qualita\''){
-      // tipo di lavoro della seduta: soglia (T) o intervalli (I)
-      const I5=/Specifico|Potenza|Consolidamento/.test(f)&&(!gara||D<=10);
-      const cap=I5?Math.max(D===10&&gara?4.8:3,kmW*(D===10&&gara?0.1:0.08)):Math.max(3,kmW*0.1);
-      o.qMain=scar?0:+cap.toFixed(1);o[r]=Math.round(wu+(scar?20*60/ps.pe:cap*1.35));
-    }else if(r==='Qualita\' 2'){
-      const cap=Math.max(3,kmW*0.1);o.q2Main=scar?0:+cap.toFixed(1);o[r]=Math.round(wu+(scar?20*60/ps.pe:cap*1.2));
+    }else if(r==='Qualita\''||r==='Qualita\' 2'){
+      o[r]=stQualita(I,w,r,kmW,rit,tipo).km;
     }else if(r==='Rigenerante'){o[r]=Math.round((kmW>=50?40:30)*60/(ps.pe*1.06));}
   });
   const fac=cs.filter(c=>c.ruolo==='Facile').length;
@@ -4244,30 +4226,88 @@ function stCorsa(I,w,ruolo,kmW,rit,nC,tipo){
     else m=stFase('Medio','Z3',km+' km',rit?stPace(rit.gara):'','a passo gara, costante');
     return {nome:'Medio',km:K.Medio,fasi:scar?[m]:[stFase('Riscaldamento','Z1','1,5 km',rit?P(rit.facile):'','facile'),m,stFase('Defaticamento','Z1','1,5 km','','corsa lenta')]};
   }
-  // ripetizioni che stanno nel volume: km del blocco diviso km della ripetuta
-  const nRip=(vol,repKm,lo,hi)=>String(Math.max(lo,Math.min(hi,Math.round(vol/repKm))));
-  // qualita' 2: soglia continua o salite, diversa dalla prima
-  if(ruolo==='Qualita\' 2'){
-    let m;
-    if(scar)m=stFase('Fartlek','Z3','20\'','','8x(1\' svelto + 1\' facile)');
-    else if(/Base|Adattamento/.test(f))m=stFase('Ripetute in salita','Z4','','','in salita al 6-8%, spinta e postura, recupero scendendo',{reps:String(6+Math.min(4,w.pp*2)),repDist:'60"',recTime:'discesa'});
-    else{const min=Math.max(15,Math.min(40,Math.round(K.q2Main*ps.soglia/60/5)*5));m=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','continuo, ritmo sostenuto ma controllato',{reps:'1',repDist:min+'\'',repPace:rit?stPace(rit.soglia):''});}
-    return {nome:'Soglia',km:K['Qualita\' 2'],fasi:[risc,m,def]};
+  const q=stQualita(I,w,ruolo,kmW,rit,tipo||stSettimanaTipo(I));
+  return {nome:q.nome,km:q.km,fasi:q.fasi};
+}
+
+/* ── le sedute di qualita' ─────────────────────────────────────────
+   Come nei piani strutturati di TrainingPeaks, Final Surge e Runna: ogni
+   blocco e' scritto per intero (serie x ripetizioni x distanza o tempo, passo,
+   recupero attivo o passivo, recupero fra le serie). Ogni fase ha la sua
+   rotazione di sedute, cosi' due settimane di fila non sono uguali: in base
+   fartlek, salite e soglia corta; in costruzione soglia a blocchi, VO2max e
+   piramide; nello specifico il passo gara (5 e 10 km) o la soglia lunga (mezza
+   e maratona, il passo gara e' nel medio e nel lungo). Quando una seduta torna
+   nella rotazione progredisce: una ripetuta in piu' o un recupero piu' corto.
+   Il volume al passo resta dentro i tetti di Daniels: soglia fino al 10% dei km
+   della settimana, VO2max fino all'8%, ripetizioni brevi fino al 5%. */
+function stTempoTxt(sec){sec=Math.round(sec);const m=Math.floor(sec/60),r=sec%60;return m?(m+'\''+(r?String(r).padStart(2,'0')+'"':'')):r+'"';}
+function stQualita(I,w,ruolo,kmW,rit,tipo){
+  const D=+I.garaDist||10,gara=I.obiettivo==='gara',lunga=gara&&D>=21,ps=stPassi(I,rit),L=I.livello;
+  const P=x=>rit&&x?stPace(x):'';
+  const f=w.fase,scar=w.tipo!=='carico',basso=kmW<35||L==='princ';
+  // nella prima settimana di un taper lungo (mezza e maratona) resta una seduta vera, al 70%
+  const fasi0=w.tipo==='taper'?stFasi(I):null,tw=fasi0?fasi0.filter(x=>x.tipo==='taper'&&x.n<w.n).length:0,taperVero=fasi0&&tw===0&&fasi0.filter(x=>x.tipo==='taper').length>=2;
+  const kf=taperVero?0.7:1;
+  const cap={T:Math.max(3,kmW*0.10*kf),I:Math.max(2.4,kmW*0.08*kf),R:Math.max(1.6,kmW*0.05*kf),RP:Math.max(3,kmW*0.10*kf)};
+  const has2=(tipo||[]).some(x=>x.ruolo==='Qualita\' 2');
+  const cl=(x,lo,hi)=>Math.max(lo,Math.min(hi,Math.round(x)));
+  const rip=(o)=>stFase(o.tipo||'Ripetute',o.zona||'Z4','','',o.note||'',Object.assign({reps:String(o.reps),repDist:o.dist,repPace:o.pace||'',recTime:o.rec||'',recPace:o.recTipo||''},o.serie>1?{serie:String(o.serie),recSerie:o.recSerie||'3\' camminata'}:{}));
+  const riscI=stFase('Riscaldamento','Z1',basso?'12\'':'15\'',rit?stPace(rit.facile[0])+'-'+stPace(rit.facile[1]):'','corsa lenta, poi 5\' di andature (skip, calciata, corsa balzata) e 4 allunghi da 80 m');
+  const riscT=stFase('Riscaldamento','Z1',basso?'10\'':'12\'',rit?stPace(rit.facile[0])+'-'+stPace(rit.facile[1]):'','corsa lenta e 3 allunghi');
+  const def=stFase('Defaticamento','Z1','10\'','','corsa lenta');
+  // km di un blocco di ripetute: lavoro piu' recuperi attivi al passo facile
+  const kmBlocco=(n,serie,repKm,recSec,attivo,recSerieSec)=>n*serie*repKm+(attivo?(n*serie-serie)*recSec/ps.pe:0)+(serie-1)*(recSerieSec||0)/ps.pe*0.3;
+  // i generatori: ognuno restituisce la fase principale, i km e il tipo di riscaldamento
+  const G={
+    fartlek:k=>{const n=[8,10,12][Math.min(2,k)];return {m:stFase('Fartlek','Z3','','',"cambi di ritmo a sensazione: svelto ma controllato, mai uno sprint",{reps:String(n),repDist:'1\' svelto',repPace:P(ps.p10),recTime:'1\' facile',recPace:'trotto'}),km:n*2*60/ps.pe,r:riscT,nome:'Fartlek'};},
+    fartlekP:k=>({m:stFase('Fartlek','Z3','','','piramide: 1-2-3-2-1 minuti svelti, recupero la meta\' del tempo corso',{reps:k?'2':'',repDist:'1\'-2\'-3\'-2\'-1\''+(k?' (2 giri, 3\' facili in mezzo)':''),repPace:P(ps.p10),recTime:'meta\' del tempo',recPace:'trotto'}),km:(k?2:1)*13*60/ps.pe,r:riscT,nome:'Fartlek a piramide'}),
+    progr:k=>{const km=Math.max(4,Math.round(cap.T*1.4));return {m:stFase('Progressivo','Z3',km+' km',rit?stPace(rit.facile[1])+' fino a '+stPace(rit.soglia):'','un km alla volta piu\' svelto: si parte facile, si chiude a ritmo soglia'),km,r:stFase('Riscaldamento','Z1','2 km',rit?stPace(rit.facile[1]):'','facile'),nome:'Progressivo'};},
+    salBrevi:k=>{const n=cl(6+2*k,6,10);return {m:rip({tipo:'Ripetute in salita',zona:'Z5',reps:n,dist:'10-12"',rec:'2\' scendendo al passo',recTipo:'',note:'salita ripida (8-10%), a tutta: spinta, ginocchia alte, braccia. E\' forza, non fatica'}),km:n*0.3,r:riscI,nome:'Salite brevi'};},
+    sal60:k=>{const n=cl(6+k,6,10);return {m:rip({tipo:'Ripetute in salita',zona:'Z4',reps:n,dist:'60"',rec:'discesa al trotto',recTipo:'',note:'salita del 5-7%, sforzo da ripetute: postura alta, passo corto e rapido'}),km:n*0.5,r:riscI,nome:'Salite'};},
+    sal90:k=>{const n=cl(5+k,5,8);return {m:rip({tipo:'Ripetute in salita',zona:'Z4',reps:n,dist:'90"',rec:'discesa al trotto',recTipo:'',note:'salita del 4-6%, sforzo da soglia alta, lo stesso in ogni ripetuta'}),km:n*0.8,r:riscI,nome:'Salite lunghe'};},
+    cruise:(repKm,min)=>k=>{
+      // soglia a blocchi (cruise intervals di Daniels): recupero breve, che cala quando la seduta torna
+      const rk=min?min*60/ps.soglia:repKm,n=cl(cap.T/rk,2,min?5:8),rec=[90,75,60][Math.min(2,k)];
+      return {m:rip({tipo:'Soglia',zona:'Z4',reps:n,dist:min?min+'\'':(repKm>=1?String(repKm).replace('.',',')+' km':Math.round(repKm*1000)+' m'),pace:P(ps.soglia),rec:stTempoTxt(rec),recTipo:'trotto',note:'soglia: sostenuto ma controllato, potresti dire poche parole. Tutte allo stesso passo'}),km:kmBlocco(n,1,rk,rec,true),r:riscT,nome:'Soglia a blocchi'};},
+    sogliaC:k=>{const min=cl(cap.T*ps.soglia/60/5,3,7)*5;return {m:stFase('Soglia','Z4',min+'\'',P(ps.soglia),'soglia continua: ritmo costante dal primo all\'ultimo minuto'),km:min*60/ps.soglia,r:riscT,nome:'Soglia continua'};},
+    vo2:(m,recSec)=>k=>{const rk=m/1000,n=cl(cap.I/rk,3,m>=1000?6:8),rec=recSec-15*Math.min(2,k);
+      return {m:rip({tipo:'Ripetute',zona:'Z5',reps:n,dist:m+' m',pace:P(ps.interv),rec:stTempoTxt(rec),recTipo:'trotto',note:'VO2max: ritmo del 3000-5000, duro ma uguale in tutte. Se l\'ultima cala, la seduta finisce li\''}),km:kmBlocco(n,1,rk,rec,true),r:riscI,nome:'Ripetute '+m+' m'};},
+    piramide:k=>({m:rip({tipo:'Ripetute',zona:'Z5',reps:1,dist:'400-800-1200-800-400 m',pace:P(ps.interv),rec:'meta\' del tempo della ripetuta',recTipo:'trotto',note:'piramide a passo VO2max, le 400 finali un filo piu\' veloci'}),km:3.6+1.2,r:riscI,nome:'Piramide'}),
+    serie400:k=>{const tot=cl(cap.R/0.4,6,12),serie=tot>=9?3:2,n=Math.round(tot/serie);
+      return {m:rip({tipo:'Ripetute',zona:'Z5',serie,reps:n,dist:'400 m',pace:P(D===5&&gara?ps.rep:ps.interv),rec:'60"',recTipo:'trotto',recSerie:'3\' camminata',note:'veloci e sciolte, tecnica prima di tutto'}),km:kmBlocco(n,serie,0.4,60,true,180),r:riscI,nome:'Serie di 400'};},
+    rp:(m,pace,recSec)=>k=>{const rk=m/1000,n=cl(cap.RP/rk,2,m>=2000?4:6);
+      return {m:rip({tipo:'Passo gara',zona:'Z4',reps:n,dist:rk>=1?String(rk).replace('.',',')+' km':m+' m',pace:P(pace),rec:stTempoTxt(recSec-15*Math.min(2,k)),recTipo:'trotto',note:'passo gara esatto, ne\' piu\' veloce ne\' piu\' lento: si impara il ritmo'}),km:kmBlocco(n,1,rk,recSec,true),r:riscI,nome:'Passo gara'};},
+    rpSerie:k=>{const serie=2,n=cl(cap.RP/2,2,4);
+      return {m:rip({tipo:'Passo gara',zona:'Z4',serie,reps:n,dist:'1000 m',pace:P(ps.p10),rec:'60"',recTipo:'trotto',recSerie:'3\' trotto',note:'passo 10 km con recuperi corti: la seconda serie e\' quella che conta'}),km:kmBlocco(n,serie,1,60,true,180),r:riscI,nome:'Passo gara a serie'};},
+  };
+  const ph=/Costruzione|Sviluppo|Rinforzo|Forza massima|Intensificazione/.test(f)?'cost':/Specifico|Consolidamento|Potenza|Realizzazione|Ritorno/.test(f)?'spec':'base';
+  // scarico e taper: poco volume, il ritmo si richiama senza fatica
+  if(w.tipo==='scarico'){const n=6;return {nome:'Fartlek leggero',km:Math.round(((basso?10:12)+10)*60/ps.pe+n*3*60/ps.pe),fasi:[riscT,stFase('Fartlek','Z3','','','settimana di scarico: svelto ma comodo',{reps:String(n),repDist:'1\' svelto',recTime:'2\' facile',recPace:'trotto'}),def]};}
+  if((w.tipo==='taper'&&!taperVero)||w.tipo==='gara'){const m=lunga?rip({tipo:'Passo gara',zona:'Z4',reps:3,dist:'1 km',pace:P(ps.gara),rec:'2\'',recTipo:'trotto',note:'richiamo del passo gara, facile da tenere'}):rip({tipo:'Passo gara',zona:'Z4',reps:4,dist:'400 m',pace:P(ps.gara),rec:'2\'',recTipo:'trotto',note:'richiamo del passo gara, gambe sciolte'});
+    return {nome:'Richiamo del ritmo',km:Math.round((15+10)*60/ps.pe+(lunga?4:2.4)),fasi:[riscI,m,def]};}
+  let lib;const phq=taperVero?'spec':ph;
+  if(ruolo==='Qualita\' 2')lib={base:[G.salBrevi,G.sal60],cost:[G.sogliaC,G.sal90],spec:[G.sogliaC,G.cruise(0,6)]}[phq];
+  else if(lunga)lib={base:[G.cruise(1),G.fartlek,G.progr],cost:[G.cruise(2),G.sogliaC,D>=42?G.cruise(1.6):G.vo2(1000,150)],spec:[G.cruise(D>=42?3:2),G.sogliaC,G.cruise(D>=42?2:1.6)]}[phq];
+  else if(gara&&D===5)lib={base:[G.fartlek,G.cruise(0,5),has2?G.fartlekP:G.sal60],cost:[G.vo2(1000,150),G.cruise(0,8),G.piramide],spec:[G.rp(1000,ps.gara,120),G.serie400,G.vo2(1200,180)]}[phq];
+  else if(gara)lib={base:[G.fartlek,G.cruise(0,5),has2?G.progr:G.sal60],cost:[G.vo2(1000,150),G.cruise(0,8),G.piramide],spec:[G.rp(2000,ps.gara,120),G.rpSerie,G.cruise(1.6)]}[phq];
+  else lib={base:[G.fartlek,G.progr,G.cruise(0,5)],cost:[G.cruise(0,8),G.vo2(1000,150),G.sogliaC],spec:[G.vo2(800,120),G.cruise(0,8),G.fartlekP]}[phq];
+  const fi=taperVero?0:(w.fi||0),x=lib[fi%lib.length](Math.floor(fi/lib.length));
+  return {nome:x.nome,km:Math.round(x.r===riscI?(basso?12:15)*60/ps.pe+10*60/ps.pe+x.km:(x.r.dist==='2 km'?2+10*60/ps.pe+x.km:((basso?10:12)+10)*60/ps.pe+x.km)),fasi:[x.r,x.m,def]};
+}
+// una fase di corsa scritta per esteso, uguale ovunque: "2 serie x 4 x 400 m @ 3:50 /km, rec 60" trotto, 3' camminata fra le serie"
+function stCorsaTesto(f){
+  if(!f)return '';
+  const pk=p=>{p=String(p||'').trim();return !p?'':/km|\//i.test(p)?p:p+' /km';};
+  if(f.reps||f.repDist||f.repPace){
+    let t=(f.serie&&+f.serie>1?f.serie+' serie x ':'')+(f.reps&&String(f.reps)!=='1'?String(f.reps).replace(/\s*[x×]\s*$/i,'')+' x ':'')+(f.repDist||'');
+    if(f.repPace)t+=' @ '+pk(f.repPace);
+    const rec=f.rec||[f.recDist,f.recTime,f.recPace].filter(Boolean).join(' ');
+    if(rec)t+=', rec '+rec;
+    if(f.serie&&+f.serie>1&&f.recSerie)t+=', '+f.recSerie+' fra le serie';
+    return t.trim();
   }
-  // qualita'
-  let main;const v=K.qMain;
-  if(scar)main=stFase('Fartlek','Z3','20\'','','6x(1\' svelto + 2\' facile)');
-  else if(/Base|Adattamento|Ricondizionamento/.test(f))main=lunga?stFase('Ripetute','Z4','',rit?stPace(rit.soglia):'','ripetute lunghe a ritmo soglia',{reps:nRip(v,1,3,8),repDist:'1000 m',repPace:rit?stPace(rit.soglia):'',recTime:'90"'})
-    :stFase('Progressivo','Z3',Math.max(4,Math.round(v*1.4))+' km',rit?stPace(rit.facile[1])+' fino a '+stPace(rit.soglia):'','dal facile alla soglia, ultimo km il piu\' veloce');
-  else if(/Costruzione|Sviluppo/.test(f)){const rk=lunga?2:480/ps.soglia;main=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','ritmo sostenuto ma controllato',{reps:nRip(v,rk,2,6),repDist:lunga?'2 km':'8\'',repPace:rit?stPace(rit.soglia):'',recTime:lunga?'90"':'2\''});}
-  else if(lunga){
-    // mezza e maratona: il passo gara sta nel medio e nel lungo, qui la soglia a blocchi lunghi
-    const rk=D>=42?3:2;main=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','soglia a blocchi lunghi, il passo gara e\' nel medio',{reps:nRip(v,rk,2,5),repDist:rk+' km',repPace:rit?stPace(rit.soglia):'',recTime:'2\''});
-  }else{
-    const s={5:[1,'1000 m',rit?rit.interv:0,'2\''],10:[1.6,'1600 m',rit?rit.gara:0,'2\'']}[gara?D:10];
-    main=stFase('Ripetute','Z4','','',gara?'a passo gara o poco sotto':'sostenuto',{reps:nRip(v,s[0],3,8),repDist:s[1],repPace:s[2]?stPace(s[2]):'',recTime:s[3]});
-  }
-  return {nome:'Corsa di qualita\'',km:K['Qualita\''],fasi:[risc,main,def]};
+  return [f.dist,f.pace?pk(f.pace):''].filter(Boolean).join(' @ ');
 }
 // velocita' e salti: tecnica, accelerazioni, velocita' lanciata, salti; cambi di direzione se servono
 function stVel(I,w){
@@ -4610,7 +4650,7 @@ function stCostruisci(I,P){
         const exs={};pb.att.concat(pb.rin).forEach((e,i)=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};});
         kmSett+=c.km||0;
         const dove=c.km?'Circa '+c.km+' km. ':c.min?'Circa '+c.min+' minuti. ':'';
-        sessions['s'+ord]={name:gi===iRes||g.ruolo==='Corri e cammina'?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
+        sessions['s'+ord]={name:gi===iRes||['Corri e cammina','Qualita\'','Qualita\' 2'].includes(g.ruolo)?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
       }
       if(g.tipo==='sprint'){
         const exs={};stVel(I,w).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
@@ -4821,7 +4861,7 @@ function stAnteprima(){
     const esempi=[];const visti={};
     P.fasi.forEach((w,i)=>{if(w.tipo!=='carico'||visti[w.fase])return;visti[w.fase]=1;esempi.push([w,i]);});
     h+=`<div class="pz-card"><div class="pz-ch">Corsa <em>una settimana per fase</em></div><div class="st-scroll"><table class="pz-tab"><thead><tr><th>Fase</th>${cr.map(c=>`<th>${ST_GG[c.d]} ${stEsc(c.nome)}</th>`).join('')}</tr></thead><tbody>${esempi.map(([w,i])=>`<tr><td>${stEsc(w.fase)}<i>S${w.n}${P.kmW[i]?', '+P.kmW[i]+' km':''}</i></td>${cr.map(c=>{const x=stCorsa(I,w,c.ruolo,(P.kmT||P.kmW)[i],P.rit,P.T.nC,P.tipo);const m=x.fasi.find(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi[0];
-        return `<td>${stEsc(m.tipo)} ${stEsc(m.reps?m.reps+' x '+m.repDist:m.dist)}${m.pace||m.repPace?' <b>'+stEsc(m.repPace||m.pace)+'</b>':''}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>
+        return `<td>${stEsc(m.tipo)} <b>${stEsc(stCorsaTesto(m))}</b></td>`;}).join('')}</tr>`).join('')}</tbody></table></div>
       ${P.rit?`<div class="pz-cap">Ritmi dal tempo recente: facile ${stPace(P.rit.facile[0])}-${stPace(P.rit.facile[1])}, soglia ${stPace(P.rit.soglia)}, intervalli ${stPace(P.rit.interv)}${I.obiettivo==='gara'?', passo gara '+stPace(P.rit.gara):''} al km.</div>`:'<div class="pz-cap">Senza un tempo recente si lavora a zone di frequenza cardiaca; il test della prima settimana dara\' i ritmi.</div>'}</div>`;
   }
   // altre sedute
@@ -5323,7 +5363,7 @@ function pzGriglia(wid,w){
         <button type="button" class="pz-b del" onclick="pzDelSess('${wid}','${sid}')" aria-label="Elimina seduta">&#215;</button>
       </div>`;
     if(tipo==='corsa'&&Array.isArray(s.corsaFasi)&&s.corsaFasi.length){
-      h+=`<div class="pz-corsa">${s.corsaFasi.map(f=>`<span><b>${stEsc(f.tipo)}</b> ${stEsc(f.reps?f.reps+' x '+(f.repDist||''):f.dist||'')}${f.zona?' '+stEsc(f.zona):''}${f.pace||f.repPace?' @'+stEsc(f.repPace||f.pace):''}${f.recTime?' rec '+stEsc(f.recTime):''}</span>`).join('')}</div>`;
+      h+=`<div class="pz-corsa">${s.corsaFasi.map(f=>`<span><b>${stEsc(f.tipo)}</b> ${stEsc(stCorsaTesto(f))}${f.zona?' '+stEsc(f.zona):''}</span>`).join('')}</div>`;
     }
     h+=`<table class="pz-t"><thead><tr><th class="n" title="Numero, o lettera del superset: A1, A2">#</th><th>Esercizio</th><th>Serie</th><th>Ripetizioni</th><th>% 1RM</th><th class="kg">Kg</th><th>RPE</th><th>Recupero</th><th>Note</th>${conF?'<th class="fa" title="Serie fatte su pianificate, kg usati, RPE medio">Fatto</th>':''}<th></th></tr></thead><tbody>`;
     exs.forEach(([eid,e],i)=>{
