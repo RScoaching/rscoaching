@@ -213,6 +213,25 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pz-q{color:var(--text);border:1px dashed rgba(255,255,255,.12);}
 .pz-q::placeholder{color:#6f685e;}
 .pz-addsess{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:4px 2px;}
+.pz-pbt{color:var(--muted);font-weight:500;margin-left:3px;}
+.pz-pt th.cur{color:var(--primary2);}
+.pz-pt th.an,.pz-pt td.an{width:96px;min-width:96px;text-align:center;}
+.pz-spark{display:block;margin:0 auto;}
+.pz-pc.chg{color:var(--primary2);font-weight:600;}
+.pz-pc.dlc{color:#86EFAC;}
+.pz-pcr td{vertical-align:top;}
+.pz-pcr td.nm i{display:block;font-style:normal;font-weight:500;color:var(--muted);font-size:10.5px;margin-top:2px;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pz-pcr tr.kmr td{text-align:center;padding:7px 4px;font-variant-numeric:tabular-nums;color:var(--muted);font-size:11px;}
+.pz-pcr tr.kmr td.nm{text-align:left;}
+.pz-pcr tr.kmr b{color:var(--white);font-size:13px;}
+.pz-pcr tr.kmr i{display:block;font-style:normal;font-size:10px;color:var(--muted);}
+.pz-pcr tr.kmr i.alto{color:#FCA5A5;}
+.pz-pcr tr.kmr i.giu{color:#86EFAC;}
+.pz-crc{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;width:150px;min-height:64px;padding:7px 8px;border-radius:8px;cursor:pointer;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);transition:background .15s,border-color .15s;}
+.pz-crc:hover,.pz-crc:focus-visible{background:rgba(99,102,241,.16);border-color:rgba(99,102,241,.5);}
+.pz-crc b{font-size:11.5px;color:var(--white);line-height:1.25;}
+.pz-crc span{font-size:10.5px;color:var(--text);line-height:1.35;overflow-wrap:anywhere;}
+.pz-crc em{font-style:normal;font-size:10px;color:var(--muted);margin-top:auto;}
 .pz-pbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
 .pz-pwrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:rgba(20,16,23,.75);}
 .pz-pt{border-collapse:collapse;font-size:12.5px;min-width:100%;}
@@ -226,7 +245,7 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pz-pt td.na{color:var(--muted);text-align:center;}
 .pz-pt td.act{white-space:nowrap;padding:4px 8px;}
 .pz-pt td.act .pz-b{margin-left:4px;}
-.pz-pc{min-width:118px;font-variant-numeric:tabular-nums;font-size:12.5px;}
+.pz-pc{min-width:138px;font-variant-numeric:tabular-nums;font-size:12px;}
 .pz-pnote{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;}
 /* ══ STUDIO DI PROGRAMMAZIONE ══ */
 .ph-acts{display:flex;gap:6px;}
@@ -5133,7 +5152,7 @@ window.creaDaStudio=async function(){
    in fondo. Ctrl+Z annulla le ultime modifiche. */
 // la vista Giorni e' quella di partenza: la settimana come nel Planner, un giorno per colonna
 let pzMode=(()=>{try{return localStorage.getItem('rsc_pz_mode_v2')||'giorni';}catch(e){return 'giorni';}})();
-let pzSessIdx=0;
+let pzSlotK=null; // seduta seguita in Progressione: tipo|giorno|n, oppure __corsa per tutte le corse
 const pzUndo=[];
 window.pzSetMode=function(m){pzMode=m;try{localStorage.setItem('rsc_pz_mode_v2',m);}catch(e){}renderWeekContent();};
 function pzWeeks(){const p=programs[currentProgId];return p&&p.weeks?Object.entries(p.weeks).sort((a,b)=>(a[1].order||0)-(b[1].order||0)):[];}
@@ -5542,33 +5561,102 @@ window.pzInserisciModello=async function(tid){
 };
 
 // ── PROGRESSIONE: la stessa seduta in tutte le settimane ─────────
-function pzProgressione(){
-  const W=pzWeeks();if(!W.length)return '';
-  // le sedute si riconoscono per posizione nella settimana
-  const nomi=pzSess(W[0][1]).map(([,s])=>s.name||'Seduta');
-  const maxS=Math.max(...W.map(([,w])=>pzSess(w).length));
-  if(pzSessIdx>=maxS)pzSessIdx=0;
-  const righe=Math.max(0,...W.map(([,w])=>{const s=pzSess(w)[pzSessIdx];return s?pzExs(s[1]).length:0;}));
-  let h=`<div class="pz-pbar">${Array.from({length:maxS},(_,i)=>`<button type="button" class="pz-mode${i===pzSessIdx?' on':''}" onclick="pzSessSel(${i})">${stEsc(nomi[i]||'Seduta '+(i+1))}</button>`).join('')}</div>`;
-  h+=`<div class="pz-pwrap"><table class="pz-pt"><thead><tr><th class="nm">Esercizio</th>${W.map(([wid,w],i)=>`<th class="${/scarico|taper|gara/i.test(w.label||'')?'dl':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}<th></th></tr></thead><tbody>`;
-  for(let r=0;r<righe;r++){
-    let nome='';
-    const celle=W.map(([wid,w],wi)=>{
-      const s=pzSess(w)[pzSessIdx];if(!s)return '<td class="na">-</td>';
-      const ex=pzExs(s[1])[r];if(!ex)return '<td class="na">-</td>';
-      if(!nome)nome=ex[1].name||'';
-      return `<td><input class="pz-pc" value="${stEsc(pzFmt(ex[1]))}" data-pz="pcell" data-w="${wid}" data-s="${s[0]}" data-e="${ex[0]}" data-wi="${wi}" data-r="${r}" title="${stEsc(ex[1].name||'')}" aria-label="${stEsc(ex[1].name||'')} settimana ${wi+1}"></td>`;
-    }).join('');
-    h+=`<tr><td class="nm">${stEsc(nome)}</td>${celle}<td class="act"><button type="button" class="pz-b" onclick="pzAvanti(${r},0)" title="Copia la prima settimana in tutte">Uguale</button><button type="button" class="pz-b" onclick="pzAvanti(${r},2.5)" title="Dalla prima settimana, +2,5% a ogni settimana di carico">+2,5%</button></td></tr>`;
-  }
-  // in fondo i conti della seduta settimana per settimana
-  const stS=W.map(([,w])=>{const s=pzSess(w)[pzSessIdx];return s?pzStatSess(s[1]):null;});
-  h+=`<tr class="sum"><td class="nm">Serie e durata</td>${stS.map(x=>`<td>${x&&x.es?x.serie+' · ~'+pzMinTxt(x.min):'-'}</td>`).join('')}<td></td></tr>`;
-  if(stS.some(x=>x&&x.nl))h+=`<tr class="sum"><td class="nm">Sollevamenti e intensita'</td>${stS.map(x=>`<td>${x&&x.nl?x.nl+' al '+Math.round(x.pctW/x.nl)+'%':'-'}</td>`).join('')}<td></td></tr>`;
-  h+=`</tbody></table></div><p class="pz-pnote">Formato di ogni cella: serie x ripetizioni, @percentuale%, RPE, r recupero. Esempio: 4x6 @75% RPE8 r2'. Le settimane di scarico sono segnate e nel "+2,5%" tornano al 60%.</p>`;
+/* ── PROGRESSIONE: una seduta in tutte le settimane ─────────────────
+   Le sedute si riconoscono per giorno e tipo (la forza del martedi', la corsa
+   del giovedi'), non per posizione: cosi' il test della prima settimana o la
+   gara dell'ultima non spostano tutto. La forza ha la tabella da riempire come
+   un foglio, con l'andamento di ogni esercizio e le variazioni segnate. La corsa
+   ha la sua vista, come in TrainingPeaks e Runna: km della settimana, lungo e
+   lavori di qualita' settimana per settimana, con il grafico dei km. */
+function pzSlotChiavi(w){
+  const cnt={},out=[];
+  pzSess(w).forEach(([sid,s])=>{if(/^Test/i.test(s.name||''))return;const base=(s.type||'pesi')+'|'+(s.dayOfWeek==null||s.dayOfWeek===''?'x':s.dayOfWeek);cnt[base]=(cnt[base]||0)+1;out.push([base+'|'+cnt[base],sid,s]);});
+  return out;
+}
+function pzSlots(){
+  const m=new Map();
+  pzWeeks().forEach(([,w])=>pzSlotChiavi(w).forEach(([k,,s])=>{if(!m.has(k))m.set(k,{k,tipo:s.type||'pesi',d:s.dayOfWeek==null||s.dayOfWeek===''?null:s.dayOfWeek,nome:s.name||'Seduta'});}));
+  return [...m.values()].sort((a,b)=>(a.d==null?9:a.d)-(b.d==null?9:b.d)||a.k.localeCompare(b.k));
+}
+function pzSlotSess(w,k){const x=pzSlotChiavi(w).find(y=>y[0]===k);return x?[x[1],x[2]]:null;}
+// km di una corsa: dalle note ("Circa 12 km") o dalle fasi
+function pzCorsaKm(s){
+  const n=/Circa (\d+(?:[.,]\d+)?) km/.exec(s.notes||'');if(n)return parseFloat(n[1].replace(',','.'));
+  let km=0;
+  (s.corsaFasi||[]).forEach(f=>{
+    const t=String(f.dist||'');let m;
+    if(/^mezza maratona$/i.test(t)){km+=21.1;return;}if(/^maratona$/i.test(t)){km+=42.2;return;}
+    if(f.reps||f.repDist){const c=(+f.serie>1?+f.serie:1)*(parseInt(f.reps,10)||1),r=String(f.repDist||'');
+      if(/-/.test(r)&&/m\b/.test(r))km+=r.split('-').reduce((a,x)=>a+(parseInt(x,10)||0),0)/1000;
+      else if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(r)))km+=c*parseFloat(m[1].replace(',','.'));
+      else if((m=/(\d+)\s*m\b/.exec(r)))km+=c*m[1]/1000;
+      else km+=c*pzMinDa(r,270)*60/270;}
+    else if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(t)))km+=parseFloat(m[1].replace(',','.'));
+    else km+=pzMinDa(t,330)*60/330;
+  });
+  return Math.round(km*10)/10;
+}
+function pzCorsaPrincipale(s){
+  const ff=(s.corsaFasi||[]).filter(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo||''));
+  return (ff.length?ff:(s.corsaFasi||[])).map(f=>(f.tipo&&!/Fondo Lento|Long Run/.test(f.tipo)?f.tipo+' ':'')+stCorsaTesto(f)).join(' + ');
+}
+function pzProgCorsa(W,k){
+  const tutte=k==='__corsa';
+  const righe=tutte?pzSlots().filter(x=>x.tipo==='corsa'):[pzSlots().find(x=>x.k===k)].filter(Boolean);
+  const kmW=W.map(([,w])=>pzSess(w).filter(([,s])=>s.type==='corsa').reduce((t,[,s])=>t+pzCorsaKm(s),0));
+  const lungo=W.map(([,w])=>Math.max(0,...pzSess(w).filter(([,s])=>s.type==='corsa').map(([,s])=>pzCorsaKm(s))));
+  let h=`<div class="pz-pwrap"><table class="pz-pt pz-pcr"><thead><tr><th class="nm">${tutte?'Corsa':'Seduta'}</th>${W.map(([wid,w],i)=>`<th class="${pzIsDl(w)?'dl':''}${i===currentWeekIdx?' cur':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}</tr></thead><tbody>`;
+  // la crescita si misura sull'ultima settimana di carico: dopo uno scarico si torna su, non si cresce del 40%
+  const rif=i=>{for(let j=i-1;j>=0;j--)if(!pzIsDl(W[j][1]))return kmW[j];return 0;};
+  h+=`<tr class="kmr"><td class="nm">Km della settimana</td>${kmW.map((x,i)=>{const pr=pzIsDl(W[i][1])?(i?kmW[i-1]:0):rif(i),cr=pr?Math.round((x-pr)/pr*100):0;return `<td><b>${x?Math.round(x):'-'}</b>${pr&&x&&Math.abs(cr)>=1?`<i class="${cr>10?'alto':cr<0?'giu':''}">${cr>0?'+':''}${cr}%</i>`:''}</td>`;}).join('')}</tr>`;
+  h+=`<tr class="kmr"><td class="nm">Uscita piu' lunga</td>${lungo.map(x=>`<td><b>${x?Math.round(x):'-'}</b>${x?' km':''}</td>`).join('')}</tr>`;
+  righe.forEach(sl=>{
+    h+=`<tr><td class="nm">${stEsc(ST_GG[sl.d]||'Senza giorno')}<i>${stEsc(sl.nome)}</i></td>${W.map(([wid,w])=>{const x=pzSlotSess(w,sl.k);if(!x)return '<td class="na">-</td>';const km=pzCorsaKm(x[1]);
+      return `<td><button type="button" class="pz-crc" onclick="openModal('edit-corsa','${wid}','${x[0]}')" title="Apri le fasi della corsa"><b>${stEsc(x[1].name||'')}</b>${(()=>{const t=pzCorsaPrincipale(x[1]);return `<span>${stEsc(t)}</span>${km&&!/^\d+(?:[.,]\d+)?\s*km(?: @ [^+]*)?$/.test(t.trim())?`<em>totale ${Math.round(km)} km</em>`:''}`;})()}</button></td>`;}).join('')}</tr>`;
+  });
+  h+=`</tbody></table></div><p class="pz-pnote">Ogni casella apre le fasi di quella corsa. In rosso le settimane che crescono piu' del 10% sulla precedente, la regola prudente per chi corre.</p>`;
   return h;
 }
-window.pzSessSel=function(i){pzSessIdx=i;renderWeekContent();};
+function pzSpark(vals){
+  const v=vals.map(x=>x==null?null:+x),ok=v.filter(x=>x!=null&&isFinite(x));if(ok.length<2)return '';
+  const lo=Math.min(...ok),hi=Math.max(...ok),Wd=86,Ht=22,n=v.length;
+  const pts=v.map((x,i)=>x==null?null:[Math.round(i/(n-1||1)*Wd),Math.round(Ht-2-(hi>lo?(x-lo)/(hi-lo):0.5)*(Ht-4))]);
+  const d=pts.filter(Boolean).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
+  return `<svg class="pz-spark" width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><path d="${d}" fill="none" stroke="#A78BFA" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>${pts.filter(Boolean).slice(-1).map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="#A78BFA"/>`).join('')}</svg>`;
+}
+function pzProgressione(){
+  const W=pzWeeks();if(!W.length)return '';
+  const SL=pzSlots();if(!SL.length)return '';
+  const conCorsa=SL.some(x=>x.tipo==='corsa');
+  if(!pzSlotK||(pzSlotK!=='__corsa'&&!SL.some(x=>x.k===pzSlotK))||(pzSlotK==='__corsa'&&!conCorsa))pzSlotK=(SL.find(x=>x.tipo==='pesi')||SL[0]).k;
+  let h=`<div class="pz-pbar">${conCorsa?`<button type="button" class="pz-mode${pzSlotK==='__corsa'?' on':''}" onclick="pzSessSel('__corsa')">Tutte le corse</button>`:''}${SL.map(x=>`<button type="button" class="pz-mode${x.k===pzSlotK?' on':''}" onclick="pzSessSel('${x.k}')" title="${stEsc(x.nome)}">${stEsc(ST_GG[x.d]||'Senza giorno')} <span class="pz-pbt">${stEsc(PZ_TIPO_BREVE[x.tipo]||'')}</span></button>`).join('')}</div>`;
+  const sl=SL.find(x=>x.k===pzSlotK);
+  if(pzSlotK==='__corsa'||(sl&&sl.tipo==='corsa'))return h+pzProgCorsa(W,pzSlotK);
+  const righe=Math.max(0,...W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);return s?pzExs(s[1]).length:0;}));
+  h+=`<div class="pz-pwrap"><table class="pz-pt"><thead><tr><th class="nm">Esercizio</th><th class="an">Andamento</th>${W.map(([wid,w],i)=>`<th class="${pzIsDl(w)?'dl':''}${i===currentWeekIdx?' cur':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}<th></th></tr></thead><tbody>`;
+  for(let r=0;r<righe;r++){
+    let nome='',prec=null;const serie=[];
+    const celle=W.map(([wid,w],wi)=>{
+      const s=pzSlotSess(w,pzSlotK);if(!s){serie.push(null);prec=null;return '<td class="na">-</td>';}
+      const ex=pzExs(s[1])[r];if(!ex){serie.push(null);prec=null;return '<td class="na">-</td>';}
+      if(!nome)nome=ex[1].name||'';
+      const v=pzFmt(ex[1]),cambia=prec!=null&&v!==prec,dl=pzIsDl(w);prec=v;
+      // l'andamento segue la percentuale, se no l'RPE, se no le ripetizioni
+      serie.push(pzNum(ex[1].pct)||null);
+      return `<td><input class="pz-pc${cambia?(dl?' dlc':' chg'):''}" value="${stEsc(v)}" data-pz="pcell" data-w="${wid}" data-s="${s[0]}" data-e="${ex[0]}" data-wi="${wi}" data-r="${r}" title="${stEsc(ex[1].name||'')}${cambia?': cambia rispetto alla settimana prima':''}" aria-label="${stEsc(ex[1].name||'')} settimana ${wi+1}"></td>`;
+    }).join('');
+    let sp=pzSpark(serie);
+    if(!sp){const alt=W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);const ex=s&&pzExs(s[1])[r];return ex?(pzNum(ex[1].rpe)||null):null;});sp=pzSpark(alt);}
+    h+=`<tr><td class="nm">${stEsc(nome)}</td><td class="an">${sp}</td>${celle}<td class="act"><button type="button" class="pz-b" onclick="pzAvanti(${r},0)" title="Copia la prima settimana in tutte">Uguale</button><button type="button" class="pz-b" onclick="pzAvanti(${r},2.5)" title="Dalla prima settimana, +2,5% a ogni settimana di carico">+2,5%</button></td></tr>`;
+  }
+  // in fondo i conti della seduta settimana per settimana
+  const stS=W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);return s?pzStatSess(s[1]):null;});
+  h+=`<tr class="sum"><td class="nm">Serie e durata</td><td class="an">${pzSpark(stS.map(x=>x&&x.es?x.serie:null))}</td>${stS.map(x=>`<td>${x&&x.es?x.serie+' · ~'+pzMinTxt(x.min):'-'}</td>`).join('')}<td></td></tr>`;
+  if(stS.some(x=>x&&x.nl))h+=`<tr class="sum"><td class="nm">Sollevamenti e intensita'</td><td class="an">${pzSpark(stS.map(x=>x&&x.nl?x.pctW/x.nl:null))}</td>${stS.map(x=>`<td>${x&&x.nl?x.nl+' al '+Math.round(x.pctW/x.nl)+'%':'-'}</td>`).join('')}<td></td></tr>`;
+  h+=`</tbody></table></div><p class="pz-pnote">Formato di ogni cella: serie x ripetizioni, @percentuale%, RPE, r recupero. Esempio: 4x6 @75% RPE8 r2'. In arancio cio' che cambia dalla settimana prima, in verde gli scarichi. L'andamento segue la percentuale, o l'RPE quando la percentuale non c'e'.</p>`;
+  return h;
+}
+window.pzSessSel=function(k){pzSlotK=k;renderWeekContent();};
 async function pzCella(el,avanti){
   if(el.value===el.defaultValue&&!avanti)return;
   el.defaultValue=el.value;
@@ -5581,14 +5669,14 @@ async function pzCella(el,avanti){
   if(avanti){
     const W=pzWeeks(),wi=+el.dataset.wi,r=+el.dataset.r;
     const up={};
-    W.slice(wi+1).forEach(([w2,w])=>{const s=pzSess(w)[pzSessIdx];const ex=s&&pzExs(s[1])[r];if(ex)up[pzBase(w2,s[0])+'/exercises/'+ex[0]]=Object.assign({},ex[1],val);});
+    W.slice(wi+1).forEach(([w2,w])=>{const s=pzSlotSess(w,pzSlotK);const ex=s&&pzExs(s[1])[r];if(ex)up[pzBase(w2,s[0])+'/exercises/'+ex[0]]=Object.assign({},ex[1],val);});
     if(Object.keys(up).length){pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);showToast('Portato su '+Object.keys(up).length+' settimane');}
   }
 }
 window.pzAvanti=async function(r,step){
   const W=pzWeeks();const up={};let base=null,pct=null,k=0;
   W.forEach(([wid,w],wi)=>{
-    const s=pzSess(w)[pzSessIdx];const ex=s&&pzExs(s[1])[r];if(!ex)return;
+    const s=pzSlotSess(w,pzSlotK);const ex=s&&pzExs(s[1])[r];if(!ex)return;
     if(base==null){base=ex[1];pct=parseFloat(base.pct);return;}
     const dl=/scarico|taper|gara/i.test(w.label||'');
     // "Uguale" copia tutta la prescrizione; la progressione tocca solo la percentuale
@@ -5670,8 +5758,22 @@ window.pzAvApplica=async function(wid){
    percentuale (punto). Si vede subito se il volume sale, se lo scarico
    scarica e se l'intensita' va nella direzione giusta. Clic su una
    settimana per aprirla. */
+function pzGraficoCorsa(W){
+  const km=W.map(([,w])=>pzSess(w).filter(([,s])=>s.type==='corsa').reduce((t,[,s])=>t+pzCorsaKm(s),0));
+  const lu=W.map(([,w])=>Math.max(0,...pzSess(w).filter(([,s])=>s.type==='corsa').map(([,s])=>pzCorsaKm(s))));
+  const mx=Math.max(1,...km);
+  return `<div class="pz-gr" role="img" aria-label="Km a settimana e uscita piu' lunga">
+    <div class="pz-gr-l"><span><i class="bar"></i>Km a settimana</span><span><i class="dot"></i>Uscita piu' lunga</span><span><i class="bar dl"></i>Scarico o taper</span></div>
+    <div class="pz-gr-c">${W.map(([wid,w],i)=>`<button type="button" class="pz-gr-w${i===currentWeekIdx?' cur':''}${pzIsDl(w)?' dl':''}" onclick="selectWeek(${i},'${wid}')" title="S${i+1} ${stEsc(w.label||'')}: ${Math.round(km[i])} km, lungo ${Math.round(lu[i])} km">
+      <span class="pz-gr-a"><span class="pz-gr-b" style="height:${Math.round(km[i]/mx*100)}%"><em>${km[i]?Math.round(km[i]):''}</em></span>${lu[i]?`<span class="pz-gr-p" style="bottom:${Math.round(lu[i]/mx*100)}%"></span>`:''}</span>
+      <span class="pz-gr-x">S${i+1}</span><span class="pz-gr-y">${lu[i]?Math.round(lu[i]):''}</span></button>`).join('')}</div></div>`;
+}
 function pzGrafico(){
   const W=pzWeeks();if(W.length<2)return '';
+  // in Progressione sulla corsa, o in un programma di sola corsa, il grafico e' dei km
+  const sl=pzMode==='progressione'&&(pzSlotK==='__corsa'||String(pzSlotK||'').startsWith('corsa|'));
+  const soloCorsa=W.every(([,w])=>pzSess(w).every(([,s])=>s.type==='corsa'||/^Test/i.test(s.name||'')));
+  if(sl||soloCorsa)return pzGraficoCorsa(W);
   const st=W.map(([,w])=>pzStatWeek(w));
   const maxS=Math.max(1,...st.map(x=>x.serie));
   const pc=st.map(x=>x.nl?x.pctW/x.nl:null);
@@ -6151,7 +6253,7 @@ async function pzIncollaProg(el,testo){
     const o=pzParse(v,false);
     if(!c){
       // la settimana ha la seduta ma non ancora l'esercizio: lo si crea
-      const wk=W[w0+j],ss=wk&&pzSess(wk[1])[pzSessIdx],nome=nomi[r0+i];if(!ss||!nome)return;
+      const wk=W[w0+j],ss=wk&&pzSlotSess(wk[1],pzSlotK),nome=nomi[r0+i];if(!ss||!nome)return;
       const base=pzBase(wk[0],ss[0])+'/exercises/';nuovi[ss[0]]=(nuovi[ss[0]]||0)+1;
       up[base+push(ref(db,base)).key]={name:nome,sets:o.sets||3,reps:o.reps||'',pct:o.pct||null,rpe:o.rpe||null,rest:o.rest||null,order:pzExs(ss[1]).length+nuovi[ss[0]]-1};
       return;
