@@ -1018,7 +1018,6 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
     <div class="nav-lbl">Overview</div>
     <div class="nav-item active" aria-label="Dashboard" onclick="if(window.innerWidth<=820)toggleSidebar();pg('dashboard',this)"><span class="nav-icon" data-rsi="dashboard"></span><span class="nav-lbl-text">Dashboard</span></div>
     <div class="nav-item" aria-label="Atleti" onclick="if(window.innerWidth<=820)toggleSidebar();pg('athletes',this)"><span class="nav-icon" data-rsi="atleti"></span><span class="nav-lbl-text">Atleti</span></div>
-    <div class="nav-item" aria-label="Gruppi" onclick="if(window.innerWidth<=820)toggleSidebar();pg('groups',this)"><span class="nav-icon" data-rsi="gruppi"></span><span class="nav-lbl-text">Gruppi</span></div>
     <div class="nav-item" aria-label="Analytics" onclick="if(window.innerWidth<=820)toggleSidebar();pg('analytics',this)"><span class="nav-icon" data-rsi="analytics"></span><span class="nav-lbl-text">Analytics</span></div>
     <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" aria-label="Program Builder" href="./builder.html"><span class="nav-icon" data-rsi="builder"></span><span class="nav-lbl-text">Program Builder</span></a>
@@ -1071,7 +1070,7 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
   </div>
   <div id="monitoring-panel"></div>
   <div class="ath-bar">
-    <input id="ath-search" type="search" placeholder="Cerca per nome, ruolo, squadra o gruppo" aria-label="Cerca atleta" oninput="renderAthletes()">
+    <input id="ath-search" type="search" placeholder="Cerca per nome, ruolo o squadra" aria-label="Cerca atleta" oninput="renderAthletes()">
     <div id="ath-tools" class="ath-tools"></div>
   </div>
   <div id="athletes-list"></div>
@@ -1273,7 +1272,7 @@ document.getElementById('app').style.display='flex';
 document.getElementById('dash-date').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 // Auto-navigate se arrivo da un'altra pagina con goto (URL param o sessionStorage)
 const _goto=new URLSearchParams(window.location.search).get('goto')||sessionStorage.getItem('goto');
-if(_goto){sessionStorage.removeItem('goto');setTimeout(()=>{const navEl=document.querySelector(`.nav-item[onclick*="${_goto}"]`);pg(_goto,navEl);},100);}
+if(_goto){sessionStorage.removeItem('goto');if(_goto==='groups'){location.replace('./index.html?goto=athletes');}setTimeout(()=>{const navEl=document.querySelector(`.nav-item[onclick*="${_goto}"]`);pg(_goto,navEl);},100);}
 
 onValue(ref(db,'athletes'),s=>{
   athletes=s.val()||{};
@@ -1598,7 +1597,6 @@ function renderAthTools(stats){
   el.innerHTML=`<div class="ath-chips" role="tablist" aria-label="Filtra atleti">${ATH_FILTRI.map(([k,l])=>
       `<button type="button" class="ath-chip${athView.f===k?' on':''}" aria-pressed="${athView.f===k}" onclick="athSet('f','${k}')">${l}<span>${n[k]}</span></button>`).join('')}</div>
     <div class="ath-sels">
-      <select aria-label="Gruppo" onchange="athSet('g',this.value)"><option value="">Tutti i gruppi</option>${gOpts}</select>
       <select aria-label="Ordina per" onchange="athSet('s',this.value)">${ATH_ORD.map(([k,l])=>`<option value="${k}"${athView.s===k?' selected':''}>Ordina: ${l}</option>`).join('')}</select>
     </div>`;
 }
@@ -1614,7 +1612,7 @@ function renderAthletes(){
     const g=a.group&&groups[a.group]?groups[a.group].name:'';
     return [a.name,a.role,a.team,g].some(x=>String(x||'').toLowerCase().includes(q));
   });
-  if(athView.g)list=list.filter(({a})=>a.group===athView.g);
+  // i gruppi non si usano piu' come filtro (R7): il dato resta sugli atleti
   const f=athView.f;
   if(f==='avviso')list=list.filter(({st})=>st.alerts.length);
   else if(f==='noci')list=list.filter(({st})=>!st.ciOggi);
@@ -2994,7 +2992,7 @@ window.openModal=function(type,...args){
       <div class="grid2"><div class="field"><label>Nome completo</label><input id="m-name" value="${a.name||''}" placeholder="Marco Rossi"></div><div class="field"><label>Data di nascita</label><input id="m-dob" value="${a.dob||''}" placeholder="gg/mm/aaaa"></div></div>
       <div class="grid2"><div class="field"><label>Ruolo / Disciplina</label><input id="m-role" value="${a.role||''}" placeholder="Ala, Atleta..."></div><div class="field"><label>Squadra / Società</label><input id="m-team" value="${a.team||''}" placeholder="FC Example"></div></div>
       <div class="grid2"><div class="field"><label>Livello</label><select id="m-level"><option value="1"${(a.level||1)==1?' selected':''}>Principiante</option><option value="2"${a.level==2?' selected':''}>Intermedio</option><option value="3"${a.level==3?' selected':''}>Avanzato</option></select></div><div class="field"><label>Microciclo</label><input type="number" id="m-micro" value="${a.micro||1}" min="1" max="52"></div></div>
-      <div class="grid2"><div class="field"><label>Gruppo</label><select id="m-group"><option value="">Nessun gruppo</option>${gOpts}</select></div><div class="field"><label>PIN accesso</label><input id="m-pin" value="${a.pin||''}" placeholder="4 cifre"></div></div>
+      <input type="hidden" id="m-group" value="${a.group||''}"><div class="grid2"><div class="field"><label>PIN accesso</label><input id="m-pin" value="${a.pin||''}" placeholder="4 cifre"></div></div>
       <div class="grid2"><div class="field"><label>Sedute attese a settimana</label><input type="number" id="m-freq" value="${a.freq||''}" min="1" max="14" placeholder="2"></div><div class="field"><label>Sesso</label><select id="m-sex"><option value="">Non indicato</option><option value="f"${a.sex==='f'?' selected':''}>Femmina</option><option value="m"${a.sex==='m'?' selected':''}>Maschio</option></select></div></div>
       <div class="field"><label>Infortuni / Limitazioni</label><input id="m-inj" value="${a.injuries||''}" placeholder="Es. LCA destra, problemi spalla..."></div>
       <div class="field"><label>Note preparatore</label><textarea id="m-notes">${a.notes||''}</textarea></div>

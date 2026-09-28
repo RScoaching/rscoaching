@@ -68,9 +68,6 @@ window.SIDEBAR_HTML = `
     <a class="nav-item" aria-label="Atleti" href="./index.html?goto=athletes" data-page="athletes">
       <span class="nav-icon">${window.rsIcon('atleti')}</span><span class="nav-lbl-text">Atleti</span>
     </a>
-    <a class="nav-item" aria-label="Gruppi" href="./index.html?goto=groups" data-page="groups">
-      <span class="nav-icon">${window.rsIcon('gruppi')}</span><span class="nav-lbl-text">Gruppi</span>
-    </a>
     <a class="nav-item" aria-label="Analytics" href="./index.html?goto=analytics" data-page="analytics">
       <span class="nav-icon">${window.rsIcon('analytics')}</span><span class="nav-lbl-text">Analytics</span>
     </a>
