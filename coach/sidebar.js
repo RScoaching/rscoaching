@@ -30,6 +30,8 @@ window.RSI = {
   cerca:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   su:'<path d="m18 15-6-6-6 6"/>',
   giu:'<path d="m6 9 6 6 6-6"/>',
+  sinistra:'<path d="m15 18-6-6 6-6"/>',
+  destra:'<path d="m9 18 6-6-6-6"/>',
   avvisa:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
   ok:'<path d="M20 6 9 17l-5-5"/>',
   test:'<path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/>'
