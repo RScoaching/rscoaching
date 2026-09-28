@@ -3749,6 +3749,9 @@ function stFasi(I){
   for(let t=0;t<taper;t++)out.push({n:corpo+t+1,fase:'Taper',tipo:t===taper-1?'gara':'taper'});
   // posizione dentro il blocco e numero del blocco, per le progressioni
   let blk=0,dentro=0;out.forEach(w=>{w.blk=blk;w.pos=Math.min(2,dentro);dentro++;if(w.tipo==='scarico'){blk++;dentro=0;}});
+  // posizione dentro la fase: quando la fase cambia a meta' blocco la progressione
+  // della nuova fase riparte dal suo primo gradino, non dal terzo
+  let fz='',pp=0;out.forEach((w,i)=>{if(w.fase!==fz||(i&&out[i-1].tipo==='scarico')){fz=w.fase;pp=0;}w.pp=Math.min(2,pp);if(w.tipo==='carico')pp++;});
   return out;
 }
 
@@ -3771,7 +3774,9 @@ function stConsigli(I){
     if(d-c.corsa>=3&&L!=='zero')c.mob=1;
   }else if(o==='forza'){c.forza=Math.min(d,{zero:2,princ:3,inter:4,avanz:4}[L]);if(d>c.forza)c.mob=1;}
   else if(o==='estetica'){c.forza=Math.min(d,{zero:2,princ:3,inter:4,avanz:5}[L]);if(d>c.forza)c.cond=1;}
-  else if(o==='ibrido'){c.forza=Math.min(3,Math.ceil(d/2));c.corsa=Math.min(3,Math.max(1,d-c.forza));}
+  // ibrido: tre corse (qualita', facile, lungo) e due o tre di forza; con 5 giorni
+  // una doppia (corsa facile e parte alta), come nei programmi ibridi di riferimento
+  else if(o==='ibrido'){c.forza=L==='zero'?2:Math.min(3,Math.max(2,d-2));c.corsa=Math.min(3,Math.max(2,d-1));if(L==='zero')c.corsa=Math.min(c.corsa,2);}
   else if(o==='sport'||sport){
     c.forza=L==='zero'?1:(+I.sqAll>=5?1:2);
     const lib=d-c.forza;
@@ -3782,6 +3787,9 @@ function stConsigli(I){
     if(I.attivita==='corsa'){c.corsa=Math.min(d,3);c.forza=d>3?1:0;}
     else{c.forza=Math.min(d,L==='zero'?2:3);if(d>c.forza)c.cond=1;if(d>c.forza+c.cond)c.mob=1;}
   }
+  // la mobilita' consigliata esiste solo se le resta un giorno libero: come doppia
+  // accanto a una corsa o alla forza non ha senso (conta i numeri scelti a mano)
+  if(c.mob){const v=(k,f)=>I[f]!=null&&I[f]!==''?+I[f]:c[k];const altre=v('forza','nForza')+v('corsa','nCorsa')+v('vel','nVel')+v('cond','nCond');if(altre+c.mob>d)c.mob=Math.max(0,d-altre);}
   return c;
 }
 function stNumeri(I){
@@ -3813,12 +3821,13 @@ function stRuoliCorsa(I,n){
   if(I.obiettivo==='gara')seq=lunga?['Lungo','Qualita\'','Facile','Medio','Facile','Rigenerante','Facile']:['Lungo','Qualita\'','Facile','Qualita\' 2','Facile','Rigenerante','Facile'];
   else if(n===1)seq=['Facile'];
   else if(n===2)seq=['Facile','Qualita\''];
+  else if(I.obiettivo==='ibrido')seq=['Lungo','Qualita\'','Facile','Facile','Qualita\' 2','Facile','Facile'];
   else seq=['Lungo','Qualita\'','Facile','Facile','Qualita\' 2','Rigenerante','Facile'];
   return seq.slice(0,n);
 }
 function stSplit(I,nF){
   if(!nF)return [];
-  const sp=I.split&&I.split!=='auto'?I.split:(I.sport!=='nessuno'?'sport':(I.obiettivo==='gara'||(stNumeri(I).corsa>=2&&I.obiettivo!=='forza'&&I.obiettivo!=='estetica'))?'corsa':'auto');
+  const sp=I.split&&I.split!=='auto'?I.split:(I.sport!=='nessuno'?'sport':(I.obiettivo==='gara'||(stNumeri(I).corsa>=2&&!['forza','estetica','ibrido'].includes(I.obiettivo)))?'corsa':'auto');
   const mk=r=>({ruolo:r,nome:ST_RUOLO_LBL[r]});
   if(sp==='sport')return ['SPORT_F','SPORT_P','SPORT_F','SPORT_P'].slice(0,nF).map((r,i)=>({ruolo:r,nome:ST_RUOLO_LBL[r]+(i>=2?' 2':'')}));
   if(sp==='corsa')return ['RUN_A','RUN_B','RUN_A','RUN_B'].slice(0,nF).map((r,i)=>({ruolo:r,nome:i<2?ST_RUOLO_LBL[r]:'Forza per la corsa '+'CD'[i-2]}));
@@ -3867,7 +3876,8 @@ function stCosto(I,S,dd){
       const m=md(d);
       if(m===0&&s.tipo!=='recupero')c+=25;
       if(m===1&&h>=1)c+=10;
-      if(m===6&&h>=1.5)c+=5;
+      // il giorno dopo la partita e' recupero: niente salti ne' forza pesante
+      if(m===6&&h>=1.5)c+=12;
       if(s.ruolo==='SPORT_F'&&![3,4].includes(m))c+=1.5;
       if((s.ruolo==='SPORT_P'||s.ruolo==='VEL')&&![2,3].includes(m))c+=1.2;
       if(I.sqGiorni.includes(d)&&h>=2)c+=1.5;
@@ -3878,12 +3888,14 @@ function stCosto(I,S,dd){
       if(l.length>2)c+=15*(l.length-2);
       const tipi={};l.forEach(s=>{tipi[s.tipo]=(tipi[s.tipo]||0)+1;});if(Object.values(tipi).some(v=>v>1))c+=12;
       // la doppia classica e' corsa facile + forza; con una corsa impegnativa costa
-      if(l.some(s=>s.tipo==='pesi')){const cs=l.filter(s=>s.tipo==='corsa');if(cs.length&&cs.every(s=>['Facile','Rigenerante'].includes(s.ruolo)))c-=1;else if(cs.length)c+=3;}}
+      // la doppia qualita' + forza per la corsa e' il "giorno duro davvero duro":
+      // costa meno che mettere la forza delle gambe il giorno prima di una corsa chiave
+      if(l.some(s=>s.tipo==='pesi')){const cs=l.filter(s=>s.tipo==='corsa');if(cs.length&&cs.every(s=>['Facile','Rigenerante'].includes(s.ruolo)))c-=1;else if(cs.length)c+=l.some(s=>/^RUN/.test(s.ruolo))?1.5:3;}}
     const nx=per[(d+1)%7];
     const hd=Math.max(0,...l.map(s=>ST_DURO[s.ruolo]||1)),hn=Math.max(0,...nx.map(s=>ST_DURO[s.ruolo]||1));
     if(hd>=2&&hn>=2)c+=3+(hd>=3&&hn>=3?2:0);
     // forza per le gambe il giorno prima di lungo o qualita'
-    if(l.some(s=>s.tipo==='pesi'&&ST_GAMBE.test(s.ruolo))&&nx.some(s=>['Lungo','Qualita\'','Medio'].includes(s.ruolo)))c+=2.5;
+    if(l.some(s=>s.tipo==='pesi'&&ST_GAMBE.test(s.ruolo))&&nx.some(s=>['Lungo','Qualita\'','Qualita\' 2','Medio'].includes(s.ruolo)))c+=5;
     if(l.some(s=>s.ruolo==='Lungo')&&nx.some(s=>(ST_DURO[s.ruolo]||1)>=2))c+=2;
     // stesso tipo due giorni di fila
     if(l.some(s=>s.tipo==='pesi')&&nx.some(s=>s.tipo==='pesi'))c+=1.2;
@@ -3984,6 +3996,7 @@ function stEs(I,slot){
   }
   if(rec('adduttori')&&slot==='add')n='Short Copenhagen Plank';
   if((rec('caviglia')||rec('polpaccio')||rec('piede'))&&(slot==='pliom'||slot==='pliom2'))n='Pogo Hop';
+  if(rec('hamstring')&&slot==='pliom2')n='Pogo Hop';
   if(rec('hamstring')&&slot==='ham')n=P?'Seated Hamstring Curl Machine':'Hamstring Curl Sliders Eccentric';
   return n;
 }
@@ -4017,36 +4030,69 @@ const ST_TPL={
    principali vanno in percentuale del massimale, e la percentuale sale dentro
    il blocco e da un blocco all'altro. Lo scarico dimezza il volume e toglie
    intensita'. Le serie accessorie restano a RPE. */
-function stPrescr(I,w,ruolo){
+// la percentuale del massimale ha senso solo sulle alzate col bilanciere che si
+// testano; trazioni, rematori, manubri e macchine vanno a RPE
+const ST_PCT=/back squat|front squat|^squat$|box squat|bench press|panca piana|deadlift|stacco|trap bar|strict press|military press|push press|hip thrust/i;
+const ST_NOPCT=/dumbbell|manubri|kettlebell|goblet|landmine|single|machine|macchina|row|pull ?up|chin/i;
+function stPctOk(name){return ST_PCT.test(name||'')&&!ST_NOPCT.test(name||'');}
+function stPctRpe(p){return p>=90?'9':p>=85?'8-9':p>=80?'8':p>=72.5?'7-8':'7';}
+function stPrescr(I,w,ruolo,name){
   const L=I.livello,avz=L==='inter'||L==='avanz';
   const scarico=w.tipo==='scarico'||w.tipo==='taper'||w.tipo==='gara';
-  const f=w.fase;
-  if(ruolo==='pliom')return scarico?{sets:2,reps:'4',rest:'90"',cue:'massima qualita\', niente fatica'}:{sets:3,reps:L==='zero'?'6':'5',rest:'90"',cue:'contatti brevi, massima reattivita\''};
+  const f=w.fase,pp=w.pp!=null?w.pp:w.pos;
+  // chi corre: la forza segue la fase della corsa. In base volume e tecnica,
+  // in costruzione carichi alti e poche ripetizioni (forza massima, che migliora
+  // l'economia di corsa), nello specifico mantenimento e potenza, nel taper poco
+  const run=I.obiettivo==='gara';
+  const fr=/Costruzione|Sviluppo/.test(f)?1:/Specifico|Consolidamento|Taper/.test(f)?2:0;
+  if(ruolo==='pliom')return scarico?{sets:2,reps:'4',rest:'90"',cue:'massima qualita\', niente fatica'}:{sets:run&&fr===2&&avz?4:3,reps:L==='zero'?'6':'5',rest:'90"',cue:'contatti brevi, massima reattivita\''};
   if(ruolo==='pow')return scarico?{sets:2,reps:'3',rest:'2\'',cue:'veloce'}:{sets:4,reps:'3',rest:'2\'',cue:'esplosivo, carico che non rallenta'};
   if(ruolo==='core')return {sets:scarico?2:3,reps:L==='zero'?'20-30"':'30-45"',rest:'45"'};
   // alzata principale a una gamba: ripetizioni e RPE, la percentuale del massimale non ha senso
-  if(ruolo==='mainU')return scarico?{sets:2,reps:'6',rpe:'6',rest:'90"'}:{sets:3,reps:L==='zero'?'10':'6-8',rpe:L==='zero'?'6':String(7+Math.min(1,w.pos)),rest:'2\''};
-  if(ruolo==='iso')return {sets:scarico?2:3,reps:'10-12',rpe:scarico?'6':'8',rest:'60"'};
+  if(ruolo==='mainU'){
+    if(scarico)return {sets:2,reps:'6',rpe:'6',rest:'90"'};
+    if(L==='zero')return {sets:3,reps:'10',rpe:'6',rest:'90"'};
+    if(run)return [{sets:3,reps:'8-10',rpe:String(7+Math.min(1,pp)),rest:'2\''},{sets:4,reps:'5-6',rpe:'8',rest:'2-3\'',cue:'carico alto, ogni ripetizione veloce in salita'},{sets:3,reps:'4-5',rpe:'7-8',rest:'2-3\'',cue:'mantenimento: carico alto, poche serie'}][fr];
+    return {sets:3,reps:'6-8',rpe:String(7+Math.min(1,pp)),rest:'2\''};
+  }
+  if(ruolo==='iso')return {sets:scarico?2:3,reps:'10-12',rpe:scarico?'6':String(7+Math.min(1,pp)),rest:'60"'};
   if(ruolo==='acc'){
-    if(I.obiettivo==='estetica')return {sets:scarico?2:3+Math.min(1,w.pos),reps:'10-12',rpe:scarico?'6':String(7+Math.min(2,w.pos)),rest:'75"'};
-    return {sets:scarico?2:3,reps:L==='zero'?'10-12':'8-10',rpe:scarico?'6':(L==='zero'?'6':'7-8'),rest:'90"'};
+    if(I.obiettivo==='estetica')return {sets:scarico?2:3+Math.min(1,pp),reps:'10-12',rpe:scarico?'6':String(7+Math.min(2,pp)),rest:'75"'};
+    if(I.obiettivo==='gara'&&fr===2&&!scarico&&avz)return {sets:2,reps:'6-8',rpe:'7',rest:'90"'};
+    return {sets:scarico?2:3,reps:L==='zero'?'10-12':'8-10',rpe:scarico?'6':(L==='zero'?'6':String(7+Math.min(1,pp))),rest:'90"'};
+  }
+  // secondo esercizio della seduta: complementare, a RPE, un gradino sotto la principale
+  if(ruolo==='main2'&&(avz&&I.obiettivo!=='rientro')){
+    if(scarico)return {sets:2,reps:'6',rpe:'6',rest:'2\''};
+    if(/Intensificazione|Forza massima|Costruzione|Rinforzo|Sviluppo/.test(f))return {sets:4,reps:'5-6',rpe:String(7+Math.min(1,pp)),rest:'2-3\''};
+    if(/Realizzazione|Potenza|Specifico|Consolidamento/.test(f))return {sets:3,reps:'4-5',rpe:'8',rest:'2-3\''};
+    if(I.obiettivo==='estetica')return {sets:3+Math.min(1,pp),reps:'8-10',rpe:String(7+Math.min(1,pp)),rest:'2\''};
+    return {sets:3+Math.min(1,pp),reps:'8',rpe:String(7+Math.min(1,pp)),rest:'2\''};
   }
   // alzate principali
   if(!avz||I.obiettivo==='rientro'){
-    const reps=L==='zero'?'10-12':'8-10';
+    const rin=I.obiettivo==='rientro';
+    // il rientro sale di carico nella fase finale: da 8-10 a 5-6 ripetizioni
+    const reps=L==='zero'?'10-12':rin&&/Ritorno/.test(f)?'5-6':rin&&/Rinforzo/.test(f)?'6-8':'8-10';
     return scarico?{sets:2,reps,rpe:'5',rest:'90"',cue:'scarico: tecnica pulita'}
-      :{sets:L==='zero'?2+Math.min(1,w.pos):3,reps,rpe:String(Math.min(8,6+w.pos)),rest:'2\'',cue:'doppia progressione: arrivato in cima alle ripetizioni a questo RPE, aggiungi carico'};
+      :{sets:L==='zero'?2+Math.min(1,pp):3,reps,rpe:String(Math.min(8,6+pp)),rest:'2\'',cue:rin?'dolore durante e il giorno dopo non oltre 3 su 10':'doppia progressione: arrivato in cima alle ripetizioni a questo RPE, aggiungi carico'};
   }
-  if(I.obiettivo==='estetica')return scarico?{sets:2,reps:'8',rpe:'6',rest:'2\''}:{sets:3+Math.min(1,w.pos),reps:'6-10',rpe:String(7+Math.min(2,w.pos)),rest:'2\''};
+  if(I.obiettivo==='estetica')return scarico?{sets:2,reps:'8',rpe:'6',rest:'2\''}:{sets:3+Math.min(1,pp),reps:'6-10',rpe:String(7+Math.min(2,pp)),rest:'2\''};
   const piu=L==='avanz'?2.5:0;
   const blk=w.blk||0;
+  // con obiettivo forza il picco (Realizzazione) riguarda solo l'alzata obiettivo:
+  // le altre principali restano sui carichi dell'intensificazione
+  let ff=f,idx=pp;
+  if(I.obiettivo==='forza'&&/Realizzazione/.test(f)&&name&&name!==I.liftObj){ff='Intensificazione';idx=2;}
+  if(I.obiettivo==='gara'||I.obiettivo==='ibrido')ff=fr===1?'Intensificazione':fr===2?'Mantenimento':'Accumulo';
   let tab;
-  if(/Accumulo|Ipertrofia|Adattamento|Base|Forza generale|Ricondizionamento/.test(f))tab=[[3,'10',65],[4,'8',70],[4,'8',72.5]];
-  else if(/Intensificazione|Forza massima|Sviluppo|Costruzione|Rinforzo/.test(f))tab=[[4,'6',75],[5,'5',77.5],[5,'4',80]];
-  else if(/Potenza|Specifico/.test(f))tab=[[4,'4',80],[4,'3',82.5],[3,'3',85]];
+  if(/Accumulo|Ipertrofia|Adattamento|Base|Forza generale|Ricondizionamento/.test(ff))tab=[[3,'10',65],[4,'8',70],[4,'8',72.5]];
+  else if(/Intensificazione|Forza massima|Sviluppo|Costruzione|Rinforzo/.test(ff))tab=[[4,'6',75],[5,'5',77.5],[5,'4',80]];
+  else if(/Mantenimento/.test(ff))tab=[[3,'4',80],[3,'3',82.5],[2,'3',82.5]];
+  else if(/Potenza|Specifico/.test(ff))tab=[[4,'4',80],[4,'3',82.5],[3,'3',85]];
   else tab=[[4,'3',85],[3,'2',87.5],[3,'1-2',90]];
   if(scarico)return {sets:3,reps:'5',pct:String(60+piu),rest:'2\'',cue:'scarico'};
-  const r=tab[Math.min(tab.length-1,w.pos)];
+  const r=tab[Math.min(tab.length-1,idx)];
   const pct=Math.min(92.5,Math.round((r[2]+piu+blk*1.25)/2.5)*2.5);
   return {sets:r[0],reps:r[1],pct:String(pct),rest:ruolo==='main'?'2-3\'':'2\''};
 }
@@ -4065,12 +4111,15 @@ function stRitmi(I){
   r.gara=tg?tg/D:t5*Math.pow(D/5,1.06)/D;
   return r;
 }
-function stKm(I,fasi){
+function stKm(I,fasi,nC){
   const L=I.livello,D=+I.garaDist||10;
   const start=stNum(I.kmSett)||{zero:6,princ:15,inter:28,avanz:45}[L];
   const picchi={5:[20,25,35,45],10:[22,30,45,55],21:[28,38,50,65],42:[32,50,65,85]};
   const li={zero:0,princ:1,inter:2,avanz:3}[L]||1;
-  const picco=stNum(I.kmPicco)||(I.obiettivo==='gara'?Math.max(start,picchi[D][li]):start*1.3);
+  // il picco tiene conto delle uscite: con tre corse a settimana 50 km vorrebbero
+  // dire corse facili da 18 km, che nessuno prescrive
+  const tetto=nC?nC*({zero:5,princ:9,inter:13,avanz:16}[L]||12):999;
+  const picco=stNum(I.kmPicco)||Math.min(Math.max(start,tetto),I.obiettivo==='gara'?Math.max(start,picchi[D][li]):start*1.3);
   // quanto serve crescere a settimana per arrivare al picco prima del taper, ma mai piu' del 10%
   const carico=fasi.filter(w=>w.tipo==='carico').length;
   const passo=Math.min(1.10,Math.max(1.03,Math.pow(Math.max(1,picco/start),1/Math.max(1,carico-2))));
@@ -4105,54 +4154,120 @@ function stLunghi(I,fasi){
   return out;
 }
 function stFase(tipo,zona,dist,pace,note,x){return Object.assign({tipo,zona,dist:dist||'',pace:pace||'',note:note||''},x||{});}
-function stCorsa(I,w,ruolo,kmW,rit,nC){
+/* I km delle sedute devono fare i km della settimana. Si parte dalle sedute
+   che hanno un loro tetto e il resto va alle corse facili: il lungo (dalla sua
+   progressione, al massimo un terzo dei km con 5 o piu' uscite, di piu' con meno
+   uscite e per mezza e maratona), la qualita' col tetto di Daniels (soglia fino
+   al 10% dei km della settimana, intervalli fino all'8%, con un minimo sotto il
+   quale la seduta non allena), il medio fino al 20%. Riscaldamento e
+   defaticamento contano. Senza tempi di gara i ritmi si stimano dal livello,
+   solo per fare i conti dei km. */
+function stPassi(I,rit){
+  const pe=rit?(rit.facile[0]+rit.facile[1])/2:({zero:450,princ:400,inter:345,avanz:300}[I.livello]||380);
+  return {pe,soglia:rit?rit.soglia:pe*0.86,interv:rit?rit.interv:pe*0.8,gara:rit?rit.gara:pe*0.88,lungo:rit?(rit.lungo[0]+rit.lungo[1])/2:pe*1.03};
+}
+function stQuota(I,nC){
+  const D=+I.garaDist||10;let q=nC>=5?0.33:nC===4?0.37:0.42;
+  if(I.obiettivo==='gara'&&D>=42)q+=0.05;else if(I.obiettivo==='gara'&&D>=21)q+=0.07;
+  return q;
+}
+function stKmRuoli(I,w,kmW,tipo,rit){
+  const cs=tipo.filter(x=>x.tipo==='corsa'),nC=cs.length,ps=stPassi(I,rit),D=+I.garaDist||10;
+  const scar=w.tipo!=='carico',f=w.fase,gara=I.obiettivo==='gara';
+  const wu=((kmW<35?10:12.5)+10)*60/ps.pe; // riscaldamento e defaticamento in km
+  const o={};
+  cs.forEach(c=>{
+    const r=c.ruolo;
+    if(r==='Lungo'){
+      let km=gara?(stLunghi(I,stFasi(I))[w.n-1]||0):Math.min(stLungoMax(I),kmW*0.35);
+      if(!stNum(I.lungoMax))km=Math.min(km,kmW*stQuota(I,nC));
+      o[r]=Math.max(4,Math.round(km));
+    }else if(r==='Medio'){
+      const main=scar?0:Math.max(4,Math.min(D>=42?16:12,kmW*0.15));
+      o.medMain=Math.round(main);o[r]=scar?Math.max(4,Math.round(kmW*0.13)):Math.round(1.5+main+1.5);
+    }else if(r==='Qualita\''){
+      // tipo di lavoro della seduta: soglia (T) o intervalli (I)
+      const I5=/Specifico|Potenza|Consolidamento/.test(f)&&(!gara||D<=10);
+      const cap=I5?Math.max(D===10&&gara?4.8:3,kmW*(D===10&&gara?0.1:0.08)):Math.max(3,kmW*0.1);
+      o.qMain=scar?0:+cap.toFixed(1);o[r]=Math.round(wu+(scar?20*60/ps.pe:cap*1.35));
+    }else if(r==='Qualita\' 2'){
+      const cap=Math.max(3,kmW*0.1);o.q2Main=scar?0:+cap.toFixed(1);o[r]=Math.round(wu+(scar?20*60/ps.pe:cap*1.2));
+    }else if(r==='Rigenerante'){o[r]=Math.round((kmW>=50?40:30)*60/(ps.pe*1.06));}
+  });
+  const fac=cs.filter(c=>c.ruolo==='Facile').length;
+  if(fac){
+    const fissi=cs.filter(c=>c.ruolo!=='Facile').reduce((t,c)=>t+(o[c.ruolo]||0),0);
+    const min=I.livello==='princ'?3:4;
+    o.Facile=Math.max(min,Math.min(Math.round((o.Lungo||kmW*0.3)*0.9),Math.round((kmW-fissi)/fac)));
+  }
+  o.tot=cs.reduce((t,c)=>t+(o[c.ruolo]||0),0);
+  return o;
+}
+// corri e cammina: la scala delle 9 settimane del Couch to 5K, stirata sulle
+// settimane di carico del programma, fino a 30 minuti di corsa continua
+const ST_C25K=[[8,1,1.5],[6,1.5,2],[6,2,2],[5,3,1.5],[3,5,2],[2,8,2],[2,10,1.5],[1,20,0],[1,25,0],[1,30,0]];
+function stC25k(I,w){
+  const fasi=stFasi(I),car=fasi.filter(x=>x.tipo==='carico');
+  const k=car.filter(x=>x.n<=w.n).length-1,nL=Math.max(2,car.length);
+  let st=Math.round(Math.max(0,k)*(ST_C25K.length-1)/(nL-1));
+  if(w.tipo==='scarico')st=Math.max(0,st-1);
+  if(w.tipo==='taper'||w.tipo==='gara')st=7;
+  return ST_C25K[Math.min(ST_C25K.length-1,st)];
+}
+function stCorsa(I,w,ruolo,kmW,rit,nC,tipo){
   const D=+I.garaDist||10,gara=I.obiettivo==='gara',lunga=gara&&D>=21;
   const P=a=>a?stPace(Array.isArray(a)?a[0]:a)+(Array.isArray(a)?'-'+stPace(a[1]):''):'';
   const risc=stFase('Riscaldamento','Z1','10-15\'',rit?P(rit.facile):'','corsa lenta, mobilita\' dinamica e 3 allunghi');
   const def=stFase('Defaticamento','Z1','10\'','','corsa lenta');
   const scar=w.tipo!=='carico',f=w.fase;
   if(ruolo==='Corri e cammina'){
-    const k=w.n-1;const corsa=Math.min(10,1+Math.floor(k/1.5)),cam=Math.max(1,3-Math.floor(k/3));
-    const rip=Math.max(4,Math.round(24/(corsa+cam)));
-    return {nome:'Corri e cammina',fasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),stFase('Ripetute','Z2','','', 'corsa facile, deve restare comoda',{reps:String(scar?Math.max(3,rip-2):rip),repDist:corsa+'\' corsa',recTime:cam+'\' camminata'}),def]};
+    const [rip,corsa,cam]=stC25k(I,w);
+    const att=stFase('Attivazione','Z1','5\'','','camminata veloce'),fin=stFase('Defaticamento','Z1','5\'','','camminata');
+    if(!cam)return {nome:'Corsa continua',min:corsa+10,fasi:[att,stFase('Fondo Lento','Z2',corsa+'\'','','corsa continua, si deve poter parlare; se serve si cammina un minuto e si riparte'),fin]};
+    return {nome:'Corri e cammina',min:Math.round(rip*(corsa+cam)+10),fasi:[att,stFase('Ripetute','Z2','','','corsa facile, deve restare comoda',{reps:String(rip),repDist:(corsa%1?Math.floor(corsa)+'\'30"':corsa+'\'')+' corsa',recTime:(cam%1?Math.floor(cam)+'\'30"':cam+'\'')+' camminata'}),fin]};
   }
-  if(ruolo==='Rigenerante')return {nome:'Corsa rigenerante',fasi:[stFase('Fondo Lento','Z1',(lunga?40:30)+'\'',rit?P(rit.lungo):'','piano davvero, anche piu\' lento del facile')]};
+  const K=stKmRuoli(I,w,kmW,tipo||stSettimanaTipo(I),rit),ps=stPassi(I,rit);
+  if(ruolo==='Rigenerante')return {nome:'Corsa rigenerante',km:K.Rigenerante,fasi:[stFase('Fondo Lento','Z1',(kmW>=50?40:30)+'\'',rit?P(rit.lungo):'','piano davvero, anche piu\' lento del facile')]};
   if(ruolo==='Lungo'){
-    const km=gara?Math.max(4,stLunghi(I,stFasi(I))[w.n-1]||0):Math.max(4,Math.min(stLungoMax(I),Math.round(kmW*0.3)));
-    const fin=gara&&/Specifico/.test(f)&&D>=21&&!scar;
-    return {nome:'Corsa lunga',fasi:[stFase('Long Run','Z2',km+' km',rit?P(rit.lungo):'',fin?'ultimi '+Math.round(km*(D>=42?0.3:0.25))+' km a passo gara ('+stPace(rit?rit.gara:0)+')':'ritmo di conversazione, bere e mangiare come in gara')]};
+    const km=K.Lungo;
+    // finale a passo gara a settimane alterne, per non sommare tre sedute a passo gara
+    const fin=gara&&/Specifico/.test(f)&&D>=21&&!scar&&w.n%2===0;
+    return {nome:'Corsa lunga',km,fasi:[stFase('Long Run','Z2',km+' km',rit?P(rit.lungo):'',fin?'ultimi '+Math.round(km*(D>=42?0.3:0.25))+' km a passo gara ('+stPace(rit?rit.gara:0)+')':'ritmo di conversazione, bere e mangiare come in gara')]};
   }
-  const facileKm=Math.max(3,Math.round(kmW*(nC>=5?0.14:nC>=4?0.17:0.24)));
-  if(ruolo==='Facile')return {nome:'Corsa facile',fasi:[stFase('Fondo Lento','Z2',facileKm+' km',rit?P(rit.facile):'','ritmo facile, respiro controllato'),stFase('Attivazione','Z3','4-6 allunghi da 80 m','','scioltezza, non sprint')]};
+  if(ruolo==='Facile')return {nome:'Corsa facile',km:K.Facile,fasi:[stFase('Fondo Lento','Z2',K.Facile+' km',rit?P(rit.facile):'','ritmo facile, respiro controllato'),stFase('Attivazione','Z3','4-6 allunghi da 80 m','','scioltezza, non sprint')]};
   // medio: il lavoro al passo della gara lunga
   if(ruolo==='Medio'){
-    const km=Math.max(5,Math.round(kmW*0.2));
-    let m;
-    if(scar)m=stFase('Fondo Lento','Z2',Math.round(km*0.8)+' km',rit?P(rit.facile):'','facile');
+    const km=K.medMain;let m;
+    if(scar)m=stFase('Fondo Lento','Z2',K.Medio+' km',rit?P(rit.facile):'','facile');
     else if(/Base/.test(f))m=stFase('Progressivo','Z3',km+' km',rit?stPace(rit.facile[1])+' fino a '+stPace(rit.gara):'','da facile a passo gara negli ultimi km');
-    else if(/Costruzione/.test(f))m=stFase('Medio','Z3',Math.round(km*0.7)+' km',rit?stPace(rit.gara*1.03):'','a passo gara o poco piu\' lento, dopo 2 km facili');
-    else m=stFase('Medio','Z3',Math.round(km*0.8)+' km',rit?stPace(rit.gara):'','a passo gara, costante');
-    return {nome:'Medio',fasi:scar?[m]:[stFase('Riscaldamento','Z1','2 km',rit?P(rit.facile):'','facile'),m,def]};
+    else if(/Costruzione/.test(f))m=stFase('Medio','Z3',km+' km',rit?stPace(rit.gara*1.03):'','a passo gara o poco piu\' lento');
+    else m=stFase('Medio','Z3',km+' km',rit?stPace(rit.gara):'','a passo gara, costante');
+    return {nome:'Medio',km:K.Medio,fasi:scar?[m]:[stFase('Riscaldamento','Z1','1,5 km',rit?P(rit.facile):'','facile'),m,stFase('Defaticamento','Z1','1,5 km','','corsa lenta')]};
   }
-  // qualita' 2: soglia o salite, diversa dalla prima
+  // ripetizioni che stanno nel volume: km del blocco diviso km della ripetuta
+  const nRip=(vol,repKm,lo,hi)=>String(Math.max(lo,Math.min(hi,Math.round(vol/repKm))));
+  // qualita' 2: soglia continua o salite, diversa dalla prima
   if(ruolo==='Qualita\' 2'){
     let m;
     if(scar)m=stFase('Fartlek','Z3','20\'','','8x(1\' svelto + 1\' facile)');
-    else if(/Base|Adattamento/.test(f))m=stFase('Ripetute in salita','Z4','','','in salita al 6-8%, spinta e postura, recupero scendendo',{reps:String(6+Math.min(4,w.pos*2)),repDist:'60"',recTime:'discesa'});
-    else m=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','continuo, ritmo sostenuto ma controllato',{reps:'1',repDist:(15+5*Math.min(2,w.pos))+'\'',repPace:rit?stPace(rit.soglia):''});
-    return {nome:'Soglia',fasi:[risc,m,def]};
+    else if(/Base|Adattamento/.test(f))m=stFase('Ripetute in salita','Z4','','','in salita al 6-8%, spinta e postura, recupero scendendo',{reps:String(6+Math.min(4,w.pp*2)),repDist:'60"',recTime:'discesa'});
+    else{const min=Math.max(15,Math.min(40,Math.round(K.q2Main*ps.soglia/60/5)*5));m=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','continuo, ritmo sostenuto ma controllato',{reps:'1',repDist:min+'\'',repPace:rit?stPace(rit.soglia):''});}
+    return {nome:'Soglia',km:K['Qualita\' 2'],fasi:[risc,m,def]};
   }
   // qualita'
-  let main;
+  let main;const v=K.qMain;
   if(scar)main=stFase('Fartlek','Z3','20\'','','6x(1\' svelto + 2\' facile)');
-  else if(/Base|Adattamento|Ricondizionamento/.test(f))main=lunga?stFase('Ripetute','Z4','',rit?stPace(rit.soglia):'','ripetute lunghe a ritmo soglia',{reps:String(4+Math.min(2,w.pos)),repDist:'1000 m',repPace:rit?stPace(rit.soglia):'',recTime:'90"'})
-    :stFase('Progressivo','Z3',Math.max(4,Math.round(kmW*0.15))+' km',rit?stPace(rit.facile[1])+' fino a '+stPace(rit.soglia):'','dal facile alla soglia, ultimo km il piu\' veloce');
-  else if(/Costruzione|Sviluppo/.test(f))main=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','ritmo sostenuto ma controllato',{reps:String(3+Math.min(2,w.pos)),repDist:lunga?'2 km':'8\'',repPace:rit?stPace(rit.soglia):'',recTime:'2\''});
-  else{
-    const s={5:['6','1000 m',rit?rit.interv:0,'2\''],10:['5','1600 m',rit?rit.gara:0,'2\''],21:['3','3 km',rit?rit.gara:0,'3\''],42:['3','5 km',rit?rit.gara:0,'3\'']}[gara?D:10];
-    main=stFase('Ripetute','Z4','','',gara?'a passo gara o poco sotto':'sostenuto',{reps:s[0],repDist:s[1],repPace:s[2]?stPace(s[2]):'',recTime:s[3]});
+  else if(/Base|Adattamento|Ricondizionamento/.test(f))main=lunga?stFase('Ripetute','Z4','',rit?stPace(rit.soglia):'','ripetute lunghe a ritmo soglia',{reps:nRip(v,1,3,8),repDist:'1000 m',repPace:rit?stPace(rit.soglia):'',recTime:'90"'})
+    :stFase('Progressivo','Z3',Math.max(4,Math.round(v*1.4))+' km',rit?stPace(rit.facile[1])+' fino a '+stPace(rit.soglia):'','dal facile alla soglia, ultimo km il piu\' veloce');
+  else if(/Costruzione|Sviluppo/.test(f)){const rk=lunga?2:480/ps.soglia;main=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','ritmo sostenuto ma controllato',{reps:nRip(v,rk,2,6),repDist:lunga?'2 km':'8\'',repPace:rit?stPace(rit.soglia):'',recTime:lunga?'90"':'2\''});}
+  else if(lunga){
+    // mezza e maratona: il passo gara sta nel medio e nel lungo, qui la soglia a blocchi lunghi
+    const rk=D>=42?3:2;main=stFase('Soglia','Z4','',rit?stPace(rit.soglia):'','soglia a blocchi lunghi, il passo gara e\' nel medio',{reps:nRip(v,rk,2,5),repDist:rk+' km',repPace:rit?stPace(rit.soglia):'',recTime:'2\''});
+  }else{
+    const s={5:[1,'1000 m',rit?rit.interv:0,'2\''],10:[1.6,'1600 m',rit?rit.gara:0,'2\'']}[gara?D:10];
+    main=stFase('Ripetute','Z4','','',gara?'a passo gara o poco sotto':'sostenuto',{reps:nRip(v,s[0],3,8),repDist:s[1],repPace:s[2]?stPace(s[2]):'',recTime:s[3]});
   }
-  return {nome:'Corsa di qualita\'',fasi:[risc,main,def]};
+  return {nome:'Corsa di qualita\'',km:K['Qualita\''],fasi:[risc,main,def]};
 }
 // velocita' e salti: tecnica, accelerazioni, velocita' lanciata, salti; cambi di direzione se servono
 function stVel(I,w){
@@ -4183,30 +4298,39 @@ function stMob(I){
 
 // ── test d'ingresso ───────────────────────────────────────────────
 const ST_TEST_CAR={caviglia:['Knee to wall (dorsiflessione caviglia)','cm dal muro, destra e sinistra'],piede:['Appoggio monopodalico a occhi chiusi','secondi, destra e sinistra'],polpaccio:['Single Leg Heel Raise','ripetute massime per lato'],ginocchio:['Step down laterale','qualita\' del controllo del ginocchio, 5 per lato'],anca:['Rotazioni anca 90-90','gradi o qualita\', destra e sinistra'],adduttori:['Squeeze test adduttori','dolore o forza a 45 gradi'],hamstring:['Nordic Hamstring Curl','angolo di rottura o 3 ripetute controllate'],glutei:['Single Leg Bridge','ripetute massime per lato'],core:['Side Plank','secondi per lato'],colonna:['Sit and reach','cm'],spalle:['Rotazione esterna spalla','gradi, destra e sinistra'],mobilita:['Overhead squat','qualita\' del gesto']};
+/* L'ordine e' quello di una batteria vera: prima le misure a riposo (mobilita',
+   circonferenze), poi salti e sprint da freschi, poi la forza, e la resistenza
+   per ultima. La resistenza (terzo campo 'res') non sta nel giorno dei test di
+   forza: prende il posto della prima corsa della settimana. Chi rientra da un
+   infortunio non fa massimali: si cerca il carico di partenza senza dolore. */
 function stTestTutti(I){
-  const t=[];const L=I.livello,N=stNumeri(I),sport=I.sport!=='nessuno';
-  const pesi=N.forza>0,corsa=N.corsa>0;
+  const mis=[],neu=[],fz=[],res=[];const L=I.livello,N=stNumeri(I),sport=I.sport!=='nessuno';
+  const pesi=N.forza>0,corsa=N.corsa>0,rientro=I.obiettivo==='rientro';
+  if(I.obiettivo==='estetica')mis.push(['Peso e circonferenze','vita, fianchi, coscia, braccio: al mattino, stesse condizioni']);
+  stCarEff(I).forEach(c=>{const x=ST_TEST_CAR[c];if(x&&!mis.some(y=>y[0]===x[0]))mis.push(x);});
+  if(sport||N.vel)neu.push(['Countermovement Jump','cm, migliore di 3'],['Sprint 10m','secondi, migliore di 2'],['Sprint 30m','secondi']);
   if(pesi&&I.obiettivo==='gara'){
     // per chi corre: forza a una gamba e tenuta, non i massimali
-    t.push([stEs(I,'unilat'),L==='zero'||L==='princ'?'10 ripetute per lato: controllo del ginocchio':'8RM per lato'],['Single Leg Heel Raise','ripetute massime per lato'],['Side Plank','secondi per lato']);
+    fz.push([stEs(I,'unilat'),L==='zero'||L==='princ'?'10 ripetute per lato: controllo del ginocchio':'8RM per lato'],['Single Leg Heel Raise','ripetute massime per lato'],['Side Plank','secondi per lato']);
+  }else if(pesi&&rientro){
+    fz.push([stEs(I,'squat'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],[stEs(I,'hinge'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],['Push Up','ripetute massime pulite']);
   }else if(pesi){
-    if(L==='zero')t.push(['Bodyweight Squat','qualita\' del gesto, 10 ripetute'],['Push Up','ripetute massime pulite'],['Plank','secondi'],['Dumbbell RDL','cerniera d\'anca con bastone, qualita\'']);
-    else if(L==='princ')t.push(['Dumbbell Goblet Squat','8RM'],['Push Up','ripetute massime'],['Feet Elevated Inverted Row','ripetute massime']);
+    if(L==='zero')fz.push(['Bodyweight Squat','qualita\' del gesto, 10 ripetute'],['Push Up','ripetute massime pulite'],['Plank','secondi'],['Dumbbell RDL','cerniera d\'anca con bastone, qualita\'']);
+    else if(L==='princ')fz.push(['Dumbbell Goblet Squat','8RM'],['Push Up','ripetute massime'],['Feet Elevated Inverted Row','ripetute massime']);
     else{
-      const rm=[[stEs(I,'squat'),I.rmSquat],[stEs(I,'spO'),I.rmPanca],[stEs(I,'hinge'),I.rmStacco]];
-      rm.forEach(([n,v])=>t.push([n,v?'1RM noto '+v+' kg: verifica con 3RM':'5RM, da cui il 1RM stimato']));
+      const rm=[['squat',stEs(I,'squat'),I.rmSquat],['spO',stEs(I,'spO'),I.rmPanca],['hinge',stEs(I,'hinge'),I.rmStacco]];
+      // l'alzata obiettivo prende il posto della sua famiglia, non si testa due volte
+      const fam={Squat:'squat','Panca Piana':'spO','Stacco da Terra':'hinge'}[I.liftObj];
+      rm.forEach(([s,n,v])=>{if(I.obiettivo==='forza'&&fam===s)fz.push([I.liftObj,I.liftDa?'1RM di partenza '+I.liftDa+' kg: verifica con 3RM':'3RM, da cui il 1RM di partenza']);else fz.push([n,v?'1RM noto '+v+' kg: verifica con 3RM':'5RM, da cui il 1RM stimato']);});
+      if(I.obiettivo==='forza'&&!fam)fz.push([I.liftObj,I.liftDa?'1RM di partenza '+I.liftDa+' kg: verifica con 3RM':'3RM, da cui il 1RM di partenza']);
     }
-    if(I.obiettivo==='forza'&&!t.some(x=>x[0]===I.liftObj))t.push([I.liftObj,'3RM, da cui il 1RM di partenza']);
   }
-  if(sport||N.vel)t.push(['Countermovement Jump','cm, migliore di 3'],['Sprint 10m','secondi, migliore di 2'],['Sprint 30m','secondi']);
-  if(sport&&(I.qualita||[]).includes('resistenza')||sport&&!(I.qualita||[]).length)t.push(['30-15 IFT','velocita\' finale']);
+  if(sport&&(I.qualita||[]).includes('resistenza')||sport&&!(I.qualita||[]).length)res.push(['30-15 IFT','velocita\' finale','res']);
   if(corsa){
-    if(L==='zero')t.push(['Camminata','20 minuti alternando corsa e cammino: quanto riesce a correre']);
-    else if(!stSec(I.t5)&&!stSec(I.t10))t.push(['Cooper Test','metri in 12 minuti, o un 5 km a tutta']);
+    if(L==='zero')res.push(['Corri e cammina 20\'','quanti minuti riesce a correre di fila, a ritmo di conversazione','res']);
+    else if(!stSec(I.t5)&&!stSec(I.t10))res.push(['Cooper Test','metri in 12 minuti, o un 5 km a tutta','res']);
   }
-  if(I.obiettivo==='estetica')t.push(['Peso e circonferenze','vita, fianchi, coscia, braccio: al mattino, stesse condizioni']);
-  stCarEff(I).forEach(c=>{const x=ST_TEST_CAR[c];if(x&&!t.some(y=>y[0]===x[0]))t.push(x);});
-  return t;
+  return mis.concat(neu,fz,res);
 }
 function stTest(I){
   const off=I.testOff||[];
@@ -4272,7 +4396,7 @@ function stPrevDose(nome,tipo,bi,dl){
 }
 // famiglie che la seduta puo' avere gia' nel corpo principale
 const ST_PREV_COPRE={hamstring:/nordic|hamstring curl/i,adduttori:/copenhagen|adductor/i,polpaccio:/heel raise|calf raise/i};
-const ST_PREV_FAM=[/nordic/i,/copenhagen/i,/heel raise|calf raise/i,/plank/i,/hip thrust|bridge|ponte/i];
+const ST_PREV_FAM=[/nordic/i,/copenhagen/i,/heel raise|calf raise/i,/plank/i,/hip thrust|bridge|ponte/i,/deadlift|rdl|stacco|hinge/i];
 function stPrevBlocco(I,ruolo,ctx){
   const cat=stPrevRuolo(ruolo),B=ST_PREV_BASE[cat];
   const bi=ctx.bi||0,gi=ctx.gi||0,dl=!!ctx.dl;
@@ -4304,7 +4428,10 @@ function stPrevBlocco(I,ruolo,ctx){
   const attZ=giro(car.filter(z=>stPrevLista(I,z,'mobilita').length).slice(gi%Math.max(1,car.length)).concat(car.filter(z=>stPrevLista(I,z,'mobilita').length)),B.att).filter((z,i,a)=>a.indexOf(z)===i);
   const att=scegli(attZ,'mobilita',1,'stretching').map(e=>Object.assign(e,{cue:'Prevenzione, attivazione: '+e.zona}));
   const rinZ=giro(car,B.rin);
-  const rin=scegli(rinZ,'rinforzo',corta?1:(car.length>1?3:2)).map(e=>Object.assign(e,{cue:'Prevenzione: '+e.zona}));
+  // chi si allena per forma, forza o estetica senza zone da proteggere fa un
+  // rinforzo solo: la prevenzione piena e' per chi corre, gioca o rientra
+  const leggera=['estetica','forza','salute','ibrido'].includes(I.obiettivo)&&!car.length;
+  const rin=scegli(rinZ,'rinforzo',corta||leggera?1:(car.length>1?3:2)).map(e=>Object.assign(e,{cue:'Prevenzione: '+e.zona}));
   return {cat,att,rin};
 }
 // compatibile con chi chiedeva solo la lista: attivazione e rinforzo in fila
@@ -4316,6 +4443,8 @@ function stDoseEs(name,pr,w){
   if(/nordic/i.test(name)){p.sets=sc?2:3;p.reps=w.blk?'5-6':'3-5';delete p.pct;delete p.rpe;p.rest='2\'';p.cue=p.cue||'discesa lenta e controllata';}
   else if(/copenhagen/i.test(name)){p.sets=sc?2:3;p.reps=(w.blk?'25-30"':'15-20"')+' per lato';delete p.pct;delete p.rpe;p.rest='60"';}
   else if(/plank|dead bug|pallof/i.test(name)&&!/"/.test(String(p.reps))&&!/pallof/i.test(name)){p.reps='30-45"';delete p.pct;}
+  // percentuale su un esercizio che non si testa col massimale: diventa RPE
+  if(p.pct&&!stPctOk(name)){p.rpe=stPctRpe(+p.pct);delete p.pct;}
   return p;
 }
 // ── esercizi di una seduta di forza ───────────────────────────────
@@ -4325,15 +4454,19 @@ function stDoseEs(name,pr,w){
    seduta, cosi' la stessa modifica vale in tutte le settimane). */
 function stCorpo(I,g,w){
   const tpl=ST_TPL[g.ruolo]||ST_TPL.FB_A,out=[],key=g.nome;
-  tpl.forEach(([slot,ruolo],i)=>{
+  // rientro: nell'ultima fase tornano i salti, bassi e pochi, in apertura di seduta
+  if(I.obiettivo==='rientro'&&/Ritorno/.test(w.fase)&&!tpl.some(x=>x[1]==='pliom')&&!I.esDel[key+'|rp']){const n=I.esOv[key+'|rp']||stEs(I,'pogo');out.push({k:key+'|rp',name:n,pr:Object.assign(stPrescr(I,w,'pliom'),{sets:2,cue:'ritorno ai salti: atterraggi morbidi e silenziosi, niente dolore'}),ruolo:'pliom'});}
+  tpl.forEach(([slot,ruolo0],i)=>{
     const k=key+'|'+i;if(I.esDel[k])return;
+    // ibrido: il total body e' la seduta leggera delle gambe, la pesante e' Gambe
+    const ruolo=I.obiettivo==='ibrido'&&g.ruolo==='FB_C'&&ruolo0==='main'?'main2':ruolo0;
     let name=stEs(I,slot);
     if(I.obiettivo==='forza'&&(ruolo==='main'||ruolo==='main2')){
       const fam={Squat:'squat','Panca Piana':'spO','Stacco da Terra':'hinge','Hip Thrust':'glutei',Trazioni:'tiV','Military Press':'spV'}[I.liftObj];
       if(fam===slot)name=I.liftObj;
     }
     if(I.esOv[k])name=I.esOv[k];
-    out.push({k,name,pr:stDoseEs(name,stPrescr(I,w,ruolo),w),ruolo});
+    out.push({k,name,pr:stDoseEs(name,stPrescr(I,w,ruolo,name),w),ruolo});
   });
   // punti da migliorare, nelle sedute della zona giusta: al massimo due in piu'
   const reg=/^(UP|PUSH|PULL)/.test(g.ruolo)?'a':/^(LOW|RUN)/.test(g.ruolo)?'b':'x';
@@ -4373,7 +4506,13 @@ function stProposta(I){
   stNorm(I);
   const fasi=stFasi(I),tipo=stSettimanaTipo(I),rit=stRitmi(I);
   const T={giorni:I.giorni.map((v,i)=>v?i:-1).filter(i=>i>=0),n:tipo.length,nF:tipo.filter(x=>x.tipo==='pesi').length,nC:tipo.filter(x=>x.tipo==='corsa').length,modo:I.attivita};
-  const kmW=T.nC?stKm(I,fasi):[];
+  let kmW=T.nC?stKm(I,fasi,T.nC):[];
+  // i km della settimana sono la somma delle sedute: se la settimana tipo chiede
+  // piu' dei km di partenza lo si dice, non lo si nasconde
+  // chi parte da zero lavora a minuti (corri e cammina), non a km
+  if(I.livello==='zero')kmW=[];
+  const kmTarget=kmW.slice();
+  if(T.nC&&I.livello!=='zero')kmW=fasi.map((w,i)=>w.tipo==='gara'?kmW[i]:(stKmRuoli(I,w,kmW[i],tipo,rit).tot||kmW[i]));
   const avvisi=[];
   const N=stNumeri(I),dLib=T.giorni.length;
   if(!dLib)avvisi.push('Scegli almeno un giorno in cui puo\' allenarsi.');
@@ -4387,6 +4526,7 @@ function stProposta(I){
   if(I.obiettivo==='gara'&&I.garaDist>=21&&!T.nF)avvisi.push('Senza forza aumenta il rischio di infortuni con il volume della '+ST_DIST[I.garaDist].toLowerCase()+': almeno una seduta a settimana.');
   if(I.obiettivo==='gara'&&I.livello==='zero'&&I.garaDist>=21)avvisi.push('Da zero a '+ST_DIST[I.garaDist].toLowerCase()+' in '+fasi.length+' settimane e\' un salto grande: valuta una distanza intermedia prima.');
   if(I.obiettivo==='gara'&&kmW.length){const lm=stLungoMax(I);if(I.garaDist===42&&lm<28)avvisi.push('Lungo massimo di '+lm+' km: per la maratona di solito si arriva a 30-32.');}
+  if(kmW.length&&kmTarget[0]&&kmW[0]>kmTarget[0]*1.15)avvisi.push('Con '+T.nC+' uscite la settimana tipo chiede almeno '+kmW[0]+' km, contro i '+kmTarget[0]+' di partenza: se sono troppi togli un\'uscita o il medio.');
   if(I.livello==='zero'&&tipo.length>4)avvisi.push('Chi parte da zero regge male piu\' di 4 sedute a settimana nelle prime settimane.');
   if(I.obiettivo==='estetica'&&!T.nF)avvisi.push('Per l\'estetica serve la forza: almeno 2 sedute.');
   if(I.obiettivo==='forza'){
@@ -4407,7 +4547,7 @@ function stProposta(I){
   if(inf.adduttori==='rec')adatt.push('adduttori: Copenhagen a leva corta');
   if(['caviglia','polpaccio','piede'].some(z=>inf[z]==='rec'))adatt.push('caviglia e piede: salti bassi (pogo) e volume di corsa graduale');
   if(adatt.length)avvisi.push('Infortuni passati, esercizi adattati: '+adatt.join('; ')+'.');
-  return {fasi,tipo,T,Nn:N,rit,kmW,test:stTest(I),avvisi,N:fasi.length};
+  return {fasi,tipo,T,Nn:N,rit,kmW,kmT:kmTarget,test:stTest(I),avvisi,N:fasi.length};
 }
 
 // ── dal piano al programma nel formato del Builder ────────────────
@@ -4416,39 +4556,61 @@ function stCostruisci(I,P){
   const tipoProg=I.sport!=='nessuno'?'sc':P.T.nC&&P.T.nF?'hybrid':P.T.nC?'corsa':'pesi';
   P.fasi.forEach((w,wi)=>{
     const sessions={};
-    let ord=0;
+    let ord=0,kmSett=0;
     const bi=P.fasi.slice(0,wi).filter(x=>x.tipo==='scarico').length,dl=w.tipo==='scarico'||w.tipo==='taper';
     const lbl='S'+w.n+' '+w.fase+(w.tipo==='scarico'?' scarico':w.tipo==='taper'?' taper':w.tipo==='gara'?' gara':'');
     // test d'ingresso nella prima settimana, e di nuovo in fondo se non c'e' una gara
     const conTest=wi===0||(wi===P.fasi.length-1&&I.obiettivo!=='gara'&&P.fasi.length>=6);
-    // il giorno dei test prende il posto della prima seduta di forza (o della prima)
-    const iTest=conTest&&P.test.length?Math.max(0,P.tipo.findIndex(x=>x.tipo==='pesi')):-1;
+    const fine=wi>0;
+    // il giorno dei test prende il posto della seduta di forza piu' importante,
+    // mai il giorno dopo la partita; la resistenza va in una corsa, da freschi
+    const tRes=P.test.filter(t=>t[2]==='res'),tFz=P.test.filter(t=>t[2]!=='res');
+    const iRes=conTest&&tRes.length?P.tipo.findIndex(x=>x.tipo==='corsa'&&x.ruolo!=='Lungo'):-1;
+    const tDay=tFz.concat(iRes<0?tRes:[]);
+    let iTest=-1;
+    if(conTest&&tDay.length){
+      let best=-1;P.tipo.forEach((x,i)=>{if(x.tipo!=='pesi'||x.md==='MD-6'||x.md==='MD-1')return;if(best<0||(ST_DURO[x.ruolo]||1)>(ST_DURO[P.tipo[best].ruolo]||1))best=i;});
+      iTest=best>=0?best:Math.max(0,P.tipo.findIndex(x=>x.tipo==='pesi'));
+    }
     if(iTest>=0){
-      const exs={};P.test.forEach((t,i)=>{exs['e'+i]={name:t[0],sets:1,reps:'test',cue:t[1],order:i};});
-      sessions['s'+(ord)]={name:wi===0?'Test d\'ingresso':'Test di fine programma',type:'pesi',order:ord,dayOfWeek:P.tipo.length?P.tipo[iTest].d:0,notes:'Riscaldamento completo, poi i test nell\'ordine: quelli piu\' neurali prima, la resistenza per ultima.',exercises:exs};ord++;
+      const exs={};tDay.forEach((t,i)=>{exs['e'+i]={name:t[0],sets:1,reps:'test',cue:fine&&/RM/.test(t[1])?'nuovo massimale: 3RM, da cui il 1RM stimato':t[1],order:i};});
+      sessions['s'+(ord)]={name:wi===0?'Test d\'ingresso':'Test di fine programma',type:'pesi',order:ord,dayOfWeek:P.tipo.length?P.tipo[iTest].d:0,notes:'Riscaldamento completo, poi i test nell\'ordine scritto: le misure a riposo, i salti e gli sprint da freschi, la forza, la resistenza per ultima.'+(I.obiettivo==='rientro'?' Ci si ferma se il dolore supera 3 su 10.':''),exercises:exs};ord++;
     }
     // settimana della gara: niente dopo la gara, niente forza negli ultimi 3 giorni,
-    // il medio diventa facile corto e il giorno prima solo una sgambata
+    // il medio diventa facile corto e il giorno prima solo una sgambata. La gara
+    // prende il posto del lungo, o dell'ultima corsa se il lungo non c'e' (da zero)
     const gd=w.tipo==='gara'?stDate(I.garaData):null;
-    const lg=P.tipo.find(x=>x.ruolo==='Lungo');
+    const cr=P.tipo.filter(x=>x.tipo==='corsa');
+    const lg=cr.find(x=>x.ruolo==='Lungo')||cr.slice().sort((a,b)=>b.d-a.d)[0];
     const dGara=w.tipo==='gara'?(gd?(gd.getDay()+6)%7:(lg?lg.d:6)):null;
+    // nel taper una sola seduta di forza, e niente eccentriche pesanti (Nordic)
+    const pesiTaper=P.tipo.map((x,i)=>x.tipo==='pesi'&&i!==iTest?i:-1).filter(i=>i>=0);
+    const zero=I.livello==='zero';
     P.tipo.forEach((g,gi)=>{
       if(gi===iTest)return;
-      if(w.tipo==='gara'&&g.ruolo!=='Lungo'){
+      if((w.tipo==='taper'||w.tipo==='gara')&&g.tipo==='pesi'&&pesiTaper.indexOf(gi)>0)return;
+      if(w.tipo==='gara'&&g!==lg){
         if(g.d>=dGara)return;
         if(g.tipo!=='corsa'&&dGara-g.d<=3)return;
-        if(g.tipo==='corsa'&&g.d===dGara-1){sessions['s'+ord]={name:'Sgambata pre gara',type:'corsa',order:ord,dayOfWeek:g.d,notes:'Solo per sciogliersi.',corsaFasi:[stFase('Fondo Lento','Z1','20\'','','piano'),stFase('Attivazione','Z3','3 allunghi da 80 m','','sciolti')],exercises:{}};ord++;return;}
+        if(g.tipo==='corsa'&&g.d===dGara-1){sessions['s'+ord]={name:'Sgambata pre gara',type:'corsa',order:ord,dayOfWeek:g.d,notes:'Solo per sciogliersi.',corsaFasi:zero?[stFase('Fondo Lento','Z1','10\'','','corsa leggerissima, poi camminata')]:[stFase('Fondo Lento','Z1','20\'','','piano'),stFase('Attivazione','Z3','3 allunghi da 80 m','','sciolti')],exercises:{}};ord++;return;}
         if(g.tipo==='corsa'&&['Medio','Qualita\' 2'].includes(g.ruolo)){sessions['s'+ord]={name:'Corsa facile',type:'corsa',order:ord,dayOfWeek:g.d,notes:'',corsaFasi:[stFase('Fondo Lento','Z2','30\'','','facile, con 3 x 1\' a passo gara')],exercises:{}};ord++;return;}
       }
-      if(w.tipo==='gara'&&g.tipo==='corsa'&&g.ruolo==='Lungo'){
-        sessions['s'+ord]={name:'Gara: '+ST_DIST[I.garaDist],type:'corsa',order:ord,dayOfWeek:dGara,notes:I.garaTempo?'Obiettivo '+I.garaTempo+', passo '+stPace(P.rit?P.rit.gara:0)+'/km':'Buona gara',corsaFasi:[stFase('Riscaldamento','Z1','15\'','','con 3 allunghi'),stFase('Testo libero','Z4',ST_DIST[I.garaDist],P.rit?stPace(P.rit.gara):'','gara')],exercises:{}};ord++;return;
+      if(w.tipo==='gara'&&g===lg){
+        sessions['s'+ord]={name:'Gara: '+ST_DIST[I.garaDist],type:'corsa',order:ord,dayOfWeek:dGara,notes:I.garaTempo?'Obiettivo '+I.garaTempo+', passo '+stPace(P.rit?P.rit.gara:0)+'/km':zero?'Partenza piano, ritmo di conversazione: l\'obiettivo e\' arrivare correndo.':'Buona gara',corsaFasi:[stFase('Riscaldamento','Z1',zero?'10\'':'15\'','',zero?'camminata veloce e 2\' di corsa leggera':'con 3 allunghi'),stFase('Testo libero','Z4',ST_DIST[I.garaDist],P.rit?stPace(P.rit.gara):'','gara')],exercises:{}};ord++;return;
       }
       if(g.tipo==='corsa'){
-        const c=stCorsa(I,w,g.ruolo,P.kmW[wi]||0,P.rit,P.T.nC);
+        let c=stCorsa(I,w,g.ruolo,(P.kmT||P.kmW)[wi]||0,P.rit,P.T.nC,P.tipo);
+        if(gi===iRes){
+          const t=tRes[0];
+          c=zero?{nome:'Test di corsa',fasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),stFase('Testo libero','Z2','20\'','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','5\'','','camminata')]}
+            :{nome:'Test di corsa',fasi:[stFase('Riscaldamento','Z1','15\'','','corsa lenta e 3 allunghi'),stFase('Testo libero','Z5','','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','10\'','','corsa lenta o camminata')]};
+        }
         const leggera=['Rigenerante','Facile'].includes(g.ruolo)&&P.tipo.some(x=>x.d===g.d&&x.tipo==='pesi');
         const pb=leggera?{att:[],rin:[]}:stPrevBlocco(I,'corsa',{bi,gi,dl});
         const exs={};pb.att.concat(pb.rin).forEach((e,i)=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};});
-        sessions['s'+ord]={name:g.nome||c.nome,type:'corsa',order:ord,dayOfWeek:g.d,notes:(P.kmW[wi]?'Settimana da circa '+P.kmW[wi]+' km. ':'')+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
+        kmSett+=c.km||0;
+        const dove=c.km?'Circa '+c.km+' km. ':c.min?'Circa '+c.min+' minuti. ':'';
+        sessions['s'+ord]={name:gi===iRes||g.ruolo==='Corri e cammina'?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
       }
       if(g.tipo==='sprint'){
         const exs={};stVel(I,w).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
@@ -4462,15 +4624,18 @@ function stCostruisci(I,P){
         const exs={};stMob(I).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
         sessions['s'+ord]={name:g.nome,type:'recupero',order:ord,dayOfWeek:g.d,notes:'20-30 minuti tranquilli: mobilita\' sulle zone da proteggere.',exercises:exs};ord++;return;
       }
-      const corpo=stCorpo(I,g,w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;return e;});
+      // nella settimana del test finale le altre sedute di forza scaricano
+      const corpo=stCorpo(I,g,conTest&&fine&&w.tipo==='carico'?Object.assign({},w,{tipo:'scarico'}):w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;return e;});
       const exs={};let i=0;
       const pb=stPrevBlocco(I,g.ruolo,{bi,gi,dl,nomi:corpo.map(e=>e.name)});
       const lista=pb.att.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})).concat(corpo,pb.rin.map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:e.cue})));
       stNelTempo(I,lista,corpo.length);
+      // taper e settimana della gara: niente eccentriche pesanti, lasciano indolenziti
+      if(w.tipo==='taper'||w.tipo==='gara')for(let j=lista.length-1;j>=0;j--)if(/nordic/i.test(lista[j].name))lista.splice(j,1);
       lista.forEach(e=>{exs['e'+String(i).padStart(2,'0')]=Object.assign(e,{order:i});i++;});
       sessions['s'+ord]={name:g.nome,type:'pesi',order:ord,dayOfWeek:g.d,notes:(g.md?g.md+'. ':'')+(w.tipo==='scarico'?'Settimana di scarico: volume ridotto, tecnica.':''),exercises:exs};ord++;
     });
-    weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(P.kmW[wi]?' · circa '+P.kmW[wi]+' km':''),sessions};
+    weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(kmSett?' · circa '+kmSett+' km'+(w.tipo==='gara'?' piu\' la gara':''):''),sessions};
   });
   const cat=I.obiettivo==='forza'?'Forza':I.obiettivo==='estetica'?'Ipertrofia':I.obiettivo==='sport'?'Pre-season':I.obiettivo==='rientro'?'Riabilitazione':I.obiettivo==='gara'?'Corsa':'Altro';
   return {weeks,sport:tipoProg,category:cat};
@@ -4655,9 +4820,9 @@ function stAnteprima(){
   if(cr.length){
     const esempi=[];const visti={};
     P.fasi.forEach((w,i)=>{if(w.tipo!=='carico'||visti[w.fase])return;visti[w.fase]=1;esempi.push([w,i]);});
-    h+=`<div class="pz-card"><div class="pz-ch">Corsa <em>una settimana per fase</em></div><div class="st-scroll"><table class="pz-tab"><thead><tr><th>Fase</th>${cr.map(c=>`<th>${ST_GG[c.d]} ${stEsc(c.nome)}</th>`).join('')}</tr></thead><tbody>${esempi.map(([w,i])=>`<tr><td>${stEsc(w.fase)}<i>S${w.n}, ${P.kmW[i]} km</i></td>${cr.map(c=>{const x=stCorsa(I,w,c.ruolo,P.kmW[i],P.rit,P.T.nC);const m=x.fasi.find(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi[0];
+    h+=`<div class="pz-card"><div class="pz-ch">Corsa <em>una settimana per fase</em></div><div class="st-scroll"><table class="pz-tab"><thead><tr><th>Fase</th>${cr.map(c=>`<th>${ST_GG[c.d]} ${stEsc(c.nome)}</th>`).join('')}</tr></thead><tbody>${esempi.map(([w,i])=>`<tr><td>${stEsc(w.fase)}<i>S${w.n}${P.kmW[i]?', '+P.kmW[i]+' km':''}</i></td>${cr.map(c=>{const x=stCorsa(I,w,c.ruolo,(P.kmT||P.kmW)[i],P.rit,P.T.nC,P.tipo);const m=x.fasi.find(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi[0];
         return `<td>${stEsc(m.tipo)} ${stEsc(m.reps?m.reps+' x '+m.repDist:m.dist)}${m.pace||m.repPace?' <b>'+stEsc(m.repPace||m.pace)+'</b>':''}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>
-      ${P.rit?`<div class="pz-cap">Ritmi dal tempo recente: facile ${stPace(P.rit.facile[0])}-${stPace(P.rit.facile[1])}, soglia ${stPace(P.rit.soglia)}, intervalli ${stPace(P.rit.interv)}${I.obiettivo==='gara'?', passo gara '+stPace(P.rit.gara):''} al km.</div>`:'<div class="pz-cap">Senza un tempo recente si lavora a zone di frequenza cardiaca; il test della prima settimana darà i ritmi.</div>'}</div>`;
+      ${P.rit?`<div class="pz-cap">Ritmi dal tempo recente: facile ${stPace(P.rit.facile[0])}-${stPace(P.rit.facile[1])}, soglia ${stPace(P.rit.soglia)}, intervalli ${stPace(P.rit.interv)}${I.obiettivo==='gara'?', passo gara '+stPace(P.rit.gara):''} al km.</div>`:'<div class="pz-cap">Senza un tempo recente si lavora a zone di frequenza cardiaca; il test della prima settimana dara\' i ritmi.</div>'}</div>`;
   }
   // altre sedute
   const w1=P.fasi.find(w=>w.tipo==='carico')||P.fasi[0];
