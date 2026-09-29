@@ -493,6 +493,9 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 @media print{ .rsec-tm, .ex-al, .ex-ok{ display:none !important; } }
 
 /* ---------- esercitazioni e tempi, settimana per settimana ---------- */
+#fg-wk-da select, #fg-wk-a select{ min-width:220px; }
+.es-scelta{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:0 0 14px; font-size:12.5px; color:var(--muted); }
+.es-scelta b{ color:var(--ink); }
 .es-w + .es-w{ margin-top:22px; }
 .es-kpi{ margin-bottom:6px; }
 .es-sed{ margin-top:20px; }
@@ -1353,6 +1356,13 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
             <button class="btn" id="btn-days" type="button" aria-haspopup="dialog">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 13h2M11 13h2M15 13h2M7 17h2M11 17h2"/></svg>
               <span id="lbl-days">Solo questa</span> <span class="cnt" id="cnt-days">1</span>
+            </button>
+          </div>
+          <div class="fg only-giorno is-hidden" id="fg-es">
+            <label for="btn-es">Report esercitazioni</label>
+            <button class="btn" id="btn-es" type="button" title="Esercitazioni delle giornate scelte: tempi GPS, dichiarati, sfori e tempi morti">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>
+              Esercitazioni e tempi
             </button>
           </div>
           <div class="fg no-eserc" id="fg-metrics">
@@ -3907,9 +3917,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     out.sort(function(a, b){ return (a.iso+(a.slot==='PM'?'1':'0')).localeCompare(b.iso+(b.slot==='PM'?'1':'0')); });
     return out;
   }
+  /* Le sedute scelte dal Giornaliero con "Giornate in stampa": quando ci sono
+     il report delle esercitazioni mostra solo quelle, raggruppate per
+     settimana; senza scelta si ragiona per settimane intere. */
+  let esScelta = null;
+  function esTiene(s){
+    if(!esScelta) return true;
+    return esScelta.some(function(d){ return d.iso === s.iso && (!d.ap || d.ap === s.slot); });
+  }
   function esSettimane(){
     const v = {};
-    esSedute().forEach(function(s){ v[s.lun] = 1; });
+    esSedute().filter(esTiene).forEach(function(s){ v[s.lun] = 1; });
     return Object.keys(v).sort();
   }
   // una seduta: le righe delle esercitazioni con i tempi e i totali
@@ -3990,7 +4008,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   // la settimana: numeri in fila e poi le sedute
   function esSettModello(lun){
-    return esSedute().filter(function(s){ return s.lun === lun; }).map(esModello);
+    return esSedute().filter(function(s){ return s.lun === lun && esTiene(s); }).map(esModello);
   }
   function esKpiHTML(L){
     const conC = L.filter(function(M){ return M.c; });
@@ -4012,6 +4030,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function esRange(){
     const W = esSettimane();
     const a = document.getElementById('sel-wk-da'), b = document.getElementById('sel-wk-a');
+    if(esScelta) return W;
     let da = a ? a.value : '', al = b ? b.value : '';
     if(!da) da = W[W.length-1] || '';
     if(!al || al < da) al = da;
@@ -4028,6 +4047,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
   }
   function renderEserc(){
+    document.querySelectorAll('#fg-wk-da,#fg-wk-a').forEach(function(el){ el.classList.toggle('is-hidden', !!esScelta || mode !== 'eserc'); });
     const host = document.getElementById('rdoc');
     host.classList.remove('has-fog');
     const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
@@ -4042,12 +4062,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<div class="d">Le esercitazioni si scrivono nella pagina Esercitazioni e compaiono qui, settimana per settimana.</div></div></div>';
       return;
     }
-    host.innerHTML = head+'<div class="rbody">'+R.map(function(w){
+    const scelta = esScelta ? '<div class="es-scelta"><span>Sedute scelte nel Giornaliero: <b>'+esScelta.length+'</b></span><button class="btn" type="button" id="es-tutte">Settimane intere</button></div>' : '';
+    host.innerHTML = head+'<div class="rbody">'+scelta+R.map(function(w){
       const L = esSettModello(w);
       return '<div class="rsec es-w"><div class="rsec-head"><h3>'+esc(esSettLbl(w))+'</h3>'+
         '<span class="rsec-n">GPS contro quanto scritto in Esercitazioni; tempi morti = Full Training meno le esercitazioni</span></div>'+
         esKpiHTML(L)+L.map(esSedutaHTML).join('')+'</div>';
     }).join('')+'<p class="tm-nota">Dichiarato: il tempo che viene da serie e recupero scritti in Esercitazioni (lavoro piu\' recuperi). Si segna lo sforo quando il GPS supera il dichiarato di oltre un minuto o del 10%. Quota: la parte del Full Training presa dall\'esercitazione. Tempi morti arancio quando superano il 15% della seduta.</p></div>';
+    const t = document.getElementById('es-tutte');
+    if(t) t.addEventListener('click', function(){ esScelta = null; fillWeeks(); aggiornaTastoStampa(); render(); });
   }
   // in stampa una settimana per foglio
   function buildPrintEserc(){
@@ -4455,7 +4478,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ---------- listeners ----------
   document.getElementById('mode-sintesi').addEventListener('click', function(){ setMode('sintesi'); });
   document.getElementById('mode-giorno').addEventListener('click', function(){ setMode('giorno'); });
-  document.getElementById('mode-eserc').addEventListener('click', function(){ setMode('eserc'); });
+  document.getElementById('mode-eserc').addEventListener('click', function(){ esScelta = null; setMode('eserc'); });
+  document.getElementById('btn-es').addEventListener('click', function(){
+    esScelta = printDays().map(function(d){ return { iso:d.iso, ap:(d.meta && d.meta.ap) || '' }; });
+    setMode('eserc');
+  });
   ['sel-wk-da','sel-wk-a'].forEach(function(id){ document.getElementById(id).addEventListener('change', function(){
     const a = document.getElementById('sel-wk-da'), b = document.getElementById('sel-wk-a');
     if(id === 'sel-wk-da' && b.value < a.value) b.value = a.value;
