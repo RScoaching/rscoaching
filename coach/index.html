@@ -725,6 +725,17 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:24px;z-index:999;
 }
+.an-sel{background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--white);font:500 13px 'Inter',sans-serif;padding:8px 12px;min-width:200px;}
+.an-t td{padding:3px 2px;}
+.an-c{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:26px;border-radius:7px;font-size:11px;font-weight:600;color:var(--white);font-variant-numeric:tabular-nums;}
+.an-c.ok{background:rgba(34,197,94,.22);color:#86EFAC;}
+.an-c.mez{background:rgba(245,158,11,.18);color:#FCD34D;}
+.an-c.no{background:rgba(244,63,94,.16);color:#FDA4AF;}
+.an-list{width:100%;border-collapse:collapse;font-size:12.5px;}
+.an-list td{padding:7px 4px;border-top:1px solid rgba(255,255,255,.05);color:var(--text);}
+.an-list tr:first-child td{border-top:0;}
+.an-list td b{color:var(--white);}
+.an-list td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
 /* ── DASHBOARD ── */
 .dash-sum{display:flex;flex-wrap:wrap;gap:8px 26px;margin:2px 0 20px;font-size:12.5px;color:var(--muted);}
 .dash-sum span{display:flex;align-items:baseline;gap:7px;}
@@ -1099,25 +1110,15 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 
 <!-- ANALYTICS -->
 <div class="page" id="page-analytics">
-  <div class="pg-head"><div><div class="pg-title">Analytics</div><div class="pg-sub">Compliance, benessere, progressione</div></div></div>
-  <div class="analytic-grid">
-    <div class="analytic-card"><div class="ac-val" id="an-sess">0</div><div class="ac-lbl">Sessioni totali</div></div>
-    <div class="analytic-card"><div class="ac-val" id="an-rpe">-</div><div class="ac-lbl">RPE medio 30gg</div></div>
-    <div class="analytic-card"><div class="ac-val" id="an-doms">-</div><div class="ac-lbl">DOMS medio</div></div>
-    <div class="analytic-card"><div class="ac-val" id="an-sleep">-</div><div class="ac-lbl">Sonno medio</div></div>
-    <div class="analytic-card"><div class="ac-val" id="an-comp">-%</div><div class="ac-lbl">Compliance 30gg</div></div>
-    <div class="analytic-card"><div class="ac-val" id="an-ci">0</div><div class="ac-lbl">Check-in totali</div></div>
+  <div class="pg-head"><div><div class="pg-title">Analytics</div><div class="pg-sub">Ultime 8 settimane: carico, aderenza al programma, test e massimali</div></div>
+    <select id="an-scope" class="an-sel" aria-label="Squadra o atleta" onchange="anScope=this.value;renderAnalytics()"></select></div>
+  <div class="dash-sum" id="an-sum"></div>
+  <section class="dcard" style="margin-bottom:16px;"><h2>Carico settimanale</h2><div class="dsub" id="an-car-sub">sRPE: RPE per minuti di ogni seduta, in unita' arbitrarie (UA)</div><div class="chart-wrap" style="height:210px;"><canvas id="an-car-chart"></canvas></div><div class="dash-wk-wrap" id="an-car-tab"></div></section>
+  <section class="dcard" style="margin-bottom:16px;"><h2>Aderenza al programma</h2><div class="dsub">Sedute registrate su sedute in programma, settimana per settimana</div><div class="dash-wk-wrap" id="an-ader"></div></section>
+  <div class="dash-grid dash-grid-b">
+    <section class="dcard"><h2>Test</h2><div class="dsub">Dalla prima all'ultima misura, in verde i miglioramenti</div><div id="an-test"></div></section>
+    <section class="dcard"><h2>Massimali</h2><div class="dsub">Dal primo al migliore registrato</div><div id="an-rm"></div></section>
   </div>
-  <div class="chart-card">
-    <div class="chart-title">RPE per atleta - media 30gg</div>
-    <div class="chart-wrap" style="height:220px;"><canvas id="athlete-rpe-chart"></canvas></div>
-  </div>
-  <div class="chart-card">
-    <div class="chart-title">Volume sessioni - ultime 8 settimane</div>
-    <div class="chart-wrap" style="height:200px;"><canvas id="volume-chart"></canvas></div>
-  </div>
-  <div class="card"><div class="sec-lbl">Compliance per atleta</div><div id="compliance-list"></div></div>
-  <div class="card"><div class="sec-lbl">Check-in recenti</div><div id="checkin-feed"></div></div>
 </div>
 
 <!-- DATABASE -->
@@ -2743,98 +2744,60 @@ function renderGroups(){
 }
 
 // ── ANALYTICS
+/* ── ANALYTICS ─────────────────────────────────────────────────────
+   Le quattro domande del preparatore, per la squadra o per un atleta: quanto
+   carico (sRPE per settimana, dal conto di athCarico, con l'ACWR), quanto
+   del programma viene fatto (sedute registrate su quelle in programma, con la
+   stessa regola della Dashboard), come vanno i test e i massimali. I grafici si
+   disegnano solo a pagina visibile: da nascosta Chart.js li faceva larghi zero. */
+let anScope='',anRm=null;
+function anIds(){return anScope&&athletes[anScope]?[anScope]:Object.keys(athletes);}
+function anColore(v,max){if(!v)return 'rgba(255,255,255,.03)';const x=Math.min(1,v/max);return `rgba(167,139,250,${(0.12+x*0.6).toFixed(2)})`;}
 function renderAnalytics(){
-  const allSess=[],allCi=[];
-  Object.values(sessions).forEach(aS=>Object.values(aS).forEach(s=>allSess.push(s)));
-  Object.values(checkins).forEach(aC=>Object.values(aC).forEach(c=>allCi.push(c)));
-  const wk30=Date.now()-30*864e5;
-  const recent=allSess.filter(s=>s.ts>wk30);
-  const avgOf=(arr,k)=>arr.filter(x=>x[k]).length?(arr.filter(x=>x[k]).reduce((t,x)=>t+x[k],0)/arr.filter(x=>x[k]).length).toFixed(1):'-';
-  document.getElementById('an-sess').textContent=allSess.length;
-  document.getElementById('an-rpe').textContent=avgOf(recent,'rpe');
-  document.getElementById('an-doms').textContent=avgOf(recent,'doms');
-  document.getElementById('an-sleep').textContent=avgOf(recent,'sleep');
-  document.getElementById('an-ci').textContent=allCi.length;
-  document.getElementById('an-comp').textContent=Object.keys(athletes).length>0?Math.round((recent.length/(Object.keys(athletes).length*30/7))*100)+'%':'-%';
-  const athNames=[],athRpe=[];
-  Object.entries(athletes).forEach(([id,a])=>{const aS=Object.values(sessions[id]||{}).filter(s=>s.ts>wk30&&s.rpe);if(aS.length){athNames.push(a.name.split(' ')[0]);athRpe.push((aS.reduce((t,s)=>t+s.rpe,0)/aS.length).toFixed(1));}});
-  const c1=document.getElementById('athlete-rpe-chart');if(c1._chart)c1._chart.destroy();
-  // Horizontal bar: athletes on Y, RPE on X - easier to read many names
-  c1._chart=new Chart(c1,{type:'bar',data:{labels:athNames,datasets:[{
-    data:athRpe,
-    backgroundColor:athRpe.map(v=>v>=9?'rgba(244,63,94,.7)':v>=7?'rgba(245,158,11,.7)':'rgba(255,106,46,.7)'),
-    borderColor:athRpe.map(v=>v>=9?'rgba(244,63,94,1)':v>=7?'rgba(245,158,11,1)':'rgba(255,106,46,1)'),
-    borderWidth:1,
-    borderRadius:6,
-    borderSkipped:false
-  }]},options:{
-    indexAxis:'y',
-    responsive:true,maintainAspectRatio:false,
-    plugins:{
-      legend:{display:false},
-      tooltip:{
-        backgroundColor:'rgba(28,23,30,.95)',
-        borderColor:'rgba(255,106,46,.3)',
-        borderWidth:1,
-        titleColor:'#94A3B8',
-        bodyColor:'#EEF0FF',
-        callbacks:{label:ctx=>`RPE medio: ${ctx.raw}`}
-      }
-    },
-    scales:{
-      x:{min:0,max:10,ticks:{color:'#475569',font:{size:9},stepSize:2},grid:{color:'rgba(255,255,255,.04)'},border:{display:false}},
-      y:{ticks:{color:'#94A3B8',font:{size:11,weight:'600'}},grid:{display:false},border:{display:false}}
-    }
-  }});
-  const wkVol={};
-  allSess.forEach(s=>{const d=new Date(s.ts||Date.now());const mon=new Date(d);mon.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));const wk=mon.toISOString().slice(0,10);if(!wkVol[wk])wkVol[wk]=0;wkVol[wk]++;});
-  const wks=Object.keys(wkVol).sort().slice(-8);
-  const c2=document.getElementById('volume-chart');if(c2._chart)c2._chart.destroy();
-  const volCtx=c2.getContext('2d');
-  const volGrad=volCtx.createLinearGradient(0,0,0,200);
-  volGrad.addColorStop(0,'rgba(255,106,46,.75)');
-  volGrad.addColorStop(1,'rgba(255,106,46,.25)');
-  const volVals=wks.map(w=>wkVol[w]||0);
-  const maxVol=Math.max(...volVals,1);
-  c2._chart=new Chart(c2,{type:'bar',data:{labels:wks.map(w=>w.slice(5)),datasets:[{
-    data:volVals,
-    backgroundColor:volVals.map(v=>v===maxVol?'rgba(255,106,46,.9)':volGrad),
-    borderRadius:8,
-    borderSkipped:false,
-  }]},options:{
-    responsive:true,maintainAspectRatio:false,
-    plugins:{
-      legend:{display:false},
-      tooltip:{
-        backgroundColor:'rgba(28,23,30,.95)',
-        borderColor:'rgba(255,106,46,.3)',
-        borderWidth:1,
-        titleColor:'#94A3B8',
-        bodyColor:'#EEF0FF',
-        callbacks:{label:ctx=>`${ctx.raw} sessioni`}
-      }
-    },
-    scales:{
-      x:{ticks:{color:'#64748B',font:{size:10}},grid:{display:false},border:{display:false}},
-      y:{ticks:{color:'#475569',font:{size:9},stepSize:1},grid:{color:'rgba(255,255,255,.04)'},border:{display:false}}
-    }
-  }});
-  const clEl=document.getElementById('compliance-list');
-  clEl.innerHTML=Object.entries(athletes).map(([id,a])=>{
-    const cnt=Object.values(sessions[id]||{}).filter(s=>s.ts>wk30).length;
-    const pct=Math.min(100,Math.round((cnt/Math.max(1,30/7))*100));
-    return {name:a.name,cnt,pct};
-  }).sort((a,b)=>b.pct-a.pct).map(it=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="min-width:100px;font-size:13px;font-weight:600;color:var(--white);">${it.name}</div>
-      <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${it.pct}%;background:${it.pct>=80?'var(--green)':it.pct>=50?'var(--amber)':'var(--red)'};border-radius:3px;"></div></div>
-      <div style="min-width:48px;text-align:right;font-size:12px;font-weight:700;color:${it.pct>=80?'var(--green)':it.pct>=50?'var(--amber)':'var(--red)'};">${it.pct}%</div>
-    </div>`).join('')||'<div class="empty">Nessun dato.</div>';
-  const cfAll=[];
-  Object.entries(checkins).forEach(([aid,aC])=>{Object.values(aC).forEach(ci=>{cfAll.push({...ci,athName:athletes[aid]?.name||'-'});});});
-  cfAll.sort((a,b)=>b.ts-a.ts);
-  document.getElementById('checkin-feed').innerHTML=cfAll.slice(0,10).map(ci=>`
-    <div class="sess-item"><div class="sess-date">${ci.date||'-'}</div><div class="sess-body"><div class="sess-day">${ci.athName}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${ci.fatica!=null?`<span class="pill p-red">F:${ci.fatica}</span>`:''}${ci.sonno!=null?`<span class="pill p-blue">S:${ci.sonno}</span>`:''}${ci.doms!=null?`<span class="pill p-gold">D:${ci.doms}</span>`:''}${ci.motivazione!=null?`<span class="pill p-green">M:${ci.motivazione}</span>`:''}${ci.pains?.length?`<span class="pill p-red">Dolore: ${ci.pains.join(', ')}</span>`:''}</div></div></div>`).join('')||'<div class="empty">Nessun check-in.</div>';
+  const pagina=document.getElementById('page-analytics');if(!pagina)return;
+  const sel=document.getElementById('an-scope');
+  sel.innerHTML=`<option value="">Tutta la squadra</option>`+Object.entries(athletes).sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name))).map(([id,a])=>`<option value="${id}"${anScope===id?' selected':''}>${dEsc(a.name)}</option>`).join('');
+  if(!pagina.classList.contains('active'))return;
+  const ids=anIds(),un=ids.length===1;
+  // carico
+  const car={};ids.forEach(id=>{try{car[id]=athCarico(id);}catch(e){}});
+  const sett=(car[ids[0]]||{settimane:[]}).settimane.map(w=>w.lun);
+  const tot=sett.map((_,i)=>ids.reduce((t,id)=>t+((car[id]&&car[id].settimane[i])?car[id].settimane[i].tot:0),0));
+  const attivi=sett.map((_,i)=>ids.filter(id=>car[id]&&car[id].settimane[i]&&car[id].settimane[i].tot>0).length);
+  const media=tot.map((t,i)=>un?t:(attivi[i]?t/attivi[i]:0));
+  const lbl=sett.map(d=>d.getDate()+'/'+(d.getMonth()+1));
+  const c=document.getElementById('an-car-chart');if(c._chart)c._chart.destroy();
+  if(window.Chart)c._chart=new Chart(c,{type:'bar',data:{labels:lbl,datasets:[{data:media.map(Math.round),backgroundColor:media.map((_,i)=>i===media.length-1?'rgba(255,106,46,.45)':'rgba(255,106,46,.8)'),borderRadius:6,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(28,23,30,.95)',bodyColor:'#F4F1EC',titleColor:'#8E8678',callbacks:{title:x=>'Settimana dal '+x[0].label,label:x=>x.raw+' UA'+(un?'':' in media per atleta')+(x.dataIndex===media.length-1?' (in corso)':'')}}},
+      scales:{x:{ticks:{color:'#8E8678',font:{size:10}},grid:{display:false},border:{display:false}},y:{ticks:{color:'#8E8678',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'},border:{display:false}}}}});
+  document.getElementById('an-car-sub').textContent=un?'sRPE per settimana (RPE per minuti), l\'ultima e\' in corso':'sRPE per settimana, media per atleta che si e\' allenato; sotto ogni atleta, piu\' scuro vuol dire piu\' carico';
+  const maxL=Math.max(1,...ids.map(id=>Math.max(0,...((car[id]||{}).settimane||[]).map(w=>w.tot))));
+  document.getElementById('an-car-tab').innerHTML=`<table class="dash-wk an-t"><thead><tr><th></th>${lbl.map(l=>`<th>${l}</th>`).join('')}<th>ACWR</th></tr></thead><tbody>${ids.map(id=>{const x=car[id];if(!x)return '';
+    return `<tr><th><button type="button" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openAthlete('${id}')">${dEsc(athletes[id].name)}</button></th>${x.settimane.map(w=>`<td><span class="an-c" style="background:${anColore(w.tot,maxL)}" title="${Math.round(w.tot)} UA, ${w.sedute} ${w.sedute===1?'giorno':'giorni'} di allenamento">${w.tot?Math.round(w.tot):''}</span></td>`).join('')}<td class="dk-s"><span class="pill ${x.acwr==null?'p-gray':x.acwr>1.5?'p-red':x.acwr>1.3?'p-warn':x.acwr<0.8?'p-blue':'p-ok'}">${x.acwr==null?'-':x.acwr.toFixed(2).replace('.',',')}</span></td></tr>`;}).join('')}</tbody></table>`;
+  // aderenza
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  let pvT=0,faT=0;
+  const righe=ids.map(id=>{const cel=sett.map(l=>{let pv=0,fa=0;for(let g=0;g<7;g++){const d=new Date(l);d.setDate(d.getDate()+g);if(d>oggi)break;const P=dPreviste(id,d),F=dFatte(id,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}return {pv,fa};});
+    const pv=cel.reduce((t,x)=>t+x.pv,0),fa=cel.reduce((t,x)=>t+x.fa,0);pvT+=pv;faT+=fa;return {id,cel,pv,fa};}).filter(r=>r.pv);
+  document.getElementById('an-ader').innerHTML=righe.length?`<table class="dash-wk an-t"><thead><tr><th></th>${lbl.map(l=>`<th>${l}</th>`).join('')}<th>Totale</th></tr></thead><tbody>${righe.map(r=>`<tr><th><button type="button" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openAthlete('${r.id}')">${dEsc(athletes[r.id].name)}</button></th>${r.cel.map(x=>{if(!x.pv)return '<td></td>';const q=x.fa/x.pv;return `<td><span class="an-c ${q>=0.8?'ok':q>=0.5?'mez':'no'}" title="${x.fa} su ${x.pv}">${x.fa}/${x.pv}</span></td>`;}).join('')}<td class="dk-s"><b>${Math.round(r.fa/r.pv*100)}%</b></td></tr>`).join('')}</tbody></table>`
+    :`<div class="d-vuoto">${dIco('planner')}<b>Nessuna seduta in programma nel periodo</b><span>L'aderenza si calcola sui programmi assegnati con i giorni fissati.</span></div>`;
+  // test
+  const tr=[];ids.forEach(id=>testNames(id).forEach(n=>{const sr=testSerie(id,n);if(sr.length<2)return;const m=testMeta(n),a=sr[0],z=sr[sr.length-1],d=(z.val-a.val)/Math.abs(a.val||1)*100;tr.push({id,n,m,a,z,d,meglio:isBetter(m,z.val,a.val),uguale:z.val===a.val});}));
+  tr.sort((x,y)=>y.z.ts-x.z.ts);
+  document.getElementById('an-test').innerHTML=tr.length?`<table class="an-list">${tr.slice(0,40).map(x=>`<tr><td>${un?'':`<b>${dEsc(athletes[x.id].name)}</b> `}${dEsc(x.n)}</td><td class="n">${fmtNum(x.a.val,x.m.dec)} &#8594; <b>${fmtNum(x.z.val,x.m.dec)}</b> ${dEsc(x.m.u||'')}</td><td class="n"><span class="pill ${x.uguale?'p-gray':x.meglio?'p-ok':'p-red'}">${x.d>0?'+':''}${x.d.toFixed(1).replace('.',',')}%</span></td></tr>`).join('')}</table>`
+    :`<div class="d-vuoto">${dIco('test')}<b>Nessun test ripetuto</b><span>Servono almeno due misure dello stesso test per vedere un progresso.</span></div>`;
+  // massimali: si leggono una volta sola quando serve
+  const rmEl=document.getElementById('an-rm');
+  if(anRm==null){rmEl.innerHTML='<div class="d-vuoto"><span>Carico i massimali...</span></div>';get(ref(db,'rm_records')).then(sn=>{anRm=sn.val()||{};renderAnalytics();}).catch(()=>{anRm={};});}
+  else{const rr=[];ids.forEach(id=>{Object.values(anRm[id]||{}).forEach(er=>{const v=Object.values(er||{}).filter(r=>r&&numVal(r.value)!=null&&r.ts).sort((a,b)=>a.ts-b.ts);if(!v.length)return;const pr=v[0],best=v.reduce((m,r)=>numVal(r.value)>numVal(m.value)?r:m,v[0]);rr.push({id,n:pr.exName||'Esercizio',a:numVal(pr.value),b:numVal(best.value),n1:v.length,ts:best.ts});});});
+    rr.sort((x,y)=>y.ts-x.ts);
+    rmEl.innerHTML=rr.length?`<table class="an-list">${rr.slice(0,40).map(x=>{const d=x.a?(x.b-x.a)/x.a*100:0;return `<tr><td>${un?'':`<b>${dEsc(athletes[x.id].name)}</b> `}${dEsc(x.n)}</td><td class="n">${fmtNum(x.a,1)} &#8594; <b>${fmtNum(x.b,1)}</b> kg</td><td class="n">${x.n1>1?`<span class="pill ${d>0?'p-ok':'p-gray'}">${d>0?'+':''}${d.toFixed(1).replace('.',',')}%</span>`:'<span class="pill p-gray">una misura</span>'}</td></tr>`;}).join('')}</table>`
+      :`<div class="d-vuoto">${dIco('pesi')}<b>Nessun massimale registrato</b><span>Si inseriscono dalla scheda atleta, scheda 1RM.</span></div>`;}
+  // sintesi
+  const ult=media.length>1?media[media.length-2]:0,prec=media.length>2?media[media.length-3]:0;
+  const migl=tr.filter(x=>x.meglio).length;
+  const sum=[[Math.round(ult),(un?'UA la settimana scorsa':'UA per atleta la settimana scorsa')+(prec?' ('+(ult>=prec?'+':'')+Math.round((ult-prec)/prec*100)+'%)':'')],[pvT?Math.round(faT/pvT*100)+'%':'-','aderenza al programma'],[ids.reduce((t,id)=>t+((car[id]&&car[id].nSedute)||0),0),'sedute con RPE'],[tr.length?migl+'/'+tr.length:'-','test migliorati']];
+  document.getElementById('an-sum').innerHTML=sum.map(([n,t])=>`<span><b>${n}</b>${t}</span>`).join('');
 }
 
 // ── DATABASE
@@ -3187,6 +3150,8 @@ window.pg=function(id,el){
   document.getElementById('page-'+id)?.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   if(el)el.classList.add('active');
+  // i grafici si disegnano a pagina visibile
+  if(id==='analytics')renderAnalytics();
 };
 window.toggleSidebar=function(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('mob-overlay').classList.toggle('open');};
 
