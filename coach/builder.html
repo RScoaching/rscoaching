@@ -3406,10 +3406,18 @@ window.exportBuilderPDF=function(){
       +'</div>';
   }).join('');
 
+  // chi riceve il foglio: la squadra se l'atleta e' della Fiorentina, se no lo studio
+  const fio=assignedIds.some(id=>/fiorentina/i.test(String((athletes[id]||{}).team||'')));
+  const ini0=stDate(p.startDate);
+  const lun0=ini0?(()=>{const x=new Date(ini0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;})():null;
+  const MESI=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+  const dSett=wi=>{if(!lun0)return '';const a=new Date(lun0);a.setDate(a.getDate()+wi*7);const b=new Date(a);b.setDate(b.getDate()+6);return a.getDate()+(a.getMonth()!==b.getMonth()?' '+MESI[a.getMonth()]:'')+' - '+b.getDate()+' '+MESI[b.getMonth()];};
+  const fineProg=lun0?(()=>{const b=new Date(lun0);b.setDate(b.getDate()+allWeeks.length*7-1);return b;})():null;
   // Weeks HTML
   let weeksHtml='';
   allWeeks.forEach(([,wk],wi)=>{
-    const sessions=Object.values(wk.sessions||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+    // in ordine di giorno, come le legge l'atleta; quelle senza giorno in fondo
+    const sessions=Object.values(wk.sessions||{}).sort((a,b)=>((a.dayOfWeek==null?9:a.dayOfWeek)-(b.dayOfWeek==null?9:b.dayOfWeek))||((a.order||0)-(b.order||0)));
     const wt=(wk.label||'').toLowerCase();
     const ph=Object.entries(PHASE_COLOR).find(([k])=>wt.includes(k));
     const phCol=ph?ph[1]:'#94a3b8';
@@ -3492,7 +3500,8 @@ window.exportBuilderPDF=function(){
               sd=e.setRows.map(r=>(r.type?'<span style="color:'+(STC[r.type]||'#94a3b8')+';font-size:6px;font-weight:700">['+esc(r.type)+']</span> ':'')+esc(r.sets)).join('<br>');
               rd=e.setRows.map(r=>esc(r.reps||'-')).join('<br>');
             } else {sd=esc(e.sets||'-');rd=esc(e.reps||'-');}
-            const noteCell=hasNotes?'<td class="note-cell">'+esc(e.cue||e.notes||e.note||'')+'</td>':'';
+            const nt=String(e.cue||e.notes||e.note||'').replace(/^Prevenzione, attivazione: /,'attivazione ').replace(/^Prevenzione: /,'prevenzione ');
+            const noteCell=hasNotes?'<td class="note-cell">'+esc(nt)+'</td>':'';
             rows+='<tr><td class="en">'+cxB+esc(e.name)+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'-')+'</td><td class="nu">'+esc(e.rest||'-')+'</td>'+noteCell+'</tr>';
           });
           const noteHeader=hasNotes?'<th class="note-th">Note / Cue</th>':'';
@@ -3522,7 +3531,7 @@ window.exportBuilderPDF=function(){
     weeksHtml+='<div class="wb">'
       +'<div class="wh">'
       +'<span class="wh-dot" style="background:'+phCol+'"></span>'
-      +'<span class="wh-num">Settimana '+(wi+1)+'</span>'
+      +'<span class="wh-num">Settimana '+(wi+1)+'</span>'+(lun0?'<span class="wh-date">'+dSett(wi)+'</span>':'')
       +(wk.label?'<span class="wh-lbl" style="color:'+phCol+'">'+esc(wk.label)+'</span>':'')
       +(wk.notes?'<span class="wh-note">'+esc(wk.notes)+'</span>':'')
       +'<span class="wh-cnt">'+sessions.length+' sessioni</span>'
@@ -3589,16 +3598,18 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
 .wh{display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:5px;background:#f7f4fb;border-radius:4px;border:1px solid #d9d2e6}
 .wh-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .wh-num{font-size:8.5px;font-weight:800;color:#14110f;letter-spacing:.3px}
+.wh-date{font-size:7.5px;color:#6b6472;font-weight:600}
+.leg{display:flex;flex-wrap:wrap;gap:3px 12px;margin:0 0 4px;padding:6px 8px;border:1px solid #d9d2e6;border-radius:4px;font-size:6.5px;color:#4a4352}
+.leg b{font-size:7px;color:#14110f;margin-right:4px}
+.leg i{font-style:normal;font-weight:800;color:#14110f;margin-right:2px}
 .wh-lbl{font-size:7.5px;font-weight:700;color:inherit}
 .wh-note{font-size:7px;color:#6b6472;font-style:italic;flex:1;padding-left:4px}
 .wh-cnt{font-size:6.5px;color:#8a8395;margin-left:auto;white-space:nowrap}
 .sw{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
 
 /* SESSION CARD */
-.sc{background:#ffffff;border:1px solid #d9d2e6;border-radius:5px;overflow:hidden;flex:1 1 220px;max-width:420px;min-width:150px;page-break-inside:avoid;break-inside:avoid}
-.sc--corsa{flex:1 1 200px;max-width:300px}
-.sc--recupero{flex:1 1 150px;max-width:240px}
-.sc--conditioning{flex:1 1 180px;max-width:300px}
+.sc{background:#ffffff;border:1px solid #d9d2e6;border-radius:5px;overflow:hidden;flex:1 1 calc(50% - 6px);max-width:calc(50% - 3px);min-width:240px;page-break-inside:avoid;break-inside:avoid}
+
 .sc-head{display:flex;align-items:center;gap:6px;padding:6px 8px 5px;border-bottom:1px solid #e6dff0;background:#f7f4fb}
 .sc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .sc-meta{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
@@ -3620,7 +3631,7 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
 .nu{text-align:center;color:#4a4352;white-space:nowrap}
 .cx-sep td{background:#efe7f7;font-size:6px;font-weight:700;color:#5b2d90;text-transform:uppercase;letter-spacing:.5px;padding:3px 6px}
 .cx-b{display:inline-block;font-size:6px;font-weight:800;padding:0 3px;border-radius:2px;margin-right:2px}
-.note-cell{font-size:6.5px;color:#6b6472;font-style:italic;max-width:100px;word-break:break-word}
+.note-cell{font-size:6.5px;color:#6b6472;font-style:italic;min-width:70px;max-width:150px;overflow-wrap:break-word;word-break:normal;hyphens:none}
 .note-th{text-align:left!important;color:#6b6472}
 
 /* CONDITIONING */
@@ -3660,36 +3671,47 @@ body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:9px;c
 /* FOOTER */
 .pg-foot{margin-top:12px;padding-top:8px;border-top:1px solid #d9d2e6;display:flex;justify-content:space-between;align-items:center;font-size:6px;color:#8a8395}
 .pg-foot strong{color:#5b2d90;font-weight:800}
+/* Studio RS Coaching: testata chiara con l'arancio del marchio, grigi caldi al posto del viola della squadra */
+body.rs .pg-head{background:#ffffff;color:#14110f;border-top:4px solid #E2611C;border-bottom:1px solid #e6e1dc;padding:10px 4px}
+body.rs .brand-name{color:#14110f}body.rs .brand-sub{color:#8a8078}
+body.rs .pg-prog{color:#14110f}body.rs .pg-m{color:#8a8078}body.rs .pg-m strong{color:#14110f}body.rs .pg-ath{color:#4a4340}body.rs .pg-date{color:#8a8078}
+body.rs .tl,body.rs .wh,body.rs .sc,body.rs .leg{border-color:#e6e1dc}
+body.rs .tl-seg,body.rs .wh,body.rs .sc-head,body.rs .ex-tbl thead tr,body.rs .sc-snote{background:#faf8f6}
+body.rs .tl-seg{border-top-color:#E2611C}body.rs .tl-seg:not(:last-child){border-right-color:#e6e1dc}
+body.rs .sc-head,body.rs .ex-tbl td,body.rs .sc-snote,body.rs .cond-row,body.rs .rf,body.rs .run-fnote{border-color:#eeeae6}
+body.rs .sc-day{background:#efe9e4}body.rs .cx-sep td{background:#fbeee6;color:#b8501a}body.rs .pg-foot strong{color:#b8501a}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 `;
 
-  const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - RS Coaching</title><style>'+css+'</style></head><body>'
+  const html='<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - RS Coaching</title><style>'+css+'</style></head><body class="'+(fio?'fio':'rs')+'">'
     // Header
     +'<div class="pg-head">'
     +'<div class="brand">'
-    +'<img class="brand-mark" src="'+esc(pdfCrestURL())+'" alt="Stemma Fiorentina" onerror="this.style.display=\'none\'">'
-    +'<div><div class="brand-name">Fiorentina Primavera</div>'
-    +'<div class="brand-sub">U19 Femminile &#183; Programma</div></div>'
+    +(fio?'<img class="brand-mark" src="'+esc(pdfCrestURL())+'" alt="Stemma Fiorentina" onerror="this.style.display=\'none\'">'
+      +'<div><div class="brand-name">Fiorentina Primavera</div><div class="brand-sub">U19 Femminile &#183; Programma</div></div>'
+      :'<svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true"><rect width="36" height="36" rx="9" fill="#E2611C"/><rect x="9" y="20" width="4.2" height="7" rx="2.1" fill="#fff" opacity=".6"/><rect x="15.9" y="15" width="4.2" height="12" rx="2.1" fill="#fff" opacity=".82"/><rect x="22.8" y="9" width="4.2" height="18" rx="2.1" fill="#fff"/></svg>'
+      +'<div><div class="brand-name">RS Coaching</div><div class="brand-sub">Raoul Simon &#183; preparatore atletico</div></div>')
     +'</div>'
     +'<div class="pg-right">'
     +'<div class="pg-prog">'+esc(p.name)+'</div>'
     +'<div class="pg-meta">'
-    +(p.sport?'<span class="pg-m"><strong>'+esc(p.sport)+'</strong></span>':'')
+    +(p.sport?'<span class="pg-m"><strong>'+esc((PROG_TYPES[p.sport]||{}).label||p.sport)+'</strong></span>':'')
     +'<span class="pg-m"><strong>'+allWeeks.length+'</strong> settimane</span>'
     +(p.phase?'<span class="pg-m"><strong>'+esc(p.phase)+'</strong></span>':'')
     +(p.category?'<span class="pg-m">'+esc(p.category)+'</span>':'')
     +'</div>'
     +(athleteNames.length?'<div class="pg-ath">'+athleteNames.map(esc).join(' · ')+'</div>':'')
-    +'<div class="pg-date">'+esc(todayStr)+'</div>'
+    +'<div class="pg-date">'+(ini0?'dal '+esc(stFmtD(ini0))+' al '+esc(stFmtD(fineProg)):esc(todayStr))+'</div>'
     +'</div>'
     +'</div>'
     // Timeline
     +(allWeeks.length?'<div class="tl">'+timelineHtml+'</div>':'')
+    +'<div class="leg"><b>Come si legge</b><span><i>S</i> serie</span><span><i>R</i> ripetizioni o secondi</span><span><i>@75%</i> carico in percentuale del massimale</span><span><i>RPE 8</i> fatica da 1 a 10: a 8 restano due ripetizioni in riserva</span><span><i>Rec</i> recupero</span><span><i>Z1-Z5</i> zone di corsa: Z1 recupero, Z2 facile, Z3 medio, Z4 soglia, Z5 veloce</span></div>'
     // Weeks
     +weeksHtml
     // Footer
     +'<div class="pg-foot">'
-    +'<span>Fiorentina Primavera U19W</span>'
+    +'<span>'+(fio?'Fiorentina Primavera U19W':'RS Coaching &#183; Raoul Simon')+'</span>'
     +'<span>'+esc(p.name)+' · '+allWeeks.length+' settimane · '+new Date().getFullYear()+'</span>'
     +'</div>'
     +'</body></html>';
