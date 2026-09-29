@@ -85,11 +85,8 @@ window.SIDEBAR_HTML = `
       <span class="nav-icon">${window.rsIcon('chat')}</span><span class="nav-lbl-text">Chat</span>
     </a>
     <div class="nav-lbl">Risorse</div>
-    <a class="nav-item" aria-label="Database Esercizi" href="./index.html?goto=database" data-page="database">
-      <span class="nav-icon">${window.rsIcon('libreria')}</span><span class="nav-lbl-text">Database Esercizi</span>
-    </a>
-    <a class="nav-item" aria-label="Strumenti S&C" href="./index.html?goto=tools" data-page="tools">
-      <span class="nav-icon">${window.rsIcon('strumenti')}</span><span class="nav-lbl-text">Strumenti S&amp;C</span>
+    <a class="nav-item" aria-label="Esercizi e strumenti" href="./index.html?goto=database" data-page="database">
+      <span class="nav-icon">${window.rsIcon('libreria')}</span><span class="nav-lbl-text">Esercizi e strumenti</span>
     </a>
     <a class="nav-item" aria-label="Tutte le sedute" href="./index.html?goto=sessions" data-page="sessions">
       <span class="nav-icon">${window.rsIcon('sedute')}</span><span class="nav-lbl-text">Tutte le sedute</span>
