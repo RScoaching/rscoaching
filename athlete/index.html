@@ -2197,7 +2197,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   const progCards=[];let _firstPT=null;
   for(const [progId,prog] of myProgs){
     const weeks=Object.entries(prog.weeks||{}).sort((a,b)=>a[1].order-b[1].order);
-    const wi=Math.min(parseInt(localStorage.getItem(`rsc_week_${aid}_${progId}`)||'0'),weeks.length-1);
+    const wi=settAttiva(progId,prog,weeks.length);
     if(wi<0)continue;
     const [,wkData]=weeks[wi];
     const sessions=Object.entries(wkData.sessions||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
@@ -2332,7 +2332,7 @@ function renderPrograms(progData){
     const weeks=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
     const sp=SPORT_LABELS[p.sport]||p.sport||'';
     const cls=SPORT_CLS[p.sport]||'pst-calcio';
-    const cur=parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0');
+    const cur=settAttiva(pid,p,weeks.length);
     return `<div class="prog-card${isActive?'':' prog-archived'}">
       <div class="prog-card-head">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
@@ -2401,7 +2401,20 @@ window.toggleArchive=()=>{
   if(btn)btn.style.color=open?'var(--text)':'var(--muted)';
 };
 
-window.setCurrentWeek=(pid,wi)=>{localStorage.setItem(`rsc_week_${aid}_${pid}`,wi);showToast(`✓ Settimana ${parseInt(wi)+1} attiva`);};
+// La settimana del programma viene dalla data di inizio che mette il preparatore:
+// cosi' l'atleta trova sempre la settimana giusta senza impostarla. Se sceglie a
+// mano un'altra settimana, la scelta vale fino a domenica. Senza data di inizio
+// resta la settimana salvata sul telefono, come prima.
+function _lunedi(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
+function _inizioProg(p){const t=String(p&&p.startDate||'');let m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);if(m)return new Date(+m[3],+m[2]-1,+m[1]);m=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
+function settAttiva(pid,p,n){
+  const lun=_lunedi(new Date()).getTime();
+  try{const m=JSON.parse(localStorage.getItem(`rsc_weekman_${aid}_${pid}`)||'null');if(m&&m.lun===lun)return Math.max(0,Math.min(n-1,+m.wi||0));}catch(e){}
+  const i=_inizioProg(p);
+  if(i)return Math.max(0,Math.min(n-1,Math.floor((lun-_lunedi(i).getTime())/(7*864e5)+0.01)));
+  return Math.max(0,Math.min(n-1,parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0')));
+}
+window.setCurrentWeek=(pid,wi)=>{localStorage.setItem(`rsc_week_${aid}_${pid}`,wi);localStorage.setItem(`rsc_weekman_${aid}_${pid}`,JSON.stringify({wi:+wi,lun:_lunedi(new Date()).getTime()}));showToast(`Settimana ${parseInt(wi)+1} attiva`);};
 window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=document.getElementById('wchev-'+wid);const o=el.classList.toggle('open');if(ch)ch.textContent=o?'▴':'▾';};
 
 function renderQuickPlans(qpData){

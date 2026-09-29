@@ -1713,7 +1713,7 @@ function renderEditor(){
   const catStr=p.category?` · ${p.category}`:'';
   const archStr=p.archived?' · ARCHIVIATO':'';
   document.getElementById('ed-prog-name').textContent=p.name;
-  document.getElementById('ed-prog-meta').textContent=`${sp.label}${catStr} · ${wks} settiman${wks===1?'a':'e'} · Atleti: ${assigned}${archStr}`;
+  document.getElementById('ed-prog-meta').textContent=`${sp.label}${catStr} · ${wks} settiman${wks===1?'a':'e'}${stDate(p.startDate)?' · dal '+p.startDate:' · senza data di inizio'} · Atleti: ${assigned}${archStr}`;
   // Archive button text
   const archBtn=document.getElementById('archive-btn');
   if(archBtn)archBtn.textContent=p.archived?'Riattiva il programma':'Archivia il programma';
@@ -2756,8 +2756,13 @@ window.openModal=function(type,...args){
   } else if(type==='assign'){
     const ids=Object.keys(athletes);
     const assigned=p?.assignedTo||{};
+    // la data di inizio decide la settimana che l'atleta vede nell'app (e la Dashboard)
+    const ini0=stDate(p?.startDate)||(()=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(p?.startDate||''));return m?new Date(+m[1],+m[2]-1,+m[3]):null;})();
+    const isoI=ini0?ini0.getFullYear()+'-'+String(ini0.getMonth()+1).padStart(2,'0')+'-'+String(ini0.getDate()).padStart(2,'0'):'';
     mb.innerHTML=`<h3>Assegna atleti</h3>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Gli atleti selezionati potranno accedere a questo programma dall'app.</div>
+      <div class="field" style="margin-bottom:6px;"><label>Inizia il</label><input type="date" id="as-inizio" value="${isoI}" onchange="setInizioProg(this.value)"></div>
+      <div id="as-inizio-info" style="font-size:12px;color:var(--muted);margin-bottom:14px;">${bInizioInfo(p)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Gli atleti selezionati trovano il programma nell'app, alla settimana giusta per la data di inizio.</div>
       <div id="assign-athletes">${ids.length?ids.map(id=>{
         const a=athletes[id]; const sel=!!assigned[id];
         return `<div class="athlete-chip${sel?' sel':''}" id="ach-${id}" onclick="toggleAssign('${id}','${progId}')">
@@ -3132,6 +3137,19 @@ window.saveCorsa=async function(wid,sid){
   closeModal();showToast('Corsa salvata');
 };
 
+// data di inizio del programma: si salva come gg/mm/aaaa, lo stesso formato del programma guidato
+function bInizioInfo(p){
+  const d=stDate(p&&p.startDate);if(!d)return 'Senza data di inizio l\'atleta sceglie la settimana a mano nell\'app.';
+  const W=Object.keys(p.weeks||{}).length,lun=x=>{const y=new Date(x);y.setHours(0,0,0,0);y.setDate(y.getDate()-((y.getDay()+6)%7));return y;};
+  const k=Math.floor((lun(new Date())-lun(d))/(7*864e5)+0.01),fine=new Date(lun(d));fine.setDate(fine.getDate()+W*7-1);
+  return (k<0?'Parte tra '+(-k)+(k===-1?' settimana':' settimane'):k>=W?'Finito':'Oggi e\' la settimana <b style="color:var(--white)">'+(k+1)+'</b> di '+W)+', finisce il '+stFmtD(fine)+'.';
+}
+window.setInizioProg=async function(iso){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');const v=m?m[3]+'/'+m[2]+'/'+m[1]:null;
+  await set(ref(db,`programs/${currentProgId}/startDate`),v);
+  const el=document.getElementById('as-inizio-info');if(el)el.innerHTML=bInizioInfo(Object.assign({},programs[currentProgId],{startDate:v}));
+  showToast(v?'Inizio: '+v:'Data di inizio tolta');
+};
 window.toggleAssign=async function(athId,progId){
   const assigned=programs[progId]?.assignedTo||{};
   if(assigned[athId]){await remove(ref(db,`programs/${progId}/assignedTo/${athId}`));}
