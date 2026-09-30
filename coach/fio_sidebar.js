@@ -1914,14 +1914,18 @@ window.fioTempi = (function() {
   // una x o con un +, vale quello che c'e' scritto. Senza unita' il lavoro si
   // prende per minuti solo se torna col GPS (fra meta' e tutta la durata vera);
   // il recupero senza unita' fino a 5 e' in minuti, sopra in secondi.
+  // Un blocco solo ("1x15'", o "15'" scritto nelle serie) vale la sua durata:
+  // se il GPS dice 20' lo sforo e' di 5', anche se non sono tempi morti. Senza
+  // recupero scritto si conta il solo lavoro.
   function atteso(t, vero) {
     t = t || {};
     var fonti = [t.serie, t.step, t.note].map(function(x) { return String(x || ''); });
     if (fonti.some(function(f) { return TURNI.test(f); })) return null;
     var lavTxt = '', fonte = '';
-    fonti.some(function(f) {
+    fonti.some(function(f, i) {
       var l = f.split(/\brec/i)[0];
-      if (/\d\s*[x×*]\s*\d/.test(l) || /\d\s*(?:'|’|min\w*|"|”|sec\w*)\s*\+/i.test(l)) {
+      var solo = i === 0 && /^\s*\d+(?:[.,]\d+)?\s*(?:'|’|min\w*)(?:\s*\d{2}\s*(?:''|"|”)?)?\s*$/i.test(l);
+      if (solo || /\d\s*[x×*]\s*\d/.test(l) || /\d\s*(?:'|’|min\w*|"|”|sec\w*)\s*\+/i.test(l)) {
         lavTxt = l; fonte = f; return true;
       }
       return false;
@@ -1938,7 +1942,6 @@ window.fioTempi = (function() {
     if (!lav) return null;
     var volte = 0;
     lav.forEach(function(x) { volte += x.volte; });
-    if (volte < 2) return null;
     var recTxt = String(t.rec || '').trim();
     if (!recTxt) {
       [fonte].concat(fonti).some(function(f) {
@@ -1947,12 +1950,14 @@ window.fioTempi = (function() {
         return false;
       });
     }
-    if (!recTxt) return null;
-    var rec = pezzi(recTxt, function(n) { return n <= 5 ? n : n / 60; });
-    if (!rec) return null;
-    var esteso = rec.length > 1 || rec[0].conX;
+    var rec = [];
+    if (recTxt && volte > 1) {
+      rec = pezzi(recTxt, function(n) { return n <= 5 ? n : n / 60; });
+      if (!rec) return null;
+    }
+    var esteso = rec.length > 1 || (rec.length === 1 && rec[0].conX);
     var lavMin = somma(lav);
-    var recMin = esteso ? somma(rec) : (volte - 1) * rec[0].dur;
+    var recMin = !rec.length ? 0 : (esteso ? somma(rec) : (volte - 1) * rec[0].dur);
     return { lav: lav, rec: rec, esteso: esteso, stima: stima, lavMin: lavMin, recMin: recMin, min: lavMin + recMin };
   }
   // Il margine prima di parlare: il taglio del GPS parte e finisce a mano, un
@@ -1974,7 +1979,9 @@ window.fioTempi = (function() {
     return p.map(function(x) { return (x.volte > 1 || x.conX) ? x.volte + 'x' + fmt(x.dur) : fmt(x.dur); }).join(' + ');
   }
   function scritto(a) {
-    return pezziTxt(a.lav) + ' con ' + (a.esteso ? 'recuperi ' + pezziTxt(a.rec) : fmt(a.rec[0].dur) + ' di recupero') +
+    var lv = pezziTxt(a.lav);
+    if (!a.rec.length) return lv + (a.stima ? ', letto in minuti' : '');
+    return lv + ' con ' + (a.esteso ? 'recuperi ' + pezziTxt(a.rec) : fmt(a.rec[0].dur) + ' di recupero') +
       (a.stima ? ', letto in minuti' : '');
   }
   return { atteso: atteso, controllo: controllo, fmt: fmt, scritto: scritto };
