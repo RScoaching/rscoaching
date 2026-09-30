@@ -4624,7 +4624,8 @@ function stVel(I,w){
   const hamR=(inf.hamstring==='rec'||inf.lca==='rec')&&w.blk===0;
   const e=[];
   e.push({name:'A-Skip',sets:2,reps:'20 m',cue:'tecnica'},{name:'B-Skip',sets:2,reps:'20 m',cue:'tecnica'});
-  e.push({name:stEs(I,'pliom'),sets:sc?2:3,reps:'5',rest:'90"',cue:'contatti brevi'});
+  const pn0=stEs(I,'pliom'),pn=pn0===stEsBase(I,'pliom')?stPliomProg(I,w,{s:'pliom',r:'VEL'}):pn0;
+  e.push(Object.assign({name:pn},stPliomDose(I,w,pn,2)));
   e.push({name:'Accelerazione 0-10m',sets:1,reps:sc?'4':String(5+Math.min(1,w.pos)),rest:'90"',cue:'partenza da fermo, massima intenzione'});
   if(!hamR&&!/Adattamento|Ricondizionamento|Forza generale/.test(f)&&!sc)e.push({name:'Volante 20m',sets:1,reps:String(3+Math.min(1,w.pos)),rest:'3\'',cue:'velocita\' massima, recupero completo'});
   else e.push({name:'Accelerazione 0-20m',sets:1,reps:'3',rest:'2\'',cue:hamR?'all\'80-90%, flessori da proteggere':'fluida, in progressione'});
@@ -4919,6 +4920,55 @@ function stDoseEs(name,pr,w){
   if(p.pct&&!stPctOk(name)){p.rpe=stPctRpe(+p.pct);delete p.pct;}
   return p;
 }
+
+// ── pliometria a contatti (NSCA, Essentials cap. 18) ──────────────
+/* Il volume dei salti si conta in contatti per seduta: 80-100 per chi comincia,
+   100-120 con un po' di esperienza, 120-140 per gli esperti (tabella 18.4),
+   contando anche le andature del riscaldamento: in sala ne restano circa due
+   terzi. La progressione va da bassa a moderata ad alta intensita', un blocco
+   alla volta; salti in basso e a una gamba solo per chi ha basi e mai sopra i 50
+   anni (i master restano su bassa e moderata, con meno contatti). Recupero 1:5 -
+   1:10 fra le serie: sono potenza, non condizionamento. */
+const ST_PL_SCALA={
+  bassa:['Pogo Hop','Ankle Hop','Double Leg Lateral Pogo Hops'],
+  moderata:['Countermovement Jump','Broad Jump','Box Jump','Double Leg Hurdle Hop (Mini Bounce)','Lateral Box Jump'],
+  alta:['Depth Jump to Box','Double Leg Continuous Hurdle Hop','Single Leg Hurdle Forward Jumps','Bounding','Lateral Bound to Box']};
+function stPlInt(n){return /depth|drop|single leg|unilateral|bounding|bound to|continuous hurdle/i.test(n)?'alta':/pogo|ankle|corda|line/i.test(n)?'bassa':'moderata';}
+function stPliomProg(I,w,slot){
+  const L=I.livello,b=Math.min(2,w.blk||0),corsa=/^RUN/.test(slot.r||'')||I.obiettivo==='gara';
+  const master=(I.problemi||[]).includes('over50');
+  const S=ST_PL_SCALA,k=slot.s==='pliom2'?1:0;
+  // chi corre: elasticita' di caviglia e rimbalzo, poi ostacoli, poi balzi di corsa
+  if(corsa)return [[S.bassa[0],S.bassa[1]],[S.bassa[0],S.moderata[3]],[S.moderata[3],L==='avanz'||L==='inter'?S.alta[3]:S.moderata[1]]][b][k];
+  let liv;
+  if(L==='zero'||L==='princ')liv=['bassa','bassa','moderata'][b];
+  else if(L==='inter')liv=['moderata','moderata','alta'][b];
+  else liv=['moderata','alta','alta'][b];
+  if(master&&liv==='alta')liv='moderata';
+  const l=S[liv];
+  return l[(b+k*2)%l.length];
+}
+function stPliomDose(I,w,name,nPl){
+  const L=I.livello,sc=w.tipo!=='carico';
+  let tot={zero:50,princ:60,inter:75,avanz:90}[L]||60;
+  if((I.problemi||[]).includes('over50'))tot=Math.round(tot*0.7);
+  if(I.sport!=='nessuno'&&I.partita>=0)tot=Math.round(tot*0.8); // in stagione il volume lo fanno campo e partita
+  if(sc)tot=Math.round(tot*0.5);
+  const c=Math.round(tot/Math.max(1,nPl));
+  const int=stPlInt(name),reps=int==='alta'?4:int==='bassa'?12:6;
+  const sets=Math.max(2,Math.min(6,Math.round(c/reps)));
+  const uni=/single leg|unilateral|bound/i.test(name);
+  return {sets,reps:reps+(uni?' per lato':''),rest:int==='alta'?'2\'':int==='bassa'?'60"':'90"',
+    cue:(int==='alta'?'alta intensita\': ':int==='bassa'?'bassa intensita\': ':'')+'contatti brevi, atterraggio silenzioso con ginocchia in asse; circa '+sets*reps*(uni?2:1)+' contatti'};
+}
+// blocchi Triphasic (Dietz e Peterson) sull'alzata principale: eccentrico, isometrico, poi esplosivo
+function stTriphasic(I,w){
+  const avz=I.livello==='inter'||I.livello==='avanz';
+  if(!avz||w.tipo!=='carico'||!['sport','forza'].includes(I.obiettivo))return '';
+  if(!/Forza massima|Intensificazione/.test(w.fase))return /Potenza|Realizzazione/.test(w.fase)?'su alla massima velocita\': se il bilanciere rallenta si chiude la serie':'';
+  const fi=w.fi||0;
+  return fi<2?'Triphasic eccentrico: discesa in 5-6 secondi, poi su veloce':fi<4?'Triphasic isometrico: fermo 2-3 secondi in basso, poi su esplosivo':'Triphasic reattivo: discesa veloce e rimbalzo controllato, su alla massima velocita\'';
+}
 // ── esercizi di una seduta di forza ───────────────────────────────
 /* Dal modello della seduta, con l'esercizio obiettivo, le varianti per gli
    infortuni, i punti da migliorare e le modifiche fatte a mano
@@ -4933,13 +4983,18 @@ function stCorpo(I,g,w){
     // ibrido: il total body e' la seduta leggera delle gambe, la pesante e' Gambe
     const ruolo=I.obiettivo==='ibrido'&&g.ruolo==='FB_C'&&ruolo0==='main'?'main2':ruolo0;
     let name=stEs(I,slot);
+    // salti: se non c'e' una sostituzione per infortunio o condizione, progressione a blocchi
+    if(ruolo0==='pliom'&&name===stEsBase(I,slot))name=stPliomProg(I,w,{s:slot,r:g.ruolo});
     const schienaR=['ernia','lombalgia'].some(z=>(I.infortuni||{})[z]==='rec');
     if(I.obiettivo==='forza'&&(ruolo==='main'||ruolo==='main2')&&!(schienaR&&['Squat','Stacco da Terra'].includes(I.liftObj))){
       const fam={Squat:'squat','Panca Piana':'spO','Stacco da Terra':'hinge','Hip Thrust':'glutei',Trazioni:'tiV','Military Press':'spV'}[I.liftObj];
       if(fam===slot)name=I.liftObj;
     }
     if(I.esOv[k])name=I.esOv[k];
-    out.push({k,name,pr:stDoseInf(I,name,stDoseEs(name,stPrescr(I,w,ruolo,name),w)),ruolo});
+    let pr=stDoseInf(I,name,stDoseEs(name,stPrescr(I,w,ruolo,name),w));
+    if(ruolo==='pliom')pr=Object.assign({},pr,stPliomDose(I,w,name,tpl.filter(x=>x[1]==='pliom').length));
+    if(ruolo==='main'&&stPctOk(name)){const tr=stTriphasic(I,w);if(tr)pr=Object.assign({},pr,{cue:(pr.cue?pr.cue+'; ':'')+tr});}
+    out.push({k,name,pr,ruolo});
   });
   // punti da migliorare, nelle sedute della zona giusta: al massimo due in piu'
   const reg=/^(UP|PUSH|PULL)/.test(g.ruolo)?'a':/^(LOW|RUN|GLU)/.test(g.ruolo)?'b':'x';
@@ -5145,6 +5200,18 @@ function stCostruisci(I,P){
       if(w.tipo==='taper'||w.tipo==='gara')for(let j=lista.length-1;j>=0;j--)if(/nordic/i.test(lista[j].name))lista.splice(j,1);
       lista.forEach(e=>{exs['e'+String(i).padStart(2,'0')]=Object.assign(e,{order:i});i++;});
       sessions['s'+ord]={name:g.nome,type:'pesi',order:ord,dayOfWeek:g.d,notes:(g.md?g.md+'. ':'')+(w.tipo==='scarico'?'Settimana di scarico: volume ridotto, tecnica.':''),exercises:exs};ord++;
+    });
+    // doppie forza e corsa (ricerca sul concurrent training): la forza da fresca se conta di piu'
+    // la forza, la corsa impegnativa prima se conta di piu' la corsa, e fra le due almeno 3 ore
+    const perG={};Object.values(sessions).forEach(x=>{(perG[x.dayOfWeek]=perG[x.dayOfWeek]||[]).push(x);});
+    Object.values(perG).forEach(l=>{
+      const fz=l.find(x=>x.type==='pesi'&&!/^Test|^Controllo/.test(x.name)),cr=l.find(x=>x.type==='corsa');
+      if(!fz||!cr)return;
+      const dura=!/facile|rigenerante|sgambata|corri e cammina/i.test(cr.name);
+      const nota=I.obiettivo==='forza'||I.obiettivo==='estetica'?'Doppia: prima la forza, la corsa dopo e facile.'
+        :dura?'Doppia: prima la corsa ('+cr.name.toLowerCase()+'), la forza almeno 3 ore dopo, meglio 6: la corsa di qualita\' vuole le gambe fresche.'
+        :'Doppia: la corsa facile puo\' stare prima della forza senza togliere niente; se sono attaccate, prima la forza.';
+      [fz,cr].forEach(x=>{x.notes=(x.notes?x.notes.trim()+' ':'')+nota;});
     });
     weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(kmSett?' · circa '+kmSett+' km'+(w.tipo==='gara'?' piu\' la gara':''):''),sessions};
   });
