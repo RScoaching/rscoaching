@@ -494,6 +494,19 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 
 /* ---------- esercitazioni e tempi, settimana per settimana ---------- */
 #fg-wk-da select, #fg-wk-a select{ min-width:220px; }
+.es-t .es-nota{ display:block; margin:4px 0 0 26px; font-size:12px; line-height:1.45; color:var(--text); font-weight:400; font-style:italic; white-space:pre-wrap; }
+#rprint .es-t .es-nota{ font-size:8.5px; color:#333; margin-left:22px; }
+.es-fog{ margin:0 0 10px; }
+.es-fog summary{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; list-style:none; font-size:12px; font-weight:600; color:var(--ink);
+  padding:6px 12px; border:1px solid var(--border2); border-radius:8px; background:var(--surface2); }
+.es-fog summary::-webkit-details-marker{ display:none; }
+.es-fog summary::before{ content:''; width:7px; height:7px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .18s var(--ease); }
+.es-fog[open] summary::before{ transform:rotate(45deg); }
+.es-fog figure{ margin:10px 0 0; }
+.es-fog img{ display:block; max-width:100%; height:auto; border:1px solid var(--border2); border-radius:8px; background:#fff; }
+.es-fog figcaption{ margin-top:6px; font-size:11.5px; }
+.es-fog figcaption a{ color:var(--orange2); }
+#rprint .es-fog{ display:none; }
 
 .es-sts{ display:flex; flex-wrap:wrap; gap:6px; }
 .es-st{ display:inline-flex; flex-direction:column; padding:5px 10px; border:1px solid var(--border2); border-radius:8px; background:var(--surface2); min-width:0; }
@@ -4046,13 +4059,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         else if(r.k.esito === 'meno') sc = '<span class="es-giu">-'+esc(tmFmt(-r.k.diff))+'</span>';
         else sc = '<span class="es-ok">in linea</span>';
       }
+      // la nota scritta sotto l'esercitazione in Esercitazioni: il commento del lavoro fatto
+      const commento = String((r.d.det && r.d.det.note) || '').trim();
       const nota = r.fuori ? (r.idp ? 'IDP, fuori dal conto' : 'lavoro di poche, fuori dal conto')
                  : (r.con ? 'nello stesso momento di '+r.con.join(', ') : '');
       let h = '<tr'+(r.fuori ? ' class="es-out"' : '')+'>'+
         '<td class="es-nm"><span class="ex-i">'+r.n+'</span><span class="ex-n">'+esc(r.d.nome||'Esercitazione')+'</span>'+
           (det ? '<span class="ex-d">'+esc(det)+'</span>' : '')+
-          (r.k ? '<span class="ex-d">scritto '+esc(tmScritto(r.k.a))+'</span>' : '')+
-          (nota ? '<span class="ex-nt">'+esc(nota)+'</span>' : '')+'</td>'+
+          (nota ? '<span class="ex-nt">'+esc(nota)+'</span>' : '')+
+          (commento ? '<span class="es-nota">'+esc(commento)+'</span>' : '')+'</td>'+
         cella(r.min != null ? esc(tmFmt(r.min)) : na)+cella(dc)+cella(sc)+
         cella(r.fuori || r.min == null ? na : pct(r.min))+'</tr>';
       if(ultimi[i] && mc != null)
@@ -4063,8 +4078,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       ? '<tr class="es-morti"><td class="es-nm">Tempi morti in tutto <span class="ex-d">'+(mc != null ? c.cambi+(c.cambi === 1 ? ' cambio' : ' cambi')+' da '+esc(tmFmt(mc))+' di media: spiegazioni, cambi di campo, acqua, pettorine' : 'spiegazioni, acqua, pettorine')+'</span></td>'+cella(esc(tmFmt(c.pausa)))+cella(na)+cella(na)+cella('<b'+(c.pausa / c.ft >= 0.15 ? ' class="es-hi"' : '')+'>'+pct(c.pausa)+'</b>')+'</tr>'+
         '<tr class="row-tot"><td class="es-nm">Full Training</td>'+cella(esc(tmFmt(c.ft)))+cella(M.nK ? esc(tmFmt(M.dich)) : na)+cella(M.sfori ? '<span class="es-su">+'+esc(tmFmt(M.piu))+'</span>' : na)+cella('100%')+'</tr>'
       : '';
+    const fk = M.s.iso+'-'+(M.s.slot || 'AM');
+    const fog = '<details class="es-fog" data-fog="'+esc(fk)+'"><summary>Foglio del mister</summary>'+
+      '<figure><img loading="lazy" src="'+fogSrc(fk)+'" alt="Foglio della seduta del '+esc(esQuando(M.s))+' disegnato dal mister">'+
+      '<figcaption><a href="'+fogSrc(fk)+'" target="_blank" rel="noopener">Apri a schermo intero</a></figcaption></figure></details>';
     return '<div class="es-sed"><div class="es-sh"><h4>'+esc(esQuando(M.s))+'</h4><div class="es-sts">'+riass+'</div></div>'+
-      esBarraHTML(M)+
+      fog+esBarraHTML(M)+
       '<div class="tbl-wrap"><table class="dt es-t"><thead><tr><th style="text-align:left">Esercitazione</th><th>GPS</th><th>Dichiarato</th><th>Scarto</th><th>Quota</th></tr></thead>'+
       '<tbody>'+body+piede+'</tbody></table></div></div>';
   }
@@ -4133,6 +4152,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<span class="rsec-n">GPS contro quanto scritto in Esercitazioni; tempi morti = Full Training meno le esercitazioni</span></div>'+
         esKpiHTML(L)+L.map(esSedutaHTML).join('')+'</div>';
     }).join('')+'<p class="tm-nota">Dichiarato: il tempo che viene da serie e recupero scritti in Esercitazioni (lavoro piu\' recuperi). Si segna lo sforo quando il GPS supera il dichiarato di oltre un minuto o del 10%. Quota: la parte del Full Training presa dall\'esercitazione. Cambio: i tagli del GPS non hanno l\'orario, quindi il tempo di ogni cambio e\' la media della seduta (tempi morti diviso cambi); arancio oltre 3 minuti. Tempi morti arancio quando superano il 15% della seduta.</p></div>';
+    // il foglio del mister c'e' solo per alcune sedute: dove manca il tasto sparisce
+    host.querySelectorAll('.es-fog').forEach(function(el){
+      fogCerca(el.getAttribute('data-fog'), function(ok){ if(!ok) el.remove(); });
+    });
     const t = document.getElementById('es-tutte');
     if(t) t.addEventListener('click', function(){ esScelta = null; fillWeeks(); aggiornaTastoStampa(); render(); });
   }
