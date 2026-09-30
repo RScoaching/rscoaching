@@ -4452,6 +4452,61 @@ function stC25k(I,w){
   if(w.tipo==='taper'||w.tipo==='gara')st=7;
   return ST_C25K[Math.min(ST_C25K.length-1,st)];
 }
+/* ── il lungo ──────────────────────────────────────────────────────
+   Non sempre in Z2. Come nei piani di Pfitzinger, Daniels e Runna il lungo
+   cambia con la fase e con la distanza: in base facile, con gli allunghi in
+   fondo o collinare; in costruzione progressivo, o con i cambi per 5 e 10 km;
+   nello specifico con i blocchi a passo gara (mezza e maratona) o con il
+   finale veloce. Il lungo di qualita' e' una settimana si' e una no: nelle
+   altre resta facile, perche' nella settimana ci sono gia' le qualita'. Chi
+   e' principiante o rientra da un infortunio recente lo tiene facile, con al
+   piu' gli allunghi o un finale progressivo corto. I km restano quelli della
+   settimana: le parti si dividono il totale. */
+function stLungo(I,w,km,rit,scar){
+  const D=+I.garaDist||10,gara=I.obiettivo==='gara',f=w.fase,L=I.livello;
+  const P=a=>a?stPace(Array.isArray(a)?a[0]:a)+(Array.isArray(a)?'-'+stPace(a[1]):''):'';
+  const mz=x=>Math.max(1,Math.round(x*2)/2),kt=x=>String(x).replace('.',',')+' km';
+  const facile=note=>stFase('Long Run','Z2',kt(km),rit?P(rit.lungo):'',note||'ritmo di conversazione, bere e mangiare come in gara');
+  const inf=['achille','piede','caviglia','lca','rotulea','hamstring'].some(z=>(I.infortuni||{})[z]==='rec')&&(w.blk||0)===0;
+  const base=L==='princ'||inf;
+  const fi=w.fi||0;
+  if(scar||w.tipo!=='carico')return {nome:'Corsa lunga facile',km,fasi:[facile('scarico: piu\' corto, tutto facile')]};
+  const ph=/Costruzione|Sviluppo/.test(f)?'cost':/Specifico|Consolidamento/.test(f)?'spec':'base';
+  // una settimana si' e una no il lungo resta facile
+  if(fi%2===1)return {nome:'Corsa lunga',km,fasi:[facile()]};
+  const q=Math.floor(fi/2);
+  const pG=rit?stPace(rit.gara):'',pS=rit?stPace(rit.soglia):'',pM=rit?stPace((rit.soglia+(Array.isArray(rit.facile)?rit.facile[0]:rit.soglia*1.15))/2):'';
+  const lista=[];
+  const allunghi=()=>{const n=6;return {nome:'Lungo con allunghi',fasi:[stFase('Long Run','Z2',kt(mz(km-0.5)),rit?P(rit.lungo):'','facile'),stFase('Attivazione','Z3',n+' allunghi da 80 m','','sciolti, recupero camminando: le gambe finiscono veloci')]};};
+  const collinare=()=>({nome:'Lungo collinare',fasi:[stFase('Collinare','Z2',kt(km),'','percorso ondulato: stesso sforzo in salita e in discesa, il passo cala in salita e va bene')]});
+  const progr=quota=>{const p=mz(km*quota);return {nome:'Lungo progressivo',fasi:[stFase('Long Run','Z2',kt(mz(km-p)),rit?P(rit.lungo):'','facile'),stFase('Progressivo','Z3',kt(p),pM?pM+' fino a '+(D>=21&&gara?pG:pS):'','un po\' piu\' svelto ogni km, senza arrivare al limite')]};};
+  const finale=quota=>{const p=mz(km*quota);return {nome:'Lungo con finale veloce',fasi:[stFase('Long Run','Z2',kt(mz(km-p)),rit?P(rit.lungo):'','facile'),stFase('Passo gara','Z4',kt(p),gara?pG:pM,'finale a passo gara con le gambe gia\' stanche: e\' quello che succede in gara')]};};
+  const cambi=()=>{const n=5+Math.min(2,q);return {nome:'Lungo con cambi',fasi:[stFase('Long Run','Z2',kt(mz(km*0.4)),rit?P(rit.lungo):'','facile'),stFase('Fartlek','Z3','','','nella seconda parte, dentro il lungo',{reps:String(n),repDist:'3\' svelto',repPace:pS,recTime:'3\' facile',recPace:'corsa'}),stFase('Long Run','Z2',kt(mz(Math.max(1,km*0.6-n*6*60/((rit&&rit.soglia)||330)))),'','facile fino in fondo')]};};
+  const blocchi=()=>{
+    // il volume a passo gara cresce con il programma: maratona da 2 x 3 km fino a 3 x 5 km, mezza da 2 x 2 a 2 x 4
+    const t=w.n/Math.max(1,stFasi(I).length);
+    const bl=D>=42?(t<0.55?3:t<0.75?4:5):(t<0.55?2:t<0.75?3:4),nb=D>=42&&t>=0.55?3:2,tot=bl*nb+(nb-1);
+    const pre=mz(Math.max(2,(km-tot)*0.6)),post=mz(Math.max(1,km-tot-pre));
+    return {nome:'Lungo con blocchi a passo gara',fasi:[stFase('Long Run','Z2',kt(pre),rit?P(rit.lungo):'','facile'),stFase('Passo gara','Z4','','','passo gara esatto, recupero corricchiando',{reps:String(nb),repDist:bl+' km',repPace:pG,recDist:'1 km',recPace:'facile'}),stFase('Long Run','Z2',kt(post),'','facile per chiudere')]};
+  };
+  if(base){
+    // principianti e chi rientra: facile, al piu' allunghi o un finale progressivo corto
+    lista.push(allunghi,()=>progr(0.15));
+  }else if(gara&&D>=21){
+    if(ph==='base')lista.push(allunghi,collinare,()=>progr(0.2));
+    else if(ph==='cost')lista.push(()=>progr(0.3),blocchi,()=>finale(0.2));
+    else lista.push(blocchi,()=>finale(D>=42?0.3:0.25),blocchi);
+  }else if(gara){
+    if(ph==='base')lista.push(allunghi,collinare,()=>progr(0.2));
+    else if(ph==='cost')lista.push(cambi,()=>progr(0.3),collinare);
+    else lista.push(()=>progr(0.25),cambi,()=>finale(0.15));
+  }else{
+    // salute, ibrido, sport: lungo facile che ogni tanto accelera
+    lista.push(allunghi,()=>progr(0.2),collinare);
+  }
+  const x=lista[q%lista.length]();
+  return {nome:x.nome,km,fasi:x.fasi};
+}
 function stCorsa(I,w,ruolo,kmW,rit,nC,tipo){
   const D=+I.garaDist||10,gara=I.obiettivo==='gara',lunga=gara&&D>=21;
   const P=a=>a?stPace(Array.isArray(a)?a[0]:a)+(Array.isArray(a)?'-'+stPace(a[1]):''):'';
@@ -4466,12 +4521,7 @@ function stCorsa(I,w,ruolo,kmW,rit,nC,tipo){
   }
   const K=stKmRuoli(I,w,kmW,tipo||stSettimanaTipo(I),rit),ps=stPassi(I,rit);
   if(ruolo==='Rigenerante')return {nome:'Corsa rigenerante',km:K.Rigenerante,fasi:[stFase('Fondo Lento','Z1',(kmW>=50?40:30)+'\'',rit?P(rit.lungo):'','piano davvero, anche piu\' lento del facile')]};
-  if(ruolo==='Lungo'){
-    const km=K.Lungo;
-    // finale a passo gara a settimane alterne, per non sommare tre sedute a passo gara
-    const fin=gara&&/Specifico/.test(f)&&D>=21&&!scar&&w.n%2===0;
-    return {nome:'Corsa lunga',km,fasi:[stFase('Long Run','Z2',km+' km',rit?P(rit.lungo):'',fin?'ultimi '+Math.round(km*(D>=42?0.3:0.25))+' km a passo gara ('+stPace(rit?rit.gara:0)+')':'ritmo di conversazione, bere e mangiare come in gara')]};
-  }
+  if(ruolo==='Lungo')return stLungo(I,w,K.Lungo,rit,scar);
   if(ruolo==='Facile')return {nome:'Corsa facile',km:K.Facile,fasi:[stFase('Fondo Lento','Z2',K.Facile+' km',rit?P(rit.facile):'','ritmo facile, respiro controllato'),stFase('Attivazione','Z3','4-6 allunghi da 80 m','','scioltezza, non sprint')]};
   // medio: il lavoro al passo della gara lunga
   if(ruolo==='Medio'){
@@ -5061,7 +5111,7 @@ function stCostruisci(I,P){
         const exs={};pb.att.concat(pb.rin).forEach((e,i)=>{exs['e'+i]={name:e.name,sets:e.sets,reps:e.reps,cue:e.cue,order:i};});
         kmSett+=c.km||0;
         const dove=c.km?'Circa '+c.km+' km. ':c.min?'Circa '+c.min+' minuti. ':'';
-        sessions['s'+ord]={name:gi===iRes||['Corri e cammina','Qualita\'','Qualita\' 2'].includes(g.ruolo)?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
+        sessions['s'+ord]={name:gi===iRes||['Corri e cammina','Qualita\'','Qualita\' 2','Lungo'].includes(g.ruolo)?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa l\'attivazione, dopo la corsa il rinforzo.':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
       }
       if(g.tipo==='sprint'){
         const exs={};stVel(I,w).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
@@ -5291,7 +5341,7 @@ function stAnteprima(){
   if(cr.length){
     const esempi=[];const visti={};
     P.fasi.forEach((w,i)=>{if(w.tipo!=='carico'||visti[w.fase])return;visti[w.fase]=1;esempi.push([w,i]);});
-    h+=`<div class="pz-card"><div class="pz-ch">Corsa <em>una settimana per fase</em></div><div class="st-scroll"><table class="pz-tab"><thead><tr><th>Fase</th>${cr.map(c=>`<th>${ST_GG[c.d]} ${stEsc(c.nome)}</th>`).join('')}</tr></thead><tbody>${esempi.map(([w,i])=>`<tr><td>${stEsc(w.fase)}<i>S${w.n}${P.kmW[i]?', '+P.kmW[i]+' km':''}</i></td>${cr.map(c=>{const x=stCorsa(I,w,c.ruolo,(P.kmT||P.kmW)[i],P.rit,P.T.nC,P.tipo);const m=x.fasi.find(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi[0];
+    h+=`<div class="pz-card"><div class="pz-ch">Corsa <em>una settimana per fase</em></div><div class="st-scroll"><table class="pz-tab"><thead><tr><th>Fase</th>${cr.map(c=>`<th>${ST_GG[c.d]} ${stEsc(c.nome)}</th>`).join('')}</tr></thead><tbody>${esempi.map(([w,i])=>`<tr><td>${stEsc(w.fase)}<i>S${w.n}${P.kmW[i]?', '+P.kmW[i]+' km':''}</i></td>${cr.map(c=>{const x=stCorsa(I,w,c.ruolo,(P.kmT||P.kmW)[i],P.rit,P.T.nC,P.tipo);const m=x.fasi.find(f=>/Z[345]/.test(f.zona)&&!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi.find(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo))||x.fasi[0];
         return `<td>${stEsc(m.tipo)} <b>${stEsc(stCorsaTesto(m))}</b></td>`;}).join('')}</tr>`).join('')}</tbody></table></div>
       ${P.rit?`<div class="pz-cap">Ritmi dal tempo recente: facile ${stPace(P.rit.facile[0])}-${stPace(P.rit.facile[1])}, soglia ${stPace(P.rit.soglia)}, intervalli ${stPace(P.rit.interv)}${I.obiettivo==='gara'?', passo gara '+stPace(P.rit.gara):''} al km.</div>`:'<div class="pz-cap">Senza un tempo recente si lavora a zone di frequenza cardiaca; il test della prima settimana dara\' i ritmi.</div>'}</div>`;
   }
