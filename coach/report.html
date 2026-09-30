@@ -494,6 +494,39 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 
 /* ---------- esercitazioni e tempi, settimana per settimana ---------- */
 #fg-wk-da select, #fg-wk-a select{ min-width:220px; }
+
+.es-sts{ display:flex; flex-wrap:wrap; gap:6px; }
+.es-st{ display:inline-flex; flex-direction:column; padding:5px 10px; border:1px solid var(--border2); border-radius:8px; background:var(--surface2); min-width:0; }
+.es-st i{ font-style:normal; font-size:9.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.es-st b{ font-size:14px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.es-st b small{ font-size:11px; font-weight:500; color:var(--muted); margin-left:3px; }
+.es-st.hi{ border-color:oklch(68% 0.19 42 / 0.45); }
+.es-st.hi b{ color:var(--orange2); }
+.es-sg.es-tm{ color:var(--muted); font-weight:600; }
+.es-sg.es-tm.alto{ background:oklch(68% 0.19 42 / 0.28); color:var(--orange2); }
+.es-leg{ display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:var(--faint); margin:-4px 0 10px; }
+.es-li{ display:inline-block; width:10px; height:10px; border-radius:3px; background:var(--orange); margin-right:5px; vertical-align:-1px; }
+.es-li.tm{ background:var(--border2); }
+.es-t tr.es-cb td{ font-size:11.5px; color:var(--faint); padding-top:3px; padding-bottom:3px; background:transparent; }
+.es-t tr.es-cb td.es-nm{ padding-left:34px; font-style:italic; }
+.es-t tr.es-cb.alto td{ color:var(--orange2); }
+#rprint .es-sh{ align-items:center; margin-bottom:5px; }
+#rprint .es-sts{ gap:4px; }
+#rprint .es-st{ padding:2px 7px; border-color:#e2ddd6; background:#faf8f5; border-radius:5px; }
+#rprint .es-st i{ font-size:6.5px; color:#8a847c; }
+#rprint .es-st b{ font-size:9.5px; color:#141414; }
+#rprint .es-st b small{ font-size:7.5px; color:#8a847c; }
+#rprint .es-st.hi b{ color:#c2410c; }
+#rprint .es-st.hi{ border-color:#f3c9ae; }
+#rprint .es-sg.es-tm{ background:#e7e2da; color:#6b6472; }
+#rprint .es-sg.es-tm.alto{ background:#fbd9c4; color:#c2410c; }
+#rprint .es-leg{ font-size:7.5px; color:#8a847c; margin:0 0 5px; gap:10px; }
+#rprint .es-li{ width:7px; height:7px; background:#e8702a; }
+#rprint .es-li.tm{ background:#e7e2da; }
+#rprint .es-t tr.es-cb td{ font-size:8px; color:#8a847c; padding:1px 6px; }
+#rprint .es-t tr.es-cb td.es-nm{ padding-left:28px; }
+#rprint .es-t tr.es-cb.alto td{ color:#c2410c; }
+#rprint .pfoot{ gap:16px; }
 .es-scelta{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:0 0 14px; font-size:12.5px; color:var(--muted); }
 .es-scelta b{ color:var(--ink); }
 .es-w + .es-w{ margin-top:22px; }
@@ -525,7 +558,9 @@ table.dt tbody tr.row-media .v{ color:var(--ink); }
 #rprint .es-sg{ font-size:7.5px; }
 #rprint .es-sg.es-tm{ background:#d9d4cc; }
 #rprint .es-t{ font-size:9.5px; }
-#rprint .es-t tbody td, #rprint .es-t thead th{ padding:3px 6px; }
+#rprint table.dt.es-t tbody td, #rprint table.dt.es-t thead th{ padding:2.5px 6px !important; line-height:1.3; }
+#rprint table.dt.es-t tr.es-cb{ display:none; }
+#rprint .es-sed{ margin-top:10px; }
 #rprint .es-t .ex-d, #rprint .es-t .ex-nt{ font-size:8px; margin-left:22px; }
 #rprint .es-kpi{ border:0; border-top:1.5px solid #141414; border-bottom:1px solid #e2ddd6; border-radius:0; background:transparent; }
 #rprint .es-kpi .tm-c{ padding:7px 10px 8px; border-left-color:#e2ddd6; }
@@ -3955,30 +3990,54 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return ES_GG[d.getDay()]+' '+esDM(s.iso)+(s.slot==='AM' ? ' · Mattino' : (s.slot==='PM' ? ' · Pomeriggio' : ''));
   }
   // la barra della seduta: esercitazioni contate in fila, poi i tempi morti
+  /* I tagli del GPS non hanno l'ora di inizio: il tempo del singolo cambio non si
+     misura, si stima. I tempi morti della seduta divisi per i cambi danno la
+     media a cambio, e la media si mette fra un'esercitazione e l'altra, nella
+     barra e nella tabella: si vede subito quanto costa ogni passaggio. */
+  function esBlocchi(M){
+    const out = [], visti = {};
+    M.righe.forEach(function(r, i){
+      if(r.fuori || r.min == null) return;
+      const nome = r.d.nome || 'Esercitazione';
+      if(r.con){
+        const k = out.findIndex(function(b){ return b.nomi.some(function(n){ return r.con.indexOf(n) >= 0; }); });
+        if(k >= 0){ out[k].nomi.push(nome); out[k].lun = Math.max(out[k].lun, r.min); out[k].ult = i; return; }
+      }
+      out.push({ nomi:[nome], n:[r.n], lun:r.min, ult:i });
+      visti[nome] = 1;
+    });
+    return out;
+  }
+  function esMediaCambio(M){ return M.c && M.c.cambi > 0 ? M.c.pausa / M.c.cambi : null; }
+  const ES_CAMBIO_ALTO = 3;   // oltre 3' a cambio il passaggio si segna in arancio
   function esBarraHTML(M){
     if(!M.c || !(M.ft > 0)) return '';
+    const B = esBlocchi(M), mc = esMediaCambio(M);
     const segs = [];
-    const visti = {};
-    M.righe.forEach(function(r){
-      if(r.fuori || r.min == null) return;
-      if(r.con && r.con.some(function(n){ return visti[n]; })) return;
-      visti[r.d.nome||'Esercitazione'] = 1;
-      const lun = r.con ? Math.max.apply(null, [r.min].concat(M.righe.filter(function(x){ return r.con.indexOf(x.d.nome) >= 0; }).map(function(x){ return x.min||0; }))) : r.min;
-      segs.push('<span class="es-sg" style="flex:'+lun.toFixed(2)+'" title="'+esc((r.d.nome||'Esercitazione')+': '+tmFmt(lun))+'">'+(lun / M.ft >= 0.06 ? r.n : '')+'</span>');
+    B.forEach(function(b, k){
+      segs.push('<span class="es-sg" style="flex:'+b.lun.toFixed(2)+'" title="'+esc(b.nomi.join(' e ')+': '+tmFmt(b.lun))+'">'+(b.lun / M.ft >= 0.06 ? M.righe[b.ult].n : '')+'</span>');
+      if(mc != null && k < B.length - 1)
+        segs.push('<span class="es-sg es-tm'+(mc > ES_CAMBIO_ALTO ? ' alto' : '')+'" style="flex:'+mc.toFixed(2)+'" title="Cambio, circa '+esc(tmFmt(mc))+'">'+(mc / M.ft >= 0.045 ? esc(tmFmt(mc)) : '')+'</span>');
     });
-    if(M.c.pausa > 0) segs.push('<span class="es-sg es-tm" style="flex:'+M.c.pausa.toFixed(2)+'" title="Tempi morti: '+esc(tmFmt(M.c.pausa))+'"></span>');
-    return '<div class="es-bar" role="img" aria-label="Seduta: esercitazioni e tempi morti">'+segs.join('')+'</div>';
+    // senza cambi (una sola esercitazione) i tempi morti stanno in fondo, tutti insieme
+    if(mc == null && M.c.pausa > 0) segs.push('<span class="es-sg es-tm" style="flex:'+M.c.pausa.toFixed(2)+'" title="Tempi morti: '+esc(tmFmt(M.c.pausa))+'"></span>');
+    return '<div class="es-bar" role="img" aria-label="Seduta: esercitazioni e cambi">'+segs.join('')+'</div>'+
+      '<div class="es-leg"><span><i class="es-li"></i>esercitazione, col suo numero</span><span><i class="es-li tm"></i>cambio, media della seduta</span></div>';
   }
   function esSedutaHTML(M){
-    const c = M.c;
+    const c = M.c, mc = esMediaCambio(M);
     const pct = function(v){ return M.ft > 0 ? NF0.format(Math.round(v / M.ft * 100))+'%' : '-'; };
     const cella = function(v, cls){ return '<td'+(cls ? ' class="'+cls+'"' : '')+'>'+v+'</td>'; };
     const na = '<span class="cell-na">-</span>';
+    const st = function(l, v, hi){ return '<span class="es-st'+(hi ? ' hi' : '')+'"><i>'+esc(l)+'</i><b>'+v+'</b></span>'; };
     const riass = c
-      ? 'Full Training <b>'+esc(tmFmt(c.ft))+'</b> · esercitazioni <b>'+esc(tmFmt(c.net))+'</b> · tempi morti <b class="'+(c.pausa / c.ft >= 0.15 ? 'es-hi' : '')+'">'+esc(tmFmt(c.pausa))+' ('+pct(c.pausa)+')</b>'+
-        (c.cambi > 0 ? ' · '+c.cambi+(c.cambi === 1 ? ' cambio' : ' cambi')+', '+esc(tmFmt(c.pausa / c.cambi))+' a cambio' : '')
-      : 'Senza Full Training: i tempi morti non si possono calcolare';
-    const body = M.righe.map(function(r){
+      ? st('Full Training', esc(tmFmt(c.ft)))+st('Esercitazioni', esc(tmFmt(c.net)))+
+        st('Tempi morti', esc(tmFmt(c.pausa))+' <small>'+pct(c.pausa)+'</small>', c.pausa / c.ft >= 0.15)+
+        (mc != null ? st('A ogni cambio', esc(tmFmt(mc))+' <small>'+c.cambi+(c.cambi === 1 ? ' cambio' : ' cambi')+'</small>', mc > ES_CAMBIO_ALTO) : '')
+      : '<span class="es-st"><i>Senza Full Training</i><b>tempi morti non calcolabili</b></span>';
+    const B = esBlocchi(M), ultimi = {};
+    B.forEach(function(b, k){ if(k < B.length - 1) ultimi[b.ult] = 1; });
+    const body = M.righe.map(function(r, i){
       const det = exDettaglio(r.d.det);
       let sc = na, dc = na;
       if(r.k){
@@ -3989,19 +4048,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }
       const nota = r.fuori ? (r.idp ? 'IDP, fuori dal conto' : 'lavoro di poche, fuori dal conto')
                  : (r.con ? 'nello stesso momento di '+r.con.join(', ') : '');
-      return '<tr'+(r.fuori ? ' class="es-out"' : '')+'>'+
+      let h = '<tr'+(r.fuori ? ' class="es-out"' : '')+'>'+
         '<td class="es-nm"><span class="ex-i">'+r.n+'</span><span class="ex-n">'+esc(r.d.nome||'Esercitazione')+'</span>'+
           (det ? '<span class="ex-d">'+esc(det)+'</span>' : '')+
           (r.k ? '<span class="ex-d">scritto '+esc(tmScritto(r.k.a))+'</span>' : '')+
           (nota ? '<span class="ex-nt">'+esc(nota)+'</span>' : '')+'</td>'+
         cella(r.min != null ? esc(tmFmt(r.min)) : na)+cella(dc)+cella(sc)+
         cella(r.fuori || r.min == null ? na : pct(r.min))+'</tr>';
+      if(ultimi[i] && mc != null)
+        h += '<tr class="es-cb'+(mc > ES_CAMBIO_ALTO ? ' alto' : '')+'"><td class="es-nm">cambio</td>'+cella('~'+esc(tmFmt(mc)))+cella('')+cella('')+cella(pct(mc))+'</tr>';
+      return h;
     }).join('');
     const piede = c
-      ? '<tr class="es-morti"><td class="es-nm">Tempi morti <span class="ex-d">spiegazioni, cambi di campo, acqua, pettorine</span></td>'+cella(esc(tmFmt(c.pausa)))+cella(na)+cella(na)+cella('<b'+(c.pausa / c.ft >= 0.15 ? ' class="es-hi"' : '')+'>'+pct(c.pausa)+'</b>')+'</tr>'+
+      ? '<tr class="es-morti"><td class="es-nm">Tempi morti in tutto <span class="ex-d">'+(mc != null ? c.cambi+(c.cambi === 1 ? ' cambio' : ' cambi')+' da '+esc(tmFmt(mc))+' di media: spiegazioni, cambi di campo, acqua, pettorine' : 'spiegazioni, acqua, pettorine')+'</span></td>'+cella(esc(tmFmt(c.pausa)))+cella(na)+cella(na)+cella('<b'+(c.pausa / c.ft >= 0.15 ? ' class="es-hi"' : '')+'>'+pct(c.pausa)+'</b>')+'</tr>'+
         '<tr class="row-tot"><td class="es-nm">Full Training</td>'+cella(esc(tmFmt(c.ft)))+cella(M.nK ? esc(tmFmt(M.dich)) : na)+cella(M.sfori ? '<span class="es-su">+'+esc(tmFmt(M.piu))+'</span>' : na)+cella('100%')+'</tr>'
       : '';
-    return '<div class="es-sed"><div class="es-sh"><h4>'+esc(esQuando(M.s))+'</h4><span>'+riass+'</span></div>'+
+    return '<div class="es-sed"><div class="es-sh"><h4>'+esc(esQuando(M.s))+'</h4><div class="es-sts">'+riass+'</div></div>'+
       esBarraHTML(M)+
       '<div class="tbl-wrap"><table class="dt es-t"><thead><tr><th style="text-align:left">Esercitazione</th><th>GPS</th><th>Dichiarato</th><th>Scarto</th><th>Quota</th></tr></thead>'+
       '<tbody>'+body+piede+'</tbody></table></div></div>';
@@ -4019,11 +4081,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const piu = L.reduce(function(a, M){ return a + M.piu; }, 0);
     const nEs = L.reduce(function(a, M){ return a + M.righe.length; }, 0);
     const q = ft > 0 ? Math.round(tm / ft * 100) : null;
+    const nCb = conC.reduce(function(a, M){ return a + M.c.cambi; }, 0);
     return '<div class="tm-row es-kpi">'+
       tmCella('Sedute', NF0.format(L.length), '', esc(nEs+' esercitazioni')) +
       tmCella('Full Training', NF0.format(Math.round(ft)), 'min', esc(conC.length+(conC.length === 1 ? ' seduta col GPS' : ' sedute col GPS'))) +
       tmCella('Esercitazioni', NF0.format(Math.round(net)), 'min', ft > 0 ? esc(NF0.format(Math.round(net / ft * 100))+'% del Full Training') : '') +
       tmCella('Tempi morti', NF0.format(Math.round(tm)), 'min', q != null ? esc(q+'% del Full Training') : '', q != null && q >= 15) +
+      (nCb ? tmCella('A ogni cambio', esc(tmFmt(tm / nCb)), '', esc(nCb+' cambi nella settimana'), tm / nCb > ES_CAMBIO_ALTO) : '') +
       tmCella('Sfori sui tempi', NF0.format(sf), '', sf ? esc(tmFmt(piu)+' oltre il dichiarato') : 'rispetto a serie e recuperi scritti', sf > 0) +
     '</div>';
   }
@@ -4068,7 +4132,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return '<div class="rsec es-w"><div class="rsec-head"><h3>'+esc(esSettLbl(w))+'</h3>'+
         '<span class="rsec-n">GPS contro quanto scritto in Esercitazioni; tempi morti = Full Training meno le esercitazioni</span></div>'+
         esKpiHTML(L)+L.map(esSedutaHTML).join('')+'</div>';
-    }).join('')+'<p class="tm-nota">Dichiarato: il tempo che viene da serie e recupero scritti in Esercitazioni (lavoro piu\' recuperi). Si segna lo sforo quando il GPS supera il dichiarato di oltre un minuto o del 10%. Quota: la parte del Full Training presa dall\'esercitazione. Tempi morti arancio quando superano il 15% della seduta.</p></div>';
+    }).join('')+'<p class="tm-nota">Dichiarato: il tempo che viene da serie e recupero scritti in Esercitazioni (lavoro piu\' recuperi). Si segna lo sforo quando il GPS supera il dichiarato di oltre un minuto o del 10%. Quota: la parte del Full Training presa dall\'esercitazione. Cambio: i tagli del GPS non hanno l\'orario, quindi il tempo di ogni cambio e\' la media della seduta (tempi morti diviso cambi); arancio oltre 3 minuti. Tempi morti arancio quando superano il 15% della seduta.</p></div>';
     const t = document.getElementById('es-tutte');
     if(t) t.addEventListener('click', function(){ esScelta = null; fillWeeks(); aggiornaTastoStampa(); render(); });
   }
