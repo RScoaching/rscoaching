@@ -5016,6 +5016,51 @@ function stTest(I){
   return stTestTutti(I).filter(x=>!off.includes(x[0])).concat((I.testAdd||[]).map(n=>[n,'test scelto']));
 }
 
+// ── volume settimanale dei punti da migliorare ────────────────────
+/* L'ipertrofia cresce con le serie settimanali, con rendimenti che calano
+   (Schoenfeld 2017; Pelland 2025, che conta le serie indirette come mezza).
+   Per l'estetica i muscoli scelti devono arrivare ad almeno 10 serie a
+   settimana (principiante) o 12 (intermedio e avanzato): se il programma resta
+   sotto, si aggiunge una serie agli esercizi diretti di quel muscolo, fino a 4
+   serie per esercizio e due serie in piu' per seduta. */
+const ST_VOL_MUS={
+  glutei:[/hip thrust|glute|bridge|abduct|kickback/i,/squat|lunge|split|step up|deadlift|rdl/i],
+  gambe:[/squat|leg press|leg extension|lunge|split|step up|hack/i,null],
+  femorali:[/leg curl|hamstring|nordic|rdl|romanian|stiff|good morning/i,/deadlift/i],
+  polpacci:[/heel raise|calf/i,null],
+  petto:[/bench|chest|fly|push up|floor press|dip/i,null],
+  dorso:[/row|pull up|pulldown|chin|pullover/i,/deadlift/i],
+  spalle:[/lateral raise|face pull|rear delt|shoulder press|strict press|seated dumbbell press|military|arnold/i,/bench|push up|incline/i],
+  braccia:[/(?<!leg |hamstring )curl|tricep|pushdown|skull|french|overhead extension/i,/row|pull up|pulldown|chin|bench|push up|dip|press/i]
+};
+const ST_VOL_ALT={polpacci:['Single Leg Heel Raise','Seated Heel Raise'],gambe:['Leg Extension Machine','Step Up'],femorali:['Leg Curl Seduto','Hamstring Curl Sliders Eccentric'],glutei:['Hip Thrust','Glute Bridge'],petto:['Push Up'],dorso:['Chest Supported Dumbbell Row'],spalle:['Dumbbell Lateral Raise'],braccia:['Dumbbell Curl']};
+function stVolPunti(I,w,sessions){
+  if(I.obiettivo!=='estetica'||w.tipo!=='carico'||I.livello==='zero')return;
+  const obj=I.livello==='princ'?10:12;
+  const exs=[];Object.values(sessions).forEach(ss=>{if(ss.type!=='pesi')return;ss._piu=0;Object.values(ss.exercises||{}).forEach(e=>{if(/^Prevenzione|^Tendine/.test(e.cue||'')||/test/i.test(String(e.reps)))return;exs.push([ss,e]);});});
+  const lavoro=(e,re)=>!/hamstring curl|leg curl/i.test(e.name)||re!==ST_VOL_MUS.braccia[0];
+  stPuntiEff(I).forEach(pk=>{
+    const m=ST_VOL_MUS[pk];if(!m)return;
+    const conta=()=>exs.reduce((t,[,e])=>t+(m[0].test(e.name)&&lavoro(e,m[0])?+e.sets:(m[1]&&m[1].test(e.name)?+e.sets*0.5:0)),0);
+    let giri=0;
+    while(conta()<obj&&giri++<6){
+      // prima gli esercizi segnati come punto, poi gli altri diretti non principali
+      const c=exs.filter(([ss,e])=>m[0].test(e.name)&&lavoro(e,m[0])&&+e.sets<4&&!e.pct&&ss._piu<2).sort((x,y)=>(/^punto/.test(y[1].cue||'')?1:0)-(/^punto/.test(x[1].cue||'')?1:0))[0];
+      if(c){c[1].sets=+c[1].sets+1;c[0]._piu++;continue;}
+      // nessun margine: un esercizio diretto in piu' nella seduta che non ce l'ha
+      const nomi=stEsPunto(I,pk).concat(ST_VOL_ALT[pk]||[]);
+      const ss=Object.values(sessions).filter(x=>x.type==='pesi'&&!Object.values(x.exercises||{}).some(e=>m[0].test(e.name)&&lavoro(e,m[0])&&!/^Prevenzione/.test(e.cue||''))&&!/^Test/.test(x.name))[0];
+      const n=ss&&nomi.find(x=>m[0].test(x)&&!Object.values(ss.exercises).some(e=>e.name===x));
+      if(!n)break;
+      const ord=Object.keys(ss.exercises).length,e={name:n,sets:3,reps:'10-15',rpe:'8',rest:'60"',cue:'punto da migliorare: volume della settimana',order:ord};
+      // prima del blocco di rinforzo finale, se c'e'
+      const lst=Object.values(ss.exercises).sort((x,y)=>x.order-y.order);const j=lst.findIndex((x,i)=>i>0&&/^Prevenzione:/.test(x.cue||''));
+      lst.splice(j<0?lst.length:j,0,e);ss.exercises={};lst.forEach((x,i)=>{x.order=i;ss.exercises['e'+i]=x;});
+      exs.push([ss,e]);ss._piu=(ss._piu||0)+3;
+    }
+  });
+  Object.values(sessions).forEach(ss=>delete ss._piu);
+}
 // ── prevenzione per tipo di seduta e carenze ─────────────────────
 /* Dalla libreria della prevenzione Fiorentina. Ogni seduta apre con
    un'attivazione (mobilita') e chiude con il rinforzo, e i due cambiano col
@@ -5449,6 +5494,7 @@ function stCostruisci(I,P){
         :'Doppia: la corsa facile puo\' stare prima della forza senza togliere niente; se sono attaccate, prima la forza.';
       [fz,cr].forEach(x=>{x.notes=(x.notes?x.notes.trim()+' ':'')+nota;});
     });
+    stVolPunti(I,w,sessions);
     weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(kmSett?' · circa '+kmSett+' km'+(w.tipo==='gara'?' piu\' la gara':''):''),sessions};
   });
   const cat=I.obiettivo==='forza'?'Forza':I.obiettivo==='estetica'?'Ipertrofia':I.obiettivo==='sport'?'Pre-season':I.obiettivo==='rientro'?'Ritorno al gioco':I.obiettivo==='gara'?'Corsa':I.obiettivo==='ibrido'?'Corsa e forza':I.obiettivo==='salute'?'Salute e forma':'Altro';
