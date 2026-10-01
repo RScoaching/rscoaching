@@ -3716,14 +3716,185 @@ body{font-family:Inter,-apple-system,Arial,sans-serif;color:#1B1720;background:#
 .k-f{display:flex;justify-content:space-between;margin-top:6px;padding-top:5px;border-top:1px solid #E6E1E8;font-size:7px;color:#857D88}`;
   return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - calendario</title>'+PDF_FONTS+'<style>'+css+'</style></head><body>'+fogli+'</body></html>';
 }
+/* ── base comune dei fogli A, E, F ──────────────────────────────────── */
+function pdfBase(p){
+  const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).map(([,w])=>w);
+  const sessOf=w=>Object.values(w.sessions||{}).sort((a,b)=>((a.dayOfWeek==null?9:a.dayOfWeek)-(b.dayOfWeek==null?9:b.dayOfWeek))||((a.order||0)-(b.order||0)));
+  const ini=stDate(p.startDate),lun0=ini?(()=>{const x=new Date(ini);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;})():null;
+  const giorno=(i,g)=>{if(!lun0)return null;const a=new Date(lun0);a.setDate(a.getDate()+i*7+(g||0));return a;};
+  const dm=d=>d?d.getDate()+'/'+(d.getMonth()+1):'';
+  const athl=Object.keys(p.assignedTo||{}).map(id=>(athletes[id]||{}).name).filter(Boolean);
+  const kgAid=pzKgAid&&(p.assignedTo||{})[pzKgAid]?pzKgAid:null;
+  const kgOf=e=>{if(!kgAid||!e||!e.pct)return '';const mx=pzMax(e.name);const pc=pzNum(e.pct);return mx&&isFinite(pc)?String(pzR25(mx.v*pc/100)).replace('.',',')+' kg':'';};
+  const prev=e=>/^Prevenzione/.test(e.cue||'');
+  const exOf=x=>Object.values(x.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo'};
+  const GG=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'],GGL=['lunedi\'','martedi\'','mercoledi\'','giovedi\'','venerdi\'','sabato','domenica'];
+  return {esc,W,sessOf,ini,lun0,giorno,dm,athl,kgAid,kgOf,prev,exOf,TIPO,GG,GGL};
+}
+function pdfCss(acc){return `*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,-apple-system,Arial,sans-serif;color:#1B1720;background:#fff;font-size:8.5px;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1B1720;padding-bottom:6px;margin-bottom:9px}
+.hd h1{font:400 22px/1 'Bebas Neue',Inter,sans-serif;letter-spacing:.4px}.hd .s{font-size:8.5px;color:#4A4450;margin-top:3px}
+.br{font:400 13px/1 'Bebas Neue',Inter,sans-serif;letter-spacing:.6px;text-align:right}.br b{color:${acc};font-weight:400}.br small{display:block;font:500 8px Inter,sans-serif;color:#857D88;letter-spacing:0;margin-top:3px}
+.tg{font:600 7px Inter,sans-serif;padding:1px 6px;border-radius:3px;background:#F1EEF2;color:#4A4450;white-space:nowrap}
+.tg.t-pesi{background:#FDEDE6;color:#B4441A}.tg.t-corsa{background:#EEE9FB;color:#5737B8}.tg.t-sprint,.tg.t-conditioning{background:#FFF4E0;color:#8A5A00}.tg.t-recupero{background:#EEF1F4;color:#3E4A57}.tg.t-rtp{background:#E7F4EE;color:#256A47}
+table{width:100%;border-collapse:collapse}th{font:600 7.5px Inter,sans-serif;color:#857D88;text-align:left;padding:4px 5px;border-bottom:1px solid #1B1720}
+td{padding:5px;border-bottom:1px solid #E6E1E8;vertical-align:middle}td.n,th.n{text-align:center;font-variant-numeric:tabular-nums}
+.cue{display:block;color:#857D88;font-size:7.5px;margin-top:1px}
+.bx{display:inline-block;width:34px;height:17px;border:1px solid #CFC8D2;border-radius:2px;margin:0 3px 0 0;vertical-align:middle;position:relative}
+.bx i{position:absolute;left:2px;top:1px;font:500 5.5px Inter,sans-serif;color:#B5ADB8;font-style:normal}
+.ck{display:inline-block;width:11px;height:11px;border:1px solid #BDB5C0;border-radius:2px;vertical-align:middle}
+.ln{border-bottom:1px solid #CFC8D2;height:16px}
+.ft{display:flex;justify-content:space-between;margin-top:8px;padding-top:5px;border-top:1px solid #E6E1E8;font-size:7px;color:#857D88}`;}
+function pdfTesta(B,p,tit,sub,dx,fio){
+  // il titolo arriva gia' pronto: chi lo compone fa l'escape dei dati
+  return '<div class="hd"><div><h1>'+tit+'</h1><div class="s">'+sub+'</div></div><div class="br">'+(fio?'Fiorentina Primavera':'<b>RS</b>COACHING')+'<small>'+dx+'</small></div></div>';
+}
+
+/* ── A: scheda della seduta ──────────────────────────────────────────
+   Le sedute della settimana scelta, da stampare e portare in palestra o al
+   campo. Si scrive sopra: una casella per serie (kg e ripetizioni fatte), i
+   tempi delle ripetute, la prevenzione da spuntare, e in fondo RPE, durata,
+   dolore e note. Le sedute corte stanno in due su un foglio. */
+function pdfSchedeHTML(p,wi,fio){
+  const B=pdfBase(p),{esc}=B;const w=B.W[wi];if(!w)return '';
+  const ss=B.sessOf(w);
+  const dose=e=>{const r=[e.sets&&e.reps?e.sets+' x '+String(e.reps).replace(' per lato',' per lato'):(e.reps||e.sets||'')];return r.join(' ');};
+  const carico=e=>{const r=[];if(e.pct)r.push(String(e.pct).replace('.',',')+'%');const kg=B.kgOf(e);if(kg)r.push('<b>'+kg+'</b>');if(e.rpe)r.push('RPE '+esc(e.rpe));if(e.rest)r.push('rec '+esc(e.rest));return r.join('<br>');};
+  const caselle=e=>{
+    // sprint, accelerazioni e cambi di direzione: una casella per prova, per il tempo
+    const nr=parseInt(e.reps,10);if(/sprint|accelerazion|volante|change of direction|5-10-5|cambio di direzione/i.test(e.name)&&(parseInt(e.sets,10)||1)===1&&nr>1&&nr<=10)return Array.from({length:nr},(_,i)=>'<span class="bx" style="width:28px"><i>'+(i===0?'tempo':'')+'</i></span>').join('');
+    const n=Math.max(1,Math.min(8,parseInt(e.sets,10)||1));if(/test/i.test(String(e.reps)))return '<span class="bx" style="width:70px"><i>risultato</i></span>';const lbl=/["'”]/.test(String(e.reps))&&!/x/.test(String(e.reps))?'':(e.pct||e.rpe||/kg/i.test(e.name)?'kg x rip':'');return Array.from({length:n},(_,i)=>'<span class="bx"><i>'+(i===0?lbl:'')+'</i></span>').join('');};
+  const blocco=x=>{
+    const d=x.dayOfWeek,dd=d!=null?B.giorno(wi,d):null;
+    const ex=B.exOf(x),lav=ex.filter(e=>!B.prev(e)),pv=ex.filter(B.prev);
+    let min='';try{const m=pzStatSess(x).min;if(m)min='circa '+Math.round(m)+' minuti';}catch(e){}
+    const km=/Circa (\d+(?:,\d)?) km/.exec(x.notes||'');
+    let h='<section class="sc"><div class="sch"><div><span class="tg t-'+esc(x.type)+'">'+esc(B.TIPO[x.type]||x.type||'')+'</span><h2>'+esc(x.name)+'</h2></div><div class="scm">'+(d!=null?B.GGL[d]+(dd?' '+B.dm(dd):''):'')+'<br>'+(km?'circa '+km[1]+' km':min)+'</div></div>';
+    const nota=String(x.notes||'').replace(/^Circa \d+(?:,\d)? km\.\s*/,'').trim();
+    if(nota)h+='<p class="scn">'+esc(nota)+'</p>';
+    if(x.type==='corsa'){
+      h+='<table><tr><th style="width:9%">Zona</th><th>Cosa</th><th class="n" style="width:15%">Ritmo</th><th style="width:34%">Tempi fatti</th></tr>'+(x.corsaFasi||[]).map(f=>{const n=parseInt(f.reps,10);const cen=/Z[345]/.test(f.zona||'')&&!/Riscaldamento|Defaticamento/.test(f.tipo);
+        return '<tr'+(cen?' class="k"':'')+'><td><b>'+esc(f.zona||'')+'</b></td><td><b>'+esc(f.tipo||'')+'</b> '+esc(stCorsaTesto(f)||'')+(f.note?'<span class="cue">'+esc(f.note)+'</span>':'')+'</td><td class="n">'+esc(String(f.repPace||f.pace||'').replace(/\s*\/km/,''))+'</td><td>'+(cen&&n>1?Array.from({length:Math.min(12,n*(parseInt(f.serie,10)||1))},()=>'<span class="bx" style="width:26px"></span>').join(''):cen?'<span class="bx" style="width:60px"><i>tempo</i></span>':'')+'</td></tr>';}).join('')+'</table>';
+    }else if(x.type==='conditioning'&&!lav.length){
+      h+='<table><tr><th>Lavoro</th><th style="width:30%">Fatto</th></tr><tr><td>'+esc((x.duration?x.duration+': ':'')+String(x.condContent||'')).replace(/\n/g,'<br>')+'</td><td><span class="bx" style="width:90px"><i>serie, metri, note</i></span></td></tr></table>';
+    }else{
+      h+='<table><tr><th style="width:4%">#</th><th>Esercizio</th><th class="n" style="width:15%">Serie x rip</th><th class="n" style="width:14%">Carico</th><th style="width:36%">Scrivi quello che fai</th></tr>'
+        +lav.map((e,i)=>'<tr><td class="n">'+(i+1)+'</td><td><b>'+esc(e.name)+'</b>'+(e.cue?'<span class="cue">'+esc(e.cue)+'</span>':'')+'</td><td class="n">'+esc(dose(e))+'</td><td class="n">'+carico(e)+'</td><td>'+caselle(e)+'</td></tr>').join('')+'</table>';
+    }
+    if(pv.length)h+='<div class="pv"><b>Prevenzione</b>'+pv.map(e=>'<span><i class="ck"></i> '+esc(e.name)+' <em>'+esc(dose(e))+'</em></span>').join('')+'</div>';
+    h+='<div class="fine"><div>RPE della seduta<span class="bx" style="width:44px"><i>1-10</i></span></div><div>Durata<span class="bx" style="width:44px"><i>min</i></span></div><div>Dolore<span class="bx" style="width:44px"><i>0-10</i></span></div><div class="nt">Note<div class="ln"></div></div></div></section>';
+    return h;
+  };
+  const acc=fio?'#5b2d90':'#E2611C';
+  const css=`@page{size:A4 portrait;margin:9mm 10mm}`+pdfCss(acc)+`
+.sc{border:1px solid #E6E1E8;border-radius:5px;padding:9px 10px 8px;margin-bottom:9px;break-inside:avoid;page-break-inside:avoid}
+.sch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}.sch h2{font:400 18px/1 'Bebas Neue',Inter,sans-serif;letter-spacing:.3px;margin-top:3px}
+.scm{text-align:right;font-size:8px;color:#4A4450;line-height:1.4}
+.scn{font-size:7.8px;color:#4A4450;margin:0 0 5px;font-style:italic}
+tr.k td{background:#FFF6F1}
+.pv{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:8px}.pv b{width:100%;font-size:8px}.pv em{font-style:normal;color:#857D88}
+.fine{display:flex;gap:14px;align-items:flex-end;margin-top:8px;font-size:8px;color:#4A4450}.fine .bx{margin-left:5px}.fine .nt{flex:1}`;
+  return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - schede settimana '+(wi+1)+'</title>'+PDF_FONTS+'<style>'+css+'</style></head><body>'
+    +pdfTesta(B,p,'Schede della settimana '+(wi+1),esc(p.name)+(B.athl.length?' &#183; '+esc(B.athl.join(', ')):'')+(B.lun0?' &#183; dal '+B.dm(B.giorno(wi,0))+' al '+B.dm(B.giorno(wi,6)):''),esc(String(w.label||'').replace(/^S\d+\s*/,''))+' &#183; '+ss.length+(ss.length===1?' seduta':' sedute'),fio)
+    +(B.kgAid&&ss.some(x=>B.exOf(x).some(e=>B.kgOf(e)))?'<p class="scn">Kg calcolati sui massimali di '+esc((athletes[B.kgAid]||{}).name||'')+'.</p>':'')
+    +ss.map(blocco).join('')
+    +'<div class="ft"><span>'+(fio?'Fiorentina Primavera U19W':'RS Coaching &#183; Raoul Simon')+'</span><span>Riporta RPE e durata nell\'app: servono a calcolare il carico</span></div></body></html>';
+}
+
+/* ── E: diario dell'atleta ───────────────────────────────────────────
+   Un foglio a settimana da compilare per chi non usa l'app: benessere ogni
+   mattina, le sedute in programma con quello che si e' fatto davvero, minuti
+   e RPE per il carico (sRPE = minuti x RPE), il fuori programma e le note. */
+function pdfDiarioHTML(p,fio){
+  const B=pdfBase(p),{esc}=B;
+  const voci=[['Sonno','ore'],['Qualita\' del sonno','1-5'],['Fatica','1-5'],['Dolori muscolari','1-5'],['Umore','1-5']];
+  const scala='<div class="rpe"><b>RPE</b><span>1 riposo</span><span>3 facile</span><span>5 impegnativo</span><span>7 duro</span><span>9 quasi al massimo</span><span>10 massimo</span><em>1-5: 1 pessimo, 5 ottimo; per i dolori 1 nessuno, 5 forti</em></div>';
+  const pag=B.W.map((w,i)=>{
+    const ss=B.sessOf(w);
+    const ben='<table class="bn"><tr><th style="width:20%">Ogni mattina</th>'+B.GG.map((g,d)=>'<th class="n">'+g+' '+B.dm(B.giorno(i,d))+'</th>').join('')+'</tr>'+voci.map(([v,u])=>'<tr><td><b>'+v+'</b> <span class="u">'+u+'</span></td>'+B.GG.map(()=>'<td class="n"><span class="bx" style="width:30px"></span></td>').join('')+'</tr>').join('')+'</table>';
+    const righe=B.GG.map((g,d)=>{const l=ss.filter(x=>x.dayOfWeek===d);const r=(l.length?l:[null]).map((x,j)=>'<tr'+(x?'':' class="rip"')+'><td>'+(j===0?'<b>'+g+'</b> '+B.dm(B.giorno(i,d)):'')+'</td><td>'+(x?'<span class="tg t-'+esc(x.type)+'">'+esc(B.TIPO[x.type]||'')+'</span> '+esc(x.name):'riposo')+'</td><td class="n"><span class="ck"></span></td><td class="n"><span class="bx"></span></td><td class="n"><span class="bx" style="width:26px"></span></td><td class="n"><span class="bx" style="width:40px"></span></td><td><div class="ln"></div></td></tr>').join('');return r;}).join('');
+    const sed='<table class="sd"><tr><th style="width:12%">Giorno</th><th>In programma</th><th class="n" style="width:6%">Fatta</th><th class="n" style="width:9%">Minuti</th><th class="n" style="width:7%">RPE</th><th class="n" style="width:10%">Min x RPE</th><th style="width:26%">Com\'e\' andata</th></tr>'+righe+'</table>';
+    return '<section class="pg">'+pdfTesta(B,p,'Diario &#183; settimana '+(i+1),(B.athl.length?esc(B.athl.join(', '))+' &#183; ':'')+(B.lun0?'dal '+B.dm(B.giorno(i,0))+' al '+B.dm(B.giorno(i,6)):esc(p.name)),'riportalo il lunedi\'',fio)
+      +'<h3>Come stai</h3>'+ben+'<h3>Le sedute</h3>'+sed
+      +'<div class="tot"><div>Carico della settimana (somma di min x RPE)<span class="bx" style="width:70px"></span></div><div>Sedute fatte<span class="bx" style="width:40px"></span></div></div>'
+      +'<h3>Fuori programma</h3><p class="u">Partite, allenamenti in piu\', altri sport: giorno, minuti, RPE</p><div class="ln"></div><div class="ln"></div>'
+      +'<h3>Per il preparatore</h3><p class="u">Dolori, impegni, cose da sapere</p><div class="ln"></div><div class="ln"></div>'
+      +scala+'<div class="ft"><span>'+(fio?'Fiorentina Primavera U19W':'RS Coaching &#183; Raoul Simon')+'</span><span>'+esc(p.name)+' &#183; settimana '+(i+1)+' di '+B.W.length+'</span></div></section>';
+  }).join('');
+  const acc=fio?'#5b2d90':'#E2611C';
+  const css=`@page{size:A4 portrait;margin:9mm 10mm}`+pdfCss(acc)+`
+.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}
+h3{font-size:10px;font-weight:700;margin:11px 0 5px}.u{font-size:7.5px;color:#857D88;font-weight:400}
+.bn td,.sd td{padding:4px 4px}.sd tr.rip td{color:#B5ADB8}.sd .bx{width:30px}
+.tot{display:flex;gap:24px;margin-top:8px;font-size:8.5px;font-weight:600}.tot .bx{margin-left:6px}
+.rpe{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:12px;padding:6px 8px;border:1px solid #E6E1E8;border-radius:4px;font-size:7.5px;color:#4A4450}.rpe b{color:#1B1720}.rpe em{width:100%;font-style:normal;color:#857D88}`;
+  return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - diario</title>'+PDF_FONTS+'<style>'+css+'</style></head><body>'+pag+'</body></html>';
+}
+
+/* ── F: percorso di rientro ──────────────────────────────────────────
+   Per i programmi di ritorno al gioco: la lesione, le fasi con le date e
+   quella in corso evidenziata, e per ogni fase il lavoro di campo, la forza
+   e la lista dei criteri da spuntare con il fisioterapista (valore e data)
+   prima di passare alla fase dopo. */
+function pdfRientroHTML(p,fio){
+  const B=pdfBase(p),{esc}=B;const I=p.intake||{};
+  const inf=(ST_INF.find(x=>x[0]===I.rtpInf)||[0,'Infortunio'])[1];
+  const fase=w=>String(w.label||'').replace(/^S\d+\s*/,'').replace(/\s*(scarico|taper|gara)$/,'')||'Fase';
+  const fasi=[];B.W.forEach((w,i)=>{const f=fase(w);const u=fasi[fasi.length-1];if(u&&u.n===f)u.w.push(i);else fasi.push({n:f,w:[i]});});
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  const corr=fasi.findIndex(f=>{const a=B.giorno(f.w[0],0),z=B.giorno(f.w[f.w.length-1],6);return a&&z&&oggi>=a&&oggi<=z;});
+  const ctrl=x=>/^Controllo/i.test(x.name||'');
+  const riga=x=>{if(x.type==='corsa')return (x.corsaFasi||[]).filter(y=>!/Riscaldamento|Defaticamento/.test(y.tipo)).map(y=>'<b>'+esc(y.tipo||'')+'</b> '+esc(stCorsaTesto(y)||'')+(y.note?' <em>('+esc(y.note)+')</em>':'')).join('; ');
+    if(x.type==='conditioning'&&!B.exOf(x).length)return esc((x.duration?x.duration+': ':'')+String(x.condContent||'').replace(/\n/g,'; '));
+    return B.exOf(x).filter(e=>!B.prev(e)).map(e=>esc(e.name)+' <em>'+esc((e.sets?e.sets+'x':'')+(e.reps||''))+'</em>').join(', ');};
+  const tl='<div class="fs">'+fasi.map((f,k)=>{const a=B.giorno(f.w[0],0),z=B.giorno(f.w[f.w.length-1],6);return '<div class="'+(k===corr?'on':'')+'"><b>'+(k+1)+' '+esc(f.n)+'</b><span>settimane '+(f.w[0]+1)+(f.w.length>1?'-'+(f.w[f.w.length-1]+1):'')+(a?' &#183; '+B.dm(a)+'-'+B.dm(z):'')+'</span>'+(k===corr?'<em>fase in corso</em>':'')+'</div>';}).join('')+'</div>';
+  const corpo=fasi.map((f,k)=>{
+    // settimana tipo della fase: la prima senza test d'ingresso o di fine
+    const test=x=>/^Test/i.test(x.name||'');
+    const w0=B.W[f.w.find(i=>!B.sessOf(B.W[i]).some(test))??f.w[0]],tutte=f.w.flatMap(i=>B.sessOf(B.W[i]).map(x=>[i,x]));
+    const tipo=B.sessOf(w0).filter(x=>!ctrl(x)&&!test(x));
+    const cr=tutte.filter(([,x])=>ctrl(x));
+    let h='<section class="fz'+(k===corr?' on':'')+'"><h2>Fase '+(k+1)+' &#183; '+esc(f.n)+'</h2>';
+    h+='<table><tr><th style="width:13%">Giorno</th><th style="width:27%">Seduta</th><th>Contenuto (settimana tipo della fase)</th></tr>'+tipo.map(x=>'<tr><td>'+(x.dayOfWeek!=null?B.GG[x.dayOfWeek]:'')+'</td><td><span class="tg t-'+esc(x.type)+'">'+esc(B.TIPO[x.type]||'')+'</span> <b>'+esc(x.name)+'</b></td><td>'+riga(x)+'</td></tr>').join('')+'</table>';
+    const note=[...new Set(tipo.map(x=>String(x.notes||'').replace(/^Fase \d di \d: [^.]*\.\s*/,'').trim()).filter(Boolean))];
+    if(note.length)h+='<p class="nt">'+note.map(esc).join(' ')+'</p>';
+    if(cr.length){const [i,x]=cr[0];h+='<h3>Per passare alla fase '+(k+2)+' <span>controllo in settimana '+(i+1)+(x.dayOfWeek!=null?', '+B.GGL[x.dayOfWeek]:'')+'</span></h3><table class="cr"><tr><th style="width:5%"></th><th>Criterio</th><th style="width:30%">Come si misura</th><th class="n" style="width:12%">Valore</th><th class="n" style="width:10%">Data</th></tr>'
+      +B.exOf(x).map(e=>'<tr><td class="n"><span class="ck"></span></td><td><b>'+esc(e.name)+'</b></td><td class="u">'+esc(e.cue||'')+'</td><td class="n"><span class="bx" style="width:48px"></span></td><td class="n"><span class="bx" style="width:38px"></span></td></tr>').join('')
+      +'<tr><td class="n"><span class="ck"></span></td><td><b>Via libera del fisioterapista</b></td><td class="u">firma</td><td colspan="2"><div class="ln"></div></td></tr></table><p class="nt">Se un criterio non e\' rispettato si ripete l\'ultima settimana della fase e si ricontrolla.</p>';}
+    return h+'</section>';
+  }).join('');
+  const acc=fio?'#5b2d90':'#E2611C';
+  const css=`@page{size:A4 portrait;margin:9mm 10mm}`+pdfCss(acc)+`
+.inf{display:flex;gap:18px;margin-bottom:10px}.inf div{font-size:7.5px;color:#857D88}.inf b{display:block;font:400 17px/1.1 'Bebas Neue',Inter,sans-serif;color:#1B1720;letter-spacing:.3px}
+.fs{display:grid;grid-template-columns:repeat(${Math.max(1,fasi.length)},1fr);gap:5px;margin-bottom:12px}
+.fs div{border:1px solid #E6E1E8;border-radius:4px;padding:7px}.fs div.on{border-color:${acc};box-shadow:inset 0 3px 0 ${acc}}
+.fs b{display:block;font-size:9px}.fs span{display:block;font-size:7.5px;color:#857D88;margin-top:2px}.fs em{display:block;font-style:normal;font-weight:700;font-size:7.5px;color:${acc};margin-top:3px}
+.fz{margin-bottom:12px;break-inside:avoid;page-break-inside:avoid;border:1px solid #E6E1E8;border-radius:5px;padding:9px 10px}.fz.on{border-color:${acc}}
+.fz h2{font:400 17px/1 'Bebas Neue',Inter,sans-serif;letter-spacing:.3px;margin-bottom:6px}
+.fz h3{font-size:9.5px;font-weight:700;margin:10px 0 4px}.fz h3 span{font-weight:500;color:#857D88;font-size:8px;margin-left:6px}
+.fz em{font-style:normal;color:#857D88}.u{color:#4A4450;font-size:7.8px}.nt{font-size:7.8px;color:#4A4450;margin-top:5px;font-style:italic}`;
+  const op=I.rtpOp==='si'?'operato':I.rtpOp==='no'?'non operato':'';
+  return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - rientro</title>'+PDF_FONTS+'<style>'+css+'</style></head><body>'
+    +pdfTesta(B,p,'Rientro &#183; '+esc(inf),(B.athl.length?esc(B.athl.join(', '))+' &#183; ':'')+esc(p.name),(I.rtpSport==='corsa'?'ritorno alla corsa':I.rtpSport==='calcio'?'ritorno al calcio':'ritorno allo sport'),fio)
+    +'<div class="inf"><div>Lesione<b>'+esc(inf)+'</b></div>'+(I.rtpGrado?'<div>Grado<b>'+esc(I.rtpGrado)+'</b></div>':'')+(op?'<div>Intervento<b>'+op+'</b></div>':'')+(I.rtpSett?'<div>Settimane dall\'infortunio<b>'+esc(I.rtpSett)+'</b></div>':'')+'<div>Fasi<b>'+fasi.length+'</b></div><div>Durata stimata<b>'+B.W.length+' settimane</b></div></div>'
+    +tl+corpo
+    +'<div class="ft"><span>'+(fio?'Fiorentina Primavera U19W':'RS Coaching &#183; Raoul Simon')+'</span><span>Si passa di fase per criteri, non per calendario: le date sono una stima</span></div></body></html>';
+}
 window.pdfScegli=function(el){
   const p=programs[currentProgId]||{};
   const corsa=Object.values(p.weeks||{}).some(w=>Object.values(w.sessions||{}).some(x=>x.type==='corsa'));
+  const rtp=(p.intake&&p.intake.obiettivo==='rientro')||Object.values(p.weeks||{}).some(w=>Object.values(w.sessions||{}).some(x=>/^Controllo/i.test(x.name||'')));
   const v=(m,t,d)=>'<button type="button" class="pdf-op" onclick="stMenuChiudiG();exportBuilderPDF(\''+m+'\')"><b>'+t+'</b><span>'+d+'</span></button>';
   stMenu(el,'<div class="stm-g"><span>PDF del programma</span><div class="pdf-ops">'
     +v('compatto','Programma a blocchi','Riassunto e progressione: esercizi in riga, settimane in colonna')
     +v('settimana','Settimana in una pagina','Orizzontale, i sette giorni in colonna: per squadra e spogliatoio')
     +(corsa?v('calendario','Calendario della corsa','Il mese a calendario con km, zone e ritmi'):'')
+    +v('schede','Schede della settimana '+((currentWeekIdx||0)+1),'Da stampare e portare in palestra: caselle per kg, tempi, RPE')
+    +v('diario','Diario dell\'atleta','Da compilare: benessere, sedute fatte, minuti e RPE')
+    +(rtp?v('rientro','Percorso di rientro','Fasi, lavoro per fase e criteri da spuntare con il fisio'):'')
     +v('','Settimana per settimana','Ogni seduta per intero, una settimana dopo l\'altra')
     +'</div></div>');
 };
@@ -3733,6 +3904,9 @@ window.exportBuilderPDF=function(modo){
   const fioC=Object.keys(p.assignedTo||{}).some(id=>/fiorentina/i.test(String((athletes[id]||{}).team||'')));
   if(modo==='settimana'){pdfApri(pdfSettimanaHTML(p,fioC),true);return;}
   if(modo==='calendario'){pdfApri(pdfCalendarioHTML(p,fioC),true);return;}
+  if(modo==='schede'){pdfApri(pdfSchedeHTML(p,Math.max(0,currentWeekIdx||0),fioC));return;}
+  if(modo==='diario'){pdfApri(pdfDiarioHTML(p,fioC));return;}
+  if(modo==='rientro'){pdfApri(pdfRientroHTML(p,fioC));return;}
   if(modo==='compatto'){
     pdfApri(pdfCompattoHTML(p,fioC));return;
   }
