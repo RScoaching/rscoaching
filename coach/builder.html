@@ -4769,7 +4769,9 @@ function stQualita(I,w,ruolo,kmW,rit,tipo){
   if((w.tipo==='taper'&&!taperVero)||w.tipo==='gara'){const m=lunga?rip({tipo:'Passo gara',zona:'Z4',reps:3,dist:'1 km',pace:P(ps.gara),rec:'2\'',recTipo:'trotto',note:'richiamo del passo gara, facile da tenere'}):rip({tipo:'Passo gara',zona:'Z4',reps:4,dist:'400 m',pace:P(ps.gara),rec:'2\'',recTipo:'trotto',note:'richiamo del passo gara, gambe sciolte'});
     return {nome:'Richiamo del ritmo',km:Math.round((15+10)*60/ps.pe+(lunga?4:2.4)),fasi:[riscI,m,def]};}
   let lib;const phq=taperVero?'spec':ph;
-  if(ruolo==='Qualita\' 2')lib={base:[G.salBrevi,G.sal60],cost:[G.sogliaC,G.sal90],spec:[G.sogliaC,G.cruise(0,6)]}[phq];
+  // seconda seduta di qualita': piramidale per chi corre per se' (soglia), polarizzata per
+  // l'avanzato su 5 e 10 km (ripetute brevi a VO2max), come nella rete di Rosenblat 2025
+  if(ruolo==='Qualita\' 2')lib=(L==='avanz'&&!lunga&&gara?{base:[G.salBrevi,G.sal60],cost:[G.vo2(800,120),G.salBrevi],spec:[G.vo2(600,120),G.cruise(0,6)]}:{base:[G.salBrevi,G.sal60],cost:[G.sogliaC,G.sal90],spec:[G.sogliaC,G.cruise(0,6)]})[phq];
   else if(lunga)lib={base:[G.cruise(1),G.fartlek,G.progr],cost:[G.cruise(2),G.sogliaC,D>=42?G.cruise(1.6):G.vo2(1000,150)],spec:[G.cruise(D>=42?3:2),G.sogliaC,G.cruise(D>=42?2:1.6)]}[phq];
   else if(gara&&D===5)lib={base:[G.fartlek,G.cruise(0,5),has2?G.fartlekP:G.sal60],cost:[G.vo2(1000,150),G.cruise(0,8),G.piramide],spec:[G.rp(1000,ps.gara,120),G.serie400,G.vo2(1200,180)]}[phq];
   else if(gara)lib={base:[G.fartlek,G.cruise(0,5),has2?G.progr:G.sal60],cost:[G.vo2(1000,150),G.cruise(0,8),G.piramide],spec:[G.rp(2000,ps.gara,120),G.rpSerie,G.cruise(1.6)]}[phq];
@@ -4803,7 +4805,9 @@ function stVel(I,w){
   const pn0=stEs(I,'pliom'),pn=pn0===stEsBase(I,'pliom')?stPliomProg(I,w,{s:'pliom',r:'VEL'}):pn0;
   e.push(Object.assign({name:pn},stPliomDose(I,w,pn,2)));
   e.push({name:'Accelerazione 0-10m',sets:1,reps:sc?'4':String(5+Math.min(1,w.pos)),rest:'90"',cue:'partenza da fermo, massima intenzione'});
-  if(!hamR&&!/Adattamento|Ricondizionamento|Forza generale/.test(f)&&!sc)e.push({name:'Volante 20m',sets:1,reps:String(3+Math.min(1,w.pos)),rest:'3\'',cue:'velocita\' massima, recupero completo'});
+  // chi gioca a calcio tocca la velocita' massima ogni settimana: e' la dose che tiene pronti i flessori
+  const calcio=I.sport==='calcio';
+  if(!hamR&&!sc&&(calcio||!/Adattamento|Ricondizionamento|Forza generale/.test(f)))e.push({name:'Volante 20m',sets:1,reps:String(3+Math.min(1,w.pos)),rest:'3\'',cue:calcio?'oltre il 90% della velocita\' massima, recupero completo: lo stimolo settimanale che protegge i flessori':'velocita\' massima, recupero completo'});
   else e.push({name:'Accelerazione 0-20m',sets:1,reps:'3',rest:'2\'',cue:hamR?'all\'80-90%, flessori da proteggere':'fluida, in progressione'});
   if(cod)e.push({name:'Change of Direction 5-10-5',sets:1,reps:sc?'3':'4',rest:'2\'',cue:'appoggi bassi, uscita veloce'});
   return e;
@@ -5300,6 +5304,12 @@ function stProposta(I){
     glutei_t:'tendinopatia glutea: niente gambe accavallate, niente stretching della bandelletta, non dormire su quel fianco; isometrie di abduzione e poi rinforzo (LEAP)',
     hamprox:'tendinopatia prossimale dei flessori: niente allungamento in flessione profonda d\'anca e niente sedute lunghe su sedie basse; isometrie a gamba quasi tesa, poi stacchi parziali, il Nordic per ultimo',
     tibiale:'periostite: e\' un sovraccarico dell\'osso, meno km, terreno morbido e polpacci seduti; se il dolore e\' in un punto preciso va esclusa la frattura da stress'};
+  const sportF=I.sport!=='nessuno'||I.obiettivo==='sport';
+  if(stDonna(I)&&sportF)avvisi.push('Donna e sport di squadra: il riscaldamento neuromuscolare (FIFA 11+ o simile, atterraggi e cambi di direzione con il ginocchio in asse) prima di ogni allenamento riduce le rotture del crociato del 61% (consenso FAIR 2025). Il ciclo mestruale va registrato, ma non serve spostare i carichi per fase: l\'effetto medio e\' minimo (McNulty 2020), si adatta sui sintomi della singola.');
+  if(stDonna(I)&&(sportF||I.obiettivo==='gara'||I.obiettivo==='ibrido'))avvisi.push('Energia: tre mesi senza ciclo, ciclo che cambia con l\'allenamento, stanchezza che non passa o fratture da stress sono segnali di bassa disponibilita\' energetica (RED-S): se ci sono si mangia di piu\' e si sente il medico prima di aumentare i carichi.');
+  if(I.sport==='calcio')avvisi.push('Calcio: in settimana una volta oltre il 90% della velocita\' massima (a MD-3 o MD-4), Nordic e Copenhagen per tutta la stagione (Copenhagen: problemi all\'inguine -41%, Haroy 2019). Chi gioca poco recupera lo sprint il giorno dopo la partita.');
+  if(I.obiettivo==='ibrido'&&stUomo(I))avvisi.push('Ibrido: negli uomini la corsa toglie un po\' di forza alle gambe (nelle donne meno, Schumann 2023). Le gambe vanno prima della corsa o ad almeno 3 ore, le ripetute brevi (fino a 10 secondi) non danno interferenza.');
+  if(I.obiettivo==='gara'&&I.livello!=='zero')avvisi.push(I.livello==='avanz'&&+I.garaDist<=10?'Intensita\': distribuzione polarizzata, quasi tutto facile e la qualita\' a VO2max, che negli atleti allenati alza di piu\' il massimo consumo di ossigeno (Rosenblat 2025).':'Intensita\': distribuzione piramidale, tanto facile, una parte a soglia e poco a VO2max: per chi corre per se\' rende quanto la polarizzata ed e\' piu\' sostenibile (Rosenblat 2025).');
   const tdol=stTendDol(I),tst=stTendStab(I);
   if(tdol.length)avvisi.push('Tendini dolenti adesso, '+tdol.map(k=>TD[k]).join('; ')+'. Regola del dolore: durante fino a 5 su 10, la mattina dopo dolore e rigidita\' tornano come prima; se no la seduta dopo si scala.');
   if(tst.length)avvisi.push('Tendini stabili ('+tst.map(k=>(ST_INF.find(x=>x[0]===k)||[0,k])[1].toLowerCase()).join(', ')+'): resta il carico lento e pesante due volte a settimana, per non perdere quello che si e\' guadagnato.');
