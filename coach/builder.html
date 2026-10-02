@@ -5806,6 +5806,11 @@ function stCostruisci(I,P){
     // nel taper una sola seduta di forza, e niente eccentriche pesanti (Nordic)
     const pesiTaper=P.tipo.map((x,i)=>x.tipo==='pesi'&&i!==iTest?i:-1).filter(i=>i>=0);
     const zero=I.livello==='zero';
+    // allunghi: non in tutte le corse facili, una a settimana (due per l'avanzato con
+    // tre o piu' facili), quella che viene poco prima della qualita' (Daniels, Pfitzinger)
+    const facili=cr.filter(x=>x.ruolo==='Facile'),qd=cr.filter(x=>/Qualita/.test(x.ruolo)).map(x=>x.d);
+    const distQ=d=>qd.length?Math.min(...qd.map(q=>((q-d+7)%7)||7)):d+1;
+    const conAllunghi=facili.slice().sort((a,b)=>distQ(a.d)-distQ(b.d)||a.d-b.d).slice(0,I.livello==='avanz'&&facili.length>=3?2:1).map(x=>x.d);
     P.tipo.forEach((g,gi)=>{
       if(gi===iTest)return;
       if((w.tipo==='taper'||w.tipo==='gara')&&g.tipo==='pesi'&&pesiTaper.indexOf(gi)>0)return;
@@ -5820,6 +5825,7 @@ function stCostruisci(I,P){
       }
       if(g.tipo==='corsa'){
         let c=stCorsa(I,w,g.ruolo,(P.kmT||P.kmW)[wi]||0,P.rit,P.T.nC,P.tipo);
+        if(g.ruolo==='Facile'&&!conAllunghi.includes(g.d))c=Object.assign({},c,{fasi:c.fasi.filter(f=>!(f.tipo==='Attivazione'&&/allunghi/.test(f.dist||f.note||'')))});
         if(gi===iRes){
           const t=tRes[0];
           c=zero?{nome:'Test di corsa',fasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),stFase('Testo libero','Z2','20\'','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','5\'','','camminata')]}

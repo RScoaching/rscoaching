@@ -560,18 +560,22 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
   @page{size:A4;margin:12mm;}
 }
 .ap-sheet{font-family:'Inter',sans-serif;color:#1c1917;font-size:10.5pt;}
-.ap-band{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;background:#E2611C;color:#fff;padding:12px 16px;border-radius:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-.ap-brand{font-family:'Bebas Neue',sans-serif;font-size:12pt;letter-spacing:2px;opacity:.9;}
+.ap-band{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;background:#fff;color:#1c1917;padding:0 0 8px;border-bottom:2px solid #1c1917;}
+.ap-brand{font-family:'Bebas Neue',sans-serif;font-size:12pt;letter-spacing:1px;}.ap-brand b{color:#E2611C;font-weight:400;}
 .ap-name{font-family:'Bebas Neue',sans-serif;font-size:26pt;letter-spacing:.5px;line-height:1;}
-.ap-meta{font-size:9.5pt;opacity:.95;margin-top:3px;}
-.ap-date{font-size:9pt;white-space:nowrap;}
+.ap-meta{font-size:9.5pt;color:#4a4450;margin-top:3px;}
+.ap-date{font-size:9pt;white-space:nowrap;color:#6b6472;}
 .ap-row{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:10px 0 4px;}
 .ap-k{border:1px solid #e7e0d8;border-radius:5px;padding:6px 8px;}
-.ap-k span{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.6px;color:#6b6472;}
+.ap-k span{display:block;font-size:8pt;color:#6b6472;}
+.ap-sint{margin:2px 0 4px 16px;font-size:9.5pt;line-height:1.5}.ap-sint li{margin-bottom:2px}
+.ap-prog{font-size:9.5pt}.ap-ad{display:inline-block;width:90px;height:6px;border-radius:3px;background:#eee7df;vertical-align:middle;margin:0 4px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ap-ad i{display:block;height:100%;background:#6D45D9}
+.ap-bars{width:100%;height:auto;display:block;margin:2px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ap-t td.su{color:#6D45D9;font-weight:700}.ap-t td.giu{color:#9a918a}
 .ap-k b{font-size:12pt;}
 .ap-sheet h4{font-family:'Bebas Neue',sans-serif;font-size:14pt;letter-spacing:.5px;color:#E2611C;margin:12px 0 4px;break-after:avoid;}
 .ap-t{width:100%;border-collapse:collapse;font-size:9.5pt;break-inside:avoid;}
-.ap-t th{text-align:left;font-size:7.5pt;text-transform:uppercase;letter-spacing:.5px;color:#6b6472;border-bottom:1.5px solid #E2611C;padding:4px 6px;}
+.ap-t th{text-align:left;font-size:8pt;font-weight:600;color:#6b6472;border-bottom:1.5px solid #1c1917;padding:4px 6px;}
 .ap-t td{padding:4px 6px;border-bottom:1px solid #eee7df;}
 .ap-t .n{text-align:right;font-variant-numeric:tabular-nums;}
 .ap-prof{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
@@ -1907,14 +1911,35 @@ window.athReport=async function(aid){
   const nf=x=>Math.round(x).toLocaleString('it-IT');
   const grp=a.group&&groups[a.group]?groups[a.group].name:'';
   const oggi=new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
-  const test=testNames(aid).map(n=>{const s=testSerie(aid,n);if(!s.length)return null;const m=testMeta(n),l=s[s.length-1],p=s.length>1?s[s.length-2]:null,rk=testRank(aid,n);
-    return `<tr><td>${athEsc(n)}</td><td class="n"><b>${fmtNum(l.val,m.dec)}</b> ${athEsc(m.u)}</td><td class="n">${p?((l.val-p.val>0?'+':'')+fmtNum(l.val-p.val,m.dec)):''}</td><td class="n">${rk?rk.pos+' su '+rk.n:''}</td><td>${athEsc(l.date)}</td></tr>`;}).filter(Boolean).join('');
+  // andamento di un test in una riga: piccola linea dalla prima all'ultima misura
+  const spark=(s,m)=>{if(s.length<2)return '';const v=s.map(x=>x.val),lo=Math.min(...v),hi=Math.max(...v),r=hi-lo||1;const pts=v.map((x,i)=>(i/(v.length-1)*58+1).toFixed(1)+','+(15-(x-lo)/r*13).toFixed(1)).join(' ');const ok=isBetter(m,v[v.length-1],v[0]);return `<svg width="60" height="16" viewBox="0 0 60 16"><polyline points="${pts}" fill="none" stroke="${ok?'#6D45D9':'#B5ADB8'}" stroke-width="1.6"/></svg>`;};
+  const migl=[];
+  const test=testNames(aid).map(n=>{const s=testSerie(aid,n);if(!s.length)return null;const m=testMeta(n),f=s[0],l=s[s.length-1],rk=testRank(aid,n);
+    const d=s.length>1&&f.val?(l.val-f.val)/Math.abs(f.val)*100:null,ok=d!=null&&isBetter(m,l.val,f.val);
+    if(ok)migl.push([n,Math.abs(d)]);
+    return `<tr><td>${athEsc(n)}</td><td class="n">${s.length>1?fmtNum(f.val,m.dec):''}</td><td class="n"><b>${fmtNum(l.val,m.dec)}</b> ${athEsc(m.u)}</td><td class="n ${d==null?'':ok?'su':'giu'}">${d==null?'':(d>0?'+':'')+d.toFixed(1).replace('.',',')+'%'}</td><td>${spark(s,m)}</td><td class="n">${rk?rk.pos+' su '+rk.n:''}</td><td>${athEsc(l.date)}</td></tr>`;}).filter(Boolean).join('');
   const inj=injList(aid);
   const prof=testProfilo(aid);
   const wk=car.settimane.slice(-4);
+  // programma in corso e aderenza delle ultime 4 settimane
+  const pr=dProgAtleta(aid)[0];let progTxt='';
+  if(pr){const k=dSettIdx(pr[0],pr[1],aid,new Date()),W=dSett(pr[1]).length;progTxt=athEsc(pr[1].name||'Programma')+(k!=null&&k>=0&&k<W?', settimana '+(k+1)+' di '+W:k!=null&&k>=W?', finito':'');}
+  let pv=0,fa=0;for(let i=27;i>=0;i--){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);const P=dPreviste(aid,d),F=dFatte(aid,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}
+  const ader=pv?Math.round(fa/pv*100):null;
+  // carico delle ultime 8 settimane in barre, si legge anche stampato in bianco e nero
+  const s8=car.settimane.slice(-8),mx=Math.max(1,...s8.map(w=>w.tot));
+  const barre=`<svg class="ap-bars" viewBox="0 0 640 112">${s8.map((w,i)=>{const h=Math.round(w.tot/mx*72),x=i*80+16;return `<rect x="${x}" y="${90-h}" width="48" height="${h}" rx="3" fill="${w.inCorso?'#F6C3AA':'#E2611C'}"/><text x="${x+24}" y="${85-h}" text-anchor="middle" font-size="11" font-family="Inter,sans-serif" fill="#1c1917">${w.tot?nf(w.tot):''}</text><text x="${x+24}" y="106" text-anchor="middle" font-size="10" font-family="Inter,sans-serif" fill="#6b6472">${w.lun.getDate()}/${w.lun.getMonth()+1}</text>`;}).join('')}</svg>`;
+  // in sintesi: tre o quattro frasi, le cose da sapere
+  const fatte=s8.filter(w=>!w.inCorso),ult=fatte[fatte.length-1],pre=fatte[fatte.length-2];
+  const sint=[];
+  if(ult&&ult.tot){const v=pre&&pre.tot?Math.round((ult.tot-pre.tot)/pre.tot*100):null;sint.push('Carico dell\'ultima settimana '+nf(ult.tot)+' UA'+(v!=null?' ('+(v>=0?'+':'')+v+'% sulla precedente)':'')+(car.acwr!=null?', ACWR '+acwrTxt(car.acwr)+(car.acwr>1.5?': salita troppo rapida, meglio scaricare':car.acwr>1.3?': in salita, da tenere d\'occhio':car.acwr<0.8?': sotto il suo solito':': nella zona giusta'):'')+'.');}
+  if(ader!=null)sint.push('Aderenza al programma nelle ultime 4 settimane: '+ader+'% ('+fa+' sedute su '+pv+').');
+  if(migl.length){migl.sort((x,y)=>y[1]-x[1]);sint.push('Miglioramento piu\' grande: '+athEsc(migl[0][0])+' (+'+migl[0][1].toFixed(1).replace('.',',')+'% dalla prima misura)'+(migl.length>1?', e altri '+(migl.length-1)+' test migliorati':'')+'.');}
+  const inCorso=injList(aid).filter(x=>!x.rientro);
+  if(inCorso.length)sint.push('Infortunio in corso: '+inCorso.map(x=>athEsc((x.zona||'')+(x.tipo?', '+x.tipo.toLowerCase():''))).join('; ')+'.');
   const host=document.getElementById('ath-print');
   host.innerHTML=`<div class="ap-sheet">
-    <div class="ap-band"><div><div class="ap-brand">RS COACHING</div><div class="ap-name">${athEsc(a.name)}</div>
+    <div class="ap-band"><div><div class="ap-brand"><b>RS</b>COACHING</div><div class="ap-name">${athEsc(a.name)}</div>
       <div class="ap-meta">${[a.role,a.team,grp,eta!=null?eta+' anni':''].filter(Boolean).map(athEsc).join(' &#183; ')}</div></div>
       <div class="ap-date">Report del ${oggi}</div></div>
     <div class="ap-row">
@@ -1925,10 +1950,12 @@ window.athReport=async function(aid){
       <div class="ap-k"><span>ACWR</span><b>${acwrTxt(car.acwr)}</b></div>
       <div class="ap-k"><span>Readiness 7 gg</span><b>${st.rdy!=null?st.rdy:'-'}</b></div>
     </div>
+    ${sint.length?`<h4>In sintesi</h4><ul class="ap-sint">${sint.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+    ${progTxt?`<h4>Programma</h4><p class="ap-prog"><b>${progTxt}</b>${ader!=null?` &#183; ${fa} sedute fatte su ${pv} in programma nelle ultime 4 settimane <span class="ap-ad"><i style="width:${ader}%"></i></span> ${ader}%`:''}</p>`:''}
     ${prof.length?`<h4>Profilo fisico nel gruppo</h4><div class="ap-prof">${prof.map(x=>`<div><span>${x.lbl}</span><b>${x.v}</b><i style="width:${x.v}%"></i></div>`).join('')}</div><p class="ap-cap">Da 0 a 100: 50 e' la meta' del gruppo, 100 meglio di tutti, sull'ultima misura di ogni test.</p>`:''}
-    ${test?`<h4>Test</h4><table class="ap-t"><thead><tr><th>Test</th><th class="n">Ultima misura</th><th class="n">Dalla precedente</th><th class="n">Nel gruppo</th><th>Data</th></tr></thead><tbody>${test}</tbody></table>`:''}
+    ${test?`<h4>Test</h4><table class="ap-t"><thead><tr><th>Test</th><th class="n">Prima</th><th class="n">Ultima</th><th class="n">Variazione</th><th>Andamento</th><th class="n">Nel gruppo</th><th>Data</th></tr></thead><tbody>${test}</tbody></table>`:''}
     ${Object.keys(rm).length?`<h4>Massimali</h4><table class="ap-t"><thead><tr><th>Alzata</th><th class="n">1RM</th><th class="n">Forza relativa</th></tr></thead><tbody>${Object.entries(rm).sort((x,y)=>y[1]-x[1]).map(([n,v])=>`<tr><td>${athEsc(n)}</td><td class="n"><b>${fmtNum(v,v%1?1:0)}</b> kg</td><td class="n">${peso?fmtNum(v/peso.kg,2)+' x peso':''}</td></tr>`).join('')}</tbody></table>`:''}
-    <h4>Carico delle ultime settimane</h4><table class="ap-t"><thead><tr><th>Settimana</th><th class="n">Carico (UA)</th><th class="n">Sedute</th><th class="n">Monotonia</th></tr></thead><tbody>${wk.map(w=>`<tr><td>dal ${w.lun.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}${w.inCorso?' (in corso)':''}</td><td class="n"><b>${nf(w.tot)}</b></td><td class="n">${w.sedute}</td><td class="n">${w.mono!=null?w.mono.toFixed(2).replace('.',','):'-'}</td></tr>`).join('')}</tbody></table>
+    <h4>Carico delle ultime 8 settimane</h4>${barre}<p class="ap-cap">sRPE: RPE per minuti di ogni seduta, in unita' arbitrarie (UA). L'ultima barra chiara e' la settimana in corso.</p><table class="ap-t"><thead><tr><th>Settimana</th><th class="n">Carico (UA)</th><th class="n">Sedute</th><th class="n">Monotonia</th></tr></thead><tbody>${wk.map(w=>`<tr><td>dal ${w.lun.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}${w.inCorso?' (in corso)':''}</td><td class="n"><b>${nf(w.tot)}</b></td><td class="n">${w.sedute}</td><td class="n">${w.mono!=null?w.mono.toFixed(2).replace('.',','):'-'}</td></tr>`).join('')}</tbody></table>
     ${bz.length?`<h4>Benessere</h4><table class="ap-t"><thead><tr><th></th><th class="n">Ultimi 3 check-in</th><th class="n">Sua media</th></tr></thead><tbody>${bz.map(x=>`<tr><td>${x.lbl}</td><td class="n"><b>${x.recente.toFixed(1).replace('.',',')}</b></td><td class="n">${x.media.toFixed(1).replace('.',',')}</td></tr>`).join('')}</tbody></table>`:''}
     ${inj.length?`<h4>Infortuni</h4><table class="ap-t"><tbody>${inj.map(x=>`<tr><td>${athEsc((x.zona||'')+(x.lato?', lato '+x.lato:''))}${x.tipo?', '+athEsc(x.tipo.toLowerCase()):''}</td><td>dal ${athEsc(x.start||'')}${x.rientro?' al '+athEsc(x.rientro):', in corso'}</td><td class="n">${x.giorni} giorni</td></tr>`).join('')}</tbody></table>`:''}
     <div class="ap-foot">RS Coaching &#183; ${athEsc(a.name)} &#183; ${oggi}</div>
