@@ -1014,6 +1014,14 @@ body::before{
 .pz-util,.pz-seg,.pz-kgsel{flex-shrink:0;white-space:nowrap;}
 .pz-util kbd{display:none;}
 @media(max-width:1200px){.pz-modes{flex-wrap:wrap;}.pz-mhint{display:none;}}
+.pz-wt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pz-wt b{font:600 14px Inter,sans-serif;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pz-wt span{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pz-dots{font-size:18px!important;line-height:1;padding:3px 10px!important;letter-spacing:1px}
+.pz-modes .pz-more>summary.pz-mode{border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--text);border-radius:8px}
+.pz-menu .pz-mt{font:600 11px Inter,sans-serif;color:var(--muted);padding:8px 11px 3px}
+.pz-menu kbd{margin-left:6px;font-size:10px;opacity:.7}
+.add-week-btn{font-size:16px!important;padding:4px 12px!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 <script>
@@ -1127,12 +1135,12 @@ document.addEventListener('DOMContentLoaded',function(){
             <div class="rp-sub" id="ed-prog-meta">-</div>
           </div>
           <div class="rp-actions">
-            <button class="btn btn-teal btn-sm" id="pz-rifai" onclick="openStudioDaProg()" hidden title="Riapre la scheda con cui e' nato il programma">Rifai dalla scheda</button>
-            <button class="btn btn-outline btn-sm" onclick="openModal('edit-prog')">Modifica</button>
-            <button class="btn btn-blue btn-sm" onclick="openModal('assign')">Atleti</button>
+            <button class="btn btn-outline btn-sm" onclick="openModal('assign')">Atleti</button>
             <button class="btn btn-outline btn-sm" onclick="pdfScegli(this)" aria-haspopup="menu">PDF</button>
-            <details class="pz-more" ontoggle="if(this.open){const m=this.querySelector('.pz-menu');m.classList.toggle('sx',this.getBoundingClientRect().right<250);}"><summary class="btn btn-outline btn-sm">Altro</summary>
+            <details class="pz-more" ontoggle="if(this.open){const m=this.querySelector('.pz-menu');m.classList.toggle('sx',this.getBoundingClientRect().right<250);}"><summary class="btn btn-outline btn-sm pz-dots" aria-label="Altre azioni sul programma">&#8943;</summary>
               <div class="pz-menu" onclick="this.parentNode.open=false">
+                <button type="button" onclick="openModal('edit-prog')">Modifica nome, tipo e note</button>
+                <button type="button" id="pz-rifai" onclick="openStudioDaProg()" hidden>Rifai dalla scheda</button>
                 <button type="button" onclick="openModal('gen-meso')">Genera settimane da una base</button>
                 <button type="button" onclick="openModal('copy-prog')">Copia il programma</button>
                 <button type="button" onclick="exportWhatsApp()">Testo per WhatsApp</button>
@@ -1145,7 +1153,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <!-- WEEK TABS -->
         <div class="week-tabs-wrap" id="week-tabs-wrap">
           <div class="week-tabs" id="week-tabs"></div>
-          <button class="add-week-btn" onclick="openModal('add-week')">+ Sett.</button>
+          <button class="add-week-btn" onclick="openModal('add-week')" title="Aggiungi una settimana" aria-label="Aggiungi una settimana">+</button>
           <button id="paste-week-btn" class="btn btn-outline btn-sm" style="display:none;font-size:11px;white-space:nowrap;flex-shrink:0;" onclick="pasteWeek()"></button>
         </div>
 
@@ -1822,28 +1830,15 @@ function renderWeekContent(){
 
   const sessions=currentWeek.sessions?Object.entries(currentWeek.sessions).sort((a,b)=>(a[1].order||0)-(b[1].order||0)):[];
   if(pzMode==='progressione'){
-    document.getElementById('week-content').innerHTML=pzToolbar()+pzDatalist()+pzGrafico()+pzProgressione();
+    document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+pzDatalist()+pzGrafico()+pzProgressione();
     pzRestoreFocus();return;
   }
   if(pzMode==='mappa'){
-    document.getElementById('week-content').innerHTML=pzToolbar()+pzGrafico()+pzMappa();
+    document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+pzGrafico()+pzMappa();
     return;
   }
 
-  document.getElementById('week-content').innerHTML=pzToolbar()+`
-    <div class="week-ctrl">
-      <div class="week-ctrl-left">
-        <div class="week-ctrl-title">Settimana ${currentWeekIdx+1}${currentWeek.label?' - '+currentWeek.label:''}</div>
-        <div class="week-ctrl-sub">${currentWeek.notes||''}&nbsp;</div>
-      </div>
-      <div class="week-ctrl-actions">
- <button class="btn btn-outline btn-sm" onclick="openModal('templates','${currentWid}')">Template</button>
- <button class="btn btn-outline btn-sm" onclick="openModal('edit-week','${currentWid}')">Sett.</button>
- <button class="btn btn-outline btn-sm" onclick="copyWeek('${currentWid}')">Copia</button>
-        <button class="btn btn-teal btn-sm" onclick="pzAvToggle('${currentWid}')" title="Copia questa settimana nelle seguenti, con la progressione">Porta avanti</button>
-        <button class="btn btn-red btn-sm" onclick="deleteWeek('${currentWid}')">Elimina</button>
-      </div>
-    </div>
+  document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+`
     ${pzAvWid===currentWid?pzAvPanel(currentWid):''}
     ${pzMode==='giorni'?pzGiorni(currentWid,currentWeek):pzMode==='griglia'?pzGriglia(currentWid,currentWeek):`<div class="sessions-grid" id="sessions-grid">${sessions.map(([sid,s])=>renderSessionCard(currentWid,sid,s)).join('')}</div>`}
     <div class="add-row"${pzMode==='griglia'||pzMode==='giorni'?' hidden style="display:none"':''}>
@@ -6409,14 +6404,21 @@ function pzDatalist(){
   if(document.getElementById('pz-exlist'))return '';
   return `<datalist id="pz-exlist">${pzExList().map(n=>`<option value="${stEsc(n)}">`).join('')}</datalist>`;
 }
-function pzToolbar(){
-  const hint={giorni:'Trascina tra i giorni, Alt copia, doppio clic aggiunge, Invio apre',griglia:'Si usa come Excel: frecce, Invio, Ctrl+D',progressione:'Shift+Invio porta il valore avanti',mappa:'Trascina per spostare, con Alt copi',schede:''}[pzMode]||'';
-  return `<div class="pz-modes"><div class="pz-seg" role="tablist">${[['giorni','Giorni'],['schede','Schede'],['griglia','Griglia'],['progressione','Progressione'],['mappa','Mappa']].map(([k,l],i)=>`<button type="button" class="pz-mode${pzMode===k?' on':''}" onclick="pzSetMode('${k}')" title="Tasto ${i+1}">${l}</button>`).join('')}</div>
-    <span class="pz-mhint">${hint}</span>
-    ${pzMode!=='schede'?pzKgHead():''}
-    <span class="pz-util"><button type="button" class="pz-mode" onclick="pzPalette('')" title="Cerca un comando, un programma, un modello">Comandi <kbd>Ctrl K</kbd></button>
-    <button type="button" class="pz-mode" onclick="pzAnnulla()" title="Ctrl+Z">Annulla</button>
-    <button type="button" class="pz-mode" onclick="pzAiuto()" title="Scorciatoie" aria-label="Scorciatoie">?</button></span></div>`;
+function pzToolbar(wid,wk){
+  // una barra sola: la settimana a sinistra, a destra tre viste, l'atleta e un menu con il resto
+  const viste=[['giorni','Settimana'],['griglia','Tabella'],['progressione','Progressione']];
+  if(pzMode==='schede')viste.push(['schede','Schede']);
+  if(pzMode==='mappa')viste.push(['mappa','Mappa']);
+  const voce=(f,t,cl)=>`<button type="button"${cl?' class="'+cl+'"':''} onclick="${f}">${t}</button>`;
+  const menu=`<details class="pz-more" ontoggle="if(this.open){const m=this.querySelector('.pz-menu');m.classList.toggle('sx',this.getBoundingClientRect().right<250);}"><summary class="pz-mode pz-dots" aria-label="Altre azioni">&#8943;</summary><div class="pz-menu" onclick="this.parentNode.open=false">
+    ${wid?`<span class="pz-mt">Questa settimana</span>${voce(`openModal('edit-week','${wid}')`,'Nome e note della settimana')}${voce(`openModal('templates','${wid}')`,'Aggiungi da un modello')}${voce(`copyWeek('${wid}')`,'Copia la settimana')}${voce(`pzAvToggle('${wid}')`,'Porta avanti nelle seguenti')}`:''}
+    ${voce(`openModal('add-week')`,'Aggiungi una settimana')}
+    <span class="pz-mt">Viste</span>${voce(`pzSetMode('schede')`,'Schede, una seduta per riquadro')}${voce(`pzSetMode('mappa')`,'Mappa del programma')}
+    <span class="pz-mt">Strumenti</span>${voce(`pzPalette('')`,'Cerca un comando <kbd>Ctrl K</kbd>')}${voce('pzAnnulla()','Annulla <kbd>Ctrl Z</kbd>')}${voce('pzAiuto()','Scorciatoie da tastiera')}
+    ${wid?voce(`deleteWeek('${wid}')`,'Elimina la settimana','del'):''}</div></details>`;
+  const titolo=wk?`<div class="pz-wt"><b>Settimana ${currentWeekIdx+1}${wk.label?' &#183; '+stEsc(String(wk.label).replace(/^S\d+\s*/,'')):''}</b><span>${stEsc(String(wk.notes||'').replace(/^[^·]*·\s*/,''))}</span></div>`:'<div class="pz-wt"></div>';
+  return `<div class="pz-modes">${titolo}<div class="pz-seg" role="tablist">${viste.map(([k,l])=>`<button type="button" class="pz-mode${pzMode===k?' on':''}" onclick="pzSetMode('${k}')">${l}</button>`).join('')}</div>
+    ${pzMode!=='schede'?pzKgHead():''}${menu}</div>`;
 }
 
 // ── CONTI della seduta: durata, serie, gruppi, carichi ───────────
