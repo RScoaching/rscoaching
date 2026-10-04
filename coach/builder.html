@@ -1022,6 +1022,30 @@ body::before{
 .pz-menu .pz-mt{font:600 11px Inter,sans-serif;color:var(--muted);padding:8px 11px 3px}
 .pz-menu kbd{margin-left:6px;font-size:10px;opacity:.7}
 .add-week-btn{font-size:16px!important;padding:4px 12px!important}
+.pz-mh{display:flex;align-items:center;gap:10px;margin:2px 0 10px}
+.pz-mh b{font:400 22px/1 'Bebas Neue',Inter,sans-serif;letter-spacing:.4px;color:var(--white);text-transform:capitalize}
+.pz-mh span{font-size:12px;color:var(--muted);margin-right:auto}
+.pz-mh .pz-mode{border:1px solid var(--line2);background:rgba(255,255,255,.03);border-radius:8px;padding:3px 11px;font-size:16px}
+.pz-mh .pz-mode:disabled{opacity:.35;cursor:default}
+.pz-mg{display:grid;grid-template-columns:64px repeat(7,minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pz-mg>*{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.pz-mhd{font:600 11.5px Inter,sans-serif;color:var(--muted);padding:7px 8px;background:rgba(255,255,255,.02)}
+.pz-mw{all:unset;cursor:pointer;padding:8px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.015)}
+.pz-mw b{font:400 18px/1 'Bebas Neue',Inter,sans-serif;color:var(--white)}.pz-mw span{font-size:10.5px;color:var(--muted);line-height:1.25}.pz-mw i{font-style:normal;font-size:11px;color:var(--violet2);font-weight:600}
+.pz-mw:hover,.pz-mw.on{background:rgba(255,255,255,.05)}.pz-mw.on b{color:var(--primary)}
+.pz-mc{padding:5px;min-height:96px;min-width:0}.pz-mc.vuoto{background:rgba(255,255,255,.01)}
+.pz-mc.oggi .pz-md{color:var(--primary);font-weight:700}
+.pz-md{font-size:11px;color:var(--muted);margin:0 0 4px 2px}
+.pz-ms{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:7px;padding:5px 6px;margin-bottom:5px;cursor:pointer;min-width:0}
+.pz-ms:hover,.pz-ms:focus-visible{border-color:var(--line2);background:rgba(255,255,255,.06);outline:none}
+.pz-ms>b{display:block;font:600 11.5px Inter,sans-serif;color:var(--white);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pz-ms>i{font-style:normal;font-size:10px;color:var(--violet2);font-weight:600}
+.pz-ms.t-corsa>b{color:#C4B5FD}.pz-ms.t-pesi>b{color:#FFB894}
+.pz-ms.fatta{border-color:rgba(139,92,246,.45)}
+.pz-mr{font-size:10.5px;line-height:1.3;padding:2px 0;border-top:1px solid rgba(255,255,255,.05);min-width:0}
+.pz-mr span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text)}
+.pz-mr em{display:block;font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.pz-mr.piu{color:var(--muted)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 <script>
@@ -1796,10 +1820,9 @@ function renderWeekTabs(){
   const p=programs[currentProgId]; if(!p||!p.weeks)return;
   const weeks=Object.entries(p.weeks).sort((a,b)=>a[1].order-b[1].order);
   document.getElementById('week-tabs').innerHTML=weeks.map(([wid,w],i)=>{
-    const isDeload=w.label?.toLowerCase().includes('deload');
-    return `<div class="week-tab${i===currentWeekIdx?' active':''}${isDeload?' deload':''}" onclick="selectWeek(${i},'${wid}')">
-      Sett ${i+1}${w.label?` · ${w.label}`:''}
-    </div>`;
+    // la scheda dice solo il numero: la fase e' nella barra sotto, e nel suggerimento
+    const isDeload=/deload|scarico|taper/i.test(w.label||'');
+    return `<div class="week-tab${i===currentWeekIdx?' active':''}${isDeload?' deload':''}" onclick="selectWeek(${i},'${wid}')" title="${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}">Sett ${i+1}</div>`;
   }).join('');
   // Show paste button if clipboard has data from another program
   const clip=_getWeekClipboard();
@@ -1832,6 +1855,10 @@ function renderWeekContent(){
   if(pzMode==='progressione'){
     document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+pzDatalist()+pzGrafico()+pzProgressione();
     pzRestoreFocus();return;
+  }
+  if(pzMode==='mese'){
+    document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+pzMese();
+    return;
   }
   if(pzMode==='mappa'){
     document.getElementById('week-content').innerHTML=pzToolbar(currentWid,currentWeek)+pzGrafico()+pzMappa();
@@ -6406,7 +6433,7 @@ function pzDatalist(){
 }
 function pzToolbar(wid,wk){
   // una barra sola: la settimana a sinistra, a destra tre viste, l'atleta e un menu con il resto
-  const viste=[['giorni','Settimana'],['griglia','Tabella'],['progressione','Progressione']];
+  const viste=[['mese','Mese'],['giorni','Settimana'],['griglia','Tabella'],['progressione','Progressione']];
   if(pzMode==='schede')viste.push(['schede','Schede']);
   if(pzMode==='mappa')viste.push(['mappa','Mappa']);
   const voce=(f,t,cl)=>`<button type="button"${cl?' class="'+cl+'"':''} onclick="${f}">${t}</button>`;
@@ -7063,6 +7090,38 @@ function pzGgRighe(s){
 function pzData(p,wi,d){
   const i=stDate(p.startDate);if(!i)return null;
   const x=new Date(i);x.setDate(x.getDate()+wi*7+d);return x;
+}
+/* ── vista Mese, come il calendario di Relay ──────────────────────────
+   Quattro settimane alla volta (il blocco della settimana scelta), i giorni in
+   colonna, ogni seduta scritta per intero in piccolo: esercizio e dose sotto.
+   Clic sulla seduta: si apre per scrivere; clic sulla settimana: vista Settimana. */
+let pzMeseDa=null;
+window.pzMeseVai=function(d){const n=pzWeeks().length;pzMeseDa=Math.max(0,Math.min(Math.max(0,n-1),(pzMeseDa==null?Math.floor(currentWeekIdx/4)*4:pzMeseDa)+d*4));renderWeekContent();};
+function pzMese(){
+  const p=programs[currentProgId]||{},W=pzWeeks(),n=W.length;if(!n)return '';
+  if(pzMeseDa==null||pzMeseDa>=n||currentWeekIdx<pzMeseDa||currentWeekIdx>=pzMeseDa+4)pzMeseDa=Math.floor(currentWeekIdx/4)*4;
+  const B=W.slice(pzMeseDa,pzMeseDa+4),oggi=new Date();oggi.setHours(0,0,0,0);
+  const MESI=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+  const d0=pzData(p,pzMeseDa,0),d1=pzData(p,pzMeseDa+B.length-1,6);
+  const tit=d0?(d0.getMonth()===d1.getMonth()?MESI[d0.getMonth()]:MESI[d0.getMonth()]+' - '+MESI[d1.getMonth()])+' '+d1.getFullYear():'Settimane '+(pzMeseDa+1)+'-'+(pzMeseDa+B.length);
+  const sess=(wid,wi,sid,x)=>{
+    const fatta=pzLog(wi,sid),r=pzGgRighe(x);
+    return `<div class="pz-ms t-${x.type||'pesi'}${fatta?' fatta':''}" tabindex="0" onclick="pzApriSess('${wid}','${sid}')" onkeydown="if(event.key==='Enter')pzApriSess('${wid}','${sid}')" title="Apri la seduta">
+      <b>${stEsc(x.name||'Seduta')}</b>${fatta?'<i>fatta</i>':''}
+      ${r.slice(0,8).map(t=>{const k=t.indexOf('  ');return `<div class="pz-mr"><span>${stEsc(k>0?t.slice(0,k):t)}</span>${k>0?`<em>${stEsc(t.slice(k+2))}</em>`:''}</div>`;}).join('')}${r.length>8?`<div class="pz-mr piu">e altri ${r.length-8}</div>`:''}
+    </div>`;
+  };
+  let h=`<div class="pz-mh"><button type="button" class="pz-mode" onclick="pzMeseVai(-1)"${pzMeseDa?'':' disabled'} aria-label="Settimane prima">&#8249;</button><b>${stEsc(tit)}</b><span>settimane ${pzMeseDa+1}-${pzMeseDa+B.length} di ${n}</span><button type="button" class="pz-mode" onclick="pzMeseVai(1)"${pzMeseDa+4<n?'':' disabled'} aria-label="Settimane dopo">&#8250;</button></div>
+    <div class="pz-mg"><div class="pz-mhd"></div>${ST_GG.map(g=>`<div class="pz-mhd">${g}</div>`).join('')}`;
+  B.forEach(([wid,w],j)=>{
+    const wi=pzMeseDa+j,ss=pzSess(w),km=/circa (\d+) km/.exec(w.notes||'');
+    h+=`<button type="button" class="pz-mw${wi===currentWeekIdx?' on':''}" onclick="pzApriSett(${wi})" title="Apri la settimana"><b>S${wi+1}</b><span>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</span>${km?`<i>${km[1]} km</i>`:''}</button>`;
+    for(let d=0;d<7;d++){
+      const dt=pzData(p,wi,d),l=ss.filter(([,x])=>x.dayOfWeek===d),og=dt&&dt.getTime()===oggi.getTime();
+      h+=`<div class="pz-mc${l.length?'':' vuoto'}${og?' oggi':''}"><div class="pz-md">${dt?dt.getDate():''}</div>${l.map(([sid,x])=>sess(wid,wi,sid,x)).join('')}</div>`;
+    }
+  });
+  return h+'</div>';
 }
 function pzGiorni(wid,w){
   const p=programs[currentProgId],wi=currentWeekIdx,ss=pzSess(w);
