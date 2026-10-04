@@ -2540,18 +2540,40 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // stessi giorni, ma dentro c'e' solo la colonna dei minuti. I TOT si rifanno qui invece di
   // copiarli, se no direbbero i minuti della squadra e non i suoi. Le righe val/AVG partita
   // saltano: senza GPS non c'e' niente da rapportare al modello.
-  function gkBuildMonths(name){
+  function gkBuildMonths(name, propri){
     const out = [];
+    // le righe sue fuori squadra (nazionale, FT, rtp), per mese e per settimana
+    const extra = {};
+    (propri || []).forEach(pm=>{
+      let wk = '';
+      (pm.rows0 || pm.rows || []).forEach(r=>{
+        if(r.type==='wk_header'){ wk = r.label; return; }
+        if((r.type==='day' || r.type==='match') && / (naz|FT|diff|rtp)$/.test(r.label)){
+          const k = pm.key+'||'+wk; (extra[k] = extra[k] || []).push(r);
+        }
+      });
+    });
+    const usati = {}, via = {};
+    Object.keys(extra).forEach(k=>{ const mk = k.split('||')[0]; extra[k].forEach(x=>{ if(/ naz$/.test(x.label)) via[mk+'||'+parseInt(x.label,10)] = true; }); });
     ((S.team && S.team.months) || []).forEach(tm=>{
       const src = tm.rows0 || tm.rows || [];
       const rows = [];
-      let train = [], week = [], month = [];
+      let train = [], week = [], month = [], curWk = '';
       src.forEach(r=>{
         if(r.type==='valmatch_train' || r.type==='valmatch_week' || r.type==='valmatch_month') return;
         if(r.type==='wk_header'){
           train = []; week = [];
           rows.push({ label:r.label, type:r.type, wd:r.wd||'', v:gkBlank() });
+          curWk = r.label;
           return;
+        }
+        // prima dei totali della settimana entrano i suoi giorni fuori squadra di quella settimana
+        if(r.type==='tot_train' && !usati[tm.key+'||'+curWk]){
+          usati[tm.key+'||'+curWk] = true;
+          (extra[tm.key+'||'+curWk] || []).forEach(x=>{
+            const row = { label:x.label, type:x.type, wd:x.wd||'', v:(x.v||gkBlank()).slice(), gk:true, proprio:true };
+            rows.push(row); if(x.type==='day') train.push(row); week.push(row); month.push(row);
+          });
         }
         if(r.type==='day' || r.type==='match'){
           const ov = gkMinOf(name, tm.key, r.label);
@@ -2559,7 +2581,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const v = gkBlank();
           // zero minuti vuol dire che quel giorno il portiere non c'era: la seduta resta a
           // schermo per poterla rimettere, ma esce dai totali, dai conti e dalla stampa
-          if(ov===0){ rows.push({ label:r.label, type:'gk_off', wd:r.wd||'', v:v, gk:true, seed:tv, was:r.type }); return; }
+          // il giorno in cui era in nazionale la seduta di squadra parte da assente
+          const inNaz = ov==null && via[tm.key+'||'+parseInt(r.label,10)];
+          if(ov===0 || inNaz){ rows.push({ label:r.label, type:'gk_off', wd:r.wd||'', v:v, gk:true, seed:tv, was:r.type, naz:!!inNaz }); return; }
           v[MIN_IDX] = (ov!=null) ? ov : tv;
           const row = { label:r.label, type:r.type, wd:r.wd||'', v:v, gk:true, seed:tv };
           rows.push(row);
@@ -2574,6 +2598,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       });
       if(rows.length) out.push({ key:tm.key, title:tm.title, rows:rows.slice(), rows0:rows.slice(), gk:true });
     });
+    // giorni suoi in settimane dove la squadra non ha sedute: in coda al loro mese
+    Object.keys(extra).forEach(k=>{
+      if(usati[k]) return;
+      const mk = k.split('||')[0], m = out.find(x=>x.key===mk);
+      if(!m) return;
+      extra[k].forEach(x=>{ const row = { label:x.label, type:x.type, wd:x.wd||'', v:(x.v||gkBlank()).slice(), gk:true, proprio:true }; m.rows.push(row); m.rows0.push(row); });
+    });
     return out;
   }
   // rifa' i mesi del portiere: gira all'avvio, quando si cambia atleta, quando si corregge un
@@ -2585,12 +2616,15 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     list.forEach(n=>{
       const p = P[n]; if(!p) return;
       if(isGk(n) && MIN_IDX >= 0){
-        if((p.months||[]).length && !p.gk) return;
+        // se ha il GPS anche nelle sedute di squadra resta il foglio normale, con i dati veri
+        if(!p.gk && (p.months||[]).some(m=>(m.rows0||m.rows||[]).some(r=>(r.type==='day'||r.type==='match') && !/ (naz|FT|diff|rtp)$/.test(r.label)))) return;
+        // le righe sue fuori squadra (nazionale) si tengono da parte e si rimettono dentro
+        if(!p.gk) p.gkPropri = p.months || [];
         p.gk = true;
-        p.months = gkBuildMonths(n);
+        p.months = gkBuildMonths(n, p.gkPropri);
       } else if(p.gk){
         p.gk = false;
-        p.months = [];
+        p.months = p.gkPropri || [];
       }
     });
   }
@@ -3801,8 +3835,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(r.type==='gk_off'){
         const tx = dayLabel(Object.assign({}, r, {type:r.was||'day'}), rowDate(r, wkNow, rmk));
         body += '<tr class="r-day gk-off" data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+
-                '<span class="lb">'+esc(tx)+'</span><span class="gk-tag">assente</span>'+
-                '<button class="gk-btn" type="button" data-gkon="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Rimette la seduta con i minuti della squadra">Presente</button></td>';
+                '<span class="lb">'+esc(tx)+'</span><span class="gk-tag">'+(r.naz?'in nazionale':'assente')+'</span>'+
+                '<button class="gk-btn" type="button" data-gkon="'+esc(r.label)+'" data-mk="'+esc(rmk)+'"'+(r.naz && r.seed!=null ? ' data-seed="'+r.seed+'"' : '')+' title="Rimette la seduta con i minuti della squadra">Presente</button></td>';
         V.forEach(i=>{ body += '<td class="num tnum">'+(i===MIN_IDX ? '0' : '')+'</td>'; });
         if(on) body += pad;
         body += '</tr>';
@@ -3836,12 +3870,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         }
         extra = ' draggable="true" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'"';
       }
-      if(gkOn() && (r.type==='day' || r.type==='match'))
+      if(gkOn() && (r.type==='day' || r.type==='match') && !r.proprio)
         lb += '<button class="gk-btn" type="button" data-gkoff="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Il portiere non c\'era: la seduta esce dai suoi totali e dalla stampa">Assente</button>';
       body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
       // sul portiere i minuti si scrivono a mano: la casella parte dal tempo della squadra
-      const gkEdit = gkOn() && (r.type==='day' || r.type==='match');
+      const gkEdit = gkOn() && (r.type==='day' || r.type==='match') && !r.proprio;
       V.forEach(i=>{
         if(gkEdit && i===MIN_IDX){
           const own = gkMinOf(state.player, rmk, r.label);
@@ -3911,7 +3945,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       gkMinSet(state.player, rowMk(b), b.getAttribute('data-gkoff'), 0); gkRifai();
     }));
     host.querySelectorAll('.gk-btn[data-gkon]').forEach(b=> b.addEventListener('click', ()=>{
-      gkMinSet(state.player, rowMk(b), b.getAttribute('data-gkon'), null); gkRifai();
+      // se l'assenza era automatica (giorno in nazionale) i minuti della squadra si scrivono per davvero
+      const sd = b.getAttribute('data-seed');
+      gkMinSet(state.player, rowMk(b), b.getAttribute('data-gkon'), sd!=null ? +sd : null); gkRifai();
     }));
     host.querySelectorAll('.rpe-in[data-gk]').forEach(inp=>{
       // si salva a ogni tasto: se si stampa subito (anche con Ctrl+P) il numero c'e' gia'
