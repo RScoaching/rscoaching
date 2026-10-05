@@ -1146,6 +1146,11 @@ body::before,body::after{display:none;}
 .ac-s.prog{border-style:dashed}
 .ac-s.fuori{background:rgba(255,106,46,.08);border-color:rgba(255,106,46,.25)}.ac-s.fuori span{color:#FF9A6B}
 a.ac-s:hover{border-color:var(--line2)}
+.det-sec{font:600 14px Inter,sans-serif;color:var(--white);margin:6px 0 10px}
+.test-grid.solo-misurati .test-card.vuoto{display:none}
+.test-acts{display:flex;gap:8px;margin:8px 0 22px}
+#det-maxes::before,#det-health::before,#det-load::before{display:block;font:600 14px Inter,sans-serif;color:var(--white);margin:18px 0 10px;padding-top:16px;border-top:1px solid var(--line)}
+#det-maxes::before{content:'Massimali'}#det-health::before{content:'Salute e note'}#det-load::before{content:'Carico'}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -2339,7 +2344,9 @@ function renderDetTests(aid){
     const ca=TEST_CATS.findIndex(c=>c[0]===testMeta(a).cat),cb=TEST_CATS.findIndex(c=>c[0]===testMeta(b).cat);
     return (ca<0?99:ca)-(cb<0?99:cb);
   });
-  const cards=names.map(n=>{
+  // si vedono i test misurati; quelli ancora da fare stanno in una riga sola che si apre
+  const misurati=names.filter(n=>testSerie(aid,n).length),vuoti=names.filter(n=>!testSerie(aid,n).length);
+  const cards=misurati.concat(vuoti).map(n=>{
     const m=testMeta(n),s=testSerie(aid,n);
     const nq=athEsc(n).replace(/'/g,'&#39;');
     if(!s.length)return `<button type="button" class="test-card vuoto" onclick="openTestDet('${aid}','${nq}')"><div class="test-name">${athEsc(n)}</div><div class="test-val">-</div><div class="test-date">Aggiungi misura</div></button>`;
@@ -2359,8 +2366,9 @@ function renderDetTests(aid){
       ${rk?`<div class="trank">${rk.pos}&#176; su ${rk.n} &#183; mediana ${fmtNum(rk.med,m.dec)}</div>`:''}
     </button>`;
   }).join('');
-  return top+`<div class="test-grid">${cards}</div>
-    <button type="button" class="btn btn-outline btn-sm" onclick="openNewTest('${aid}')">+ Nuovo test</button>`;
+  return `<h3 class="det-sec">Test</h3>`+top+`<div class="test-grid${misurati.length?' solo-misurati':''}">${cards}</div>
+    <div class="test-acts">${misurati.length&&vuoti.length?`<button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('#det-tests').querySelector('.test-grid').classList.toggle('solo-misurati');this.textContent=this.textContent.startsWith('Altri')?'Nascondi i test senza misure':'Altri test da misurare (${vuoti.length})'">Altri test da misurare (${vuoti.length})</button>`:''}
+    <button type="button" class="btn btn-outline btn-sm" onclick="openNewTest('${aid}')">+ Nuovo test</button></div>`;
 }
 function refreshTests(){if(currentAid){const el=document.getElementById('det-tests');if(el&&el.style.display!=='none')el.innerHTML=renderDetTests(currentAid);}}
 
@@ -2509,7 +2517,8 @@ window.saveCoachMax=async function(aid,i){
 };
 
 function renderDetSessions(aid,aSess){
-  return `<div id="det-cal">${calHTML(aid)}</div>`+renderDetSessList(aid,aSess);
+  // il calendario del mese sta nella scheda Calendario: qui resta il registro
+  return `<h3 class="det-sec">Registro delle sedute</h3>`+renderDetSessList(aid,aSess);
 }
 function renderDetSessList(aid,aSess){
   // Merge check-in sessions + workout logs
