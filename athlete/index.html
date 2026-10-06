@@ -1146,6 +1146,17 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .sess-start-btn.fatta .sess-start-name{color:var(--text)}
 .week-row-meta.tutte{color:var(--primary2)!important}
 .start-arrow .rsi{width:16px;height:16px}
+.pf7-num{margin:0 14px 14px;border:1px solid var(--line6);border-radius:14px;background:var(--card6)}
+.pt7{margin:0 14px;border:1px solid var(--line6);border-radius:14px;background:var(--card6);overflow:hidden}
+.pt7-r{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line6)}
+.pt7-r:last-child{border-bottom:0}
+.pt7-n{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pt7-n b{font:600 13.5px Inter,sans-serif;color:var(--white)}
+.pt7-n span{font-size:11.5px;color:var(--muted)}
+.pt7-n .pt7-d{font-weight:600}.pt7-d.su{color:var(--violet2)!important}.pt7-d.giu{color:#FB7185!important}
+.pt7-sp{width:56px;height:28px;color:var(--violet2);flex-shrink:0}
+.pt7-v{font:400 26px 'Bebas Neue',sans-serif;color:var(--white);white-space:nowrap}
+.pt7-v small{font:500 11px Inter,sans-serif;color:var(--muted);margin-left:3px}
 .wl7-m{font-size:12px;color:var(--muted);margin-top:3px}
 .wl7-rpe{display:flex;flex-direction:column;align-items:flex-end;min-width:44px}
 .wl7-rpe b{font:400 22px 'Bebas Neue',sans-serif;color:var(--white);line-height:1}
@@ -1260,18 +1271,24 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
     <div class="page-head">
       <div><div class="page-head-sub">Il mio profilo</div><div class="page-head-title" id="prof-name-big">-</div></div>
     </div>
-    <div class="prof-stats-row">
-      <div class="prof-stat-card"><div class="prof-stat-val" id="athlete-sess-count">0</div><div class="prof-stat-lbl">Sessioni</div></div>
-      <div class="prof-stat-card"><div class="prof-stat-val" id="athlete-avg-rpe" style="color:var(--orange);">-</div><div class="prof-stat-lbl">RPE medio</div></div>
-      <div class="prof-stat-card"><div class="prof-stat-val" id="athlete-avg-doms" style="color:var(--amber);">-</div><div class="prof-stat-lbl">DOMS medio</div></div>
+    <div class="og7 pf7-num">
+      <div class="og7-c"><div class="og7-v" id="athlete-sess-count">0</div><div class="og7-l">sedute registrate</div></div>
+      <div class="og7-c"><div class="og7-v" id="pf-min30">-</div><div class="og7-l">minuti negli ultimi 30 giorni</div></div>
+      <div class="og7-c"><div class="og7-v" id="pf-rec">-</div><div class="og7-l">record personali</div></div>
+      <div class="og7-c"><div class="og7-v" id="pf-ci">-</div><div class="og7-l">check-in fatti in 4 settimane</div></div>
     </div>
+    <span id="athlete-avg-rpe" hidden></span><span id="athlete-avg-doms" hidden></span>
 
     <div class="prof-tabs">
       <button class="prof-tab active" onclick="profTab('storico',this)">Storico</button>
-      <button class="prof-tab" onclick="profTab('1rm',this)">1RM</button>
+      <button class="prof-tab" onclick="profTab('test',this)">Test</button>
+      <button class="prof-tab" onclick="profTab('1rm',this)">Massimali</button>
       <button class="prof-tab" onclick="profTab('body',this)">Corpo</button>
-      <button class="prof-tab" onclick="profTab('strumenti',this)">Tools</button>
+      <button class="prof-tab" onclick="profTab('strumenti',this)">Strumenti</button>
     </div>
+
+    <!-- TEST: i risultati che scrive il preparatore -->
+    <div id="prof-test" style="display:none"><div id="pf-test-list"></div></div>
 
     <!-- STORICO -->
     <div id="prof-storico">
@@ -1371,16 +1388,6 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
         <div id="t-dnl-res" style="margin-top:10px;"></div>
       </div>
 
-      <div class="tool-card">
-        <div class="tool-title"><div class="tool-icon" style="background:rgba(245,158,11,.1);" data-rsi="analytics"></div>ACWR - Carico training</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div><div class="bc-field-lbl">Carico acuto 7gg</div><input type="number" id="t-acute" placeholder="45" inputmode="decimal"></div>
-          <div><div class="bc-field-lbl">Carico cronico 28gg</div><input type="number" id="t-chronic" placeholder="40" inputmode="decimal"></div>
-        </div>
-        <button class="btn-tool" onclick="calcACWR()">Calcola</button>
-        <div class="tool-result" id="t-acwr-res"></div>
-        <div class="tool-sub" id="t-acwr-sub"></div>
-      </div>
     </div>
   </div>
 
@@ -1618,7 +1625,6 @@ if(!aid){
       window._sessListCache=sessList;
       renderRpeChart(sessList);
       renderHistory(sessList);
-      computeAndShowACWR(sessList);
       oggiAgg();
     });
 
@@ -1672,6 +1678,11 @@ if(!aid){
         loadWeekPlan(athlete).then(()=>{window._oggiPronto=true;_oggiLogs=ST.logs.length;oggiAgg();});
       },{onlyOnce:true});
     });
+
+    // test del preparatore: valore attuale, storico e definizioni dei test personalizzati
+    onValue(ref(db,`tests/${aid}`),t=>{ST.tests=t.val()||{};renderPfTest();});
+    onValue(ref(db,`test_history/${aid}`),t=>{ST.testH=t.val()||{};renderPfTest();});
+    onValue(ref(db,'test_defs'),t=>{ST.testDefs=t.val()||{};renderPfTest();});
 
     onValue(ref(db,`body_comp/${aid}`),bcSnap=>{
       renderBodyComp(Object.values(bcSnap.val()||{}).sort((a,b)=>b.ts-a.ts));
@@ -1981,12 +1992,13 @@ function renderWorkoutStorico(logs){
     const pr=(l.newPRs||[]).map(x=>x.name+' '+x.value+' kg');
     h+=`<div class="pf-row"><div class="pf-d"><b>${String(d.getDate()).padStart(2,'0')}</b><i>${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}</i></div>
       <div class="pf-b"><div class="pf-n">${l.sessName||'Seduta'}</div><div class="pf-m">${num.join(' · ')||'&nbsp;'}${pr.length?' <span class="pf-pr">Record: '+pr.join(', ')+'</span>':''}</div>${l.note?`<div class="pf-nt">${String(l.note).slice(0,120).replace(/</g,'&lt;')}</div>`:''}</div>
-      <div class="pf-rpe${l.avgRpe>=9?' hi':''}">${l.avgRpe?'<b>'+l.avgRpe+'</b><i>RPE</i>':''}</div></div>`;
+      <div class="pf-rpe${rpeLog(l)>=9?' hi':''}">${rpeLog(l)?'<b>'+nfIt(rpeLog(l),1)+'</b><i>RPE</i>':''}</div></div>`;
   });
   if(mese)h+='</div>';
   if(!tutti&&logs.length>12)h+=`<button type="button" class="pf-more" onclick="document.getElementById('wstorico-list').dataset.tutti='1';renderWorkoutStorico(window._weekLogs||[])">Mostra tutte le ${logs.length} sedute</button>`;
   el.innerHTML=h;
 }
+function rpeLog(l){return +l.avgRpe||+(ST.sess[isoLoc(l.ts)]&&ST.sess[isoLoc(l.ts)].rpe)||0;}
 // sedute e carico settimana per settimana: barre del carico, numero di sedute sopra
 function renderProfSett(logs){
   const el=document.getElementById('prof-sett');if(!el)return;
@@ -1994,12 +2006,53 @@ function renderProfSett(logs){
   const W=[];for(let i=7;i>=0;i--){const a=new Date(lun);a.setDate(a.getDate()-7*i);W.push({a:a.getTime(),b:a.getTime()+7*864e5,n:0,car:0,rpe:[]});}
   const sc=document.getElementById('athlete-sess-count');if(sc&&(logs||[]).length)sc.textContent=logs.length;
   // senza RPE registrato il carico e' fatto dai soli minuti
-  const conR=(logs||[]).some(l=>+l.avgRpe);
-  (logs||[]).forEach(l=>{const w=W.find(x=>l.ts>=x.a&&l.ts<x.b);if(!w)return;w.n++;const r=+l.avgRpe||0,m=+l.duration||+l.minuti||0;if(r)w.rpe.push(r);w.car+=conR?r*m:m;});
+  // RPE della seduta, se no quello del giorno: lo stesso carico che vede il preparatore
+  const conR=(logs||[]).some(l=>rpeLog(l));
+  (logs||[]).forEach(l=>{const w=W.find(x=>l.ts>=x.a&&l.ts<x.b);if(!w)return;w.n++;const r=rpeLog(l),m=+l.duration||+l.minuti||0;if(r)w.rpe.push(r);w.car+=conR?r*m:m;});
   const mx=Math.max(1,...W.map(w=>w.car));
   const hs=document.querySelector('#prof-storico .pf-h span');if(hs)hs.textContent=conR?'sedute e carico (minuti x RPE)':'sedute e minuti';
   el.innerHTML=`<div class="pf-bars">${W.map((w,i)=>{const d=new Date(w.a);return `<div class="pf-bar${i===W.length-1?' now':''}" title="${w.n} sedute, carico ${Math.round(w.car)}"><span class="pf-bn">${w.n||''}</span><div class="pf-bt"><div style="height:${Math.round(w.car/mx*100)}%"></div></div><span class="pf-bl">${d.getDate()}/${d.getMonth()+1}</span></div>`;}).join('')}</div>
-    <p class="pf-cap">Numero sopra: sedute della settimana. L'altezza e' ${conR?'il carico, minuti per RPE':'il totale dei minuti'}. In arancio la settimana in corso.</p>`;
+    <p class="pf-cap">Il numero sopra la barra: sedute della settimana. L'altezza: ${conR?'il carico, cioe\' minuti per RPE':'il totale dei minuti'}. In arancio la settimana in corso.</p>`;
+}
+
+// ── PROFILO: numeri e test
+// quattro numeri: sedute, minuti dell'ultimo mese, record personali, check-in fatti in 4 settimane
+function renderPfNum(){
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('athlete-sess-count',String(ST.logs.length));
+  const t30=Date.now()-30*864e5;
+  const m=ST.logs.filter(l=>l.ts>=t30).reduce((t,l)=>t+(+l.duration||+l.minuti||0),0);
+  set('pf-min30',m?nfIt(m):'-');
+  set('pf-rec',String(ST.logs.reduce((t,l)=>t+((l.newPRs||[]).length),0)));
+  let n=0;for(let i=0;i<28;i++){const d=new Date();d.setDate(d.getDate()-i);if(prGiorno(isoLoc(d)))n++;}
+  set('pf-ci',n+'/28');
+}
+/* I test li scrive il preparatore: qui l'atleta vede l'ultimo valore, la data, quanto e'
+   cambiato dal primo test e l'andamento. Il verso conta: nello sprint il tempo che scende
+   e' un miglioramento, nel salto e' il contrario (stessa tabella del preparatore). */
+const PF_TEST_META={'Sprint 10m':['s',-1,2],'Sprint 20m':['s',-1,2],'Sprint 30m':['s',-1,2],'CMJ':['cm',1,1],'SJ':['cm',1,1],'Drop Jump':['cm',1,1],'Yo-Yo IR1':['m',1,0],'Illinois Agility':['s',-1,2],'5-10-5':['s',-1,2],'Back Squat 1RM':['kg',1,1],'Trap Bar 1RM':['kg',1,1],'Front Squat 1RM':['kg',1,1],'Hip Thrust 1RM':['kg',1,1],'Nordic Hamstring':['N',1,0]};
+const pfNum=v=>{const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:null;};
+const pfTs=d=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d||'').trim());return m?new Date(+m[3],+m[2]-1,+m[1],12).getTime():0;};
+function renderPfTest(){
+  const el=document.getElementById('pf-test-list');if(!el)return;
+  const nomi=Object.keys(ST.tests||{});
+  if(!nomi.length){el.innerHTML='<div class="empty">Nessun test ancora. Quando il preparatore scrive un risultato lo trovi qui, con quanto sei migliorato.</div>';return;}
+  const key=n=>String(n).replace(/[.$#\[\]\/]/g,'_').trim();
+  el.innerHTML='<div class="pt7">'+nomi.sort((a,b)=>a.localeCompare(b,'it')).map(n=>{
+    const def=(ST.testDefs||{})[key(n)]||{};
+    const [u,dir,dec]=PF_TEST_META[n]||[def.u||'',def.dir||1,def.dec!=null?def.dec:2];
+    const H=Object.values((ST.testH||{})[key(n)]||{}).map(h=>({v:pfNum(h.val),ts:h.ts||pfTs(h.date),date:h.date})).filter(h=>h.v!=null).sort((a,b)=>a.ts-b.ts);
+    const last=H.length?H[H.length-1]:{v:pfNum(ST.tests[n].val),date:ST.tests[n].date};
+    const first=H.length>1?H[0]:null;
+    let dl='';
+    if(first&&last.v!=null){const d=last.v-first.v,meglio=d*dir>0;dl=d?`<span class="pt7-d ${meglio?'su':'giu'}">${d>0?'+':''}${nfIt(d,dec)} ${u} ${meglio?'meglio':'peggio'} dal ${escH(first.date||'')}</span>`:'<span class="pt7-d">uguale al primo test</span>';}
+    // andamento: linea semplice sugli ultimi valori
+    let sp='';
+    if(H.length>1){const V=H.slice(-8).map(h=>h.v),mn=Math.min(...V),mx=Math.max(...V),r=mx-mn||1;
+      const pts=V.map((v,i)=>`${(i/(V.length-1)*100).toFixed(1)},${(26-(v-mn)/r*22).toFixed(1)}`).join(' ');
+      sp=`<svg class="pt7-sp" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;}
+    return `<div class="pt7-r"><div class="pt7-n"><b>${escH(n)}</b><span>${escH(last.date||'')}${H.length>1?' &middot; '+H.length+' misure':''}</span>${dl}</div>${sp}<div class="pt7-v">${last.v!=null?nfIt(last.v,dec):escH(ST.tests[n].val||'-')}<small>${escH(u)}</small></div></div>`;
+  }).join('')+'</div>';
 }
 
 // ── LA SETTIMANA
@@ -2093,7 +2146,7 @@ let _oggiT=null,_oggiLogs=-1;
 function oggiAgg(){
   clearTimeout(_oggiT);
   _oggiT=setTimeout(()=>{
-    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);
+    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();
     if(typeof renderCiPagina==='function')renderCiPagina();
     // la seduta di oggi cambia aspetto quando viene registrata
     if(ST.logs.length!==_oggiLogs&&window._ath&&window._oggiPronto){_oggiLogs=ST.logs.length;loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx);if(ST.progs)renderPrograms(ST.progs);}
@@ -2949,7 +3002,7 @@ window.bnSwitch=(page,btn)=>{
 };
 
 window.profTab=(tab,btn)=>{
-  ['storico','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
+  ['storico','test','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
   document.querySelectorAll('.prof-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(tab==='1rm'){
@@ -3107,50 +3160,6 @@ window.calcDaniels=()=>{
         <span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${z.c};">${pLo} - ${pHi} /km</span>
       </div>`;
     }).join('');
-};
-
-function _showACWRResult(ratio){
-  const color=ratio<0.8?'var(--blue)':ratio<=1.3?'var(--green)':ratio<=1.5?'var(--amber)':'var(--red)';
-  const label=ratio<0.8?'Sottoallenato':ratio<=1.3?'Zona ottimale':ratio<=1.5?'Attenzione - Rischio ↑':'Pericolo overtraining';
-  const resEl=document.getElementById('t-acwr-res');
-  const subEl=document.getElementById('t-acwr-sub');
-  if(resEl){resEl.textContent=ratio.toFixed(2);resEl.style.color=color;}
-  if(subEl){subEl.textContent=label;subEl.style.color=color;}
-  // Update dashboard ACWR badge if present
-  const dash=document.getElementById('dash-acwr');
-  if(dash){dash.textContent=ratio.toFixed(2);dash.style.color=color;}
-}
-
-// Auto-compute ACWR from session history and pre-fill inputs
-function computeAndShowACWR(sessList){
-  const now=Date.now();
-  const day7=now-7*86400000;
-  const day28=now-28*86400000;
-  const recent=sessList.filter(s=>s.ts&&s.ts>=day28&&s.rpe>0);
-  if(!recent.length)return;
-  // Acute = sum of RPE in last 7 days
-  const acute=recent.filter(s=>s.ts>=day7).reduce((a,s)=>a+(s.rpe||0),0);
-  // Chronic = average weekly RPE sum over 28 days (4 weeks)
-  const weekSums=[0,0,0,0];
-  recent.forEach(s=>{
-    const daysAgo=Math.floor((now-s.ts)/86400000);
-    const weekIdx=Math.min(3,Math.floor(daysAgo/7));
-    weekSums[weekIdx]+=(s.rpe||0);
-  });
-  const chronic=weekSums.reduce((a,b)=>a+b,0)/4;
-  if(!chronic)return;
-  const acEl=document.getElementById('t-acute');
-  const chEl=document.getElementById('t-chronic');
-  if(acEl&&!acEl._edited){acEl.value=Math.round(acute*10)/10;acEl.addEventListener('input',()=>acEl._edited=true,{once:true});}
-  if(chEl&&!chEl._edited){chEl.value=Math.round(chronic*10)/10;chEl.addEventListener('input',()=>chEl._edited=true,{once:true});}
-  _showACWRResult(acute/chronic);
-}
-
-window.calcACWR=()=>{
-  const ac=parseFloat(document.getElementById('t-acute').value);
-  const ch=parseFloat(document.getElementById('t-chronic').value);
-  if(!ac||!ch){showToast('Compila i campi');return;}
-  _showACWRResult(ac/ch);
 };
 
 // ── QUICK SESSION (no program)
