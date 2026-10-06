@@ -1155,6 +1155,7 @@ const db=getDatabase(app);
 
 const p=new URLSearchParams(window.location.search);
 const AID=p.get('id'), PROG=p.get('prog'), WEEK=parseInt(p.get('week')||'0'), SESS=p.get('sess');
+const isoLoc=d=>{d=new Date(d);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const isQuick=p.get('quick')==='1';
 
 let athlete={}, session={};
@@ -2450,7 +2451,7 @@ window.ciSlide=function(id,val,color){
 
 // ── READINESS SHEET
 async function showReadinessSheet(){
-  const dateKey=new Date().toISOString().slice(0,10);
+  const dateKey=isoLoc(new Date());
   try{
     const snap=await get(ref(db,`questionnaires/${AID}/${dateKey}/readiness`));
     if(snap.exists()){
@@ -2487,7 +2488,7 @@ window.saveReadiness=async function(){
   const btn=document.getElementById('rd-submit-btn');
   btn.textContent='SALVANDO...';btn.disabled=true;
   const now=new Date();
-  const dateKey=now.toISOString().slice(0,10);
+  const dateKey=isoLoc(now);
   const sonno=parseInt(document.getElementById('rd-sonno-inp').value);
   const dolori=parseInt(document.getElementById('rd-dolori-inp').value);
   const stress=parseInt(document.getElementById('rd-stress-inp').value);
@@ -2526,17 +2527,20 @@ window.saveSessionCheckin=async function(){
     const _ts=now.getTime();
     const _date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
     const _day=session.name||session.type||'Sessione';
-    // Use date key (YYYY-MM-DD) so same-day re-save overwrites instead of duplicating
-    const _dateKey=now.toISOString().slice(0,10);
+    // una chiave per giorno, sulla data locale (con quella UTC dopo mezzanotte finiva sul giorno prima)
+    const _dateKey=isoLoc(now);
+    const _min=_sessionStats&&+_sessionStats.dur>0?Math.round(+_sessionStats.dur):null;
+    /* Il check-in del mattino non si tocca piu': prima questo lo sovrascriveva e metteva
+       l'RPE nella fatica, cosi' il preparatore vedeva "fatica 9" dopo ogni seduta dura.
+       Se il giorno aveva gia' un RPE (allenamento di squadra, altra seduta) si fa la media
+       pesata sui minuti, perche' il carico del giorno e' uno solo. */
+    const prima=(await get(ref(db,`sessions/${AID}/${_dateKey}`))).val();
+    let rpeG=rpe,dayG=_day;
+    if(prima&&+prima.rpe>0&&prima.day!==_day){const m0=+prima.min||60,m1=_min||60;rpeG=Math.round((prima.rpe*m0+rpe*m1)/(m0+m1)*10)/10;dayG=(prima.day||'Seduta')+' + '+_day;}
     await Promise.all([
-      set(ref(db,`checkins/${AID}/${_dateKey}`),{
-        ts:_ts,date:_date,
-        fatica:rpe,doms,sonno,pains:pains.length?pains:null,note,
-        fromSession:_day,sessType:session.type||null
-      }),
       set(ref(db,`sessions/${AID}/${_dateKey}`),{
         ts:_ts,date:_date,
-        rpe,doms,sleep:sonno,note,day:_day
+        rpe:rpeG,doms,sleep:sonno,note,day:dayG,min:(prima&&prima.day!==_day&&+prima.min?+prima.min:0)+(_min||0)||null,pains:pains.length?pains:null
       }),
       set(ref(db,`questionnaires/${AID}/${_dateKey}/feedback`),{
         ts:_ts,sessionRpe:rpe,note:note||null,fromSession:_day
