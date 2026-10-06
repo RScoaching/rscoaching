@@ -487,9 +487,16 @@ tr.r-teamref td.num{ color:var(--ink); }
    vengono ricalcolati. Lo spostamento resta nel browser, il file dei dati non si tocca. */
 .grid tr.r-day[draggable="true"] td.col-day, .grid tr.r-match[draggable="true"] td.col-day{ cursor:grab; }
 .grid tr.dragging td{ opacity:.45; }
+/* finche' sono nascoste le frecce non si possono premere: un tocco sul nome della seduta
+   finiva su una freccia che non si vedeva e la seduta cambiava settimana */
 .grid td.col-day .mvbar{ display:inline-flex; gap:2px; margin-left:8px; vertical-align:middle;
-  opacity:0; transition: opacity .16s var(--ease); }
-.grid tr:hover td.col-day .mvbar, .grid td.col-day .mvbar:focus-within{ opacity:1; }
+  opacity:0; pointer-events:none; transition: opacity .16s var(--ease); }
+.grid tr:hover td.col-day .mvbar, .grid td.col-day .mvbar:focus-within{ opacity:1; pointer-events:auto; }
+/* su tablet e telefono non c'e' il passaggio del mouse: le frecce restano a vista */
+@media (hover: none){ .grid td.col-day .mvbar{ opacity:1; pointer-events:auto; } }
+/* la seduta appena spostata si accende un momento nella settimana d'arrivo */
+.grid tr.mv-flash td{ animation: mvflash 1.7s var(--ease); }
+@keyframes mvflash{ 0%, 45%{ box-shadow: inset 0 0 0 100vmax var(--ember-bg); } 100%{ box-shadow: inset 0 0 0 100vmax transparent; } }
 .grid td.col-day .mv{ appearance:none; cursor:pointer; width:19px; height:17px; padding:0; line-height:0;
   display:inline-grid; place-items:center; color:var(--faint); background:transparent;
   border:1px solid var(--border2); border-radius:5px;
@@ -512,7 +519,7 @@ tr.r-teamref td.num{ color:var(--ink); }
 #mv-reset{ margin-left:auto; }
 #mv-reset[hidden]{ display:none; }
 @media (prefers-reduced-motion: reduce){
-  .grid td.col-day .mvbar{ opacity:1; transition:none; }
+  .grid td.col-day .mvbar{ opacity:1; pointer-events:auto; transition:none; }
   tr.wkband .wk-drop{ transition:none; }
 }
 /* dialog cerca seduta */
@@ -654,6 +661,11 @@ table.partite td.data{ color:var(--muted); }
   transition: opacity .2s var(--ease), transform .2s var(--ease);
 }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
+/* il messaggio dello spostamento porta con se' l'annulla */
+.toast.show.has-act{ pointer-events:auto; }
+.toast-act{ appearance:none; margin-left:14px; padding:0; border:0; background:none; font:inherit;
+  font-weight:700; color:var(--orange); cursor:pointer; }
+.toast-act:hover{ text-decoration:underline; }
 
 /* ---------- parametri / sinottiche ---------- */
 .cols-count{ display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:18px;
@@ -1373,7 +1385,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
         <div class="card-head">
           <h2 id="grid-title">Monitoraggio</h2>
           <span class="hint" id="grid-hint">griglia mensile · giorno per giorno</span>
-          <button class="mini" id="mv-reset" type="button" hidden>Rimetti le sedute come nel foglio</button>
+          <button class="mini" id="mv-reset" type="button" hidden title="Le sedute spostate a mano tornano nel microciclo scritto nel foglio">Rimetti le sedute come nel foglio</button>
           <button class="mini" id="rpe-clear" type="button" hidden>Cancella gli RPE del mese</button>
         </div>
         <div class="card-body" style="padding-top:6px">
@@ -2356,6 +2368,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // originali restano intatte in mon.rows0 pronte da rimettere a posto.
   const MOVE_KEY = 'rs_fio_carico_move_' + (S.stagione || 'na');
   let moveOv = {};
+  let mvVisti = [];   // chiavi delle sedute spostate che la griglia sta mostrando
   (function loadMoveOv(){
     try{
       const raw = JSON.parse(localStorage.getItem(MOVE_KEY) || 'null');
@@ -2415,7 +2428,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(r.type==='wk_header'){ cur = { label:r.label||'', head:r, days:[], tot:null, val:null, train:null, valtrain:null, dirty:false, inbox:[] }; blocks.push(cur); return; }
       if(r.type==='tot_month' || r.type==='valmatch_month'){ post.push(r); return; }
       if(!cur){ pre.push(r); return; }
-      if(r.type==='day' || r.type==='match'){ r.wk0 = cur.label; cur.days.push(r); return; }
+      // anche la seduta in cui il portiere era assente resta nella sua settimana: finiva
+      // in coda al mese appena c'era uno spostamento, con la settimana mezza vuota sopra
+      if(r.type==='day' || r.type==='match' || r.type==='gk_off'){ r.wk0 = cur.label; cur.days.push(r); return; }
       if(r.type==='tot_week'){ cur.tot = r; return; }
       if(r.type==='valmatch_week'){ cur.val = r; return; }
       if(r.type==='tot_train'){ cur.train = r; return; }
@@ -2424,6 +2439,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     return { pre:pre, blocks:blocks, post:post };
   }
+  // la partita, anche quella saltata dal portiere, sta dopo il TOT Training
+  function isMatchRow(r){ return r.type === 'match' || (r.type === 'gk_off' && r.was === 'match'); }
   function sortDays(monthKey, days){
     days.sort((a,b)=>{
       const da = rowDate(a, a.wk0||'', monthKey), db = rowDate(b, b.wk0||'', monthKey);
@@ -2460,12 +2477,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       if(b.train){
         // stesso ordine del foglio: prima gli allenamenti col loro TOT Training,
         // poi la partita, poi il TOT Sett che chiude tutto il microciclo
-        const only = b.days.filter(r=> r.type !== 'match');
+        const only = b.days.filter(r=> !isMatchRow(r));
         only.forEach(r=> out.push(r));
         const tt = b.dirty ? sumRows(only) : null;
         out.push(b.dirty ? calcRow(b.train, tt) : b.train);
         if(b.valtrain) out.push(b.dirty ? calcRow(b.valtrain, valOf(tt)) : b.valtrain);
-        b.days.filter(r=> r.type === 'match').forEach(r=> out.push(r));
+        b.days.filter(isMatchRow).forEach(r=> out.push(r));
       } else {
         b.days.forEach(r=> out.push(r));
       }
@@ -2487,8 +2504,49 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // le medie vanno rifatte, se no il reparto resta indietro di uno spostamento
     unitClear();
     MDMAP = null;
-    const b = document.getElementById('mv-reset');
-    if(b) b.hidden = !moveN();
+  }
+  // spostamenti rimasti da un foglio vecchio: se nel mese la seduta o la settimana non ci
+  // sono piu' non spostano niente, ma restavano salvati. Un mese che nei dati manca del
+  // tutto invece non si tocca: puo' essere solo un file arrivato a meta'.
+  function pruneMoves(){
+    const lab = {}, wks = {}, mesi = {};
+    ((S.team && S.team.months) || []).forEach(m=>{ mesi[m.key] = true; });
+    eachMonth(mon=>{
+      (mon.rows0 || mon.rows || []).forEach(r=>{
+        if(r.type==='wk_header') wks[mon.key+'|'+(r.label||'')] = true;
+        else if(r.type==='day' || r.type==='match') lab[moveKeyOf(mon.key, r.label)] = true;
+      });
+    });
+    let tolti = 0;
+    Object.keys(moveOv).forEach(k=>{
+      const mk = k.split('|')[0];
+      if(!mesi[mk] || (lab[k] && wks[mk+'|'+moveOv[k]])) return;
+      delete moveOv[k]; tolti++;
+    });
+    if(tolti) saveMoveOv();
+  }
+  // la seduta appena spostata si accende un momento e viene portata a vista
+  function mvFlash(mk, label){
+    const host = document.getElementById('grid-scroll'); if(!host) return;
+    const tr = [...host.querySelectorAll('tr[draggable="true"]')].find(t=> t.getAttribute('data-l')===label && t.getAttribute('data-mk')===mk);
+    if(!tr) return;
+    tr.classList.add('mv-flash');
+    tr.scrollIntoView({ block:'nearest', behavior: REDUCE ? 'auto' : 'smooth' });
+    setTimeout(()=> tr.classList.remove('mv-flash'), 1700);
+  }
+  // Un clic sposta una seduta sola. Il secondo colpo di un doppio clic cadeva sulla
+  // seduta salita al posto di quella appena spostata e portava via anche lei: con tre o
+  // quattro clic una settimana si svuotava nella vicina senza accorgersene.
+  let mvLast = 0;
+  function moveDo(mk, label, wk, home){
+    const prima = movedTo(mk, label);
+    mvLast = Date.now();
+    setMove(mk, label, wk, home);
+    mvFlash(mk, label);
+    toast('Seduta portata nel microciclo '+wk, 'Annulla', ()=>{
+      setMove(mk, label, prima || home, home);
+      mvFlash(mk, label);
+    });
   }
   function repaintAll(){
     renderMonths(); renderKPIs(); renderChart(); renderAnalytics(); renderGrid();
@@ -2568,7 +2626,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           return;
         }
         // prima dei totali della settimana entrano i suoi giorni fuori squadra di quella settimana
-        if(r.type==='tot_train' && !usati[tm.key+'||'+curWk]){
+        // senza partita la settimana non ha il TOT Training: allora entrano prima del TOT Sett,
+        // invece di finire in coda al mese
+        if((r.type==='tot_train' || r.type==='tot_week') && !usati[tm.key+'||'+curWk]){
           usati[tm.key+'||'+curWk] = true;
           (extra[tm.key+'||'+curWk] || []).forEach(x=>{
             const row = { label:x.label, type:x.type, wd:x.wd||'', v:(x.v||gkBlank()).slice(), gk:true, proprio:true };
@@ -2631,6 +2691,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // sul portiere il grafico deve guardare i minuti: e' l'unica colonna che ha
   function gkSync(){
     gkSeed(state.player);
+    // i mesi del portiere sono appena stati rifatti da quelli della squadra: senza rimettere
+    // gli spostamenti la sua pagina mostrava le sedute come nel foglio, e al primo Assente
+    // o Presente cambiava tutto sotto gli occhi
+    applyMoves();
     if(gkOn() && state.chartIdx !== MIN_IDX){ state.chartIdx = MIN_IDX; syncMetricSelect(); }
   }
 
@@ -2776,20 +2840,25 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(state.level==='unit') return slugify(unitLabel(state.unit));
     return slugify(disp(state.player||''));
   }
-  // elenco delle fasce settimana del mese come si vedono adesso
-  function weekLabels(mon){
-    return ((mon && mon.rows) || []).filter(r=> r.type==='wk_header').map(r=> r.label||'');
-  }
   function setMove(monthKey, label, weekLabel, homeWeek){
     const k = moveKeyOf(monthKey, label);
     if(!weekLabel || weekLabel === homeWeek) delete moveOv[k];
     else moveOv[k] = weekLabel;
     saveMoveOv(); applyMoves(); repaintAll();
   }
+  // il tasto rimette a posto le sedute spostate che si stanno guardando e dice quante sono
+  function mvResetSync(){
+    const b = document.getElementById('mv-reset'); if(!b) return;
+    const n = mvVisti.length;
+    b.hidden = !n;
+    b.textContent = n===1 ? 'Rimetti la seduta spostata' : 'Rimetti le '+n+' sedute spostate';
+  }
   function resetMoves(){
-    if(!moveN()) return;
-    moveOv = {}; saveMoveOv(); applyMoves(); repaintAll();
-    toast('Sedute rimesse nel microciclo del foglio');
+    const ks = mvVisti.filter(k=> moveOv[k]);
+    if(!ks.length) return;
+    ks.forEach(k=>{ delete moveOv[k]; });
+    saveMoveOv(); applyMoves(); repaintAll();
+    toast(ks.length===1 ? 'Seduta rimessa nel microciclo del foglio' : 'Sedute rimesse nel microciclo del foglio');
   }
   // Somma o media secondo il file dati: quello che nella griglia e' sommabile si somma,
   // il resto (m/min, percentuali, velocita' massima) va a media semplice, come i TOT del foglio.
@@ -3762,8 +3831,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // ogni microciclo, cosi' a meta' mese si sa ancora quale colonna si sta leggendo
   // il data-wk e' lo stesso della fascia sopra: la riga sta proprio dove uno mira
   // quando trascina una seduta, e lasciarla qui deve valere come lasciarla sulla fascia
-  function wkHeadHTML(V, wk){
-    let h = '<tr class="wkhead" data-wk="'+esc(wk||'')+'"><td class="col-day">Giorno</td>';
+  function wkHeadHTML(V, wk, mk){
+    let h = '<tr class="wkhead" data-wk="'+esc(wk||'')+'"'+(mk ? ' data-mk="'+esc(mk)+'"' : '')+'><td class="col-day">Giorno</td>';
     V.forEach(i=>{
       h += '<td class="'+(KEY.has(i)?'key':'')+'" title="'+esc(M[i])+(UNIT[i]?' ('+esc(UNIT[i])+')':'')+'">'+
              esc(SHORT[i]||M[i])+'<span class="u">'+esc(UNIT[i]||'')+'</span></td>';
@@ -3791,7 +3860,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const clr  = document.getElementById('rpe-clear');
     if(note) note.textContent = '';
     if(clr) clr.hidden = true;
-    if(!mon){ host.innerHTML = emptyBlock('Nessun dato per la selezione'); return; }
+    if(!mon){ host.innerHTML = emptyBlock('Nessun dato per la selezione'); mvVisti = []; mvResetSync(); return; }
     const V = VIS();
     const on = rpeOn();
     const ncol = V.length + 1 + (on ? 2 : 0);
@@ -3815,9 +3884,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       V.forEach(i=> body += '<td class="num tnum'+(KEY.has(i)?' key':'')+'">'+fmt(MOD[i], i)+'</td>');
       body += pad+'</tr>';
     }
-    const wks = weekLabels(mon);
+    // le fasce in ordine, ognuna col suo mese: negli ultimi microcicli una seduta si sposta
+    // solo verso la fascia vicina dello stesso mese, perche' lo spostamento si salva nel mese
+    const fasce = (mon.rows||[]).filter(r=> r.type==='wk_header').map(r=> ({ l:r.label||'', mk:r.mk || mon.key }));
     const mic = !!mon.micro;
-    let wkNow = '';
+    let wkNow = '', wkAt = -1;
+    mvVisti = [];
     (mon.rows||[]).forEach(r=>{
       /* Nella vista degli ultimi microcicli le righe arrivano da mesi diversi e ognuna
          si porta appresso la sua chiave: senza, l'RPE di "27PM" di settembre finirebbe
@@ -3825,18 +3897,19 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const rmk = r.mk || mon.key;
       if(r.type==='wk_header'){
         const primo = !wkNow;
-        wkNow = r.label||'';
+        wkNow = r.label||''; wkAt++;
         aT = { min:0, tl:0 }; aW = { min:0, tl:0 };
-        body += '<tr class="wkband'+(primo ? ' first' : '')+'" data-wk="'+esc(wkNow)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
-                (mic ? '' : '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span>')+'</td></tr>';
-        body += wkHeadHTML(V, wkNow);
+        body += '<tr class="wkband'+(primo ? ' first' : '')+'" data-wk="'+esc(wkNow)+'" data-mk="'+esc(rmk)+'"><td class="col-day" colspan="'+ncol+'">'+esc(r.label)+
+                '<span class="wk-drop">lascia qui la seduta per portarla in questo microciclo</span></td></tr>';
+        body += wkHeadHTML(V, wkNow, rmk);
         return;
       }
       if(r.type==='gk_off'){
         const tx = dayLabel(Object.assign({}, r, {type:r.was||'day'}), rowDate(r, wkNow, rmk));
-        body += '<tr class="r-day gk-off" data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+
+        body += '<tr class="r-day gk-off" data-wk="'+esc(wkNow)+'" data-mk="'+esc(rmk)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+
                 '<span class="lb">'+esc(tx)+'</span><span class="gk-tag">'+(r.naz?'in nazionale':'assente')+'</span>'+
-                '<button class="gk-btn" type="button" data-gkon="'+esc(r.label)+'" data-mk="'+esc(rmk)+'"'+(r.naz && r.seed!=null ? ' data-seed="'+r.seed+'"' : '')+' title="Rimette la seduta con i minuti della squadra">Presente</button></td>';
+                '<button class="gk-btn" type="button" data-gkon="'+esc(r.label)+'" data-mk="'+esc(rmk)+'"'+(r.naz && r.seed!=null ? ' data-seed="'+r.seed+'"' : '')+' title="Rimette la seduta con i minuti della squadra">Presente</button>'+
+                (r.wk0 && r.wk0 !== wkNow ? '<span class="mvfrom">spostata da '+esc(r.wk0)+'</span>' : '')+'</td>';
         V.forEach(i=>{ body += '<td class="num tnum">'+(i===MIN_IDX ? '0' : '')+'</td>'; });
         if(on) body += pad;
         body += '</tr>';
@@ -3853,26 +3926,29 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         ? '<button class="lb lb-open" type="button" data-l="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Apri seduta: tutte le atlete piu la media squadra">'+esc(txt)+'</button>'
         : '<span class="lb">'+esc(soloBase(txt))+soloTag(sg)+(r.recalc?'<span class="lb-recalc">ricalcolato</span>':'')+'</span>';
       let trCls = cls, extra = '';
-      /* Spostare una seduta da un microciclo all'altro si fa nel mese: qui i microcicli
-         sono di mesi diversi e il vicino di sopra potrebbe stare in un altro blocco. */
-      if(clickable && !mic){
+      /* Le frecce portano la seduta nella fascia sopra o sotto. Negli ultimi microcicli le
+         fasce possono essere di due mesi: la freccia c'e' solo verso una fascia dello stesso
+         mese, perche' lo spostamento si salva nel mese della seduta. */
+      if(clickable){
         const home = r.wk0 || wkNow;
-        const at = wks.indexOf(wkNow);
-        const up = (at>0) ? wks[at-1] : '';
-        const dn = (at>=0 && at<wks.length-1) ? wks[at+1] : '';
+        const pu = fasce[wkAt-1], pd = fasce[wkAt+1];
+        const up = (pu && pu.mk === rmk) ? pu.l : '';
+        const dn = (pd && pd.mk === rmk) ? pd.l : '';
+        const da = ' data-mk="'+esc(rmk)+'" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'"';
         let bar = '';
-        if(up) bar += '<button class="mv" type="button" data-mv="'+esc(up)+'" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'" title="Porta questa seduta nel microciclo '+esc(up)+'" aria-label="Porta questa seduta nel microciclo '+esc(up)+'">'+UP_SVG+'</button>';
-        if(dn) bar += '<button class="mv" type="button" data-mv="'+esc(dn)+'" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'" title="Porta questa seduta nel microciclo '+esc(dn)+'" aria-label="Porta questa seduta nel microciclo '+esc(dn)+'">'+DN_SVG+'</button>';
+        if(up) bar += '<button class="mv" type="button" data-mv="'+esc(up)+'"'+da+' title="Porta questa seduta nel microciclo '+esc(up)+'" aria-label="Porta questa seduta nel microciclo '+esc(up)+'">'+UP_SVG+'</button>';
+        if(dn) bar += '<button class="mv" type="button" data-mv="'+esc(dn)+'"'+da+' title="Porta questa seduta nel microciclo '+esc(dn)+'" aria-label="Porta questa seduta nel microciclo '+esc(dn)+'">'+DN_SVG+'</button>';
         if(bar) lb += '<span class="mvbar">'+bar+'</span>';
         if(home !== wkNow){
           trCls += ' r-moved';
           lb += '<span class="mvfrom">spostata da '+esc(home)+'</span>';
+          mvVisti.push(moveKeyOf(rmk, r.label));
         }
         extra = ' draggable="true" data-l="'+esc(r.label)+'" data-home="'+esc(home)+'"';
       }
       if(gkOn() && (r.type==='day' || r.type==='match') && !r.proprio)
         lb += '<button class="gk-btn" type="button" data-gkoff="'+esc(r.label)+'" data-mk="'+esc(rmk)+'" title="Il portiere non c\'era: la seduta esce dai suoi totali e dalla stampa">Assente</button>';
-      body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
+      body += '<tr class="'+trCls+'"'+extra+' data-wk="'+esc(wkNow)+'" data-mk="'+esc(rmk)+'"><td class="col-day">'+(r.wd?'<span class="wd">'+esc(r.wd)+'</span>':'')+lb+'</td>';
       const rv = r.v||[];
       // sul portiere i minuti si scrivono a mano: la casella parte dal tempo della squadra
       const gkEdit = gkOn() && (r.type==='day' || r.type==='match') && !r.proprio;
@@ -3924,8 +4000,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // ogni riga sa da quale mese arriva: negli ultimi microcicli non e' detto sia questo
     const rowMk = el=> (el && el.getAttribute('data-mk')) || mk;
     host.querySelectorAll('.lb-open').forEach(b=> b.addEventListener('click', ()=> { location.href='hybrid.html?m='+encodeURIComponent(rowMk(b))+'&l='+encodeURIComponent(b.getAttribute('data-l')); }));
-    if(!mic) bindMoveUI(host, mk);
-    const rb = document.getElementById('mv-reset'); if(rb) rb.hidden = mic || !moveN();
+    bindMoveUI(host, mk);
+    mvResetSync();
     // negli ultimi microcicli si legge il periodo per intero, il mese resta scritto solo qui
     const dove = mic ? 'nel periodo' : 'nel mese';
     if(!on){
@@ -4263,21 +4339,23 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // frecce e trascinamento della riga seduta sulla fascia di un altro microciclo
   function bindMoveUI(host, monthKey){
+    // ogni riga sa di che mese e': negli ultimi microcicli non e' detto sia quello aperto
+    const mkOf = el=> (el && el.getAttribute('data-mk')) || monthKey;
     host.querySelectorAll('.mv').forEach(b=>{
       b.addEventListener('click', ev=>{
         ev.stopPropagation();
-        const wk = b.getAttribute('data-mv');
-        setMove(monthKey, b.getAttribute('data-l'), wk, b.getAttribute('data-home'));
-        toast('Seduta portata nel microciclo '+wk);
+        if(ev.detail > 1 || Date.now() - mvLast < 700) return;
+        moveDo(mkOf(b), b.getAttribute('data-l'), b.getAttribute('data-mv'), b.getAttribute('data-home'));
       });
     });
     const bands = [...host.querySelectorAll('tr.wkband')];
     let drag = null;
     host.querySelectorAll('tr[draggable="true"]').forEach(tr=>{
       tr.addEventListener('dragstart', ev=>{
-        drag = { label: tr.getAttribute('data-l'), home: tr.getAttribute('data-home'), wk: tr.getAttribute('data-wk') };
+        drag = { label: tr.getAttribute('data-l'), home: tr.getAttribute('data-home'), wk: tr.getAttribute('data-wk'), mk: mkOf(tr) };
         tr.classList.add('dragging');
-        bands.forEach(b=> b.classList.add('dropzone'));
+        // si lascia solo su un'altra settimana dello stesso mese
+        bands.forEach(b=> b.classList.toggle('dropzone', mkOf(b) === drag.mk && b.getAttribute('data-wk') !== drag.wk));
         try{ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain', drag.label); }catch(e){}
       });
       tr.addEventListener('dragend', ()=>{
@@ -4286,31 +4364,30 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         drag = null;
       });
     });
+    // la settimana sotto il puntatore, se e' dello stesso mese e non e' quella di partenza
     function target(el){
       const tr = el && el.closest ? el.closest('tr') : null;
-      if(!tr) return '';
-      return tr.getAttribute('data-wk') || '';
+      const wk = tr ? (tr.getAttribute('data-wk') || '') : '';
+      if(!drag || !wk || wk === drag.wk || mkOf(tr) !== drag.mk) return '';
+      return wk;
     }
     // i due ascoltatori stanno sulla tabella, non sul contenitore: la tabella viene
     // ricreata a ogni disegno, cosi' non se ne accumula uno nuovo a ogni ridisegno
     const tbl = host.querySelector('table.grid');
     if(!tbl) return;
     tbl.addEventListener('dragover', ev=>{
-      if(!drag) return;
       const wk = target(ev.target);
-      if(!wk || wk === drag.wk) return;
+      if(!wk) return;
       ev.preventDefault();
       try{ ev.dataTransfer.dropEffect='move'; }catch(e){}
-      bands.forEach(b=> b.classList.toggle('dragover', b.getAttribute('data-wk')===wk));
+      bands.forEach(b=> b.classList.toggle('dragover', b.getAttribute('data-wk')===wk && mkOf(b)===drag.mk));
     });
     tbl.addEventListener('drop', ev=>{
-      if(!drag) return;
       const wk = target(ev.target);
-      if(!wk || wk === drag.wk) return;
+      if(!wk) return;
       ev.preventDefault();
       const d = drag; drag = null;
-      setMove(monthKey, d.label, wk, d.home);
-      toast('Seduta portata nel microciclo '+wk);
+      moveDo(d.mk, d.label, wk, d.home);
     });
   }
 
@@ -5593,11 +5670,21 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
 
   // ---------- toast ----------
   let toastT;
-  function toast(msg){
+  // con un'azione (Annulla) il messaggio resta qualche secondo in piu' e si puo' premere
+  function toast(msg, act, fn){
     const t = document.getElementById('toast');
     if(!t) return;
-    t.textContent = msg; t.classList.add('show');
-    clearTimeout(toastT); toastT = setTimeout(()=> t.classList.remove('show'), 2600);
+    t.textContent = msg;
+    const conAzione = !!(act && fn);
+    if(conAzione){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'toast-act'; b.textContent = act;
+      b.addEventListener('click', ()=>{ clearTimeout(toastT); t.classList.remove('show'); fn(); });
+      t.appendChild(b);
+    }
+    t.classList.toggle('has-act', conAzione);
+    t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(()=> t.classList.remove('show'), conAzione ? 6000 : 2600);
   }
 
   // ---------- export CSV (Excel) ----------
@@ -6191,6 +6278,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     // cosi' griglia, KPI, grafici, ACWR ed esportazioni partono gia' dagli stessi numeri.
     // Prima ancora si costruiscono i mesi dei portieri, se no non ci sarebbe niente da mettere in ordine.
     gkSeed();
+    pruneMoves();
     applyMoves();
     // da qui in poi un cambio di sinottica puo' ridisegnare i grafici
     metLive = true;
