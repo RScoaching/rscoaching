@@ -1361,6 +1361,9 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
     <select id="db-equip-filter" onchange="dbEquipFilter(this.value)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
       <option value="">Tutti gli attrezzi</option>
     </select>
+    <select id="db-video-filter" onchange="dbVideoFilter(this.value)" aria-label="Video" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:7px 12px;color:var(--white);font-size:12px;">
+      <option value="">Con e senza video</option><option value="si">Con video</option><option value="no">Senza video</option>
+    </select>
   </div>
   <div id="db-content"></div>
 </div>
@@ -3251,9 +3254,12 @@ function renderDB(){
   if(_dbMuscle)all=all.filter(e=>(e.muscles||[]).indexOf(_dbMuscle)>=0);
   if(_dbEquip)all=all.filter(e=>e.equip===_dbEquip);
   if(_dbSearch)all=all.filter(e=>e.name.toLowerCase().includes(_dbSearch));
+  // il conto dei senza video si fa prima del filtro video, cosi' resta visibile
+  const senzaV=all.filter(e=>!e.url).length;
+  if(_dbVideo==='si')all=all.filter(e=>e.url);else if(_dbVideo==='no')all=all.filter(e=>!e.url);
   all.sort((a,b)=>a.name.localeCompare(b.name,'it'));
 
-  document.getElementById('db-count').textContent=`${all.length} esercizi`;
+  document.getElementById('db-count').textContent=`${all.length} esercizi${senzaV?', '+senzaV+' senza video':''}`;
 
   // Group by cat
   const bycat={};
@@ -3288,6 +3294,8 @@ window.dbFilter=function(v){_dbFilter=v;renderDB();}
 window.dbPatternFilter=function(v){_dbPattern=v;renderDB();}
 window.dbMuscleFilter=function(v){_dbMuscle=v;renderDB();}
 window.dbEquipFilter=function(v){_dbEquip=v;renderDB();}
+let _dbVideo='';
+window.dbVideoFilter=function(v){_dbVideo=v;renderDB();}
 // Populate tag-facet dropdowns from the merged DB (once, on first render)
 function _populateDbFacets(){
   const L=window.EX_TAG_LABELS||{};
