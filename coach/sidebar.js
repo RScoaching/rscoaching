@@ -64,7 +64,7 @@ window.SIDEBAR_HTML = `
       <svg class="rs-mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect width="36" height="36" rx="10" fill="url(#rsGsb)"/><rect x="9" y="20" width="4.2" height="7" rx="2.1" fill="#fff" opacity=".55"/><rect x="15.9" y="15" width="4.2" height="12" rx="2.1" fill="#fff" opacity=".8"/><rect x="22.8" y="9" width="4.2" height="18" rx="2.1" fill="#fff"/><defs><linearGradient id="rsGsb" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF8A4D"/><stop offset="1" stop-color="#E2611C"/></linearGradient></defs></svg>
       <div class="rs-word"><b>RS</b><span>COACHING</span></div>
     </div>
-    <div class="logo-sub">Strength &amp; Conditioning</div>
+    <div class="logo-sub">Pannello Preparatore</div>
   </div>
   <div class="nav-s">
     <div class="nav-lbl">Panoramica</div>
