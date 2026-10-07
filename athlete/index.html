@@ -1178,7 +1178,7 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .pt7-n{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .pt7-n b{font:600 13.5px Inter,sans-serif;color:var(--white)}
 .pt7-n span{font-size:11.5px;color:var(--muted)}
-.pt7-n .pt7-d{font-weight:600}.pt7-d.su{color:var(--violet2)!important}.pt7-d.giu{color:#FB7185!important}
+.pt7-n .pt7-d{font-weight:600;font-style:normal}.pt7-d.su{color:var(--violet2)!important}.pt7-d.giu{color:#FB7185!important}
 .pt7-sp{width:56px;height:28px;color:var(--violet2);flex-shrink:0}
 .pt7-v{font:400 26px 'Bebas Neue',sans-serif;color:var(--white);white-space:nowrap}
 .pt7-v small{font:500 11px Inter,sans-serif;color:var(--muted);margin-left:3px}
@@ -1336,6 +1336,7 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
         <div class="card-title" style="display:none;" id="rm-chart-title">Progressione</div>
         <div class="chart-wrap" id="rm-chart-area" style="display:none;"><canvas id="rm-prog-chart"></canvas></div>
       </div>
+      <div id="pf-e1rm"></div>
       <div id="rm-list"></div>
       <div class="card" style="margin-bottom:12px;">
         <div style="font-size:12.5px;font-weight:600;color:var(--white);margin-bottom:8px;">Aggiungi un esercizio</div>
@@ -2041,6 +2042,30 @@ function renderProfSett(logs){
     <p class="pf-cap">Il numero sopra la barra: sedute della settimana. L'altezza: ${conR?'il carico, cioe\' minuti per RPE':'il totale dei minuti'}. In arancio la settimana in corso.</p>`;
 }
 
+// ── MASSIMALE STIMATO DALLE SEDUTE
+/* Ogni seduta del lettore salva kg e ripetizioni delle serie: da quelle si stima il massimale
+   (Epley sulla serie migliore, fino a 10 ripetizioni) e se ne vede l'andamento senza scrivere
+   niente a mano. Solo gli esercizi registrati almeno due volte. */
+function renderE1rm(){
+  const el=document.getElementById('pf-e1rm');if(!el)return;
+  const per={};
+  ST.logs.slice().sort((a,b)=>a.ts-b.ts).forEach(l=>{
+    Object.entries(l.exerciseData||{}).forEach(([nome,serie])=>{
+      let best=0;(Array.isArray(serie)?serie:Object.values(serie||{})).forEach(x=>{const kg=+x.kg,r=parseInt(x.reps)||0;if(kg>0&&r>0&&r<=10){const e=r===1?kg:kg*(1+r/30);if(e>best)best=e;}});
+      if(best>0)(per[nome]=per[nome]||[]).push({ts:l.ts,v:Math.round(best*2)/2});
+    });
+  });
+  const nomi=Object.keys(per).filter(n=>per[n].length>=2).sort((a,b)=>per[b][per[b].length-1].ts-per[a][per[a].length-1].ts);
+  if(!nomi.length){el.innerHTML='';return;}
+  el.innerHTML='<div class="sec-lbl">Stimato dalle sedute</div><div class="pt7">'+nomi.slice(0,12).map(n=>{
+    const H=per[n],V=H.slice(-8).map(h=>h.v),last=H[H.length-1].v,first=H[0].v,d=Math.round((last-first)*2)/2;
+    const mn=Math.min(...V),mx=Math.max(...V),r=mx-mn||1;
+    const sp=`<svg class="pt7-sp" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="${V.map((v,i)=>`${(i/(V.length-1)*100).toFixed(1)},${(26-(v-mn)/r*22).toFixed(1)}`).join(' ')}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+    const dd=new Date(H[0].ts);
+    return `<div class="pt7-r"><div class="pt7-n"><b>${escH(n)}</b><span>${H.length} sedute${d?` &middot; <em class="pt7-d ${d>0?'su':'giu'}">${d>0?'+':''}${nfIt(d,1)} kg dal ${dd.getDate()}/${dd.getMonth()+1}</em>`:''}</span></div>${sp}<div class="pt7-v">${nfIt(last,1)}<small>kg</small></div></div>`;
+  }).join('')+'</div><p class="pf-cap" style="margin:6px 18px 14px">Stima dalla serie migliore di ogni seduta (formula di Epley). Non sostituisce un massimale provato.</p>';
+}
+
 // ── PROFILO: numeri e test
 // quattro numeri: sedute, minuti dell'ultimo mese, record personali, check-in fatti in 4 settimane
 function renderPfNum(){
@@ -2173,7 +2198,7 @@ let _oggiT=null,_oggiLogs=-1;
 function oggiAgg(){
   clearTimeout(_oggiT);
   _oggiT=setTimeout(()=>{
-    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();
+    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();
     if(typeof renderCiPagina==='function')renderCiPagina();
     // la seduta di oggi cambia aspetto quando viene registrata
     if(ST.logs.length!==_oggiLogs&&window._ath&&window._oggiPronto){_oggiLogs=ST.logs.length;loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx);if(ST.progs)renderPrograms(ST.progs);}
