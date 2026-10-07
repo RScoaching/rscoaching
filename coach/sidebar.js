@@ -67,7 +67,7 @@ window.SIDEBAR_HTML = `
     <div class="logo-sub">Strength &amp; Conditioning</div>
   </div>
   <div class="nav-s">
-    <div class="nav-lbl">Overview</div>
+    <div class="nav-lbl">Panoramica</div>
     <a class="nav-item" aria-label="Dashboard" href="./index.html" data-page="dashboard">
       <span class="nav-icon">${window.rsIcon('dashboard')}</span><span class="nav-lbl-text">Dashboard</span>
     </a>

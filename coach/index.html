@@ -1073,7 +1073,10 @@ body::before,body::after{display:none;}
 .at-al,.at-msg{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;white-space:nowrap;background:rgba(255,106,46,.10);color:#FF9A6B;}
 .at-al.rosso{background:rgba(244,63,94,.10);color:#FB7185;}
 .at-msg{background:rgba(139,92,246,.12);color:var(--violet2);}
-@media(max-width:1100px){.at-h{display:none;}.at-r{grid-template-columns:1fr 1fr;row-gap:6px;}.at-who{grid-column:1/-1;}}
+@media(max-width:1100px){.at-h{display:none;}.at-r{grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;row-gap:12px;align-items:start;}.at-who{grid-column:1/-1;}
+  /* senza intestazioni ogni valore porta il suo nome, se no "1,06" non dice niente */
+  .at-c::before{content:attr(data-l);font-size:11px;font-weight:500;color:var(--muted);}
+  .at-prog{grid-column:span 2;}.at-st{grid-column:1/-1;}.at-st::before{flex-basis:100%;}}
 /* analytics: barre sopra le colonne della tabella */
 .an-bars td{vertical-align:bottom;padding:0 4px 6px;}
 .an-bars th{vertical-align:bottom;text-align:left;padding-bottom:8px;}
@@ -1228,6 +1231,29 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .qx-vuoto{font-size:12.5px;color:var(--muted);margin:4px 0 12px}
 .qx-tab th{max-width:180px;white-space:normal}
 @media(max-width:820px){.qx-f{grid-template-columns:1fr 1fr}.qx-f input{grid-column:1/-1}}
+/* ═══ v8: rifinitura visiva (07/10) ═══
+   Titoli di sezione in Inter come nell'app atleta (Bebas resta per titoli di
+   pagina e numeri), badge leggibili, testo secondario piu' chiaro, risposta
+   alla pressione su ogni tasto. */
+:root{--muted:#9A9286;}
+button,input,select,textarea{font-family:inherit}
+.dcard h2,.tprof-h,.hl-h span,.cal-t{font:600 15px/1.3 'Inter',sans-serif!important;letter-spacing:0!important;text-transform:none!important}
+.modal h3{font:600 18px/1.3 'Inter',sans-serif!important;letter-spacing:0!important}
+.pill{font-size:11.5px;padding:3px 8px}
+.btn{transition:transform .16s cubic-bezier(.23,1,.32,1),background-color .18s ease,border-color .18s ease,filter .18s ease}
+.btn:active{transform:scale(.97)}
+.btn-outline{border-color:var(--line2)!important}
+/* anagrafica in una riga con divisori, come i numeri sotto: niente quattro card uguali */
+.ana{gap:0!important;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 0}
+.ana-c{background:none!important;border:0!important;border-right:1px solid var(--line)!important;border-radius:0!important;padding:8px 14px!important}
+.ana-c:first-child{padding-left:0!important}
+.ana-l{font-size:11.5px!important;font-weight:500!important;text-transform:none!important;letter-spacing:0!important}
+.ana-s{font-size:11.5px!important}
+.ana-btn{margin-left:14px}
+/* i dati in viola, l'arancio resta alle azioni; la settimana in corso piu' chiara perche' non e' finita */
+.an-col i{background:var(--violet2)!important;opacity:.75}
+.an-col.cur i{opacity:.35}
+@media(prefers-reduced-motion:reduce){.btn{transition:none}.btn:active{transform:none}}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -1255,7 +1281,7 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
     <div class="logo-sub">Pannello Preparatore</div>
   </div>
   <div class="nav-s">
-    <div class="nav-lbl">Overview</div>
+    <div class="nav-lbl">Panoramica</div>
     <div class="nav-item active" aria-label="Dashboard" onclick="if(window.innerWidth<=820)toggleSidebar();pg('dashboard',this)"><span class="nav-icon" data-rsi="dashboard"></span><span class="nav-lbl-text">Dashboard</span></div>
     <div class="nav-item" aria-label="Atleti" onclick="if(window.innerWidth<=820)toggleSidebar();pg('athletes',this)"><span class="nav-icon" data-rsi="atleti"></span><span class="nav-lbl-text">Atleti</span></div>
     <div class="nav-item" id="nav-questionari" aria-label="Questionari" onclick="if(window.innerWidth<=820)toggleSidebar();pg('questionari',this)"><span class="nav-icon" data-rsi="questionari"></span><span class="nav-lbl-text">Questionari</span></div>
@@ -2093,12 +2119,12 @@ function renderAthletes(){
     if(st.unread)al.push(`<span class="at-msg" title="Messaggi non letti">${st.unread} msg</span>`);
     return `<div class="ath-row at-r${st.inattivo?' idle':''}" role="button" tabindex="0" onclick="openAthlete('${id}')" onkeydown="if(event.key==='Enter')openAthlete('${id}')">
       <div class="at-who"><div class="ath-av">${ini(a.name)}</div><div class="ath-mid"><div class="ath-name">${athEsc(a.name)}</div><div class="ath-meta">${athEsc(LV_L[lv]||'')}${a.role?' · '+athEsc(a.role):''}${a.team?' · '+athEsc(a.team):''}${grp?' · '+athEsc(grp):''}</div></div></div>
-      <div class="at-c${st.inattivo?' late':''}">${st.lastSess?ggFa(st.lastSess):'<span class="at-no">mai</span>'}${st.lastRpe?`<small>RPE ${st.lastRpe}</small>`:''}</div>
-      <div class="at-c">${st.ciOggi?'oggi':st.lastCi?ggFa(st.lastCi):'<span class="at-no">mai</span>'}</div>
-      <div class="at-c"><span class="at-n">${st.sess7} su ${st.freq||0}</span><span class="at-bar"><i style="width:${p7}%"></i></span></div>
-      <div class="at-c at-prog">${prog}</div>
-      <div class="at-c"><span class="at-acwr ${acwrCls}" title="Rapporto carico acuto su cronico">${st.acwr==null?'-':st.acwr.toFixed(2).replace('.',',')}</span></div>
-      <div class="at-c at-st">${al.join('')||'<span class="at-no">tutto in linea</span>'}</div>
+      <div class="at-c${st.inattivo?' late':''}" data-l="Ultima seduta">${st.lastSess?ggFa(st.lastSess):'<span class="at-no">mai</span>'}${st.lastRpe?`<small>RPE ${st.lastRpe}</small>`:''}</div>
+      <div class="at-c" data-l="Check-in">${st.ciOggi?'oggi':st.lastCi?ggFa(st.lastCi):'<span class="at-no">mai</span>'}</div>
+      <div class="at-c" data-l="Ultimi 7 giorni"><span class="at-n">${st.sess7} su ${st.freq||0}</span><span class="at-bar"><i style="width:${p7}%"></i></span></div>
+      <div class="at-c at-prog" data-l="Programma">${prog}</div>
+      <div class="at-c" data-l="ACWR"><span class="at-acwr ${acwrCls}" title="Rapporto carico acuto su cronico">${st.acwr==null?'-':st.acwr.toFixed(2).replace('.',',')}</span></div>
+      <div class="at-c at-st" data-l="Da guardare">${al.join('')||'<span class="at-no">tutto in linea</span>'}</div>
     </div>`;
   }).join('');
 }
@@ -2453,7 +2479,8 @@ function readinessInfo(aid){
   const avg7=w.length?Math.round(w.reduce((t,e)=>t+e.r.score,0)/w.length):null;
   return {last:all[0]||null,avg7,count7:w.length,all};
 }
-function rdyColor(s){return s>=70?'var(--green)':s>=40?'var(--amber)':'var(--red)';}
+// stessa scala dell'app atleta: viola pronto, arancio medio, rosa basso
+function rdyColor(s){return s>=70?'var(--violet2)':s>=40?'#FF9A6B':'#FB7185';}
 function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:(ri.last?ri.last.r.score:null);}
 
 // ── ANAGRAFICA: eta', altezza, peso con lo storico
@@ -2530,7 +2557,7 @@ function renderDetOverview(aid,a,aSess,aCi){
   const avgFat=ci7.filter(c=>c.fatica).length?(ci7.filter(c=>c.fatica).reduce((t,c)=>t+c.fatica,0)/ci7.filter(c=>c.fatica).length).toFixed(1):'-';
   return `<div id="det-ana">${renderAnagrafica(aid,a)}</div>${progHTML(aid)}${(()=>{const rs=rdyScore(aid),st=athStats(aid);
     // i numeri in una riga, come nella Dashboard: niente card uguali in fila
-    const v=[[aSess.length,'sedute registrate'],[st.sess7+' su '+st.freq,'sedute negli ultimi 7 giorni'],[avgRpe,'RPE medio'],[avgSleep,'sonno, 7 giorni'],[avgFat,'fatica, 7 giorni'],[rs!=null?rs:'-','readiness, 7 giorni']];
+    const v=[[aSess.length,'sedute registrate'],[st.sess7+'/'+st.freq,'sedute negli ultimi 7 giorni (fatte su attese)'],[avgRpe,'RPE medio'],[avgSleep,'sonno, 7 giorni'],[avgFat,'fatica, 7 giorni'],[rs!=null?rs:'-','readiness, 7 giorni']];
     return `<div class="dash-sum det-sum">${v.map(([n,t],i)=>`<span><b${i===5&&rs!=null?` style="color:${rdyColor(rs)}"`:''}>${n}</b>${t}</span>`).join('')}</div>`;})()}
   ${a.injuries?`<div class="alert-item red" style="margin-bottom:10px;">Infortuni: ${a.injuries}</div>`:''}
   ${a.notes?`<div class="alert-item" style="margin-bottom:10px;">Note: ${a.notes}</div>`:''}
