@@ -2470,4 +2470,25 @@ window.SIDEBAR_CSS = `
 }
 @media(max-width:900px){
   .sb-edge{display:none !important;}
-}`;
+}
+/* v8 (07/10): rifinitura comune a tutte le pagine Fiorentina.
+   Le etichette piccole erano in maiuscolo spaziato quasi ovunque: il testo
+   sorgente e' gia' scritto normale, quindi basta togliere la trasformazione.
+   Via la striscia colorata a sinistra dei riquadri dei numeri e l'ombra larga
+   sopra il bordo. Solo a schermo: stampa ed esportazioni restano come sono. */
+@media screen{
+  /* testo secondario leggibile: prima 58% e 46% stavano sotto 4,5:1 sulle card */
+  :root{--muted:oklch(68% 0.014 38);--faint:oklch(60% 0.014 38);}
+  .main *{text-transform:none !important;}
+  .main *:not(svg):not(svg *){letter-spacing:normal;}
+  .kpi::before{display:none !important;}
+  .kpi{box-shadow:none !important;}
+  .kpi .k-label{font-size:12.5px !important;font-weight:500 !important;}
+  .nav-lbl{text-transform:none !important;letter-spacing:0 !important;}
+  .main button,.main input,.main select,.main textarea{font-family:inherit;}
+  /* tasto pieno senza bagliore, e risposta breve alla pressione */
+  .main .btn.primary{box-shadow:none !important;}
+  .main .btn{transition:transform .16s cubic-bezier(.23,1,.32,1),background-color .18s ease,border-color .18s ease,color .18s ease;}
+  .main .btn:active{transform:scale(.97);}
+}
+@media screen and (prefers-reduced-motion:reduce){.main .btn{transition:none;}.main .btn:active{transform:none;}}`;
