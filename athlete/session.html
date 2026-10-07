@@ -953,6 +953,11 @@ body{background:#0F0D12;}
 .ci7-rpe button{padding:11px 0;font:600 14px Inter,sans-serif}
 .ci-submit:disabled{background:rgba(255,255,255,.07)!important;color:#8E8678!important;box-shadow:none!important;cursor:default}
 .done-title{text-transform:none}
+.prog7{display:flex;flex-direction:column;gap:3px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(139,92,246,.06)}
+.prog7 b{font:600 13.5px Inter,sans-serif;color:#C4B5FD}
+.prog7.su{background:rgba(255,106,46,.08)}
+.prog7.su b{color:#FF9A6B}
+.prog7 span{font-size:12px;color:#B5ADA0;line-height:1.4}
 .ci7-mininp{width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#F4F1EC;font:600 16px Inter,sans-serif;padding:10px 12px}
 .ci7-mininp.warn{border-color:rgba(255,106,46,.6)}
 </style>
@@ -1385,6 +1390,31 @@ function buildFromArray(type,arr){
   initSets();
 }
 
+// ── PROSSIMO CARICO: doppia progressione sull'ultima volta
+/* Come TrueCoach e Hevy: accanto all'esercizio quello che si e' fatto l'ultima volta e il
+   carico di oggi. Se tutte le serie sono arrivate in cima alle ripetizioni con RPE fino a 8
+   si sale di un passo (5 kg sulle alzate grandi sopra i 60 kg, 2 con manubri e kettlebell,
+   2,5 sul resto); se una serie e' rimasta sotto il minimo si resta; in mezzo si resta e si
+   aggiunge una ripetizione. Se il preparatore ha scritto % o kg, decide lui. */
+function repRange(r){const m=String(r||'').match(/(\d+)\s*(?:-|a)\s*(\d+)/);if(m)return [+m[1],+m[2]];const n=parseInt(r);return n>0?[n,n]:null;}
+function passoKg(nome,kg){const n=String(nome||'').toLowerCase();if(/manubri|manubrio|dumbbell|\bdb\b|kettlebell/.test(n))return 2;if(kg>=60&&/squat|stacco|deadlift|leg press|pressa|hip thrust|trap bar/.test(n))return 5;return 2.5;}
+function calcProg(ex){
+  if(parseFloat(ex.pct)>0||parseFloat(ex.kg)>0||(ex.setRows&&ex.setRows.length>1))return null;
+  const h=(_prevKg[ex.name]||[]).filter(x=>x&&+x.kg>0);if(!h.length)return null;
+  const top=Math.max(...h.map(x=>+x.kg)),rr=repRange(ex.reps);
+  const reps=h.map(x=>parseInt(x.reps)).filter(x=>x>0);
+  const rpes=h.map(x=>+x.rpe).filter(x=>x>0),rpeMax=rpes.length?Math.max(...rpes):null;
+  const f=v=>String(v).replace('.',',');
+  const prima=`Ultima volta ${h.length} ${h.length===1?'serie':'serie'} a ${f(top)} kg${reps.length?' ('+reps.join(', ')+' ripetizioni'+(rpeMax?', RPE fino a '+f(rpeMax):'')+')':''}`;
+  if(!rr||!reps.length)return {kg:top,su:false,titolo:'Riparti da '+f(top)+' kg',txt:prima+'.'};
+  if(reps.length>=h.length&&reps.every(r=>r>=rr[1])&&(rpeMax==null||rpeMax<=8)){
+    const k=Math.round((top+passoKg(ex.name,top))*2)/2;
+    return {kg:k,su:true,titolo:'Oggi '+f(k)+' kg',txt:prima+': tutte chiuse, si sale di '+f(k-top)+' kg.'};
+  }
+  if(reps.some(r=>r<rr[0]))return {kg:top,su:false,titolo:'Oggi ancora '+f(top)+' kg',txt:prima+': qualche serie e\' rimasta sotto, prima chiudile tutte.'};
+  return {kg:top,su:false,titolo:'Oggi ancora '+f(top)+' kg',txt:prima+': aggiungi una ripetizione dove riesci, poi si sale.'};
+}
+
 function initSets(){
   exs.forEach((ex,i)=>{
     if(ex._type==='pesi'){
@@ -1394,9 +1424,11 @@ function initSets(){
         ? ex.setRows.reduce((a,r)=>a+(parseInt(r.sets)||1),0)
         : (parseInt(ex.sets)||3);
       const hist=_prevKg[ex.name]||[];
+      const pr=calcProg(ex);
       for(let s=0;s<totalS;s++){
         const h=hist[s]||{};
-        const prevK=h.kg!=null&&h.kg!==''?String(h.kg):'';
+        // con la progressione ogni serie parte dal carico di oggi, non da quello di allora
+        const prevK=pr?String(pr.kg):(h.kg!=null&&h.kg!==''?String(h.kg):'');
         const prevR=h.reps!=null?String(h.reps):''; // actual reps from last session
         setData[i][s]={kg:prevK,suggested:!!prevK,prevReps:prevR,reps:null,rpe:null,done:false};
       }
@@ -1714,6 +1746,7 @@ function renderPesi(ex,ei){
       <div><div class="sug-kg-lbl">Carico suggerito</div><div class="sug-kg-pct">${pct>0?'dal tuo 1RM':'Diretto'}</div></div>
       <div><span class="sug-kg-val">${kgSug}</span><span class="sug-kg-unit"> kg</span></div>
     </div>`:''}
+    ${(()=>{const pr=calcProg(ex);return pr?`<div class="prog7${pr.su?' su':''}"><b>${pr.titolo}</b><span>${pr.txt}</span></div>`:'';})()}
     ${pct>0&&rm===0?`<div style="padding:10px 16px;background:rgba(255,209,102,.06);border-bottom:1px solid var(--border);font-size:11px;color:var(--amber);">Imposta 1RM nel profilo per vedere il carico</div>`:''}
     <div class="sets-wrap">
       <div class="sets-head${noKg?' nokg':''}"><span style="text-align:center;">Serie</span><span style="text-align:center;">Prec.</span><span style="text-align:center;">${tempo?'Tempo':'Rip.'}</span><span style="text-align:center;">${noKg?'':'Kg'}</span><span></span></div>
