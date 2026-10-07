@@ -1217,6 +1217,17 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .qz-prop.rosso{background:rgba(244,63,94,.07);color:#FECDD3}.qz-prop.arancio{background:rgba(255,106,46,.07);color:#FFD2BD}.qz-prop.zona{background:rgba(255,255,255,.03)}
 .qz-r.con-prop{border-bottom:0}
 .do-prop{padding:6px 10px 8px 44px;border-bottom:0;border-radius:8px;margin:-2px 0 6px}
+.qx-l{display:flex;flex-direction:column;border-top:1px solid var(--line);margin-bottom:12px}
+.qx-r{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.qx-r.off{opacity:.55}
+.qx-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.qx-t b{font-size:13px;font-weight:600;color:var(--white)}
+.qx-t span{font-size:11.5px;color:var(--muted)}
+.qx-f{display:grid;grid-template-columns:minmax(200px,1fr) auto auto auto;gap:8px}
+.qx-f input,.qx-f select{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:8px 12px;color:var(--white);font:13px Inter,sans-serif}
+.qx-vuoto{font-size:12.5px;color:var(--muted);margin:4px 0 12px}
+.qx-tab th{max-width:180px;white-space:normal}
+@media(max-width:820px){.qx-f{grid-template-columns:1fr 1fr}.qx-f input{grid-column:1/-1}}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -1328,7 +1339,8 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
   <div class="dash-sum" id="qz-sum"></div>
   <section class="dcard" style="margin-bottom:16px;"><h2>Prontezza</h2><div class="dsub">Prima della seduta, i piu' bassi in cima. Ognuno e' confrontato con la sua media delle 4 settimane prima.</div><div id="qz-pr"></div></section>
   <section class="dcard" style="margin-bottom:16px;"><h2>Dopo la seduta</h2><div class="dsub">RPE, minuti, carico e note di chi si e' allenato</div><div id="qz-post"></div></section>
-  <section class="dcard"><h2>Ultime 4 settimane</h2><div class="dsub">Prontezza giorno per giorno. Un clic su un giorno lo apre qui sopra.</div><div class="dash-wk-wrap" id="qz-tr"></div></section>
+  <section class="dcard" style="margin-bottom:16px;"><h2>Ultime 4 settimane</h2><div class="dsub">Prontezza giorno per giorno. Un clic su un giorno lo apre qui sopra.</div><div class="dash-wk-wrap" id="qz-tr"></div></section>
+  <section class="dcard"><h2>Domande in piu'</h2><div class="dsub">Domande tue, oltre alle cinque del check-in: l'atleta le trova la mattina o dopo la seduta. Le risposte del giorno aperto sono qui sotto.</div><div id="qz-extra"></div></section>
 </div>
 
 <!-- ANALYTICS -->
@@ -1501,7 +1513,7 @@ const db=getDatabase(app);
 const PIN="raoul2024";
 if(sessionStorage.getItem('ca')!==PIN){const p=prompt("PIN preparatore:");if(p!==PIN){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#50506A;font-family:Inter,sans-serif;">Accesso negato.</div>';throw new Error();}sessionStorage.setItem('ca',PIN);}
 
-let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={},chatData={},questionnaires={};
+let athletes={},sessions={},groups={},tests={},exercises={},checkins={},programs={},sessionLogs={},chatData={},questionnaires={},qDefs={};
 const BASE=(()=>{const p=window.location.pathname;const base=p.replace(/\/coach\/.*$/,'').replace(/^\/+/,'');return window.location.origin+'/'+(base?base+'/':'')+'athlete/?id=';})();
 let currentAid=null;
 const LV_L={1:'Principiante',2:'Intermedio',3:'Avanzato'};
@@ -1534,6 +1546,8 @@ onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};renderDashboard();});
 onValue(ref(db,'session_logs'),s=>{sessionLogs=s.val()||{};renderDashboard();});
 onValue(ref(db,'questionnaires'),s=>{questionnaires=s.val()||{};renderAthletes();renderQuestionari();});
+// domande in piu' scritte dal preparatore
+onValue(ref(db,'questionnaire_defs'),s=>{qDefs=s.val()||{};renderQuestionari();});
 onValue(ref(db,'chat'),s=>{
   chatData=s.val()||{};
   renderAthletes(); // aggiorna badge messaggi non letti nella lista atleti
@@ -1694,6 +1708,49 @@ function qzProposta(g,b){
   return {liv:rosso?'rosso':arancio?'arancio':'zona',txt:base+(togli.length?'; togli '+togli.join(', ')+' finche\' non ne parlate':'')};
 }
 
+// ── DOMANDE IN PIU'
+/* Il check-in ha cinque domande fisse (le stesse della prontezza). Qui il preparatore ne
+   aggiunge di sue, come i questionari di Relay e TeamBuildr: da 0 a 10, si' o no, o una
+   risposta breve, la mattina o dopo la seduta. Le risposte stanno accanto alla prontezza
+   del giorno, in questionnaires/{atleta}/{giorno}/extra. Spegnere una domanda la toglie
+   dall'app ma tiene le risposte gia' date. */
+const QX_TIPI=[['scala10','Da 0 a 10'],['sino','Si\' o no'],['testo','Risposta breve']];
+const QX_QUANDO=[['mattino','Al check-in del mattino'],['dopo','Dopo la seduta']];
+function qxLista(){return Object.entries(qDefs||{}).filter(([,q])=>q&&q.testo).sort((a,b)=>(a[1].ordine||0)-(b[1].ordine||0)||(a[1].ts||0)-(b[1].ts||0));}
+function qxVal(q,v){if(v==null||v==='')return null;if(q.tipo==='sino')return v===true||v==='si'?'si\'':'no';return String(v);}
+function renderQzExtra(d,iso,ids,nome,chi){
+  const el=document.getElementById('qz-extra');if(!el)return;
+  const L=qxLista();
+  const form=`<div class="qx-f"><input id="qx-testo" type="text" maxlength="120" placeholder="Es. Hai il ciclo oggi? Quanto fa male il tendine?" aria-label="Testo della domanda">
+    <select id="qx-tipo" aria-label="Tipo di risposta">${QX_TIPI.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select>
+    <select id="qx-quando" aria-label="Quando">${QX_QUANDO.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select>
+    <button type="button" class="btn btn-orange btn-sm" onclick="qxAggiungi()">Aggiungi</button></div>`;
+  const lista=L.length?`<div class="qx-l">${L.map(([k,q])=>`<div class="qx-r${q.attiva===false?' off':''}"><div class="qx-t"><b>${athEsc(q.testo)}</b><span>${(QX_TIPI.find(t=>t[0]===q.tipo)||QX_TIPI[0])[1]} &middot; ${(QX_QUANDO.find(t=>t[0]===q.quando)||QX_QUANDO[0])[1].toLowerCase()}${q.attiva===false?' &middot; spenta':''}</span></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="qxAttiva('${k}',${q.attiva===false})">${q.attiva===false?'Riaccendi':'Spegni'}</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="qxElimina('${k}')" aria-label="Elimina la domanda">Elimina</button></div>`).join('')}</div>`:'<div class="qx-vuoto">Nessuna domanda in piu\'. Scrivine una qui sotto: compare subito nell\'app degli atleti.</div>';
+  // risposte del giorno aperto: un atleta per riga, una domanda per colonna
+  let risposte='';
+  if(L.length){
+    const con=ids.filter(id=>{const x=((questionnaires[id]||{})[iso]||{}).extra;return x&&Object.keys(x).length;});
+    risposte=con.length?`<div class="dash-wk-wrap"><table class="qz7-t qx-tab"><thead><tr><th>Atleta</th>${L.map(([,q])=>`<th>${athEsc(q.testo)}</th>`).join('')}</tr></thead><tbody>${con.map(id=>{const x=((questionnaires[id]||{})[iso]||{}).extra||{};
+      return `<tr><td>${athEsc(nome(id))}</td>${L.map(([k,q])=>{const v=qxVal(q,x[k]);const male=q.tipo==='scala10'&&+x[k]>=7;return v==null?'<td class="qz7-na">-</td>':`<td${male?' class="qz7-bad"':''}>${athEsc(v)}</td>`;}).join('')}</tr>`;}).join('')}</tbody></table></div>`
+      :`<div class="qx-vuoto">Nessuna risposta in questo giorno.</div>`;
+  }
+  el.innerHTML=lista+form+(L.length?'<h3 class="det-sec" style="margin-top:16px">Risposte del giorno</h3>'+risposte:'');
+}
+window.qxAggiungi=async function(){
+  const t=(document.getElementById('qx-testo').value||'').trim();
+  if(t.length<3){showToast('Scrivi la domanda');return;}
+  const L=qxLista();
+  await push(ref(db,'questionnaire_defs'),{testo:t,tipo:document.getElementById('qx-tipo').value,quando:document.getElementById('qx-quando').value,attiva:true,ordine:L.length,ts:Date.now()});
+  showToast('Domanda aggiunta: gli atleti la vedono gia\'');
+};
+window.qxAttiva=async function(k,on){await update(ref(db,`questionnaire_defs/${k}`),{attiva:!!on});};
+window.qxElimina=async function(k){
+  if(!confirm('Eliminare la domanda? Le risposte gia\' date restano salvate ma non si vedranno piu\' qui. Per toglierla solo dall\'app usa Spegni.'))return;
+  await remove(ref(db,`questionnaire_defs/${k}`));
+};
+
 // ── QUESTIONARI
 /* Le risposte di tutta la squadra in una pagina, come la prontezza di squadra di
    TrainHeroic e i questionari di TeamBuildr: per il giorno scelto chi ha risposto e
@@ -1810,6 +1867,7 @@ function renderQuestionari(){
   }).join('');
   document.getElementById('qz-tr').innerHTML=ids.length?`<table class="qz-t"><thead>${head}</thead><tbody>${corpo}</tbody></table><div class="qz-leg"><span><i class="qz-c hi"></i>70 e oltre</span><span><i class="qz-c mid"></i>da 40 a 69</span><span><i class="qz-c lo"></i>sotto 40</span><span><i class="qz-c"></i>nessuna risposta</span></div>`
     :`<div class="d-vuoto">${dIco('atleti')}<b>Nessun atleta attivo</b><span>Compaiono qui gli atleti con un programma o attivi nelle ultime 2 settimane.</span></div>`;
+  renderQzExtra(d,iso,ids,nome,chi);
   // sintesi in una riga
   const media=risp.length?Math.round(risp.reduce((t,x)=>t+x.g.score,0)/risp.length):null;
   document.getElementById('qz-sum').innerHTML=[[risp.length+'/'+ids.length,'hanno risposto'],[media!=null?media:'-','prontezza media'],[segnali,'da guardare'],[post.length,post.length===1?'seduta registrata':'sedute registrate']].map(([n,t])=>`<span><b>${n}</b>${t}</span>`).join('');
