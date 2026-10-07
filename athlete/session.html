@@ -953,6 +953,14 @@ body{background:#0F0D12;}
 .ci7-rpe button{padding:11px 0;font:600 14px Inter,sans-serif}
 .ci-submit:disabled{background:rgba(255,255,255,.07)!important;color:#8E8678!important;box-shadow:none!important;cursor:default}
 .done-title{text-transform:none}
+.vid-ov{position:fixed;inset:0;z-index:2000;background:rgba(8,6,10,.86);display:none;align-items:center;justify-content:center;padding:16px}
+.vid-ov.on{display:flex}
+.vid-box{width:100%;max-width:720px;background:#17141A;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden}
+.vid-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px}
+.vid-h b{font:600 14px Inter,sans-serif;color:#F4F1EC;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vid-h button{appearance:none;border:0;background:rgba(255,255,255,.08);color:#F4F1EC;font:600 12.5px Inter,sans-serif;padding:8px 12px;border-radius:9px;cursor:pointer}
+.vid-f{position:relative;aspect-ratio:16/9;background:#000}
+.vid-f iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .prog7{display:flex;flex-direction:column;gap:3px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(139,92,246,.06)}
 .prog7 b{font:600 13.5px Inter,sans-serif;color:#C4B5FD}
 .prog7.su{background:rgba(255,106,46,.08)}
@@ -1390,6 +1398,23 @@ function buildFromArray(type,arr){
   initSets();
 }
 
+// ── VIDEO DENTRO LA SEDUTA
+/* Il video si apre sopra la seduta e si chiude tornando allo stesso punto: prima il link
+   portava su YouTube e per tornare alla serie bisognava riaprire l'app. youtube-nocookie,
+   parte da solo e muto finche' non lo si tocca. Se il link non e' di YouTube si apre fuori. */
+function ytId(u){const m=String(u||'').match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);return m?m[1]:null;}
+window.apriVideo=function(u,nome){
+  const id=ytId(u);if(!id)return true;
+  nome=escH(nome||'Video');
+  let ov=document.getElementById('vid-ov');
+  if(!ov){ov=document.createElement('div');ov.id='vid-ov';ov.className='vid-ov';ov.addEventListener('click',e=>{if(e.target===ov)chiudiVideo();});document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="vid-box" role="dialog" aria-label="Video ${nome}"><div class="vid-h"><b>${nome}</b><button type="button" onclick="chiudiVideo()" aria-label="Chiudi il video">Chiudi</button></div><div class="vid-f"><iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="${nome}"></iframe></div></div>`;
+  ov.classList.add('on');
+  return false;
+};
+window.chiudiVideo=function(){const ov=document.getElementById('vid-ov');if(ov){ov.classList.remove('on');ov.innerHTML='';}};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')chiudiVideo();});
+
 // ── PROSSIMO CARICO: doppia progressione sull'ultima volta
 /* Come TrueCoach e Hevy: accanto all'esercizio quello che si e' fatto l'ultima volta e il
    carico di oggi. Se tutte le serie sono arrivate in cima alle ripetizioni con RPE fino a 8
@@ -1740,7 +1765,7 @@ function renderPesi(ex,ei){
       <div class="ex-card-params">${paramsSummary}${pct>0?(rm===0?` · @${pct}% 1RM`:''):(ex.carico?` · ${ex.carico}`:'')}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
       ${exTagsHtml(ex.name)}
       ${ex.cue?`<div class="cue-chip">${ex.cue}</div>`:''}
-      ${_vidUrl?`<a href="${_vidUrl}" target="_blank" class="ex-video-link">VIDEO</a>`:''}
+      ${_vidUrl?`<a href="${_vidUrl}" target="_blank" rel="noopener" class="ex-video-link" data-n="${escH(ex.name)}" onclick="return apriVideo(this.href,this.dataset.n)">Guarda il video</a>`:''}
     </div>
     ${kgSug>0?`<div class="sug-kg-bar">
       <div><div class="sug-kg-lbl">Carico suggerito</div><div class="sug-kg-pct">${pct>0?'dal tuo 1RM':'Diretto'}</div></div>
@@ -1783,7 +1808,7 @@ function renderComplex(ex,ei){
         <div class="cx-sep-name">${item.name}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
           ${item.reps?`<span class="cx-sep-reps">${item.reps} rep</span>`:''}
-          ${itemVid?`<a href="${itemVid}" target="_blank" class="ex-video-link">VIDEO</a>`:''}
+          ${itemVid?`<a href="${itemVid}" target="_blank" rel="noopener" class="ex-video-link" data-n="${escH(item.name||'')}" onclick="return apriVideo(this.href,this.dataset.n)">Guarda il video</a>`:''}
         </div>
       </div>
     </div>
