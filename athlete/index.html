@@ -1164,6 +1164,9 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .t7-pct i{font-style:normal;font-size:10.5px;color:var(--muted)}
 .t7-pct b{font-size:13px;color:var(--white)}
 .chat-bubble{white-space:pre-line}
+.qx7-10{grid-template-columns:repeat(11,minmax(0,1fr))}
+.qx7-10 button{padding:10px 0;font-size:13px}
+.qx7-in{width:100%;box-sizing:border-box;background:rgba(255,255,255,.04);border:1px solid var(--line6);border-radius:10px;color:var(--white);font:400 14px Inter,sans-serif;padding:10px 12px}
 .ps7{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:600 11.5px Inter,sans-serif;padding:4px 8px;border-radius:7px;white-space:nowrap}
 .ps7 .rsi{width:12px;height:12px}
 .ps7.ok{background:rgba(255,106,46,.12);color:var(--primary2)}
@@ -1664,6 +1667,9 @@ if(!aid){
       oggiAgg();
     });
 
+    // domande in piu' del preparatore
+    onValue(ref(db,'questionnaire_defs'),d=>{ST.qdefs=d.val()||{};});
+
     // Questionari: prontezza prima della seduta e feedback dopo
     onValue(ref(db,`questionnaires/${aid}`),qSnap=>{
       window._questionnairesCache=qSnap.val()||{};
@@ -1811,6 +1817,26 @@ async function savePesoSheet(){
   }catch(e){showToast('Errore salvataggio');}
 }
 
+// ── DOMANDE IN PIU' DEL PREPARATORE
+/* Oltre alle cinque domande fisse il preparatore puo' aggiungerne di sue (da 0 a 10, si'
+   o no, risposta breve). Non sono obbligatorie: chi non risponde invia lo stesso. */
+function qxAttive(quando){return Object.entries(ST.qdefs||{}).filter(([,q])=>q&&q.testo&&q.attiva!==false&&(q.quando||'mattino')===quando).sort((a,b)=>(a[1].ordine||0)-(b[1].ordine||0));}
+function qxHtml(quando,val,fn){
+  const L=qxAttive(quando);if(!L.length)return '';
+  return L.map(([k,q])=>{
+    const v=val[k];
+    let ctl='';
+    if(q.tipo==='sino')ctl=`<div class="ci7-zone">${[['si','Si\''],['no','No']].map(([x,t])=>`<button type="button" class="${v===x?'on':''}" aria-pressed="${v===x}" onclick="${fn}('${k}','${x}')">${t}</button>`).join('')}</div>`;
+    else if(q.tipo==='testo')ctl=`<input type="text" class="qx7-in" maxlength="160" value="${escH(v||'')}" oninput="${fn}T('${k}',this.value)" aria-label="${escH(q.testo)}">`;
+    else ctl=`<div class="ci7-rpe qx7-10">${[0,1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" class="${String(v)===String(n)?'on':''}" aria-pressed="${String(v)===String(n)}" onclick="${fn}('${k}',${n})">${n}</button>`).join('')}</div>`;
+    return `<div class="ci7-q"><div class="ci7-qh"><b>${escH(q.testo)}</b><span>Domanda del preparatore</span></div>${ctl}</div>`;
+  }).join('');
+}
+// solo le risposte date, e mai testo vuoto
+function qxRaccogli(x){const o={};Object.entries(x||{}).forEach(([k,v])=>{if(v!==''&&v!=null)o[k]=typeof v==='string'?v.slice(0,160):v;});return o;}
+window.qciX=(k,v)=>{qciNota();QCI.extra[k]=QCI.extra[k]===v?null:v;qciDisegna();};
+window.qciXT=(k,v)=>{QCI.extra[k]=v;};
+
 // ── CHECK-IN DEL MATTINO
 /* Uno solo, quello che prima erano tre (foglio di Oggi, pagina Check-in, questionario
    prima della seduta, con tre scale diverse). Si salva due volte: nei check-in, sulla
@@ -1824,6 +1850,7 @@ function qciDisegna(){
       <div class="ci7-opt" role="radiogroup" aria-label="${l}">${parole.map((p,i)=>`<button type="button" role="radio" aria-checked="${QCI.v[k]===i+1}" class="${QCI.v[k]===i+1?'on':''}" onclick="qciSet('${k}',${i+1})"><i>${i+1}</i>${p}</button>`).join('')}</div></div>`).join('')
     +`<div class="ci7-q"><div class="ci7-qh"><b>Dove senti dolore</b><span>Solo se c'e' un fastidio preciso</span></div>
       <div class="ci7-zone">${PR_ZONE.map(z=>`<button type="button" aria-pressed="${QCI.zone.has(z.toLowerCase())}" class="${QCI.zone.has(z.toLowerCase())?'on':''}" onclick="qciZona('${z.toLowerCase()}')">${z}</button>`).join('')}</div></div>
+    ${qxHtml('mattino',QCI.extra,'qciX')}
     <div class="ci7-q"><div class="ci7-qh"><b>Note per il preparatore</b><span>Facoltative</span></div>
       <textarea id="qci-note" rows="2" placeholder="Qualcosa da segnalare?">${escH(QCI.nota||'')}</textarea></div>
     <button type="button" class="ci7-invia" onclick="saveQuickCheckin()"${manca?' disabled':''}>${manca?(manca===1?'Manca 1 risposta':'Mancano '+manca+' risposte'):'Invia il check-in'}</button>`;
@@ -1835,7 +1862,7 @@ window.qciZona=z=>{qciNota();if(QCI.zone.has(z))QCI.zone.delete(z);else QCI.zone
 function openQuickCheckin(){
   // si riapre con le risposte di oggi, se ci sono
   const g=prGiorno(isoLoc(new Date()));
-  QCI.v={};QCI.zone=new Set();QCI.nota='';
+  QCI.v={};QCI.zone=new Set();QCI.nota='';QCI.extra=Object.assign({},(ST.q[isoLoc(new Date())]||{}).extra||{});
   if(g){PR_VOCI.forEach(([k])=>{if(g[k])QCI.v[k]=g[k];});g.pains.forEach(z=>QCI.zone.add(String(z).toLowerCase()));QCI.nota=g.nota||'';}
   qciDisegna();
   document.getElementById('qci-overlay').classList.add('open');
@@ -1857,6 +1884,7 @@ async function saveQuickCheckin(){
   try{
     await Promise.all([
       set(ref(db,`questionnaires/${aid}/${key}/readiness`),{ts,sleep:v.sonno,soreness:v.dolori,stress:v.stress,energy:v.energia,motivation:v.motiv,score,avg,semaforo,src:'checkin'}),
+      ...(Object.keys(qxRaccogli(QCI.extra)).length?[update(ref(db,`questionnaires/${aid}/${key}/extra`),qxRaccogli(QCI.extra))]:[]),
       // la fatica del vecchio check-in e' l'energia girata: 5 su 5 di energia vuol dire fatica 1 su 10
       set(ref(db,`checkins/${aid}/${key}`),{ts,date:itData(now),sonno:to10(v.sonno),doms:to10(v.dolori),stress:to10(v.stress),motivazione:to10(v.motiv),fatica:11-to10(v.energia),pains:[...QCI.zone],note:nota||null,src:'mattino'})
     ]);

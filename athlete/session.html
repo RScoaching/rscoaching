@@ -1098,11 +1098,13 @@ body{background:#0F0D12;}
 <script src="../coach/sidebar.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, get, push, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, get, push, set, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const cfg={apiKey:"AIzaSyAayWDWvUQqtAfIlm7qA8kMKxJu2-_y7k4",authDomain:"rscoaching-a6c61.firebaseapp.com",databaseURL:"https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rscoaching-a6c61",storageBucket:"rscoaching-a6c61.firebasestorage.app",messagingSenderId:"499942544251",appId:"1:499942544251:web:bd246cc6846b0fad89e3de"};
 const app=initializeApp(cfg);
 const db=getDatabase(app);
+// domande in piu' del preparatore da fare dopo la seduta
+let QDEFS={};get(ref(db,'questionnaire_defs')).then(x=>{QDEFS=x.val()||{};}).catch(()=>{});
 
 const p=new URLSearchParams(window.location.search);
 const AID=p.get('id'), PROG=p.get('prog'), WEEK=parseInt(p.get('week')||'0'), SESS=p.get('sess');
@@ -2480,9 +2482,23 @@ function ciDisegna(){
   b.innerHTML=`<div class="ci7-q"><div class="ci7-qh"><b>Minuti</b><span>${lunga?'Sembra lunga: correggila se serve':'Dal riscaldamento alla fine'}</span></div><input type="number" id="ci-min" class="ci7-mininp${lunga?' warn':''}" inputmode="numeric" min="5" max="300" value="${CI.min||''}" aria-label="Minuti della seduta"></div>
     <div class="ci7-q"><div class="ci7-qh"><b>RPE della seduta</b><span>${CI.rpe?CI.rpe+': '+RPE_PAROLE[CI.rpe-1]:'Pensa alla seduta intera'}</span></div><div class="ci7-rpe">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<button type="button" class="${CI.rpe===v?'on':''}" aria-pressed="${CI.rpe===v}" aria-label="RPE ${v}, ${RPE_PAROLE[v-1]}" onclick="ciRpe(${v})">${v}</button>`).join('')}</div></div>
     <div class="ci7-q"><div class="ci7-qh"><b>Dolore da qualche parte?</b><span>Solo se c'e'</span></div><div class="ci7-zone">${ZONE.map(z=>`<button type="button" class="${CI.zone.has(z.toLowerCase())?'on':''}" aria-pressed="${CI.zone.has(z.toLowerCase())}" onclick="ciZona('${z.toLowerCase()}')">${z}</button>`).join('')}</div></div>
+    ${qxDopoHtml()}
     <div class="ci7-q"><div class="ci7-qh"><b>Note per il preparatore</b><span>Facoltative</span></div><textarea class="ci-note" id="ci-note" rows="2" placeholder="Carichi, sensazioni, esercizi da cambiare">${escH(CI.nota)}</textarea></div>`;
   const bt=document.getElementById('ci-submit-btn');if(bt){bt.disabled=!CI.rpe;bt.textContent=CI.rpe?'Invia':'Manca l\'RPE';}
 }
+// domande in piu' del preparatore, dopo la seduta: facoltative
+CI.extra={};
+CI.extraOk=()=>{const o={};Object.entries(CI.extra).forEach(([k,v])=>{if(v!==''&&v!=null)o[k]=typeof v==='string'?v.slice(0,160):v;});return o;};
+function qxDopoHtml(){
+  const L=Object.entries(QDEFS||{}).filter(([,q])=>q&&q.testo&&q.attiva!==false&&q.quando==='dopo').sort((a,b)=>(a[1].ordine||0)-(b[1].ordine||0));
+  return L.map(([k,q])=>{const v=CI.extra[k];let ctl='';
+    if(q.tipo==='sino')ctl=`<div class="ci7-zone">${[['si','Si\''],['no','No']].map(([x,t])=>`<button type="button" class="${v===x?'on':''}" aria-pressed="${v===x}" onclick="ciX('${k}','${x}')">${t}</button>`).join('')}</div>`;
+    else if(q.tipo==='testo')ctl=`<input type="text" class="ci7-mininp" maxlength="160" value="${escH(v||'')}" oninput="CIXT('${k}',this.value)" aria-label="${escH(q.testo)}">`;
+    else ctl=`<div class="ci7-rpe" style="grid-template-columns:repeat(11,minmax(0,1fr))">${[0,1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" class="${String(v)===String(n)?'on':''}" onclick="ciX('${k}',${n})">${n}</button>`).join('')}</div>`;
+    return `<div class="ci7-q"><div class="ci7-qh"><b>${escH(q.testo)}</b><span>Domanda del preparatore</span></div>${ctl}</div>`;}).join('');
+}
+window.ciX=(k,v)=>{CI.extra[k]=CI.extra[k]===v?null:v;ciDisegna();};
+window.CIXT=(k,v)=>{CI.extra[k]=v;};
 window.ciRpe=v=>{CI.rpe=v;ciDisegna();};
 window.ciZona=z=>{if(CI.zone.has(z))CI.zone.delete(z);else CI.zone.add(z);ciDisegna();};
 
@@ -2563,7 +2579,8 @@ window.saveSessionCheckin=async function(){
       }),
       set(ref(db,`questionnaires/${AID}/${_dateKey}/feedback`),{
         ts:_ts,sessionRpe:rpe,note:note||null,fromSession:_day
-      })
+      }),
+      ...(Object.keys(CI.extraOk()).length?[update(ref(db,`questionnaires/${AID}/${_dateKey}/extra`),CI.extraOk())]:[])
     ]);
     document.getElementById('ci-card').innerHTML='<div class="ci-ok"><span class="ci-ok-txt">Inviato al preparatore</span></div>';
     document.getElementById('done-actions').style.display='flex';

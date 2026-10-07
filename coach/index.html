@@ -1736,13 +1736,17 @@ function renderQzExtra(d,iso,ids,nome,chi){
       return `<tr><td>${athEsc(nome(id))}</td>${L.map(([k,q])=>{const v=qxVal(q,x[k]);const male=q.tipo==='scala10'&&+x[k]>=7;return v==null?'<td class="qz7-na">-</td>':`<td${male?' class="qz7-bad"':''}>${athEsc(v)}</td>`;}).join('')}</tr>`;}).join('')}</tbody></table></div>`
       :`<div class="qx-vuoto">Nessuna risposta in questo giorno.</div>`;
   }
+  // la domanda che si sta scrivendo non si perde quando arrivano risposte nuove
+  const tIn=document.getElementById('qx-testo'),keep=tIn?{t:tIn.value,tipo:document.getElementById('qx-tipo').value,q:document.getElementById('qx-quando').value,f:document.activeElement===tIn}:null;
   el.innerHTML=lista+form+(L.length?'<h3 class="det-sec" style="margin-top:16px">Risposte del giorno</h3>'+risposte:'');
+  if(keep&&(keep.t||keep.f)){const n=document.getElementById('qx-testo');n.value=keep.t;document.getElementById('qx-tipo').value=keep.tipo;document.getElementById('qx-quando').value=keep.q;if(keep.f)n.focus();}
 }
 window.qxAggiungi=async function(){
   const t=(document.getElementById('qx-testo').value||'').trim();
   if(t.length<3){showToast('Scrivi la domanda');return;}
   const L=qxLista();
   await push(ref(db,'questionnaire_defs'),{testo:t,tipo:document.getElementById('qx-tipo').value,quando:document.getElementById('qx-quando').value,attiva:true,ordine:L.length,ts:Date.now()});
+  document.getElementById('qx-testo').value='';
   showToast('Domanda aggiunta: gli atleti la vedono gia\'');
 };
 window.qxAttiva=async function(k,on){await update(ref(db,`questionnaire_defs/${k}`),{attiva:!!on});};
