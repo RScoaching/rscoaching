@@ -1212,6 +1212,11 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .qz7-t td.qz7-sc{font-weight:700}.qz7-t td.qz7-sc.hi{color:var(--violet2)}.qz7-t td.qz7-sc.mid{color:#FF9A6B}.qz7-t td.qz7-sc.lo{color:#FB7185}
 .qz7-t td.qz7-nt{font-size:12px;color:var(--muted);max-width:260px}
 .qz7-leg{font-size:11.5px;color:var(--muted);margin:8px 0 0}
+.qz-prop{font-size:12px;line-height:1.45;padding:8px 12px 10px 54px;border-bottom:1px solid var(--line);color:var(--text)}
+.qz-prop b{color:var(--white);font-weight:600}
+.qz-prop.rosso{background:rgba(244,63,94,.07);color:#FECDD3}.qz-prop.arancio{background:rgba(255,106,46,.07);color:#FFD2BD}.qz-prop.zona{background:rgba(255,255,255,.03)}
+.qz-r.con-prop{border-bottom:0}
+.do-prop{padding:6px 10px 8px 44px;border-bottom:0;border-radius:8px;margin:-2px 0 6px}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -1604,7 +1609,7 @@ function renderDashboard(){
   const oggiL=[];ids.forEach(id=>{dPreviste(id,oggi).forEach(v=>oggiL.push({id,v}));});
   const fatteOggi=new Set(ids.filter(id=>dFatte(id,oggi).length));
   document.getElementById('dash-oggi').innerHTML=oggiL.length?oggiL.map(({id,v})=>{const f=fatteOggi.has(id);
-    return `<div class="do-row${f?' fatta':''}"><span class="do-ic t-${dEsc(v.x.type||'pesi')}">${dIco(v.x.type==='corsa'?'corsa':v.x.type==='sprint'?'sprint':v.x.type==='conditioning'?'conditioning':v.x.type==='recupero'?'recupero':'pesi')}</span><div class="do-b"><b>${dEsc(athletes[id].name)}</b><span>${dEsc(v.x.name||'Seduta')} &middot; ${dEsc(v.p.name||'')}, settimana ${v.k+1}</span></div><span class="do-st">${f?dIco('ok')+' fatta':'da fare'}</span></div>`;}).join('')
+    return `<div class="do-row${f?' fatta':''}"><span class="do-ic t-${dEsc(v.x.type||'pesi')}">${dIco(v.x.type==='corsa'?'corsa':v.x.type==='sprint'?'sprint':v.x.type==='conditioning'?'conditioning':v.x.type==='recupero'?'recupero':'pesi')}</span><div class="do-b"><b>${dEsc(athletes[id].name)}</b><span>${dEsc(v.x.name||'Seduta')} &middot; ${dEsc(v.p.name||'')}, settimana ${v.k+1}</span></div><span class="do-st">${f?dIco('ok')+' fatta':'da fare'}</span></div>${(()=>{if(f)return '';const g=qzGiorno(id,isoDay(oggi.getTime()));const pp=qzProposta(g,g?qzBase(id,oggi):null);return pp?`<div class="qz-prop ${pp.liv} do-prop">Prontezza ${g.score}. Proposta: ${dEsc(pp.txt)}.</div>`:'';})()}`;}).join('')
     :`<div class="d-vuoto">${dIco('planner')}<b>Nessuna seduta in programma oggi</b><span>Le sedute compaiono qui quando un programma assegnato ha dei giorni fissati.</span></div>`;
   // la settimana
   const lun=dLunedi(oggi),giorni=[0,1,2,3,4,5,6].map(i=>{const d=new Date(lun);d.setDate(d.getDate()+i);return d;});
@@ -1663,6 +1668,30 @@ function renderDashboard(){
   document.getElementById('activity-feed').innerHTML=feedU.length?feedU.slice(0,8).map(({id,s})=>{const m=Math.round((Date.now()-s.ts)/60000);const tm=m<60?m+' min fa':m<1440?Math.round(m/60)+' h fa':'ieri';
     return `<div class="act-item"><div class="act-icon">${dIni(athletes[id].name)}</div><div class="act-body"><div class="act-name">${dEsc(athletes[id].name)}</div><div class="act-desc">${dEsc(s.sessName||s.day||'Seduta')}${s.rpe?` &middot; RPE <b style="color:${s.rpe>=9?'var(--red)':s.rpe>=7?'var(--amber)':'var(--green)'}">${s.rpe}</b>`:''}${s.duration?' &middot; '+s.duration+' min':''}</div></div><div class="act-time">${tm}</div></div>`;}).join('')
     :`<div class="d-vuoto">${dIco('sedute')}<b>Nessuna seduta nelle ultime 48 ore</b></div>`;
+}
+
+// ── PROPOSTA DI CARICO DALLA PRONTEZZA
+/* Il check-in serve se cambia qualcosa: quando chi ha la seduta oggi sta male, al
+   preparatore arriva una proposta concreta (autoregolazione, come Bridge e TeamBuildr).
+   Rossa sotto 40 o molto sotto la sua media, arancio sotto 55, sotto la sua media o con
+   una risposta al livello peggiore. Le zone di dolore dicono cosa togliere. La decisione
+   resta al preparatore: qui c'e' solo la proposta. */
+const QZ_GAMBE=/ginocch|cavigl|polpac|cosc|inguin|anch|pied|achille|adduttor/i,QZ_SPALLE=/spall|collo/i,QZ_SCHIENA=/schien|lomb/i;
+function qzProposta(g,b){
+  if(!g)return null;
+  const giu=b?g.score-b.m:0;
+  const rosso=g.score<40||(b&&giu<=-Math.max(15,2*b.sd));
+  const peggio=(g.sonno===1)||(g.energia===1)||(g.dolori===5)||(g.stress===5);
+  const arancio=!rosso&&(g.score<55||(b&&giu<=-Math.max(10,1.5*b.sd))||peggio);
+  const zone=g.pains||[];
+  const togli=[];
+  if(zone.some(z=>QZ_GAMBE.test(z)))togli.push('salti, sprint e cambi di direzione');
+  if(zone.some(z=>QZ_SPALLE.test(z)))togli.push('spinte sopra la testa');
+  if(zone.some(z=>QZ_SCHIENA.test(z)))togli.push('carichi pesanti sulla schiena (squat e stacco)');
+  if(!rosso&&!arancio&&!togli.length)return null;
+  const gambe=togli.length&&zone.some(z=>QZ_GAMBE.test(z));
+  const base=rosso?'seduta leggera: carichi -20%, RPE massimo 6'+(gambe?'':', niente salti e sprint massimali'):arancio?'carichi -10%, RPE massimo 7, volume uguale':'seduta come da programma';
+  return {liv:rosso?'rosso':arancio?'arancio':'zona',txt:base+(togli.length?'; togli '+togli.join(', ')+' finche\' non ne parlate':'')};
 }
 
 // ── QUESTIONARI
@@ -1741,7 +1770,9 @@ function renderQuestionari(){
     if(g.pains.length)al.push(`<span class="at-al" title="Dolore segnalato nel check-in">Dolore: ${dEsc(g.pains.join(', '))}</span>`);
     if(al.length)segnali++;
     const ora=g.ts?new Date(g.ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'';
-    return `<div class="qz-r">${chi(id)}<span class="qz-sc ${qzCls(g.score)}" data-l="Prontezza" title="Dal ${g.da}${b?', la sua media e\' '+Math.round(b.m):''}"><b>${g.score}</b>${dlt?`<small>${dlt}</small>`:''}</span>${QZ_VOCI.map(([k,lbl,verso])=>voce(g[k],verso,lbl)).join('')}<span class="qz-al">${al.join('')||'<span class="at-no">-</span>'}</span><span class="qz-ora" data-l="Ora">${ora}</span></div>`;
+    const pv=dPreviste(id,d),pp=pv.length?qzProposta(g,b):null;
+    const prop=pp?`<div class="qz-prop ${pp.liv}"><b>${dEsc(pv.map(v=>v.x.name||'Seduta').join(' + '))} ${eOggi?'oggi':'in programma'}.</b> Proposta: ${dEsc(pp.txt)}.</div>`:'';
+    return `<div class="qz-r${prop?' con-prop':''}">${chi(id)}<span class="qz-sc ${qzCls(g.score)}" data-l="Prontezza" title="Dal ${g.da}${b?', la sua media e\' '+Math.round(b.m):''}"><b>${g.score}</b>${dlt?`<small>${dlt}</small>`:''}</span>${QZ_VOCI.map(([k,lbl,verso])=>voce(g[k],verso,lbl)).join('')}<span class="qz-al">${al.join('')||'<span class="at-no">-</span>'}</span><span class="qz-ora" data-l="Ora">${ora}</span></div>`+prop;
   }).join('');
   const testa='<div class="qz-h"><span>Atleta</span><span>Prontezza</span><span>Sonno</span><span>Energia</span><span>Dolori</span><span>Stress</span><span>Segnali</span><span>Ora</span></div>';
   manca.sort((a,b)=>nome(a).localeCompare(nome(b)));
