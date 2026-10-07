@@ -1151,6 +1151,11 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .bc7-f input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.04);border:1px solid var(--line6);border-radius:10px;color:var(--white);font:500 15px Inter,sans-serif;padding:10px 12px}
 .bc7-sp{width:100%;height:30px;color:var(--violet2)}
 #bc-history{margin-top:4px}
+.ex7-r{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line6);font-size:13px}
+.ex7-r:first-of-type{border-top:0}
+.ex7-n{color:var(--white);font-weight:500;min-width:0}
+.ex7-d{color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ex7-k{color:var(--violet2);font-weight:600;font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ps7{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:600 11.5px Inter,sans-serif;padding:4px 8px;border-radius:7px;white-space:nowrap}
 .ps7 .rsi{width:12px;height:12px}
 .ps7.ok{background:rgba(255,106,46,.12);color:var(--primary2)}
@@ -1551,6 +1556,17 @@ const app=initializeApp(cfg);
 const db=getDatabase(app);
 const params=new URLSearchParams(window.location.search);
 const aid=params.get('id');
+
+// massimale di un esercizio: nome uguale, se no lo stesso alzata scritta in un altro modo.
+// Solo equivalenti veri: il Front Squat non prende il massimale dello Squat.
+const RM_ALIAS=[['squat','back squat','high bar back squat','low bar back squat','squat bilanciere','back squat bilanciere'],['panca piana','bench press','barbell bench press','panca piana bilanciere','distensioni su panca piana'],['stacco da terra','deadlift','conventional deadlift','stacco','stacco bilanciere'],['hip thrust','barbell hip thrust','hip thrust bilanciere'],['military press','overhead press','barbell overhead press','lento avanti','lento avanti bilanciere','strict press'],['rematore bilanciere','barbell row','bent over row','barbell bent over row'],['romanian deadlift','rdl','barbell rdl','stacco rumeno','stacchi rumeni','barbell romanian deadlift'],['leg press','pressa','pressa 45'],['trap bar deadlift','stacco trap bar','trap bar 1rm']];
+function rmDi(name,best){
+  const n=String(name||'').toLowerCase().trim();if(!n||!best)return 0;
+  const B={};Object.entries(best).forEach(([k,v])=>{B[String(k).toLowerCase().trim()]=+v||0;});
+  if(B[n])return B[n];
+  const g=RM_ALIAS.find(x=>x.includes(n));if(!g)return 0;
+  let m=0;g.forEach(a=>{if(B[a]>m)m=B[a];});return m;
+}
 
 // ── STATO COMUNE
 /* Registri delle sedute, RPE, check-in, questionari e programmi stanno in un posto solo:
@@ -2240,22 +2256,23 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   await loadGroupVars(athlete&&athlete.group);
   try{
 
+  // tutti gli esercizi con serie x ripetizioni, intensita' e kg dal massimale: chi apre
+  // l'app la mattina sa gia' cosa lo aspetta e che carichi preparare
   function exListHtml(exercises){
-    // Compact mini-preview: show chips with exercise names only
     if(!exercises)return '';
     const arr=Array.isArray(exercises)?exercises:Object.values(exercises);
     if(!arr.length)return '';
-    const MAX=4;
-    const names=arr.map(ex=>ex.name||'-');
-    const shown=names.slice(0,MAX);
-    const extra=names.length-MAX;
-    return `<div class="sess-mini-preview">
-      <div class="sess-mini-label">${names.length} esercizi</div>
-      <div class="sess-mini-chips">
-        ${shown.map(n=>`<span class="sess-mini-chip">${n}</span>`).join('')}
-        ${extra>0?`<span class="sess-mini-more">+${extra}</span>`:''}
-      </div>
-    </div>`;
+    const righe=arr.map(ex=>{
+      const nome=ex.name||'-';
+      const dose=[ex.sets&&ex.reps?ex.sets+' x '+ex.reps:(ex.sets?ex.sets+' serie':(ex.reps||''))].filter(Boolean);
+      const rm=rmDi(nome,best1rm),pct=parseFloat(ex.pct)||0;
+      let carico='';
+      if(+ex.kg>0)carico=nfIt(+ex.kg,1)+' kg';
+      else if(pct&&rm)carico=nfIt(Math.round(rm*pct/100/2.5)*2.5,1)+' kg';
+      const intens=pct?pct+'%':(ex.rpe?'RPE '+ex.rpe:'');
+      return `<div class="ex7-r"><span class="ex7-n">${escH(resolveVars(nome))}</span><span class="ex7-d">${escH([dose.join(''),intens].filter(Boolean).join(' · '))}</span>${carico?`<span class="ex7-k">${carico}</span>`:''}</div>`;
+    }).join('');
+    return `<div class="sess-mini-preview ex7"><div class="sess-mini-label">${arr.length} esercizi</div>${righe}</div>`;
   }
 
   // ── RUNNING (corsa): zone + pace + %FCmax, never serie×reps×carico

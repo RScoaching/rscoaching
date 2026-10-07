@@ -1563,8 +1563,18 @@ function render(){
   initExObserver();updateVolumeTracker();
 }
 
+// massimale di un esercizio: nome uguale, se no lo stesso alzata scritta in un altro modo.
+// Solo equivalenti veri: il Front Squat non prende il massimale dello Squat.
+const RM_ALIAS=[['squat','back squat','high bar back squat','low bar back squat','squat bilanciere','back squat bilanciere'],['panca piana','bench press','barbell bench press','panca piana bilanciere','distensioni su panca piana'],['stacco da terra','deadlift','conventional deadlift','stacco','stacco bilanciere'],['hip thrust','barbell hip thrust','hip thrust bilanciere'],['military press','overhead press','barbell overhead press','lento avanti','lento avanti bilanciere','strict press'],['rematore bilanciere','barbell row','bent over row','barbell bent over row'],['romanian deadlift','rdl','barbell rdl','stacco rumeno','stacchi rumeni','barbell romanian deadlift'],['leg press','pressa','pressa 45'],['trap bar deadlift','stacco trap bar','trap bar 1rm']];
+function rmDi(name,best){
+  const n=String(name||'').toLowerCase().trim();if(!n||!best)return 0;
+  const B={};Object.entries(best).forEach(([k,v])=>{B[String(k).toLowerCase().trim()]=+v||0;});
+  if(B[n])return B[n];
+  const g=RM_ALIAS.find(x=>x.includes(n));if(!g)return 0;
+  let m=0;g.forEach(a=>{if(B[a]>m)m=B[a];});return m;
+}
 function kgSugFor(ex){
-  const rm=best1rm[ex.name]||0;
+  const rm=rmDi(ex.name,best1rm);
   const pct=parseFloat(ex.pct)||0;
   const kgD=parseFloat(ex.kg)||0;
   return kgD>0?kgD:(rm>0&&pct>0?Math.round(rm*pct/100/2.5)*2.5:0);
@@ -1582,7 +1592,7 @@ function exTagsHtml(name){
 
 function renderPesi(ex,ei){
   const sets=parseInt(ex.sets)||3;
-  const rm=best1rm[ex.name]||0;
+  const rm=rmDi(ex.name,best1rm);
   const pct=parseFloat(ex.pct)||0;
   const kgSug=kgSugFor(ex);
   // Build set rows - supports new setRows format + old flat sets/reps
