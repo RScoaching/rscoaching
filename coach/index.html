@@ -3049,7 +3049,7 @@ function renderDetChat(aid){
     const isCoach=m.from==='coach';
     return `<div style="display:flex;justify-content:${isCoach?'flex-end':'flex-start'};margin-bottom:8px;">
       <div style="max-width:72%;padding:8px 12px;border-radius:${isCoach?'14px 14px 4px 14px':'14px 14px 14px 4px'};background:${isCoach?'rgba(255,106,46,.18)':'var(--card2)'};border:1px solid ${isCoach?'rgba(255,106,46,.3)':'var(--border)'};">
-        <div style="font-size:13px;color:var(--white);line-height:1.4;">${m.text}</div>
+        <div style="font-size:13px;color:var(--white);line-height:1.4;white-space:pre-line;">${athEsc(m.text)}</div>
         <div style="font-size:9px;color:var(--muted);margin-top:3px;text-align:right;">${fmtTime(m.ts)}${isCoach?(m.read?' letto':' inviato'):''}</div>
       </div>
     </div>`;
@@ -3057,10 +3057,11 @@ function renderDetChat(aid){
   return `<div style="display:flex;flex-direction:column;height:360px;">
     <div id="chat-msgs-${aid}" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;">${msgsHtml}</div>
     <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
-      <input type="text" id="chat-inp-${aid}" placeholder="Scrivi un messaggio per ${athletes[aid]?.name||'atleta'}..."
-        style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:20px;padding:8px 14px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);outline:none;"
-        onkeydown="if(event.key==='Enter')sendCoachChat('${aid}')"
-        style="width:100%;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="chatRiepilogo('${aid}')" title="Prepara il messaggio con la settimana: lo rileggi e lo mandi tu">Riepilogo della settimana</button>
+      <textarea id="chat-inp-${aid}" rows="1" placeholder="Scrivi un messaggio per ${athEsc(athletes[aid]?.name||'atleta')}... (Invio manda, Maiuscolo+Invio va a capo)"
+        style="flex:1;resize:none;max-height:160px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:8px 14px;font-family:'Inter',sans-serif;font-size:13px;color:var(--white);outline:none;"
+        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendCoachChat('${aid}')}"></textarea>
       <button onclick="sendCoachChat('${aid}')"
         style="background:rgba(255,106,46,.15);border:1px solid rgba(255,106,46,.3);color:var(--orange);border-radius:20px;padding:8px 14px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.5px;">
         INVIA
@@ -3069,6 +3070,33 @@ function renderDetChat(aid){
   </div>`;
 }
 
+/* Riepilogo della settimana per l'atleta: sedute fatte su quelle in programma, minuti,
+   prontezza media e check-in, record, e una riga su cosa fare. Va nel campo del messaggio,
+   non parte da solo: il preparatore lo rilegge, lo cambia e lo manda. */
+window.chatRiepilogo=function(aid){
+  const inp=document.getElementById(`chat-inp-${aid}`);if(!inp)return;
+  const a=athletes[aid]||{},nome=String(a.name||'').split(' ')[0]||'ciao';
+  const oggi=new Date();oggi.setHours(0,0,0,0);const lun=dLunedi(oggi);
+  let prev=0,fatte=0,giorni=0,n=0,somma=0;
+  for(let i=0;i<7;i++){const d=new Date(lun);d.setDate(d.getDate()+i);if(d>oggi)break;giorni++;
+    const P=dPreviste(aid,d),F=dFatte(aid,d);prev+=P.length;if(P.length&&F.length)fatte+=Math.min(P.length,F.length);
+    const g=qzGiorno(aid,isoDay(d.getTime()));if(g){n++;somma+=g.score;}}
+  const logs=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts>=lun.getTime());
+  const min=logs.reduce((t,l)=>t+(+l.duration||+l.minuti||0),0);
+  const rec=logs.reduce((t,l)=>t+((l.newPRs||[]).length),0);
+  const car=athCarico(aid);
+  const righe=['Ciao '+nome+', il riepilogo della settimana:'];
+  righe.push('- sedute: '+(prev?fatte+' su '+prev+' in programma':logs.length+' registrate')+(min?' ('+min+' minuti)':''));
+  righe.push('- prontezza media: '+(n?Math.round(somma/n)+' su 100':'nessun check-in')+' ('+n+' check-in su '+giorni+' giorni)');
+  if(rec)righe.push('- record battuti: '+rec);
+  const fine=[];
+  if(prev&&fatte<prev)fine.push('Ne mancano '+(prev-fatte)+': se riesci recuperale entro domenica, se no ne parliamo.');
+  if(n<giorni-1)fine.push('Ricordati il check-in ogni mattina: mi serve per regolare i carichi.');
+  if(car.acwr!=null&&car.acwr>1.3)fine.push('Il carico e\' salito parecchio rispetto alle ultime settimane: nei prossimi giorni teniamo l\'RPE sotto controllo.');
+  if(!fine.length)fine.push('Ottimo lavoro, continua cosi\'.');
+  righe.push('',fine.join(' '));
+  inp.value=righe.join('\n');inp.style.height='auto';inp.style.height=inp.scrollHeight+'px';inp.focus();
+};
 window.sendCoachChat=async function(aid){
   const inp=document.getElementById(`chat-inp-${aid}`);
   const text=(inp?.value||'').trim();
@@ -3149,7 +3177,7 @@ function renderGlobalChatConv(aid){
     return `<div style="display:flex;justify-content:${isCoach?'flex-end':'flex-start'};">
       <div style="max-width:70%;padding:9px 13px;border-radius:${isCoach?'14px 14px 4px 14px':'14px 14px 14px 4px'};background:${isCoach?'rgba(255,106,46,.18)':'var(--card2)'};border:1px solid ${isCoach?'rgba(255,106,46,.3)':'var(--border2)'};">
         ${!isCoach?`<div style="font-size:9px;font-weight:700;color:var(--orange);margin-bottom:3px;">${ath.name}</div>`:''}
-        <div style="font-size:13px;color:var(--white);line-height:1.45;">${(m.text||'').replace(/</g,'&lt;')}</div>
+        <div style="font-size:13px;color:var(--white);line-height:1.45;white-space:pre-line;">${athEsc(m.text||'')}</div>
         <div style="font-size:9px;color:var(--muted);margin-top:4px;text-align:right;">${fmtTime(m.ts)}${isCoach?(m.read?' letto':' inviato'):''}${pending}</div>
       </div>
     </div>`;
