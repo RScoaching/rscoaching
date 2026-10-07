@@ -1725,10 +1725,17 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const isM = (m.kind==='match' || m.kind==='amichevole');
       for(let i=0; i<REG.length; i++){
         const r = REG[i];
-        if(r.mid) continue;
+        // una gara in piu' scritta a mano nello stesso giorno resta la stessa
+        // gara: finisce dentro quella registrata invece di farne una seconda
+        if(r.mid && !isM) continue;
         if(r.data !== m.data) continue;
         if(r.is_match !== isM) continue;
-        if(r.slot && m.slot && r.slot !== m.slot) continue;
+        /* Sulla gara la parte della giornata non conta: si gioca una partita
+           sola al giorno, e lo slot del file GPS della gara e' messo d'ufficio
+           (il nome del file non lo dice). Prima una gara scritta a mano al
+           pomeriggio non si accoppiava con quella registrata "AM" e il
+           calendario ne mostrava due: una con i dati e una con il tabellino. */
+        if(!isM && r.slot && m.slot && r.slot !== m.slot) continue;
         return r;
       }
       return null;
@@ -1743,7 +1750,12 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const kind = m.kind || 'training';
       const hit = regDi(m);
       if(hit){
+        if(hit.mid) return;
         hit.mid = m.id;
+        /* Lo slot della gara registrata e' d'ufficio: quello vero e' quello
+           scritto dal mister. Si tiene a parte per mostrarlo, lo slot del GPS
+           resta com'e' perche' serve a ritrovare i dati della giornata. */
+        if(hit.is_match && m.slot) hit.slotGara = m.slot;
         if(!hit.slot && m.slot) hit.slot = m.slot;
         if(!hit.title && m.title) hit.title = m.title;
         if(hit.pct==null && m.pct!=null) hit.pct = Number(m.pct);
@@ -3190,8 +3202,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
       pct: null, load: null, note:'', svolto:false,
       group: PL.group||'', diff:'', phases:[], players:[],
       comp_gara: (type==='gara') ? (FIX_BY_DATE[dateIso] ? 'campionato' : 'amichevole') : '',
-      opp: (type==='gara' && FIX_BY_DATE[dateIso]) ? fixOpp(FIX_BY_DATE[dateIso]) : '',
-      casa: (type==='gara' && FIX_BY_DATE[dateIso]) ? !!FIX_BY_DATE[dateIso].casa : true
+      /* FIX_BY_DATE tiene una lista di {i, f}: la gara vera e' f del primo. */
+      opp: (type==='gara' && FIX_BY_DATE[dateIso]) ? fixOpp(FIX_BY_DATE[dateIso][0].f) : '',
+      casa: (type==='gara' && FIX_BY_DATE[dateIso]) ? !!FIX_BY_DATE[dateIso][0].f.casa : true
     };
     s.manual.push(rec); saveStore(s); return rec.id;
   }
@@ -4620,7 +4633,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(dl){
       const dt = parseDate(s.data);
       dl.innerHTML = esc(dt ? cap(DTF_LONG.format(dt)) : (s.data||'')) +
-        (s.slot ? ' &#183; '+esc(s.slot) : '');
+        (((s.is_match && s.slotGara) || s.slot) ? ' &#183; '+esc((s.is_match && s.slotGara) || s.slot) : '');
     }
     /* Prima apertura su una seduta che il GPS segna come IDP: le schede
        nascono gia' con i nomi e i minuti veri, senza cancellare niente di
@@ -4957,7 +4970,9 @@ window.RS_ROSTER = window.RS_ROSTER || [
       pt1: (r && Array.isArray(r.pt1)) ? r.pt1.slice() : []
     };
     const sl = document.getElementById('pl-gaslot');
-    if(sl) sl.value = (r && r.slot) ? String(r.slot) : '';
+    /* Senza risultato salvato, lo slot parte da quello scritto nel calendario
+       dal mister: la gara e' una sola e non va riscritto due volte. */
+    if(sl) sl.value = (r && r.slot) ? String(r.slot) : (s.slotGara || (s.manual ? (s.slot||'') : ''));
     const dl = document.getElementById('pl-gadate');
     if(dl){
       const dt = parseDate(s.data);
@@ -5191,7 +5206,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
        che adesso non esiste piu'. */
     if(s.mid){
       h += '<div class="pl-dedit"><button class="svbtn" type="button" id="pl-detplan">'+
-        '<span>'+(pgh ? 'Modifica il programma' : 'Scrivi il programma')+'</span></button></div>';
+        '<span>'+(s.is_match ? 'Modifica la gara' : (pgh ? 'Modifica il programma' : 'Scrivi il programma'))+'</span></button></div>';
     }
     /* La forza va prima delle esercitazioni GPS: e' quello che si e' deciso,
        il GPS e' quello che poi e' successo in campo. */
@@ -5244,7 +5259,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     if(dl){
       const dt = parseDate(s.data);
       dl.innerHTML = esc(dt ? cap(DTF_LONG.format(dt)) : (s.data||'')) +
-        (s.slot ? ' &#183; '+esc(s.slot) : '');
+        (((s.is_match && s.slotGara) || s.slot) ? ' &#183; '+esc((s.is_match && s.slotGara) || s.slot) : '');
     }
     const body = document.getElementById('pl-detbody');
     if(body) body.innerHTML = plDetBody(s);
