@@ -1146,6 +1146,11 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .rm7-tipo{font-size:11px;color:var(--muted);min-width:56px;text-align:right}
 .rm7-del{appearance:none;background:none;border:0;color:var(--muted);cursor:pointer;padding:6px;display:grid;place-items:center}
 .rm7-del .rsi{width:15px;height:15px}
+.bc7-f{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 14px}
+.bc7-f label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--muted)}
+.bc7-f input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.04);border:1px solid var(--line6);border-radius:10px;color:var(--white);font:500 15px Inter,sans-serif;padding:10px 12px}
+.bc7-sp{width:100%;height:30px;color:var(--violet2)}
+#bc-history{margin-top:4px}
 .ps7{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font:600 11.5px Inter,sans-serif;padding:4px 8px;border-radius:7px;white-space:nowrap}
 .ps7 .rsi{width:12px;height:12px}
 .ps7.ok{background:rgba(255,106,46,.12);color:var(--primary2)}
@@ -1331,23 +1336,20 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 
     <!-- BODY COMP -->
     <div id="prof-body" style="display:none">
-      <div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;gap:24px;margin-bottom:14px;">
-          <div><div class="bc-num" id="bc-peso-last">-</div><div class="bc-lbl">Peso attuale</div></div>
-          <div><div class="bc-num" id="bc-bmi-last">-</div><div class="bc-lbl">BMI</div></div>
-          <div><div class="bc-num" id="bc-fat-last">-</div><div class="bc-lbl">Grasso %</div></div>
+      <div class="bc7" id="bc7-sum"></div>
+      <div class="ci7-card">
+        <div class="ci7-qh"><b>Nuova misura</b><span>Meglio la mattina, a digiuno</span></div>
+        <div class="bc7-f">
+          <label>Peso (kg)<input type="number" id="bc-peso" placeholder="75,5" inputmode="decimal" step="0.1"></label>
+          <label>Altezza (cm)<input type="number" id="bc-altezza" placeholder="180" inputmode="decimal"></label>
+          <label>Massa grassa (%)<input type="number" id="bc-fat" placeholder="facoltativa" inputmode="decimal"></label>
+          <label>Massa magra (kg)<input type="number" id="bc-lean" placeholder="facoltativa" inputmode="decimal"></label>
+          <label>Vita (cm)<input type="number" id="bc-waist" placeholder="facoltativa" inputmode="decimal"></label>
+          <label>Note<input type="text" id="bc-note" placeholder="dopo gara, mattino..."></label>
         </div>
-        <div class="bc-grid">
-          <div><div class="bc-field-lbl">Peso (kg)</div><input type="number" id="bc-peso" placeholder="75.5" inputmode="decimal"></div>
-          <div><div class="bc-field-lbl">Altezza (cm)</div><input type="number" id="bc-altezza" placeholder="180" inputmode="decimal"></div>
-          <div><div class="bc-field-lbl">Massa grassa (%)</div><input type="number" id="bc-fat" placeholder="12" inputmode="decimal"></div>
-          <div><div class="bc-field-lbl">Massa magra (kg)</div><input type="number" id="bc-lean" placeholder="68" inputmode="decimal"></div>
-        </div>
-        <input type="number" id="bc-waist" placeholder="Vita (cm) - es. 82" inputmode="decimal" style="margin-bottom:8px;">
-        <input type="text" id="bc-note" placeholder="Note (es. dopo gara, mattino...)" style="margin-bottom:10px;">
-        <button onclick="saveBodyComp()" style="width:100%;padding:12px;background:rgba(255,106,46,.1);border:1px solid rgba(255,106,46,.22);color:var(--primary2);border-radius:10px;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;cursor:pointer;">Salva la misura</button>
+        <button type="button" class="ci7-invia" onclick="saveBodyComp()">Salva la misura</button>
       </div>
-      <div style="padding:0 18px;"><div id="bc-history"></div></div>
+      <div id="bc-history"></div>
     </div>
 
     <!-- STRUMENTI -->
@@ -2937,60 +2939,44 @@ function renderBodyComp(list){
       }
     }
   }
+  // riepilogo: ultimo peso, cambio in 4 settimane, BMI, andamento delle ultime misure
+  const sum=document.getElementById('bc7-sum');
+  const P=list.filter(m=>+m.peso>0);
+  if(sum){
+    if(!P.length)sum.innerHTML='<div class="empty">Nessuna misura ancora: la prima la scrivi qui sotto.</div>';
+    else{
+      const last=P[0],rif=P.find(m=>m.ts<=last.ts-25*864e5);
+      const d=rif?Math.round((last.peso-rif.peso)*10)/10:null;
+      const alt=+((window._ath&&window._ath.alt)||(P.find(m=>+m.altezza)||{}).altezza||0);
+      window._bcAlt=alt||null;const ai=document.getElementById('bc-altezza');if(ai&&alt)ai.placeholder=String(alt);
+      const bmi=alt>0?Math.round(last.peso/((alt/100)**2)*10)/10:(+last.bmi||null);
+      const V=P.slice(0,12).reverse().map(m=>+m.peso);
+      let sp='';if(V.length>1){const mn=Math.min(...V),mx=Math.max(...V),r=mx-mn||1;sp=`<svg class="bc7-sp" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true"><polyline points="${V.map((v,k)=>`${(k/(V.length-1)*100).toFixed(1)},${(32-(v-mn)/r*28).toFixed(1)}`).join(' ')}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;}
+      sum.innerHTML=`<div class="og7 pf7-num"><div class="og7-c"><div class="og7-v">${nfIt(last.peso,1)}<small> kg</small></div><div class="og7-l">ultima misura, ${escH(last.date||'')}</div></div>
+        <div class="og7-c"><div class="og7-v">${d==null?'-':(d>0?'+':'')+nfIt(d,1)}<small>${d==null?'':' kg'}</small></div><div class="og7-l">${d==null?'serve una misura di un mese fa':'rispetto a un mese fa'}</div></div>
+        <div class="og7-c"><div class="og7-v">${bmi?nfIt(bmi,1):'-'}</div><div class="og7-l">BMI${alt?'':' (serve l\'altezza)'}</div></div>
+        <div class="og7-c">${sp||'<div class="og7-v">-</div>'}<div class="og7-l">andamento del peso</div></div></div>`;
+    }
+  }
   const el=document.getElementById('bc-history');if(!el)return;
-  el.innerHTML=list.slice(0,12).map(m=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
-      <div style="min-width:62px;font-size:11px;color:var(--muted);">${m.date||'-'}</div>
-      <div style="flex:1;">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--white);">${m.peso}kg</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">
-          ${m.bmi?`<span style="font-size:11px;color:var(--purple);">BMI ${m.bmi}</span>`:''}
-          ${m.fat?`<span style="font-size:11px;color:var(--amber);">Grasso ${m.fat}%</span>`:''}
-          ${m.lean?`<span style="font-size:11px;color:var(--green);">Magra ${m.lean}kg</span>`:''}
-          ${m.waist?`<span style="font-size:11px;color:var(--blue);">Vita ${m.waist}cm</span>`:''}
-        </div>
-        ${m.note?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">${m.note}</div>`:''}
-      </div>
-    </div>`).join('');
+  el.innerHTML=list.length?'<div class="pt7">'+list.slice(0,12).map(m=>{
+    const extra=[m.fat?'grasso '+nfIt(m.fat,1)+'%':'',m.lean?'magra '+nfIt(m.lean,1)+' kg':'',m.waist?'vita '+nfIt(m.waist,0)+' cm':'',m.note?escH(m.note):''].filter(Boolean).join(' &middot; ');
+    return `<div class="pt7-r"><div class="pt7-n"><b>${escH(m.date||'-')}</b>${extra?`<span>${extra}</span>`:''}</div><div class="pt7-v">${m.peso?nfIt(m.peso,1):'-'}<small>kg</small></div></div>`;}).join('')+'</div>':'';
 }
-
-window.deleteSession=async k=>{if(!confirm('Cancellare?'))return;await remove(ref(db,`sessions/${aid}/${k}`));};
-
-// ── SAVE 1RM
-window.saveRm=async(exKey,exName)=>{
-  const peso=parseFloat(document.getElementById(`rp-${exKey}`).value);
-  const reps=parseFloat(document.getElementById(`rr-${exKey}`).value);
-  if(!peso||!reps){showToast('Inserisci peso e reps');return;}
-  const est=Math.round(peso*(1+reps/30));
-  const now=new Date();const date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
-  await push(ref(db,`rm_records/${aid}/${exKey}`),{ts:now.getTime(),date,value:est,type:'stimato',peso,reps,exName});
-  showToast(`1RM stimato: ${est}kg`);
-  ['rp','rr'].forEach(p=>{const el=document.getElementById(`${p}-${exKey}`);if(el)el.value='';});
-};
-window.saveRmReal=async(exKey,exName)=>{
-  const reale=parseFloat(document.getElementById(`rl-${exKey}`).value);
-  if(!reale){showToast('Inserisci il valore');return;}
-  const now=new Date();const date=now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
-  await push(ref(db,`rm_records/${aid}/${exKey}`),{ts:now.getTime(),date,value:reale,type:'reale',exName});
-  showToast(`1RM ${reale}kg salvato!`);
-  document.getElementById(`rl-${exKey}`).value='';
-};
-window.deleteRmRecord=async(exKey,recKey)=>{if(!confirm('Cancellare?'))return;await remove(ref(db,`rm_records/${aid}/${exKey}/${recKey}`));};
-window.addCustomEx=async()=>{const name=document.getElementById('new-ex-name').value.trim();if(!name)return;await push(ref(db,`rm_exercises/${aid}`),{name,order:999,custom:true});document.getElementById('new-ex-name').value='';showToast('Esercizio aggiunto!');};
-window.deleteExercise=async(exKey,exName)=>{if(!confirm(`Rimuovere "${exName}"?`))return;await remove(ref(db,`rm_exercises/${aid}/${exKey}`));await remove(ref(db,`rm_records/${aid}/${exKey}`));};
 
 // ── SAVE BODY COMP
 window.saveBodyComp=async()=>{
   const peso=parseFloat(document.getElementById('bc-peso').value);
   if(!peso){showToast('Inserisci il peso');return;}
-  const alt=parseFloat(document.getElementById('bc-altezza').value)||0;
+  // l'altezza si ricorda: quella scritta ora, se no l'ultima o quella del preparatore
+  const alt=parseFloat(document.getElementById('bc-altezza').value)||+(window._bcAlt||0)||0;
   const fat=parseFloat(document.getElementById('bc-fat').value)||null;
   const lean=parseFloat(document.getElementById('bc-lean').value)||null;
   const waist=parseFloat(document.getElementById('bc-waist').value)||null;
   const note=document.getElementById('bc-note').value.trim()||null;
   const bmi=alt>0?Math.round(peso/(alt/100)**2*10)/10:null;
   const now=new Date();
-  await push(ref(db,`body_comp/${aid}`),{ts:now.getTime(),date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),peso,bmi,fat,lean,waist,note});
+  await push(ref(db,`body_comp/${aid}`),{ts:now.getTime(),date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),peso,bmi,fat,lean,waist,note,altezza:alt||null});
   ['bc-peso','bc-fat','bc-lean','bc-waist','bc-altezza','bc-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   showToast('Misurazione salvata!');
 };
