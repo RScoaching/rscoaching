@@ -1204,6 +1204,14 @@ button.qz-c:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .qz-leg span{display:inline-flex;align-items:center;gap:6px}
 .qz-leg .qz-c{display:inline-block;margin:0;cursor:default}
 @media(max-width:1100px){.qz-h{display:none}.qz-r,.qz-r.qz-p{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));row-gap:6px}.qz-who,.qz-al,.qz-note{grid-column:1/-1}.qz-r [data-l]::before{content:attr(data-l) ' ';color:var(--muted);font-size:11px;font-weight:400}.qz-r .at-no{display:none}.qz-al:empty,.qz-al:has(>.at-no:only-child),.qz-note:has(>.at-no:only-child){display:none}}
+/* scheda atleta: ultimi 14 giorni del check-in */
+.qz7-t{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+.qz7-t th{font-size:11px;font-weight:500;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.qz7-t td{padding:8px;border-bottom:1px solid var(--line);color:var(--text);font-variant-numeric:tabular-nums}
+.qz7-t td.qz7-bad{color:#FF9A6B;font-weight:600}.qz7-t td.qz7-na{color:rgba(149,141,128,.6)}
+.qz7-t td.qz7-sc{font-weight:700}.qz7-t td.qz7-sc.hi{color:var(--violet2)}.qz7-t td.qz7-sc.mid{color:#FF9A6B}.qz7-t td.qz7-sc.lo{color:#FB7185}
+.qz7-t td.qz7-nt{font-size:12px;color:var(--muted);max-width:260px}
+.qz7-leg{font-size:11.5px;color:var(--muted);margin:8px 0 0}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -2885,12 +2893,27 @@ function progHTML(aid){
   return `<div class="pg-wrap"><div class="tdet-h">Programma in corso</div>${card}</div>`;
 }
 
+/* Ultimi 14 giorni come li vede l'atleta nella sua app: prontezza e risposte su 5 (stessa
+   lettura della pagina Questionari, anche per i check-in vecchi da 1 a 10), poi RPE e note
+   della seduta. Prima erano pillole con sigle (F, S, D, M) sulla scala da 1 a 10. */
 function renderDetCheckin(aid,aCi){
-  const ciHtml=aCi.length?aCi.slice(0,12).map(ci=>`<div class="sess-item"><div class="sess-date">${ci.date||'-'}</div><div class="sess-body" style="display:flex;gap:5px;flex-wrap:wrap;">${ci.fatica!=null?`<span class="pill p-red">F:${ci.fatica}</span>`:''}${ci.sonno!=null?`<span class="pill p-blue">S:${ci.sonno}</span>`:''}${ci.doms!=null?`<span class="pill p-gold">D:${ci.doms}</span>`:''}${ci.motivazione!=null?`<span class="pill p-green">M:${ci.motivazione}</span>`:''}${ci.pains?.length?`<span class="pill p-red">Dolore: ${ci.pains.join(', ')}</span>`:''}</div></div>`).join(''):'<div class="empty">Nessun check-in.</div>';
-  // Phase 3: feedback post-seduta (sRPE + nota) dai questionnaires
-  const fb=qEntries(aid).filter(e=>e.f&&(e.f.sessionRpe!=null||e.f.note));
-  const fbHtml=fb.length?`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 8px;">Feedback sedute (sRPE)</div>`+fb.slice(0,12).map(e=>{const rpe=e.f.sessionRpe;const col=rpe>=8?'p-red':rpe>=6?'p-warn':'p-ok';return `<div class="sess-item"><div class="sess-date">${e.date}</div><div class="sess-body" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${rpe!=null?`<span class="pill ${col}">sRPE ${rpe}</span>`:''}${e.f.note?`<span style="font-size:12px;color:var(--muted);">${e.f.note}</span>`:''}</div></div>`;}).join(''):'';
-  return wbHTML(aid,aCi)+'<div class="tdet-h">Ultimi check-in</div>'+ciHtml+fbHtml;
+  const righe=[];
+  for(let i=0;i<14;i++){
+    const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);
+    const iso=isoDay(d.getTime()),g=qzGiorno(aid,iso);
+    const s=Object.values(sessions[aid]||{}).find(x=>x&&x.ts&&isoDay(x.ts)===iso);
+    const fb=((questionnaires[aid]||{})[iso]||{}).feedback;
+    const rpe=s&&+s.rpe?+s.rpe:(fb&&+fb.sessionRpe?+fb.sessionRpe:null);
+    if(!g&&rpe==null)continue;
+    const ci=(checkins[aid]||{})[iso];
+    const nota=[g&&g.pains.length?'Dolore: '+g.pains.join(', '):'',ci&&!ci.fromSession&&ci.note?ci.note:'',(s&&s.note)||(fb&&fb.note)||''].filter(Boolean).join(' · ');
+    righe.push({d,g,rpe,nota,day:(s&&s.day)||(fb&&fb.fromSession)||''});
+  }
+  const GGc=['dom','lun','mar','mer','gio','ven','sab'];
+  const cel=(v,male)=>v==null?'<td class="qz7-na">-</td>':`<td${male?' class="qz7-bad"':''}>${v}</td>`;
+  const tab=righe.length?`<table class="qz7-t"><thead><tr><th>Giorno</th><th>Prontezza</th><th>Sonno</th><th>Energia</th><th>Dolori</th><th>Stress</th><th>RPE</th><th>Seduta e note</th></tr></thead><tbody>${righe.map(({d,g,rpe,nota,day})=>`<tr><td>${GGc[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</td>${g?`<td class="qz7-sc ${qzCls(g.score)}">${g.score}</td>`:'<td class="qz7-na">-</td>'}${cel(g&&g.sonno,g&&g.sonno<=2)}${cel(g&&g.energia,g&&g.energia<=2)}${cel(g&&g.dolori,g&&g.dolori>=4)}${cel(g&&g.stress,g&&g.stress>=4)}${cel(rpe!=null?String(rpe).replace('.',','):null,rpe>=9)}<td class="qz7-nt">${athEsc([day,nota].filter(Boolean).join(': '))||'<span class="qz7-na">-</span>'}</td></tr>`).join('')}</tbody></table><p class="qz7-leg">Risposte da 1 a 5: sonno ed energia piu' alti sono meglio, dolori e stress piu' bassi sono meglio. In arancio quello da guardare.</p>`
+    :'<div class="empty">Nessun check-in negli ultimi 14 giorni.</div>';
+  return wbHTML(aid,aCi)+'<div class="tdet-h">Ultimi 14 giorni</div><div class="dash-wk-wrap">'+tab+'</div>';
 }
 
 function renderDetLoad(aid,aSess){
