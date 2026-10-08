@@ -1022,6 +1022,11 @@ body::before{
 /* struttura delle settimane */
 dialog.pzs{margin:auto;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#131212;color:var(--text);padding:0;width:min(860px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
+.pzr-ts{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.pzr-t{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:12px;border:1px solid rgba(139,92,246,.22);background:rgba(139,92,246,.06)}
+.pzr-t b{font:700 12px 'Inter',sans-serif;color:#A78BFA}.pzr-t span{font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.pzr-t em{font-style:normal;font-size:11px;color:var(--muted)}
+.pzr-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pzr-add input,.pzr-add select{width:auto;min-width:0;flex:0 1 150px}
+.pzr-tab{width:100%;border-collapse:collapse;font-size:13px}.pzr-tab td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);color:var(--text)}.pzr-tab td b{color:#A78BFA}.pzr-tab .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.pzr-tab .a{color:var(--white);font-weight:600}
 .pzs-b{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
 .pzs-h{display:flex;justify-content:space-between;gap:12px}
 .pzs-h h3{margin:0;font:650 20px 'Inter',sans-serif;letter-spacing:-.02em;color:var(--white)}
@@ -1224,6 +1229,7 @@ html,body{background:#0A0909!important}
                 <button type="button" id="pz-strut" onclick="pzStrutApri()" hidden>Struttura delle settimane</button>
                 <button type="button" id="pz-rifai" onclick="openStudioDaProg()" hidden>Rifai dalla scheda</button>
                 <button type="button" onclick="openModal('gen-meso')">Genera settimane da una base</button>
+                <button type="button" onclick="pzRitmiApri()">Ritmi dell'atleta</button>
                 <button type="button" onclick="pzImportaApri()">Importa un piano di corsa da file</button>
                 <button type="button" onclick="openModal('copy-prog')">Copia il programma</button>
                 <button type="button" onclick="exportWhatsApp()">Testo per WhatsApp</button>
@@ -2786,7 +2792,7 @@ window.openModal=function(type,...args){
     const recSel=cur=>`<option value="">-</option>`+REC_TIPI.concat(cur&&!REC_TIPI.includes(cur)?[cur]:[]).map(t=>`<option value="${stEsc(t)}"${cur===t?' selected':''}>${stEsc(t)}</option>`).join('');
     const ic=d=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
     const fld=(lbl,cls,val,ph,w)=>`<div class="field" style="margin-bottom:0;min-width:0;${w?'grid-column:span 1':'grid-column:span 2'}"><label>${lbl}</label><input class="${cls}" value="${stEsc(val||'')}" placeholder="${ph}" oninput="window._faseSum(this)"></div>`;
-    const buildFaseRow=(f={},i)=>`<div class="fase-row" style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+    const buildFaseRow=(f={},i)=>`<div class="fase-row" data-rit="${stEsc(f.rit||'')}" data-p0="${stEsc(f.repPace||f.pace||'')}" style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-bottom:8px;">
         <span class="fase-n" style="font-size:11px;font-weight:700;color:var(--muted);padding-bottom:9px;min-width:16px;">${i+1}</span>
         <div class="field" style="margin-bottom:0;flex:1 1 150px;min-width:0;"><label>Tipo</label><select class="fase-tipo" onchange="window._toggleIntervalFields(this)">${fasiTypeSel(f.tipo)}</select></div>
@@ -2796,11 +2802,11 @@ window.openModal=function(type,...args){
         <button type="button" class="btn btn-outline btn-sm" title="Togli la fase" aria-label="Togli la fase" onclick="removeFase(this)">${ic('M18 6L6 18M6 6l12 12')}</button>
       </div>
       <div class="fase-cont-fields" style="display:${isIntv(f.tipo,f)?'none':'grid'};grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px;">
-        ${fld('Distanza o tempo','fase-dist',f.dist,'Es. 8 km o 40\'')}${fld('Passo','fase-pace',f.pace,'Es. 5:30-5:50',150)}
+        ${fld('Distanza o tempo','fase-dist',f.dist,'Es. 8 km o 40\'')}${fld('Passo','fase-pace',f.pace,'Es. 5:30-5:50 o E',150)}
       </div>
       <div class="fase-interval-fields" style="display:${isIntv(f.tipo,f)?'block':'none'};margin-bottom:8px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px;">
-          ${fld('Serie','fase-serie',f.serie,'1',70)}${fld('Ripetizioni','fase-reps',f.reps,'Es. 5',90)}${fld('Distanza o tempo','fase-repDist',f.repDist,'Es. 1000 m o 3\'')}${fld('Passo','fase-repPace',f.repPace,'Es. 4:10',120)}
+          ${fld('Serie','fase-serie',f.serie,'1',70)}${fld('Ripetizioni','fase-reps',f.reps,'Es. 5',90)}${fld('Distanza o tempo','fase-repDist',f.repDist,'Es. 1000 m o 3\'')}${fld('Passo','fase-repPace',f.repPace,'Es. 4:10 o I',120)}
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;">
           ${fld('Recupero','fase-recTime',[f.recTime,f.recDist].filter(Boolean).join(' '),'Es. 90" o 200 m')}
@@ -2825,7 +2831,7 @@ window.openModal=function(type,...args){
       ['Riscaldamento 15\'',{tipo:'Riscaldamento',zona:'Z1',dist:'15\'',note:'corsa lenta, andature e 4 allunghi'}],
       ['Defaticamento 10\'',{tipo:'Defaticamento',zona:'Z1',dist:'10\'',note:'corsa lenta'}]];
     mb.innerHTML=`<h3>Modifica corsa</h3>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ogni fase e' un pezzo della seduta, dal riscaldamento al defaticamento. Le ripetute si scrivono per esteso: serie, ripetizioni, distanza o tempo, passo, recupero e recupero fra le serie. Sotto ogni fase si legge come la vedra' l'atleta. Nei campi si puo' scrivere <code>{nome}</code> per richiamare una variabile del gruppo.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ogni fase e' un pezzo della seduta, dal riscaldamento al defaticamento. Le ripetute si scrivono per esteso: serie, ripetizioni, distanza o tempo, passo, recupero e recupero fra le serie. Sotto ogni fase si legge come la vedra' l'atleta. Nel passo si puo' scrivere E, M, T, I, R o RG: prende il ritmo dell'atleta e lo segue quando arrivano tempi nuovi. Nei campi si puo' scrivere <code>{nome}</code> per richiamare una variabile del gruppo.</div>
       <div id="m-fasi-list">${initFasi.map((f,i)=>buildFaseRow(f,i)).join('')}</div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn btn-outline btn-sm" onclick="window._addFase()" style="flex:1;">Aggiungi fase</button>
@@ -2843,9 +2849,14 @@ window.openModal=function(type,...args){
       const f={tipo:v('fase-tipo'),zona:v('fase-zona'),note:v('fase-note')};
       if(r.querySelector('.fase-interval-fields').style.display!=='none'){f.serie=v('fase-serie');f.reps=v('fase-reps');f.repDist=v('fase-repDist');f.repPace=v('fase-repPace');f.recTime=v('fase-recTime');f.recPace=v('fase-recPace');f.recSerie=v('fase-recSerie');}
       else{f.dist=v('fase-dist');f.pace=v('fase-pace');}
+      // un codice di ritmo nel passo lega la fase ai tempi dell'atleta; un passo scritto a mano la slega
+      const k=f.repPace!==undefined?'repPace':'pace',val=String(f[k]||'').trim(),cod=/^(E|M|T|I|R|RG)$/i.exec(val);
+      if(cod){r.dataset.rit=cod[1].toUpperCase();f[k]=pzRitPasso(r.dataset.rit);}
+      else if(val!==(r.dataset.p0||''))r.dataset.rit='';
+      if(r.dataset.rit)f.rit=r.dataset.rit;
       return f;
     };
-    window._faseSum=function(el){const r=el.closest('.fase-row');r.querySelector('.fase-sum').textContent=stCorsaTesto(window._faseLeggi(r));};
+    window._faseSum=function(el){const r=el.closest('.fase-row'),f=window._faseLeggi(r);r.querySelector('.fase-sum').textContent=stCorsaTesto(f)+(f.rit?' (ritmo '+f.rit+(f.repPace||f.pace?'':', l\'atleta non ha ancora tempi')+')':'');};
     window._addFase=function(f){
       const list=document.getElementById('m-fasi-list');
       list.insertAdjacentHTML('beforeend',buildFaseRow(f||{},list.querySelectorAll('.fase-row').length));
@@ -5040,14 +5051,24 @@ function stPrescr0(I,w,ruolo,name){
    la soglia, gli intervalli e il passo gara. Senza un tempo si lavora a zone di
    frequenza cardiaca e i ritmi restano vuoti. */
 function stRitmi(I){
-  let t5=stSec(I.t5);
-  if(!t5&&stSec(I.t10))t5=stSec(I.t10)*Math.pow(5/10,1.06);
-  if(!t5)return null;
-  const p5=t5/5;
-  const r={facile:[p5*1.22,p5*1.32],lungo:[p5*1.25,p5*1.35],soglia:p5*1.06,interv:p5*0.99,rep:p5*0.95,p10:t5*Math.pow(2,1.06)/10,t5};
-  const tg=stSec(I.garaTempo),D=+I.garaDist||10;
-  r.gara=tg?tg/D:t5*Math.pow(D/5,1.06)/D;
+  // VDOT di Daniels (window.RSRitmi): dal 5 o dal 10 km della scheda, se no dai tempi dell'atleta in Atleti
+  const RR=window.RSRitmi;if(!RR)return null;
+  const t5=stSec(I.t5),t10=stSec(I.t10);
+  let V=(t5&&RR.vdot(5000,t5))||(t10&&RR.vdot(10000,t10))||null,A=null;
+  if(!V){const a=athletes[I.aid];A=a&&a.ritmi&&a.ritmi.vdot?a.ritmi:null;if(A)V=A.vdot;}
+  if(!V)return null;
+  const X=A||RR.daVdot(V),D=+I.garaDist||10,Dm=RR.DIST[String(D)]||D*1000;
+  const r={facile:X.E.slice(),lungo:X.E.slice(),soglia:X.T,interv:X.I,rep:X.R,maratona:X.M,p10:RR.previsto(V,10000)/10,t5:RR.previsto(V,5000),vdot:V,fonte:A?A.fonte:null};
+  const tg=stSec(I.garaTempo);
+  r.gara=tg?tg/(Dm/1000):RR.previsto(V,Dm)/(Dm/1000);
   return r;
+}
+// i ritmi con cui il programma guidato scrive le fasi: le lega con il campo rit e li salva nel programma
+function stRitmiProg(I,weeks){
+  const rit=stRitmi(I),RR=window.RSRitmi;if(!rit||!RR)return null;
+  const v={E:rit.facile.map(Math.round),M:Math.round(rit.maratona),T:Math.round(rit.soglia),I:Math.round(rit.interv),R:Math.round(rit.rep),RG:Math.round(rit.gara)};
+  Object.values(weeks||{}).forEach(w=>Object.values(w&&w.sessions||{}).forEach(x=>{if(x&&x.type==='corsa')RR.etichetta(x.corsaFasi,v);}));
+  return Object.assign(v,{vdot:Math.round(rit.vdot*10)/10,RGfisso:!!stSec(I.garaTempo),ts:Date.now()});
 }
 function stKm(I,fasi,nC){
   const L=I.livello,D=+I.garaDist||10;
@@ -6154,10 +6175,10 @@ window.pzStrutApplica=async function(){
   const pid=currentProgId,p=programs[pid];if(!p||!pzSI)return;
   const btn=document.getElementById('pzs-ok');if(btn){btn.disabled=true;btn.textContent='Rigenero...';}
   try{
-    const P=stProposta(pzSI),B=stCostruisci(pzSI,P);
+    const P=stProposta(pzSI),B=stCostruisci(pzSI,P),ritP=stRitmiProg(pzSI,B.weeks);
     const scheda=JSON.parse(JSON.stringify(pzSI));delete scheda.nomeProg;
     const up={};
-    up[`programs/${pid}/weeks`]=B.weeks;up[`programs/${pid}/duration`]=P.N;up[`programs/${pid}/intake`]=scheda;
+    up[`programs/${pid}/weeks`]=B.weeks;up[`programs/${pid}/ritmi`]=ritP;up[`programs/${pid}/duration`]=P.N;up[`programs/${pid}/intake`]=scheda;
     pzUndo.push({multi:pzPrima(up)});
     await update(ref(db),up);
     if(scheda.aid)try{await set(ref(db,'athlete_intake/'+scheda.aid),scheda);}catch(e){}
@@ -6165,6 +6186,89 @@ window.pzStrutApplica=async function(){
     currentWeekIdx=Math.min(currentWeekIdx,P.N-1);
     showToast('Settimane rigenerate: '+P.N+(P.kmW&&P.kmW.some(x=>x>0)?', picco '+Math.round(Math.max(...P.kmW))+' km':''));
   }catch(e){console.error(e);showToast('Errore nella rigenerazione');if(btn){btn.disabled=false;btn.textContent='Rigenera le sedute';}}
+};
+/* ── RITMI DELL'ATLETA NEL PROGRAMMA ────────────────────────────────
+   I ritmi (E, M, T, I, R) vengono dai tempi dell'atleta, scritti in Atleti o qui
+   (race_times, motore window.RSRitmi in sidebar.js). Le fasi di corsa con il
+   campo rit seguono quei ritmi: qui si vede cosa cambia e si aggiorna il
+   programma aperto, con Ctrl+Z. Nel campo Passo di una fase si puo' scrivere
+   E, M, T, I, R o RG al posto del numero. */
+function pzRitAid(){
+  const p=programs[currentProgId];if(!p)return null;
+  const ids=Object.keys(p.assignedTo||{}).filter(k=>p.assignedTo[k]);
+  return ids.find(k=>athletes[k]&&athletes[k].ritmi&&athletes[k].ritmi.vdot)||ids[0]||null;
+}
+function pzRitR(){const a=pzRitAid();return a&&athletes[a]&&athletes[a].ritmi&&athletes[a].ritmi.vdot?athletes[a].ritmi:null;}
+function pzRitPasso(cod){
+  const RR=window.RSRitmi,R=pzRitR(),p=programs[currentProgId];
+  const v=RR.valore(R,cod,RR.rgProgramma(p,R));
+  return v?RR.testo(v):'';
+}
+let pzRitAgg=null;
+window.pzRitmiApri=async function(){
+  if(!currentProgId){showToast('Apri prima un programma');return;}
+  let d=document.getElementById('pz-rit-dlg');
+  if(!d){d=document.createElement('dialog');d.id='pz-rit-dlg';d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
+  pzRitRender();
+  if(typeof d.showModal==='function'&&!d.open)d.showModal();else d.setAttribute('open','');
+};
+function pzRitRender(){
+  const d=document.getElementById('pz-rit-dlg');if(!d)return;
+  const RR=window.RSRitmi,p=programs[currentProgId],aid=pzRitAid(),a=aid?athletes[aid]:null,R=pzRitR();
+  const res=R?RR.ricalcola(p,R):{cambi:[],rg:null},veri=res.cambi.filter(c=>c.da!==c.a);
+  pzRitAgg=R?{R,res}:null;
+  const g={};veri.forEach(x=>{const k=x.cod+'|'+x.da+'|'+x.a;(g[k]=g[k]||{cod:x.cod,da:x.da,a:x.a,n:0}).n++;});
+  const gruppi=Object.values(g).sort((x,y)=>RR.CODICI.indexOf(x.cod)-RR.CODICI.indexOf(y.cod)||y.n-x.n);
+  const altri=Object.keys(p.assignedTo||{}).filter(k=>k!==aid&&p.assignedTo[k]).map(k=>athletes[k]&&athletes[k].name).filter(Boolean);
+  const tiles=R?['E','M','T','I','R'].map(c=>`<div class="pzr-t" title="${stEsc(RR.DESC[c])}"><b>${c}</b><span>${RR.testo(R[c])}</span><em>${RR.NOMI[c]}</em></div>`).join('')+(res.rg?`<div class="pzr-t"><b>RG</b><span>${RR.passo(res.rg)}</span><em>Ritmo gara</em></div>`:''):'';
+  d.innerHTML=`<div class="pzs-b">
+    <div class="pzs-h"><div><h3>Ritmi dell'atleta</h3><p>${a?stEsc(a.name||''):'Nessun atleta assegnato'}${R?' &#183; VDOT '+String(R.vdot).replace('.',',')+' da '+stEsc(R.fonte||''):''}</p></div>
+      <button type="button" class="pzs-x" onclick="this.closest('dialog').close()" aria-label="Chiudi">&#215;</button></div>
+    ${R?`<div class="pzr-ts">${tiles}</div>`:`<p class="pzs-n">${a?'Ancora nessun tempo per '+stEsc(a.name||'')+'. Scrivi un tempo recente: i ritmi si calcolano subito.':'Assegna il programma a un atleta per usare i suoi ritmi.'}</p>`}
+    ${aid?`<div class="pzr-add"><select id="pzr-d" aria-label="Distanza">${[['5','5 km'],['10','10 km'],['21','Mezza'],['42','Maratona'],['soglia','Soglia /km']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
+      <input id="pzr-t" placeholder="tempo, es. 47:30" aria-label="Tempo" onkeydown="if(event.key==='Enter')pzRitTempo()">
+      <input id="pzr-dt" value="${stFmtD(new Date())}" aria-label="Data" style="width:110px">
+      <button type="button" class="btn btn-outline btn-sm" onclick="pzRitTempo()">Aggiungi il tempo</button>
+      <a class="pzs-auto" href="./index.html?goto=athletes" onclick="sessionStorage.setItem('goto','athletes')">Storico in Atleti</a></div>`:''}
+    ${R?(gruppi.length?`<div><p class="pzs-n" style="margin-bottom:8px">${veri.length} ${veri.length===1?'passo cambia':'passi cambiano'} in questo programma${altri.length?' (assegnato anche a '+stEsc(altri.join(', '))+': nell\'app ognuno vede i suoi ritmi)':''}:</p>
+      <table class="pzr-tab"><tbody>${gruppi.map(x=>`<tr><td><b>${x.cod}</b> ${stEsc(RR.NOMI[x.cod]||'')}</td><td class="n">${stEsc(x.da||'-')}</td><td class="n a">${stEsc(x.a)}</td><td class="n">${x.n} ${x.n===1?'fase':'fasi'}</td></tr>`).join('')}</tbody></table></div>`
+      :`<p class="pzs-n">${res.cambi.length?'I passi del programma sono gia\' questi.':'Nessuna fase di corsa a ritmo in questo programma.'}</p>`):''}
+    <p class="pzs-n">Nel campo Passo di una fase si puo' scrivere E, M, T, I, R o RG: prende il ritmo dell'atleta e lo segue quando arrivano tempi nuovi. Progressivi, fartlek e salite restano come sono.</p>
+    <div class="pzs-f"><span>Ctrl+Z dopo l'aggiornamento riporta i passi di prima.</span>
+      <button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button>
+      ${res.cambi.length?`<button type="button" class="btn btn-orange" id="pzr-ok" onclick="pzRitApplica()">${veri.length?'Aggiorna '+veri.length+(veri.length===1?' passo':' passi'):'Lega le fasi ai ritmi'}</button>`:''}</div></div>`;
+}
+window.pzRitTempo=async function(){
+  const RR=window.RSRitmi,aid=pzRitAid();if(!aid)return;
+  const dist=document.getElementById('pzr-d').value,t=RR.sec(document.getElementById('pzr-t').value),date=(document.getElementById('pzr-dt').value||'').trim()||stFmtD(new Date());
+  if(!t){showToast('Scrivi il tempo');return;}
+  const voce=dist==='soglia'?{tipo:'soglia',sec:t,date}:{tipo:'gara',dist,sec:t,time:RR.tempo(t),date};
+  if(dist==='soglia'&&t>=600){showToast('Il passo di soglia va scritto al km, es. 4:35');return;}
+  if(dist!=='soglia'&&!RR.vdot(RR.metri(dist),t)){showToast('Tempo fuori scala per '+RR.distNome(dist));return;}
+  voce.src='coach';voce.ts=Date.now();
+  try{
+    const r=push(ref(db,'race_times/'+aid));await set(r,voce);
+    const s=await get(ref(db,'race_times/'+aid));const tempi=s.val()||{};
+    const base=dist==='soglia'?(athletes[aid].ritmiBase||null):null;
+    const R=RR.calcola(tempi,base);
+    await update(ref(db,'athletes/'+aid),{ritmi:R||null,ritmiBase:base});
+    athletes[aid]=Object.assign({},athletes[aid],{ritmi:R,ritmiBase:base});
+    showToast('Tempo salvato: VDOT '+(R&&R.vdot?String(R.vdot).replace('.',','):'-'));
+    pzRitRender();
+  }catch(e){console.error(e);showToast('Errore nel salvataggio del tempo');}
+};
+window.pzRitApplica=async function(){
+  if(!pzRitAgg||!currentProgId)return;
+  const RR=window.RSRitmi,pid=currentProgId,p=programs[pid],{R}=pzRitAgg,res=RR.ricalcola(p,R),up={};
+  res.cambi.forEach(c=>{const b=`programs/${pid}/weeks/${c.wid}/sessions/${c.sid}/corsaFasi/${c.i}`;up[b+'/'+c.campo]=c.a;up[b+'/rit']=c.cod;});
+  up[`programs/${pid}/ritmi`]=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+  const n=res.cambi.filter(c=>c.da!==c.a).length;
+  try{
+    pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();
+    await update(ref(db),up);
+    document.getElementById('pz-rit-dlg')?.close();
+    showToast(n?n+(n===1?' passo aggiornato':' passi aggiornati')+'. Ctrl+Z annulla':'Fasi legate ai ritmi dell\'atleta');
+  }catch(e){console.error(e);showToast('Errore nell\'aggiornamento');}
 };
 /* ── IMPORTA UN PIANO DI CORSA DA FILE ─────────────────────────────
    Un piano scritto altrove (un PDF del preparatore trasformato in file .json,
@@ -6196,6 +6300,8 @@ function pzImpCostruisci(){
     const sessions={};let ord=0;
     (fw.corse||[]).slice().sort((a,b)=>a.giorno-b.giorno).forEach(c=>{
       const fasi=(c.fasi||[]).map(f=>Object.assign({},f,f.dist?{dist:stDistNorm(f.dist)}:{},f.repDist?{repDist:stDistNorm(f.repDist)}:{}));
+      // i ritmi del file (E, T, I, RG) legano le fasi: con tempi nuovi dell'atleta si ricalcolano
+      if(d.ritmi&&window.RSRitmi)window.RSRitmi.etichetta(fasi,window.RSRitmi.daTesto(d.ritmi));
       const x={name:c.nome||'Corsa',type:'corsa',order:ord,dayOfWeek:c.giorno,corsaFasi:fasi,exercises:{}};
       const k=pzCorsaKm(x);x.notes=(k?'Circa '+pzKmTxt(k)+' km. ':'')+(c.note||'');
       sessions['s'+String(ord).padStart(2,'0')]=x;ord++;
@@ -6240,6 +6346,7 @@ window.pzImportaApplica=async function(){
     const R=pzImpCostruisci(),up={};
     R.out.forEach(x=>{up[`programs/${pid}/weeks/${x.wid}`]=x.wk;});
     const tot=Math.max(pzWeeks().length,R.out.length);up[`programs/${pid}/duration`]=tot;
+    if(pzImp.ritmi&&window.RSRitmi){const v=window.RSRitmi.daTesto(pzImp.ritmi);up[`programs/${pid}/ritmi`]=Object.assign(v,{RGfisso:!!v.RG,ts:Date.now()});}
     pzUndo.push({multi:pzPrima(up)});
     await update(ref(db),up);
     document.getElementById('pz-imp-dlg')?.close();
@@ -6311,7 +6418,7 @@ function stForm(){
     (['estetica','salute','forza'].includes(I.obiettivo)?stRiga('Punti da migliorare',stChips('punti',ST_PUNTI.map(x=>[x[0],x[1]]),true)+(I.obiettivo==='estetica'&&!(I.punti||[]).length&&(stDonna(I)||stUomo(I))?`<p class="pz-hint">Se non scegli: ${stDonna(I)?'glutei e gambe':'petto, spalle e braccia'}, come si fa di solito per ${stDonna(I)?'una donna':'un uomo'}.</p>`:''),'esercizi in piu\''):'')+`</section>`;
   h+=`<section class="pz-sec"><h4><b>3</b>Da dove parte</h4>`+
     stRiga('Livello',stChips('livello',[['zero','Da zero'],['princ','Meno di 6 mesi'],['inter','6 mesi - 2 anni'],['avanz','Oltre 2 anni']]))+
-    (corsa?stRiga('Corsa oggi',`<span class="pz-inline">${stIn('kmSett','km',56,'decimal')} km a settimana ${stIn('lungo','km',56,'decimal')} km il lungo</span>`)+stRiga('Tempi recenti',`<span class="pz-inline">5 km ${stIn('t5','mm:ss',70)} 10 km ${stIn('t10','mm:ss',70)}</span>`,'danno i ritmi'):'')+
+    (corsa?stRiga('Corsa oggi',`<span class="pz-inline">${stIn('kmSett','km',56,'decimal')} km a settimana ${stIn('lungo','km',56,'decimal')} km il lungo</span>`)+stRiga('Tempi recenti',`<span class="pz-inline">5 km ${stIn('t5','mm:ss',70)} 10 km ${stIn('t10','mm:ss',70)}</span>`+(!stSec(I.t5)&&!stSec(I.t10)&&athletes[I.aid]&&athletes[I.aid].ritmi&&athletes[I.aid].ritmi.vdot?`<p class="pz-hint">Vuoti: i ritmi vengono dai tempi in Atleti (${stEsc(athletes[I.aid].ritmi.fonte||'')}, VDOT ${String(athletes[I.aid].ritmi.vdot).replace('.',',')}).</p>`:''),'danno i ritmi'):'')+
     stRiga('Si allena gia\'',stChips('giaAllena',[['si','Si'],['no','No']])+(I.giaAllena==='si'?`<span class="pz-inline">${stIn('sedAttuali','n',40,'numeric')} volte a settimana</span>`:''))+
     (I.giaAllena==='si'?stRiga('Cosa fa oggi',stChips('cosaFa',[['pesi','Pesi'],['corsa','Corsa'],['sport','Sport'],['altro','Altro']],true)):'')+
     stRiga('Fermo da',stChips('fermo',[['','In attivita\''],['1-3','1-3 mesi'],['3+','Oltre 3 mesi']]),'rientro graduale')+
@@ -6605,14 +6712,14 @@ window.creaDaStudio=async function(){
       await set(r,{name:I.nome.trim(),level:({zero:1,princ:1,inter:2,avanz:3})[I.livello],role:I.sport==='calcio'?'Calciatore':'',team:'',sex:I.sesso||null,freq:I.giorni.filter(Boolean).length});
       aid=r.key;
     }
-    const P=stProposta(I),B=stCostruisci(I,P);
+    const P=stProposta(I),B=stCostruisci(I,P),ritP=stRitmiProg(Object.assign({},I,{aid}),B.weeks);
     const nome=String(I.nomeProg||'').trim()||stNomeAuto();
     const scheda=JSON.parse(JSON.stringify(Object.assign({},I,{aid})));
     if(stRifai&&programs[stRifai]){
       if(!confirm('Le settimane di questo programma vengono ricostruite dalla scheda. Le modifiche fatte a mano si perdono (Ctrl+Z nella griglia le riporta). Procedo?'))return;
       const pid=stRifai,up={};
       up[`programs/${pid}/weeks`]=B.weeks;up[`programs/${pid}/duration`]=P.N;up[`programs/${pid}/startDate`]=I.inizio;
-      up[`programs/${pid}/intake`]=scheda;up[`programs/${pid}/name`]=nome;up[`programs/${pid}/sport`]=B.sport;up[`programs/${pid}/category`]=B.category;
+      up[`programs/${pid}/intake`]=scheda;up[`programs/${pid}/name`]=nome;up[`programs/${pid}/ritmi`]=ritP;up[`programs/${pid}/sport`]=B.sport;up[`programs/${pid}/category`]=B.category;
       pzUndo.push({multi:pzPrima(up)});
       await update(ref(db),up);
       await set(ref(db,'athlete_intake/'+aid),scheda);
@@ -6623,7 +6730,7 @@ window.creaDaStudio=async function(){
     const r=push(ref(db,'programs'));
     await set(r,{name:nome,sport:B.sport,category:B.category,duration:P.N,
       notes:ST_OBJ[I.obiettivo]+(I.obiettivo==='gara'?' '+ST_DIST[I.garaDist]+(I.garaData?' il '+I.garaData:''):'')+'. '+ST_LIV[I.livello]+', '+P.T.n+' sedute a settimana.',
-      createdAt:Date.now(),startDate:I.inizio,assignedTo:{[aid]:true},weeks:B.weeks,intake:scheda,origine:'studio'});
+      createdAt:Date.now(),startDate:I.inizio,assignedTo:{[aid]:true},weeks:B.weeks,intake:scheda,origine:'studio',ritmi:ritP});
     await set(ref(db,'athlete_intake/'+aid),scheda);
     closeStudio();
     showToast('Programma creato: '+P.N+' settimane');
@@ -7601,6 +7708,7 @@ function pzComandi(){
       add('Settimana','Copia la settimana negli appunti',()=>copyWeek(w[0]));
     }
     if(p.intake)add('Programma','Struttura delle settimane',()=>pzStrutApri(),'scarichi e km, e rigenera le sedute');
+    add('Programma','Ritmi dell\'atleta',()=>pzRitmiApri(),'passi dai tempi: E, M, T, I, R');
     add('Programma','Importa un piano di corsa da file',()=>pzImportaApri(),'file .json del piano');
     if(p.intake)add('Programma','Rifai dalla scheda',()=>openStudioDaProg());
     add('Programma','Modifica nome e dati del programma',()=>openModal('edit-prog'));

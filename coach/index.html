@@ -1286,6 +1286,38 @@ html,body{background:#0A0909!important}
 /* campi */
 input,select,textarea{border-radius:10px}
 .search-inp,.inp,.field input,.field select{background:#121111!important;border-color:var(--line2)!important}
+
+/* R13 tempi e ritmi */
+.rt-box{border:1px solid rgba(139,92,246,.22);border-radius:14px;background:rgba(139,92,246,.05);padding:14px 16px;margin-bottom:12px}
+.rt-h{display:flex;justify-content:space-between;gap:8px 14px;flex-wrap:wrap;align-items:baseline;margin-bottom:12px}
+.rt-vd{font-size:12px;color:var(--muted);margin-right:10px}.rt-vd b{font-size:22px;color:var(--violet2);font-weight:700;margin-left:4px;font-variant-numeric:tabular-nums}
+.rt-src{font-size:12px;color:var(--muted)}
+.rt-prev{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}.rt-prev b{color:var(--white);font-weight:600;font-variant-numeric:tabular-nums}
+.rt-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.rt-t{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rt-t b{font-size:11px;color:var(--violet2);font-weight:700}
+.rt-p{font-size:15px;font-weight:700;color:var(--white);font-variant-numeric:tabular-nums}.rt-p small{font-size:10px;color:var(--muted);font-weight:500;margin-left:2px}
+.rt-n{font-size:11px;color:var(--muted)}
+.rt-fc{margin-top:10px;font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px}.rt-fc b{color:var(--white)}
+@media(max-width:700px){.rt-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rt-tab .pb{font-size:10px;font-weight:700;color:var(--orange);margin-left:6px}
+.rt-tab .bs{font-size:10px;font-weight:600;color:var(--violet2);margin-left:6px}
+.rt-tab .ub{background:none;border:0;color:var(--muted);font:inherit;font-size:11px;cursor:pointer;padding:2px 4px;border-radius:6px}.rt-tab .ub:hover{color:var(--white);background:rgba(255,255,255,.06)}
+.rt-new{font-size:12px;color:var(--text);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,106,46,.3);background:rgba(255,106,46,.06);margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.rt-new span{flex:1;min-width:200px}
+.rt-seg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.rt-seg button{font:500 12px Inter,sans-serif;padding:7px 12px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--text);cursor:pointer}
+.rt-seg button.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.rt-live{font-size:12px;color:var(--text);line-height:1.6;min-height:20px;padding:10px 12px;border-radius:10px;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.18);margin-top:4px}
+.rt-live b{color:var(--white);font-variant-numeric:tabular-nums}.rt-live i{font-style:normal;color:var(--muted)}
+.rt-pg{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.rt-pg label{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;color:var(--white)}
+.rt-pg label span{color:var(--muted);font-size:12px;margin-left:auto;text-align:right}
+.rt-pg input{accent-color:var(--primary);width:16px;height:16px}
+.rt-pg details{margin-top:8px}.rt-pg summary{font-size:12px;color:var(--muted);cursor:pointer}
+.rt-pg .tdet-tab{margin:8px 0 0}.rt-pg .tdet-tab td.a{color:var(--violet2);font-weight:600}
+.rt-sum{margin:8px 0 0}.rt-sum td{padding:5px 8px}
+.rt-pg .cond{font-size:11.5px;color:var(--muted);margin-top:6px}
 </style>
   <link rel="stylesheet" href="./style-v2.css">
 </head>
@@ -1596,6 +1628,7 @@ onValue(ref(db,'groups'),s=>{groups=s.val()||{};renderAll();});
 onValue(ref(db,'tests'),s=>{tests=s.val()||{};refreshTests();});
 onValue(ref(db,'test_history'),s=>{testHistory=s.val()||{};refreshTests();});
 onValue(ref(db,'test_defs'),s=>{testDefs=s.val()||{};refreshTests();});
+onValue(ref(db,'race_times'),s=>{raceTimes=s.val()||{};refreshRitmi();});
 onValue(ref(db,'body_log'),s=>{bodyLog=s.val()||{};refreshOverview();});
 onValue(ref(db,'injuries'),s=>{injuries=s.val()||{};refreshHealth();renderAthletes();});
 onValue(ref(db,'coach_notes'),s=>{coachNotes=s.val()||{};refreshHealth();});
@@ -2440,6 +2473,7 @@ window.openAthlete=function(aid,silent){
     </div>
     <div id="det-calendario">${athCalendario(aid)}</div>
     <div id="det-overview">${renderDetOverview(aid,a,aSess,aCi)}</div>
+    <div id="det-ritmi" style="display:none;">${renderDetRitmi(aid)}</div>
     <div id="det-tests" style="display:none;">${renderDetTests(aid)}</div>
     <div id="det-sessions" style="display:none;">${renderDetSessions(aid,aSess)}</div>
     <div id="det-checkin" style="display:none;">${renderDetCheckin(aid,aCi)}</div>
@@ -2724,6 +2758,214 @@ function renderDetTests(aid){
     <button type="button" class="btn btn-outline btn-sm" onclick="openNewTest('${aid}')">+ Nuovo test</button></div>`;
 }
 function refreshTests(){if(currentAid){const el=document.getElementById('det-tests');if(el&&el.style.display!=='none')el.innerHTML=renderDetTests(currentAid);}}
+
+// ── TEMPI E RITMI ──────────────────────────────────────────────────
+/* I tempi di gara e la soglia dell'atleta stanno in race_times/{aid}
+   {tipo:'gara'|'soglia', dist, sec, time, fc, date, note, src, ts}; i ritmi che
+   ne escono (VDOT di Daniels, window.RSRitmi in sidebar.js) in athletes/{aid}/ritmi,
+   dove li leggono il Builder e l'app atleta. Ogni tempo nuovo propone di aggiornare
+   i passi di tutti i programmi dell'atleta: prima l'anteprima, poi Ctrl+Z riporta
+   i passi di prima. */
+let raceTimes={};
+const rtUndo=[];
+let rtDist='10';
+function rtLista(aid){return Object.entries(raceTimes[aid]||{}).map(([id,x])=>Object.assign({id},x)).filter(x=>x&&(x.sec>0||x.fc>0)).sort((a,b)=>window.RSRitmi.dataTs(b.date)-window.RSRitmi.dataTs(a.date)||(b.ts||0)-(a.ts||0));}
+function rtCalcola(aid,tempi,base){return window.RSRitmi.calcola(tempi||raceTimes[aid]||{},base!==undefined?base:(athletes[aid]?.ritmiBase||null));}
+function rtPb(aid){const pb={};rtLista(aid).filter(x=>x.tipo!=='soglia'&&x.sec>0).forEach(x=>{const k=String(x.dist);if(!pb[k]||x.sec<pb[k].sec)pb[k]=x;});return pb;}
+function rtRiga(R){const RR=window.RSRitmi;return R&&R.vdot?['E','M','T','I','R'].map(c=>c+' <b>'+RR.testo(R[c])+'</b>').join(' &#183; '):'';}
+function renderDetRitmi(aid){
+  const RR=window.RSRitmi;if(!RR)return '';
+  const L=rtLista(aid),R=athletes[aid]?.ritmi||null,pb=rtPb(aid);
+  const nuovi=L.filter(x=>x.src==='atleta'&&(!R||(x.ts||0)>(R.ts||0)));
+  let top='';
+  if(R&&R.vdot){
+    const zf=RR.zoneFc(R.fcSoglia);
+    top=`<div class="rt-box"><div class="rt-h"><div><span class="rt-vd">VDOT <b>${String(R.vdot).replace('.',',')}</b></span><span class="rt-src">da ${athEsc(R.fonte||'')}${R.sogliaMisurata?', soglia misurata':''}</span></div>
+      <div class="rt-prev"><span>Vale oggi:</span>${['5','10','21','42'].map(d=>R.prev&&R.prev[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(R.prev[d])}</b></span>`:'').join('')}</div></div>
+      <div class="rt-tiles">${['E','M','T','I','R'].map(c=>`<div class="rt-t" title="${athEsc(RR.DESC[c])}"><b>${c}</b><span class="rt-p">${RR.testo(R[c])}<small>/km</small></span><span class="rt-n">${RR.NOMI[c]}</span></div>`).join('')}</div>
+      ${zf?`<div class="rt-fc">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:''}</div>`;
+  }else if(R&&R.fcSoglia){
+    const zf=RR.zoneFc(R.fcSoglia);
+    top=`<div class="rt-box"><div class="rt-fc" style="margin:0">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div><p class="tdet-vuoto" style="margin:8px 0 0">Per i ritmi serve un tempo di gara o il passo di soglia.</p></div>`;
+  }else if(L.length)top=`<p class="tdet-vuoto">Ritmi non ancora calcolati: <button type="button" class="ub" style="color:var(--primary)" onclick="rtRicalcola('${aid}')">calcola dai tempi</button></p>`;
+  else top=`<p class="tdet-vuoto">Nessun tempo ancora. Da un 5 km, un 10 km, una mezza o una maratona recenti (o dal passo di soglia) si calcolano i ritmi di allenamento: E facile e lungo, M maratona, T soglia, I intervalli, R ripetute brevi. Le fasi di corsa dei programmi li seguono.</p>`;
+  const righe=L.map(x=>{
+    const sogl=x.tipo==='soglia',m=RR.metri(x.dist),V=!sogl&&m?RR.vdot(m,x.sec):null;
+    const isPb=!sogl&&pb[String(x.dist)]&&pb[String(x.dist)].id===x.id&&L.filter(y=>String(y.dist)===String(x.dist)&&y.tipo!=='soglia').length>1;
+    const base=R&&R.baseId===x.id;
+    return `<tr><td>${athEsc(x.date||'-')}</td><td>${sogl?'Soglia':athEsc(RR.distNome(x.dist))}${isPb?'<span class="pb">PB</span>':''}${base?'<span class="bs">base dei ritmi</span>':''}</td>
+      <td class="n"><b>${sogl?(x.sec?RR.passo(x.sec)+' /km':''):RR.tempo(x.sec)}</b>${sogl&&x.fc?' &#183; FC '+x.fc:''}</td>
+      <td class="n">${!sogl&&m?RR.passo(x.sec/(m/1000))+' /km':''}</td><td class="n">${V?V.toFixed(1).replace('.',','):''}</td>
+      <td class="nt">${athEsc(x.note||'')}${x.src==='atleta'?' (dall\'app)':''}</td>
+      <td class="x" style="white-space:nowrap">${!sogl&&V&&!base?`<button type="button" class="ub" title="Calcola i ritmi da questo tempo" onclick="rtBase('${aid}','${x.id}')">Usa</button>`:''}<button type="button" class="tdel" aria-label="Elimina il tempo del ${athEsc(x.date||'')}" onclick="rtDel('${aid}','${x.id}')">&#215;</button></td></tr>`;
+  }).join('');
+  return `<h3 class="det-sec">Tempi e ritmi</h3>`
+    +(nuovi.length?`<div class="rt-new"><span>${nuovi.length===1?'Un tempo nuovo':nuovi.length+' tempi nuovi'} dall'app dell'atleta: ${nuovi.map(x=>athEsc((x.tipo==='soglia'?'soglia':RR.distNome(x.dist))+' '+(x.tipo==='soglia'?RR.passo(x.sec):RR.tempo(x.sec)))).join(', ')}.</span><button type="button" class="btn btn-orange btn-sm" onclick="rtRicalcola('${aid}')">Aggiorna i ritmi</button></div>`:'')
+    +top
+    +(L.length?`<table class="tdet-tab rt-tab"><thead><tr><th>Data</th><th>Gara</th><th class="n">Tempo</th><th class="n">Passo</th><th class="n">VDOT</th><th>Note</th><th></th></tr></thead><tbody>${righe}</tbody></table>`:'')
+    +`<div class="test-acts"><button type="button" class="btn btn-orange btn-sm" onclick="rtNuovo('${aid}')">+ Nuovo tempo</button>${R&&R.vdot?`<button type="button" class="btn btn-outline btn-sm" onclick="rtAnteprima('${aid}')">Aggiorna i passi nei programmi</button>`:''}${rtUndo.length?`<button type="button" class="btn btn-ghost btn-sm" onclick="rtAnnulla()" title="Ctrl+Z">Annulla l'ultimo aggiornamento</button>`:''}</div>`;
+}
+function refreshRitmi(){if(currentAid){const el=document.getElementById('det-ritmi');if(el&&el.style.display!=='none')el.innerHTML=renderDetRitmi(currentAid);}}
+window.rtNuovo=function(aid){
+  const mb=document.getElementById('modal-body');
+  const oggi=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const D=[['5','5 km'],['10','10 km'],['21','Mezza'],['42','Maratona'],['altro','Altra distanza'],['soglia','Soglia']];
+  mb.innerHTML=`<h3>Nuovo tempo</h3>
+    <div class="tdet-sub">${athEsc(athletes[aid]?.name||'')}: un PB o un tempo recente. Vale anche un test, se corso a tutta.</div>
+    <div class="rt-seg" role="group" aria-label="Distanza">${D.map(([k,l])=>`<button type="button" data-d="${k}" class="${k===rtDist?'on':''}" onclick="rtSel('${aid}','${k}')">${l}</button>`).join('')}</div>
+    <div class="grid2"><div class="field rt-gara"><label>Tempo</label><input id="m-rt-t" placeholder="es. 45:30 o 1:42:10" oninput="rtLive('${aid}')" onkeydown="if(event.key==='Enter')rtSalva('${aid}')"></div>
+      <div class="field rt-altro" style="display:none"><label>Distanza in km</label><input id="m-rt-km" inputmode="decimal" placeholder="es. 15" oninput="rtLive('${aid}')"></div>
+      <div class="field rt-sogl" style="display:none"><label>Passo di soglia /km</label><input id="m-rt-sp" placeholder="es. 4:35" oninput="rtLive('${aid}')"></div>
+      <div class="field rt-sogl" style="display:none"><label>FC di soglia</label><input id="m-rt-fc" inputmode="numeric" placeholder="es. 172" oninput="rtLive('${aid}')"></div>
+      <div class="field"><label>Data</label><input id="m-rt-d" value="${oggi}" placeholder="gg/mm/aaaa" oninput="rtLive('${aid}')"></div></div>
+    <div class="field"><label>Note</label><input id="m-rt-n" placeholder="gara, test in pista, percorso, condizioni" onkeydown="if(event.key==='Enter')rtSalva('${aid}')"></div>
+    <div id="rt-live" class="rt-live"></div>
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="rtSalva('${aid}')">Salva e aggiorna i ritmi</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  rtSel(aid,rtDist);
+  setTimeout(()=>document.getElementById(rtDist==='soglia'?'m-rt-sp':'m-rt-t')?.focus(),60);
+};
+window.rtSel=function(aid,d){
+  rtDist=d;
+  document.querySelectorAll('.rt-seg button').forEach(b=>b.classList.toggle('on',b.dataset.d===d));
+  document.querySelectorAll('.rt-sogl').forEach(e=>e.style.display=d==='soglia'?'':'none');
+  document.querySelectorAll('.rt-gara').forEach(e=>e.style.display=d==='soglia'?'none':'');
+  document.querySelectorAll('.rt-altro').forEach(e=>e.style.display=d==='altro'?'':'none');
+  rtLive(aid);
+};
+// il tempo scritto nella finestra, come voce di race_times (null se manca qualcosa)
+function rtLeggi(){
+  const RR=window.RSRitmi,v=id=>(document.getElementById(id)?.value||'').trim();
+  const date=v('m-rt-d')||new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  if(rtDist==='soglia'){const sp=RR.sec(v('m-rt-sp')),fc=parseInt(v('m-rt-fc'),10);if(!sp&&!(fc>80&&fc<230))return null;return {tipo:'soglia',sec:sp&&sp<600?sp:0,fc:fc>80&&fc<230?fc:null,date};}
+  let dist=rtDist;if(dist==='altro'){const k=parseFloat(v('m-rt-km').replace(',','.'));if(!(k>0.4&&k<=100))return null;dist=String(k);}
+  const sec=RR.sec(v('m-rt-t'));if(!sec)return null;
+  const m=RR.metri(dist);if(!RR.vdot(m,sec))return {errore:'Tempo fuori scala per '+RR.distNome(dist)};
+  return {tipo:'gara',dist,sec,time:RR.tempo(sec),date};
+}
+window.rtLive=function(aid){
+  const el=document.getElementById('rt-live');if(!el)return;
+  const x=rtLeggi(),RR=window.RSRitmi;
+  if(!x){el.innerHTML='<i>Scrivi il tempo: i ritmi nuovi compaiono qui.</i>';return;}
+  if(x.errore){el.innerHTML='<i>'+athEsc(x.errore)+'</i>';return;}
+  const tempi=Object.assign({},raceTimes[aid]||{},{_nuovo:x});
+  const R=rtCalcola(aid,tempi,null),P=athletes[aid]?.ritmi;
+  if(!R||!R.vdot){el.innerHTML=x.fc?'Zone di frequenza dalla FC di soglia '+x.fc+'.':'<i>Servono un tempo o il passo di soglia.</i>';return;}
+  el.innerHTML=(R.baseId!=='_nuovo'&&x.tipo!=='soglia'?'<i>Esiste un tempo piu\' recente: i ritmi restano calcolati da quello. </i><br>':'')
+    +'VDOT <b>'+String(R.vdot).replace('.',',')+'</b>'+(P&&P.vdot?' <i>(prima '+String(P.vdot).replace('.',',')+')</i>':'')+'<br>'+rtRiga(R)
+    +(P&&P.vdot?'<br><i>Prima: '+rtRiga(P).replace(/<\/?b>/g,'')+'</i>':'');
+};
+window.rtSalva=async function(aid){
+  const x=rtLeggi();
+  if(!x){showToast(rtDist==='soglia'?'Scrivi il passo o la FC di soglia':'Scrivi il tempo');return;}
+  if(x.errore){showToast(x.errore);return;}
+  const note=(document.getElementById('m-rt-n')?.value||'').trim();
+  const voce=Object.assign({},x,{note:note||null,src:'coach',ts:Date.now()});
+  const r=push(ref(db,`race_times/${aid}`));
+  await set(r,voce);
+  const tempi=Object.assign({},raceTimes[aid]||{},{[r.key]:voce});
+  // una gara nuova diventa la base: si toglie la scelta fatta a mano (la soglia non la tocca)
+  const base=x.tipo==='gara'?null:(athletes[aid]?.ritmiBase||null);
+  const R=rtCalcola(aid,tempi,base);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null,ritmiBase:base});
+  closeModal();
+  if(R&&R.vdot){if(!rtAnteprima(aid,R,true))showToast('Tempo salvato, ritmi aggiornati');}
+  else showToast('Tempo salvato');
+};
+window.rtRicalcola=async function(aid){
+  const R=rtCalcola(aid);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null});
+  if(R&&R.vdot){if(!rtAnteprima(aid,R,true))showToast('Ritmi aggiornati');}else showToast('Ritmi aggiornati');
+};
+window.rtBase=async function(aid,id){
+  const R=rtCalcola(aid,null,id);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null,ritmiBase:id});
+  if(R&&R.vdot){if(!rtAnteprima(aid,R,true))showToast('Ritmi calcolati da questo tempo');}
+};
+window.rtDel=async function(aid,id){
+  if(!confirm('Eliminare questo tempo?'))return;
+  await remove(ref(db,`race_times/${aid}/${id}`));
+  const tempi=Object.assign({},raceTimes[aid]||{});delete tempi[id];
+  const base=athletes[aid]?.ritmiBase===id?null:(athletes[aid]?.ritmiBase||null);
+  const R=rtCalcola(aid,tempi,base);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null,ritmiBase:base});
+  if(!(R&&R.vdot&&rtAnteprima(aid,R,true)))showToast('Tempo eliminato');
+};
+// programmi dell'atleta con le fasi da ritoccare
+function rtProgrammi(aid,R){
+  return Object.entries(programs).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived).map(([pid,p])=>{
+    const res=window.RSRitmi.ricalcola(p,R);
+    const altri=Object.keys(p.assignedTo).filter(k=>k!==aid&&p.assignedTo[k]).map(k=>athletes[k]?.name).filter(Boolean);
+    return {pid,p,res,veri:res.cambi.filter(c=>c.da!==c.a),altri};
+  }).filter(x=>x.res.cambi.length);
+}
+function rtGruppi(c){const g={};c.forEach(x=>{const k=x.cod+'|'+x.da+'|'+x.a;(g[k]=g[k]||{cod:x.cod,da:x.da,a:x.a,n:0}).n++;});const o=window.RSRitmi.CODICI;return Object.values(g).sort((a,b)=>o.indexOf(a.cod)-o.indexOf(b.cod)||b.n-a.n);}
+// anteprima dei passi che cambiano; dopoTempo: se non c'e' niente da cambiare non apre la finestra
+window.rtAnteprima=function(aid,R,dopoTempo){
+  R=R||athletes[aid]?.ritmi;if(!R||!R.vdot){showToast('Servono i ritmi: aggiungi un tempo');return false;}
+  const PG=rtProgrammi(aid,R);
+  if(!PG.length||!PG.some(x=>x.veri.length)){
+    if(PG.length)rtApplica(aid,R,PG.map(x=>x.pid),true);
+    if(dopoTempo)return false;
+    showToast(PG.length?'I passi dei programmi sono gia\' questi':'Nessun programma con fasi di corsa');return true;
+  }
+  const RR=window.RSRitmi;
+  const blocchi=PG.map(x=>{
+    const tab=x.veri.slice(0,80).map(c=>`<tr><td>${athEsc(String(c.week).replace(/\s.*$/,''))}</td><td>${athEsc(c.sess)}</td><td>${athEsc(c.tipo)}</td><td><b>${c.cod}</b></td><td class="n">${athEsc(c.da||'-')}</td><td class="n a">${athEsc(c.a)}</td></tr>`).join('');
+    return `<div class="rt-pg"><label><input type="checkbox" data-pid="${x.pid}" ${x.altri.length?'':'checked'}> <b>${athEsc(x.p.name||'Programma')}</b><span>${x.veri.length?x.veri.length+(x.veri.length===1?' passo cambia':' passi cambiano'):'gia\' allineato'}</span></label>
+      ${x.altri.length?`<div class="cond">Assegnato anche a ${athEsc(x.altri.join(', '))}: i passi scritti valgono per tutti. Nell'app ognuno vede comunque i suoi ritmi sulle fasi E, M, T, I, R.</div>`:''}
+      ${x.res.rg?`<div class="cond">Ritmo gara RG ${RR.passo(x.res.rg)} /km ${x.p.intake&&x.p.intake.garaTempo||x.p.ritmi&&x.p.ritmi.RGfisso?'(obiettivo fissato, non cambia)':'(previsto dai tempi)'}</div>`:''}
+      ${x.veri.length?`<table class="tdet-tab rt-sum"><tbody>${rtGruppi(x.veri).map(g=>`<tr><td><b>${g.cod}</b> ${athEsc(RR.NOMI[g.cod]||'')}</td><td class="n">${athEsc(g.da||'-')}</td><td class="n a">${athEsc(g.a)}</td><td class="n">${g.n} ${g.n===1?'fase':'fasi'}</td></tr>`).join('')}</tbody></table>
+      <details><summary>Seduta per seduta</summary><table class="tdet-tab"><thead><tr><th>Sett.</th><th>Seduta</th><th>Fase</th><th></th><th class="n">Prima</th><th class="n">Dopo</th></tr></thead><tbody>${tab}</tbody></table>${x.veri.length>80?`<div class="cond">e altri ${x.veri.length-80}</div>`:''}</details>`:''}</div>`;
+  }).join('');
+  const mb=document.getElementById('modal-body');
+  document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
+  mb.innerHTML=`<h3>Passi nei programmi</h3>
+    <div class="tdet-sub">Ritmi nuovi di ${athEsc(athletes[aid]?.name||'')}: ${rtRiga(R).replace(/<\/?b>/g,'')}. Cambiano solo le fasi a ritmo (facile, soglia, intervalli, ripetute, passo gara); progressivi, fartlek e salite restano come sono.</div>
+    ${blocchi}
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Non ora</button><button class="btn btn-orange" id="rt-ok" onclick="rtApplica('${aid}')">Aggiorna i passi</button></div>
+    <div class="cond" style="font-size:11.5px;color:var(--muted);margin-top:10px">Dopo l'aggiornamento Ctrl+Z riporta i passi di prima.</div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  return true;
+};
+window.rtApplica=async function(aid,R,pids,quiet){
+  R=R||athletes[aid]?.ritmi;
+  pids=pids||[...document.querySelectorAll('.rt-pg input[data-pid]:checked')].map(i=>i.dataset.pid);
+  if(!pids.length){closeModal();return;}
+  const RR=window.RSRitmi,up={},prima={};let n=0;
+  pids.forEach(pid=>{
+    const p=programs[pid];if(!p)return;
+    const res=RR.ricalcola(p,R);
+    res.cambi.forEach(c=>{
+      const base=`programs/${pid}/weeks/${c.wid}/sessions/${c.sid}/corsaFasi/${c.i}`;
+      const f=p.weeks[c.wid].sessions[c.sid].corsaFasi[c.i];
+      up[base+'/'+c.campo]=c.a;prima[base+'/'+c.campo]=f[c.campo]==null?null:f[c.campo];
+      up[base+'/rit']=c.cod;prima[base+'/rit']=f.rit==null?null:f.rit;
+      if(c.da!==c.a)n++;
+    });
+    up[`programs/${pid}/ritmi`]=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+    prima[`programs/${pid}/ritmi`]=p.ritmi?JSON.parse(JSON.stringify(p.ritmi)):null;
+  });
+  if(!Object.keys(up).length){closeModal();return;}
+  const btn=document.getElementById('rt-ok');if(btn){btn.disabled=true;btn.textContent='Aggiorno...';}
+  try{
+    await update(ref(db),up);
+    if(n){rtUndo.push({prima,n,aid});if(rtUndo.length>20)rtUndo.shift();}
+    if(!quiet){closeModal();showToast(n+(n===1?' passo aggiornato':' passi aggiornati')+' in '+pids.length+(pids.length===1?' programma':' programmi')+'. Ctrl+Z annulla');}
+    refreshRitmi();
+  }catch(e){console.error(e);showToast('Errore nell\'aggiornamento');if(btn){btn.disabled=false;btn.textContent='Aggiorna i passi';}}
+};
+window.rtAnnulla=async function(){
+  const u=rtUndo.pop();if(!u)return;
+  await update(ref(db),u.prima);
+  showToast('Rimessi i passi di prima ('+u.n+')');refreshRitmi();
+};
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey)||e.shiftKey||String(e.key).toLowerCase()!=='z'||!rtUndo.length)return;
+  const t=e.target;if(t&&t.matches&&t.matches('input,textarea,select,[contenteditable]'))return;
+  e.preventDefault();rtAnnulla();
+});
+
 
 // dettaglio di un test: storico con i delta, grafico, nuova misura
 window.openTestDet=function(aid,name){
@@ -3118,12 +3360,12 @@ function renderDetLoad(aid,aSess){
 }
 
 // cinque schede come Relay: ognuna raccoglie uno o piu' pannelli di prima
-const DET_GRUPPI={calendario:['calendario','overview'],allenamenti:['sessions','load'],questionari:['checkin'],profilo:['tests','maxes','health'],chat:['chat']};
-const DET_PADRE={overview:'calendario',sessions:'allenamenti',load:'allenamenti',checkin:'questionari',tests:'profilo',maxes:'profilo',health:'profilo'};
+const DET_GRUPPI={calendario:['calendario','overview'],allenamenti:['sessions','load'],questionari:['checkin'],profilo:['ritmi','tests','maxes','health'],chat:['chat']};
+const DET_PADRE={ritmi:'profilo',overview:'calendario',sessions:'allenamenti',load:'allenamenti',checkin:'questionari',tests:'profilo',maxes:'profilo',health:'profilo'};
 window.detTab=function(gid,el){
   if(DET_PADRE[gid]){gid=DET_PADRE[gid];el=document.querySelector('#detail-panel .tab[data-t="'+gid+'"]');}
   const subs=DET_GRUPPI[gid]||[gid];
-  ['calendario','overview','tests','sessions','checkin','load','maxes','health','chat'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=subs.includes(t)?'block':'none';});
+  ['calendario','overview','ritmi','tests','sessions','checkin','load','maxes','health','chat'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=subs.includes(t)?'block':'none';});
   document.querySelectorAll('#detail-panel .tab').forEach(t=>t.classList.remove('active'));
   if(el)el.classList.add('active');
   subs.forEach(id=>detTabSub(id));

@@ -1452,6 +1452,22 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rpe9 button.z3.on{background:#FB7185!important;border-color:#FB7185!important;color:#2B0A10!important}
 #prog-list-athlete .prog-card:not(.prog-archived){background:radial-gradient(110% 60% at 100% 0%,rgba(255,106,46,.18) 0%,rgba(255,106,46,0) 60%),#1C1412!important;border-color:rgba(255,106,46,.22)!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+/* ritmi di corsa */
+.rt7{margin:0 14px 14px;border:1px solid rgba(139,92,246,.24);border-radius:14px;background:rgba(139,92,246,.06);padding:14px}
+.rt7-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.rt7-h b{font:700 22px Inter,sans-serif;color:var(--violet2);font-variant-numeric:tabular-nums}.rt7-h span{font-size:11.5px;color:var(--muted);text-align:right}
+.rt7-r{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line6)}
+.rt7-c{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font:700 12px Inter,sans-serif;color:var(--violet2);background:rgba(139,92,246,.14);flex-shrink:0}
+.rt7-n{flex:1;min-width:0}.rt7-n b{display:block;font:600 13.5px Inter,sans-serif;color:var(--white)}.rt7-n span{font-size:11.5px;color:var(--muted);line-height:1.4}
+.rt7-p{font:600 16px Inter,sans-serif;color:var(--white);white-space:nowrap;font-variant-numeric:tabular-nums}.rt7-p small{font-size:11px;color:var(--muted);font-weight:500;margin-left:2px}
+.rt7-prev{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin-top:8px}.rt7-prev b{color:var(--white);font-weight:600}
+.rt7-fc{font-size:11.5px;color:var(--muted);margin-top:8px;display:flex;flex-wrap:wrap;gap:4px 10px}.rt7-fc b{color:var(--white)}
+.rt7-add{margin:0 14px 14px;display:flex;gap:8px;flex-wrap:wrap}
+.rt7-add select,.rt7-add input{flex:1 1 120px;min-width:0;font-size:16px}
+.rt7-add button{flex:1 1 100%;padding:12px;border-radius:12px;border:0;background:var(--primary);color:#fff;font:600 14px Inter,sans-serif;cursor:pointer}
+.rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
+.prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important}
+.corsa-rit{display:inline-block;font:700 10px Inter,sans-serif;color:var(--violet2);background:rgba(139,92,246,.14);border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:1px}
 </style>
 </head>
 <body>
@@ -1556,6 +1572,7 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 
     <div class="prof-tabs">
       <button class="prof-tab active" onclick="profTab('storico',this)">Storico</button>
+      <button class="prof-tab" onclick="profTab('ritmi',this)">Ritmi</button>
       <button class="prof-tab" onclick="profTab('test',this)">Test</button>
       <button class="prof-tab" onclick="profTab('1rm',this)">Massimali</button>
       <button class="prof-tab" onclick="profTab('body',this)">Corpo</button>
@@ -1564,6 +1581,8 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 
     <!-- TEST: i risultati che scrive il preparatore -->
     <div id="prof-test" style="display:none"><div id="pf-test-list"></div></div>
+    <!-- RITMI: dai tempi di gara, calcolati dal preparatore -->
+    <div id="prof-ritmi" style="display:none"><div id="pf-ritmi"></div></div>
 
     <!-- STORICO -->
     <div id="prof-storico">
@@ -1962,6 +1981,9 @@ if(!aid){
 
     // test del preparatore: valore attuale, storico e definizioni dei test personalizzati
     onValue(ref(db,`tests/${aid}`),t=>{ST.tests=t.val()||{};renderPfTest();});
+    // ritmi di corsa: li calcola il preparatore dai tempi; i tempi nuovi dell'atleta aspettano lui
+    onValue(ref(db,`athletes/${aid}/ritmi`),t=>{window._ath.ritmi=t.val()||null;renderPfRitmi();});
+    onValue(ref(db,`race_times/${aid}`),t=>{ST.tempi=t.val()||{};renderPfRitmi();});
     onValue(ref(db,`test_history/${aid}`),t=>{ST.testH=t.val()||{};renderPfTest();});
     onValue(ref(db,'test_defs'),t=>{ST.testDefs=t.val()||{};renderPfTest();});
 
@@ -2377,6 +2399,41 @@ function renderPfNum(){
 const PF_TEST_META={'Sprint 10m':['s',-1,2],'Sprint 20m':['s',-1,2],'Sprint 30m':['s',-1,2],'CMJ':['cm',1,1],'SJ':['cm',1,1],'Drop Jump':['cm',1,1],'Yo-Yo IR1':['m',1,0],'Illinois Agility':['s',-1,2],'5-10-5':['s',-1,2],'Back Squat 1RM':['kg',1,1],'Trap Bar 1RM':['kg',1,1],'Front Squat 1RM':['kg',1,1],'Hip Thrust 1RM':['kg',1,1],'Nordic Hamstring':['N',1,0]};
 const pfNum=v=>{const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:null;};
 const pfTs=d=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d||'').trim());return m?new Date(+m[3],+m[2]-1,+m[1],12).getTime():0;};
+// ── RITMI DI CORSA
+/* I ritmi (E facile, M maratona, T soglia, I intervalli, R ripetute) li calcola il
+   preparatore dai tempi di gara (athletes/{aid}/ritmi). Le fasi di corsa legate a un
+   ritmo (campo rit) mostrano il passo dell'atleta, anche nei programmi di gruppo.
+   Un tempo scritto qui va in race_times con src 'atleta' e aspetta il preparatore. */
+function ritPasso(f,campo){const R=(window._ath||{}).ritmi;return window.RSRitmi?window.RSRitmi.passoFase(f,R,campo):(f[campo]||'');}
+function ritChip(f){return f&&f.rit?`<span class="corsa-rit" title="${escH(window.RSRitmi?window.RSRitmi.NOMI[f.rit]||'':'')}">${escH(f.rit)}</span>`:'';}
+function renderPfRitmi(){
+  const el=document.getElementById('pf-ritmi');if(!el||!window.RSRitmi)return;
+  const RR=window.RSRitmi,R=(window._ath||{}).ritmi;
+  const L=Object.values(ST.tempi||{}).filter(x=>x&&x.sec>0).sort((a,b)=>RR.dataTs(b.date)-RR.dataTs(a.date)||(b.ts||0)-(a.ts||0));
+  let h='';
+  if(R&&R.vdot){
+    const zf=RR.zoneFc(R.fcSoglia);
+    h+=`<div class="rt7"><div class="rt7-h"><div><span style="font-size:11.5px;color:var(--muted)">VDOT</span> <b>${nfIt(R.vdot,1)}</b></div><span>dal ${escH(R.fonte||'')}</span></div>`
+      +['E','M','T','I','R'].map(c=>`<div class="rt7-r"><span class="rt7-c">${c}</span><div class="rt7-n"><b>${RR.NOMI[c]}</b><span>${escH(RR.DESC[c])}</span></div><div class="rt7-p">${RR.testo(R[c])}<small>/km</small></div></div>`).join('')
+      +(R.prev?`<div class="rt7-prev"><span>Oggi vali:</span>${['5','10','21','42'].map(d=>R.prev[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(R.prev[d])}</b></span>`:'').join('')}</div>`:'')
+      +(zf?`<div class="rt7-fc">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:'')+`</div>`;
+  }else h+=`<div class="empty">I ritmi arrivano dai tuoi tempi: scrivi un 5 km, un 10 km, una mezza o una maratona recenti e il preparatore li calcola.</div>`;
+  h+=`<div class="pf-sec"><div class="pf-h"><h3>Aggiungi un tempo</h3><span>gara o test a tutta</span></div></div>
+    <div class="rt7-add"><select id="rt7-d" aria-label="Distanza"><option value="5">5 km</option><option value="10">10 km</option><option value="21">Mezza</option><option value="42">Maratona</option></select>
+    <input id="rt7-t" placeholder="tempo, es. 47:30" aria-label="Tempo" autocomplete="off"><input id="rt7-dt" value="${new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}" aria-label="Data">
+    <button type="button" onclick="rt7Salva()">Invia al preparatore</button></div>`;
+  if(L.length)h+=`<div class="pf-sec"><div class="pf-h"><h3>I tuoi tempi</h3><span>${L.length}</span></div></div><div class="pt7">`+L.map(x=>{
+    const sogl=x.tipo==='soglia',att=x.src==='atleta'&&(!R||(x.ts||0)>(R.ts||0));
+    return `<div class="pt7-r"><div class="pt7-n"><b>${sogl?'Soglia':escH(RR.distNome(x.dist))}${att?'<i class="rt7-att">in attesa del preparatore</i>':''}</b><span>${escH(x.date||'')}${x.note?' &middot; '+escH(x.note):''}</span></div><div class="pt7-v">${sogl?RR.passo(x.sec):RR.tempo(x.sec)}<small>${sogl?'/km':''}</small></div></div>`;}).join('')+`</div>`;
+  el.innerHTML=h;
+}
+window.rt7Salva=async function(){
+  const RR=window.RSRitmi,d=document.getElementById('rt7-d').value,t=RR.sec(document.getElementById('rt7-t').value);
+  const date=(document.getElementById('rt7-dt').value||'').trim();
+  if(!t||!RR.vdot(RR.metri(d),t)){showToast('Scrivi il tempo, es. 47:30 o 1:45:00');return;}
+  try{await push(ref(db,`race_times/${aid}`),{tipo:'gara',dist:d,sec:t,time:RR.tempo(t),date:date||null,src:'atleta',ts:Date.now()});showToast('Tempo inviato: il preparatore aggiorna i ritmi');}
+  catch(e){showToast('Non riesco a salvare, riprova');}
+};
 function renderPfTest(){
   const el=document.getElementById('pf-test-list');if(!el)return;
   const nomi=Object.keys(ST.tests||{});
@@ -2619,7 +2676,8 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
         if(f.reps&&String(f.reps)!=='1')head.push(esc(String(f.reps).replace(/\s*[x×]\s*$/i,''))+'×');
         if(f.repDist)head.push(esc(resolveVars(f.repDist)));
         let line=head.join(' ');
-        if(f.repPace)line+=(line?' @ ':'')+esc(pk(resolveVars(f.repPace)));
+        const rpp=ritPasso(f,'repPace');
+        if(rpp)line+=(line?' @ ':'')+esc(pk(resolveVars(rpp)))+ritChip(f);else if(f.rit)line+=(line?' @ ':'')+'ritmo '+esc(f.rit)+ritChip(null);
         const rec=f.rec||[f.recDist,f.recTime,f.recPace].filter(Boolean).join(' ');
         if(rec)line+=(line?' · ':'')+'rec '+esc(resolveVars(rec));
         if(ser&&f.recSerie)line+=' · '+esc(resolveVars(f.recSerie))+' fra le serie';
@@ -2627,7 +2685,8 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       }else{
         const parts=[];
         if(f.dist)parts.push(esc(distNorm(resolveVars(f.dist))));
-        if(f.pace)parts.push(esc(pk(resolveVars(f.pace))));
+        const pp=ritPasso(f,'pace');
+        if(pp)parts.push(esc(pk(resolveVars(pp)))+ritChip(f));else if(f.rit)parts.push('ritmo '+esc(f.rit));
         detail=parts.join(' · ');
       }
       const fc=z?`<div class="corsa-ffc">${ZF_ATH[z]}</div>`:'';
@@ -3344,7 +3403,7 @@ window.bnSwitch=(page,btn)=>{
 };
 
 window.profTab=(tab,btn)=>{
-  ['storico','test','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
+  ['storico','ritmi','test','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
   document.querySelectorAll('.prof-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(tab==='1rm'){
