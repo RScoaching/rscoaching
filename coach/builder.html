@@ -7061,6 +7061,14 @@ function pzFatto(e,log){
 }
 const PZ_FAM=[['front',/front squat|squat frontale/],['squat',/squat/],['rdl',/\brdl\b|romanian|stacco rumeno/],['stacco',/deadlift|stacco/],['panca',/bench press|panca piana|^panca$/],['ohp',/military|overhead press|strict press|lento avanti|shoulder press/],['trazioni',/pull ?-?up|trazion|chin ?-?up/],['thrust',/hip thrust/],['clean',/power clean|hang clean|girata/]];
 function pzFam(n){n=String(n||'').toLowerCase().trim();if(/goblet|split|bulgar|pistol|jump|bodyweight|corpo libero|single leg|dumbbell|manubri|kettlebell/.test(n))return 'x:'+n;const f=PZ_FAM.find(([,r])=>r.test(n));return f?f[0]:'x:'+n;}
+// sedute del programma in un giorno (AAAA-MM-GG), per agganciare le uscite dell'orologio
+function pzPianIso(pid,iso){
+  const p=programs[pid],O=window.RSOrologio;if(!p||!O)return [];
+  const out=[];Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).forEach(([,w],wi)=>Object.entries(w.sessions||{}).forEach(([sid,x])=>{
+    if(!x||x.dayOfWeek==null)return;const d=O.giorno(p,wi,x.dayOfWeek);if(d&&O.iso(d)===iso)out.push({pid,wi,sid,tipo:x.type,nome:x.name||'Seduta',s:x});}));
+  return out;
+}
+function pzFattaKm(f){return f&&f.corsa&&+f.corsa.km?' '+String(f.corsa.km).replace('.',',')+' km'+(f.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(f.corsa.passo):''):'';}
 async function pzCaricaRM(){
   const p=programs[currentProgId];if(!p)return;
   const ids=Object.keys(p.assignedTo||{}).filter(id=>athletes[id]);
@@ -7068,7 +7076,9 @@ async function pzCaricaRM(){
   let nuovo=false;
   await Promise.all(ids.filter(id=>!pzLogs[id]||pzLogs[id].pid!==currentProgId).map(async id=>{
     try{
-      const v=(await get(ref(db,'session_logs/'+id))).val()||{};
+      let v=(await get(ref(db,'session_logs/'+id))).val()||{};
+      // le uscite dell'orologio (garmin_data) valgono come sedute fatte di questo programma
+      try{const g=(await get(ref(db,'garmin_data/'+id))).val();if(g&&window.RSGarmin)v=window.RSGarmin.fondi(v,g,iso=>pzPianIso(currentProgId,iso));}catch(e){}
       pzLogs[id]={pid:currentProgId,l:Object.values(v).filter(l=>l&&l.progId===currentProgId).sort((a,b)=>(b.ts||0)-(a.ts||0))};nuovo=true;
     }catch(e){pzLogs[id]={pid:currentProgId,l:[]};}
   }));
@@ -7533,7 +7543,7 @@ function pzGrafico(){
 let pzClip=null,pzDrag=null;
 function pzChip(wid,sid,s,wi){
   const st=pzStatSess(s),fatta=wi!=null&&pzLog(wi,sid);
-  return `<div class="pz-chip2 t-${s.type||'pesi'}${fatta?' fatta':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" onclick="pzApriSess('${wid}','${sid}')" title="${stEsc(s.name||'')}"><b>${stEsc(s.name||'Seduta')}</b><span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+' · ':''}${st.es?st.es+' es · ':''}${st.min?'~'+pzMinTxt(st.min):stEsc((SESS_TYPES[s.type]||{}).label||'')}</span></div>`;
+  return `<div class="pz-chip2 t-${s.type||'pesi'}${fatta?' fatta':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" onclick="pzApriSess('${wid}','${sid}')" title="${stEsc(s.name||'')}"><b>${stEsc(s.name||'Seduta')}</b><span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+pzFattaKm(fatta)+' · ':''}${st.es?st.es+' es · ':''}${st.min?'~'+pzMinTxt(st.min):stEsc((SESS_TYPES[s.type]||{}).label||'')}</span></div>`;
 }
 function pzMappa(){
   const W=pzWeeks();if(!W.length)return '';
@@ -7677,7 +7687,7 @@ function pzGiorni(wid,w){
       <em>${stEsc(PZ_TIPO_BREVE[x.type]||'Seduta')}${k.dura?' <u>dura</u>':''}</em>
       <b>${stEsc(x.name||'Seduta')}</b>
       ${r.length?`<ul>${r.slice(0,5).map(t=>`<li>${stEsc(t)}</li>`).join('')}${r.length>5?`<li class="piu">e altri ${r.length-5}</li>`:''}</ul>`:''}
-      <span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+' · ':''}${k.min?'~'+pzMinTxt(Math.round(k.min/5)*5||k.min):''}${km?' · '+km[1]+' km':''}</span>
+      <span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+pzFattaKm(fatta)+' · ':''}${k.min?'~'+pzMinTxt(Math.round(k.min/5)*5||k.min):''}${km?' · '+km[1]+' km':''}</span>
     </div>`;
   };
   let h=pzWeekBar(w)+`<div class="pz-days-wrap"><div class="pz-days${senza.length?' con-senza':''}">`;

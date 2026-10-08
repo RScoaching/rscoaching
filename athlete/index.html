@@ -1466,7 +1466,8 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rt7-add select,.rt7-add input{flex:1 1 120px;min-width:0;font-size:16px}
 .rt7-add button{flex:1 1 100%;padding:12px;border-radius:12px;border:0;background:var(--primary);color:#fff;font:600 14px Inter,sans-serif;cursor:pointer}
 .rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
-.prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important}
+.prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important} 
+.pr-or{margin-top:12px;padding-top:10px;border-top:1px solid var(--line6);font-size:12.5px;line-height:1.5;color:var(--text)}.pr-or b{color:var(--violet2);font-weight:600;margin-right:4px}.pr-or i{display:block;font-style:normal;color:#FF9A6B;margin-top:3px}
 .orol-btns{display:flex;gap:8px;padding:0 16px 13px}.orol-btns button{flex:1;padding:10px 8px;border-radius:12px;border:1px solid var(--line6);background:rgba(255,214,196,.04);color:var(--white);font:600 12.5px Inter,sans-serif;cursor:pointer}
 #today-content .orol-btns{padding:10px 0 0}
 .orol-imp{width:100%;padding:12px;border-radius:12px;border:1px dashed rgba(255,106,46,.45);background:rgba(255,106,46,.06);color:#FF9A6B;font:600 13px Inter,sans-serif;cursor:pointer;margin-bottom:14px}
@@ -1873,7 +1874,24 @@ function prPunti(s,d,e,st){const n=v=>(v-1)/4,inv=v=>(5-v)/4;return Math.round((
 function prStato(s){return s>=70?'Pronto':s>=40?'Discreto':'Da recuperare';}
 function prCls(s){return s>=70?'hi':s>=40?'mid':'lo';}
 // la risposta di un giorno: il questionario se c'e', se no il check-in del mattino tradotto su 5
+// registri = quelli scritti dall'app + le attivita' dell'orologio agganciate alle sedute in programma
+function gmPianIso(iso){
+  const O=window.RSOrologio,out=[];if(!O)return out;
+  Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived).forEach(([pid,p])=>{
+    Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).forEach(([,w],wi)=>Object.entries(w.sessions||{}).forEach(([sid,x])=>{
+      if(!x||x.dayOfWeek==null)return;const d=O.giorno(p,wi,x.dayOfWeek);if(d&&O.iso(d)===iso)out.push({pid,wi,sid,tipo:x.type,nome:x.name||'Seduta',s:x});}));});
+  return out;
+}
+function gmLogs(){
+  const v=ST.gd&&window.RSGarmin?window.RSGarmin.fondi(ST.logsRaw||{},ST.gd,gmPianIso):(ST.logsRaw||{});
+  ST.logs=Object.values(v).filter(l=>l&&l.ts).sort((a,b)=>b.ts-a.ts);
+}
 function prGiorno(iso){
+  const q=prGiorno0(iso);if(!ST.gd||!window.RSGarmin)return q;
+  const r=window.RSGarmin.prontezza(q,window.RSGarmin.sintesi(ST.gd,iso),prPunti);
+  return r&&typeof r.score==='number'?Object.assign({pains:[],ts:0,nota:''},r):null;
+}
+function prGiorno0(iso){
   const r=ST.q[iso]&&ST.q[iso].readiness,c=ST.ci[iso];
   const pz=c&&c.pains,pains=(Array.isArray(pz)?pz:(pz&&typeof pz==='object'?Object.values(pz):[])).filter(z=>z&&z!=='nessuno');
   const nota=(c&&!c.fromSession&&c.note)||'';
@@ -1923,10 +1941,12 @@ if(!aid){
 
     // Session logs (actual workouts)
     onValue(ref(db,`session_logs/${aid}`),wlogSnap=>{
-      ST.logs=Object.values(wlogSnap.val()||{}).filter(l=>l&&l.ts).sort((a,b)=>b.ts-a.ts);
+      ST.logsRaw=wlogSnap.val()||{};gmLogs();
       renderWorkoutLogs(ST.logs);
       oggiAgg();
     });
+    // dati dell'orologio (Garmin o intervals.icu): le uscite diventano sedute fatte, sonno e HRV entrano nella prontezza
+    onValue(ref(db,`garmin_data/${aid}`),gSnap=>{ST.gd=gSnap.val()||null;gmLogs();oggiAgg();},()=>{});
 
     // RPE delle sedute, un giorno per chiave
     onValue(ref(db,`sessions/${aid}`),sessSnap=>{
@@ -2057,16 +2077,20 @@ function r9Core(g){
 }
 function renderProntezza(){
   const el=document.getElementById('readiness-hero');if(!el)return;
-  const g=prGiorno(isoLoc(new Date()));
+  const oggi=isoLoc(new Date()),g=prGiorno(oggi),o=ST.gd&&window.RSGarmin?window.RSGarmin.sintesi(ST.gd,oggi):null;
+  const or=o?`<div class="pr-or"><b>Dall'orologio</b> ${window.RSGarmin.riga(o)||''}${o.hrvGiu||o.fcSu?'<i>'+(o.hrvGiu?'HRV sotto la tua media':'FC a riposo alta')+': oggi meglio non forzare</i>':''}</div>`:'';
   if(!g){
     el.classList.remove('fatto');el.dataset.st='vuoto';
-    el.innerHTML=`<div class="pr-vuoto"><div><div class="pr-t">Come stai oggi?</div><div class="pr-s">Cinque domande, venti secondi. Il preparatore lo vede subito e adatta la seduta.</div></div>
-      <button type="button" class="pr-go" onclick="openQuickCheckin()">Fai il check-in</button></div>`;
+    el.innerHTML=`<div class="pr-vuoto"><div><div class="pr-t">Come stai oggi?</div><div class="pr-s">${o?'Il sonno lo prende dall\'orologio: restano dolori, energia e stress.':'Cinque domande, venti secondi. Il preparatore lo vede subito e adatta la seduta.'}</div></div>
+      <button type="button" class="pr-go" onclick="openQuickCheckin()">Fai il check-in</button></div>`+or;
     return;
   }
   el.classList.add('fatto');
   el.dataset.st=prCls(g.score);
-  el.innerHTML=r9Core(g)+`
+  const qOggi=!!prGiorno0(oggi);
+  let core=r9Core(g);
+  if(g.da==='orologio')core=core.replace(/<div class="r9-ora">[^<]*<\/div>/,'<div class="r9-ora">Readiness dell\'orologio</div>').replace('>Modifica</button>','>'+(qOggi?'Modifica il check-in':'Fai il check-in')+'</button>');
+  el.innerHTML=core+or+`
     ${g.pains.length?`<div class="pr-dol">Dolore: ${escH(g.pains.join(', '))}</div>`:''}
     ${g.score<40?`<div class="pr-basso"><span>Prontezza bassa: se oggi hai la seduta, dillo al preparatore prima di iniziare.</span><button type="button" onclick="bnSwitch('chat',document.getElementById('bn-chat'))">Scrivigli</button></div>`:''}`;
 }
@@ -2875,7 +2899,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   // ── Priority 2: Programs (program builder)
   const progSnap=await get(ref(db,'programs'));
   const progs=progSnap.val()||{};
-  ST.progs=progs;
+  ST.progs=progs;if(ST.gd)gmLogs();
   const myProgs=Object.entries(progs).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived);
   const progCards=[];let _firstPT=null;
   for(const [progId,prog] of myProgs){
@@ -2972,7 +2996,7 @@ async function loadWeekPlan(athlete){
   const monday=getMondayOf(new Date());const wk=monday.toISOString().slice(0,10);
   const wrap=document.getElementById('week-list');
   const progSnap=await get(ref(db,'programs'));
-  ST.progs=progSnap.val()||{};
+  ST.progs=progSnap.val()||{};if(ST.gd)gmLogs();
   renderPrograms(ST.progs);
   // Load all athlete-specific plans (sent by coach)
   const qpSnap=await get(ref(db,`athlete_plans/${aid}`));
