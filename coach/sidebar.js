@@ -284,7 +284,7 @@ window.RSRitmi = (function(){
   // elenco dei tempi { id: {tipo:'gara'|'soglia', dist, sec, fc, date, note} } -> ritmi
   // base: l'id scelto dal preparatore, se no la gara piu' recente (a parita' di data la migliore)
   function calcola(tempi,baseId){
-    const L=Object.entries(tempi||{}).map(([id,x])=>Object.assign({id},x)).filter(x=>x&&x.sec>0);
+    const L=Object.entries(tempi||{}).map(([id,x])=>Object.assign({id},x)).filter(x=>x&&(x.sec>0||x.fc>0));
     const gare=L.filter(x=>x.tipo!=='soglia'&&metri(x.dist)).map(x=>Object.assign(x,{V:vdot(metri(x.dist),x.sec),t:dataTs(x.date)})).filter(x=>x.V);
     gare.sort((a,b)=>b.t-a.t||b.V-a.V);
     const soglie=L.filter(x=>x.tipo==='soglia').map(x=>Object.assign(x,{t:dataTs(x.date)})).sort((a,b)=>b.t-a.t);
@@ -379,4 +379,267 @@ window.RSRitmi = (function(){
   // passo di una fase per l'app atleta: se la fase ha un codice e l'atleta ha i suoi ritmi, i suoi
   function passoFase(f,R,campo){const v=f&&f.rit&&f.rit!=='RG'&&R?R[f.rit]:null;return v?testo(v):(f?f[campo]||'':'');}
   return {DIST,DNOME,CODICI,NOMI,DESC,sec,passo,tempo,metri,distNome,vdot,previsto,daVdot,vdotDaSoglia,calcola,zoneFc,valore,testo,rgProgramma,codice,codiceDaPasso,codiceFase,daTesto,etichetta,ricalcola,istantanea,passoFase,dataTs};
+})();
+
+// ── OROLOGIO: SEDUTE DI CORSA IN FILE E ATTIVITA' DAI FILE ─────────────
+/* Una seduta di corsa (corsaFasi) diventa una lista di passi strutturati: durata a
+   distanza o a tempo (o al tasto lap), passo come fascia di velocita', ripetute con
+   recupero. Dai passi escono: il workout .FIT (Garmin: cavo USB, cartella
+   GARMIN/NewFiles; intervals.icu lo importa e lo manda a Garmin Connect e COROS),
+   il testo per il costruttore di intervals.icu e il pacchetto JSON che Claude passa
+   al connettore Garmin (MCP). Al contrario, un'attivita' .FIT o .GPX dell'orologio
+   (o esportata da Strava) da' km, tempo, passo, FC e giri per il confronto. */
+window.RSOrologio = (function(){
+  const RR = () => window.RSRitmi;
+  const FIT_EPOCH = 631065600; // 31/12/1989 in secondi Unix
+  // ── durate: "2 km", "1,5 km", "400 m", "15'", "1h 20'", "90\"", "3:00", "6" (km)
+  function durata(t){
+    t=String(t==null?'':t).toLowerCase().replace(/,/g,'.').trim();
+    if(!t)return null;
+    let m;
+    if((m=/(\d+(?:\.\d+)?)\s*km\b/.exec(t)))return {tipo:'dist',m:Math.round(+m[1]*1000)};
+    if((m=/(\d+(?:\.\d+)?)\s*(?:m|mt|mtr|metri)\b(?!in)/.exec(t))&&!/'|"/.test(t))return {tipo:'dist',m:Math.round(+m[1])};
+    let s=0,ok=false;
+    if((m=/(\d+)\s*h/.exec(t))){s+=+m[1]*3600;ok=true;}
+    if((m=/(\d+(?:\.\d+)?)\s*(?:'|min\b|minuti|′)(?!')/.exec(t))){s+=+m[1]*60;ok=true;}
+    if((m=/(\d+)\s*(?:"|''|sec\b|secondi|s\b|″)/.exec(t))&&!/^\d+\s*'\s*$/.test(t)){const mm=/(\d+)\s*'\s*(\d+)\s*("|'')/.exec(t);s+=mm?+mm[2]:+m[1];ok=true;}
+    if(ok&&s>0)return {tipo:'time',s:Math.round(s)};
+    if((m=/^(\d{1,2}):(\d{2})$/.exec(t)))return {tipo:'time',s:+m[1]*60+(+m[2])};
+    if((m=/^(\d+(?:\.\d+)?)$/.exec(t))){const x=+m[1];if(x>0&&x<=45)return {tipo:'dist',m:Math.round(x*1000)};if(x>=100)return {tipo:'dist',m:Math.round(x)};}
+    return null;
+  }
+  // pezzi di una piramide: "400-800-1200-800-400 m", "1'-2'-3'-2'-1'"
+  function pezzi(t){
+    const s=String(t||'').replace(/\(.*?\)/g,'').trim();
+    if(!/\d\s*['"m]?\s*-\s*\d/.test(s)||/^\d+\s*-\s*\d+\s*"/.test(s))return null;
+    const unita=(/\s*(km|m)\s*$/i.exec(s)||[])[1]||'';
+    const p=s.replace(/\s*(km|m)\s*$/i,'').split(/\s*-\s*/).map(x=>durata(x+(/['"]/.test(x)?'':(unita?' '+unita:''))));
+    return p.length>1&&p.every(Boolean)?p:null;
+  }
+  // fascia di passo (secondi al km): [lento, veloce]
+  function fascia(txt){
+    const r=RR();const t=String(txt||'');if(!t||/fino a/.test(t))return null;
+    const p=t.replace(/\s*\/\s*km/i,'').split(/\s*-\s*/).map(r.sec).filter(x=>x&&x>=150&&x<=900);
+    if(p.length===2)return [Math.max(p[0],p[1]),Math.min(p[0],p[1])];
+    if(p.length===1)return [p[0]+5,p[0]-5];
+    return null;
+  }
+  function passoDi(f,campo,R){const r=RR();return r&&f.rit&&f.rit!=='RG'&&R?r.passoFase(f,R,campo):(f[campo]||'');}
+  function fcDi(f,R){const z=(/Z[1-5]/.exec(f.zona||'')||[])[0];if(!z||!R||!R.fcSoglia)return null;const fc=+R.fcSoglia,P={Z1:[0.70,0.85],Z2:[0.85,0.89],Z3:[0.90,0.94],Z4:[0.95,1.0],Z5:[1.0,1.06]}[z];return [Math.round(fc*P[0]),Math.round(fc*P[1])];}
+  function target(f,campo,R){
+    const fa=fascia(passoDi(f,campo,R));
+    if(fa)return {tipo:'pace',lo:fa[0],hi:fa[1]};
+    const hr=fcDi(f,R);return hr?{tipo:'hr',lo:hr[0],hi:hr[1]}:null;
+  }
+  function intens(tipo){const t=String(tipo||'').toLowerCase();return /riscald|attivaz/.test(t)?'warmup':/defatic/.test(t)?'cooldown':'active';}
+  // recupero: "90\"", "2' trotto", "1 km lento", "500 m", "discesa", "ritorno al passo"
+  function recupero(f){
+    const txt=[f.recDist,f.recTime,f.rec].filter(Boolean).join(' ');const p=String(f.recPace||'');
+    const d=durata(txt);const fermo=/fermo|camminat|passo\b/.test(txt+' '+p)&&!/trotto/.test(txt+' '+p);
+    const nome=(txt+(p&&!txt.includes(p)?' '+p:'')).trim()||'Recupero';
+    if(!txt&&!p)return null;
+    return {kind:'step',nome:'Recupero',note:nome,intens:fermo?'rest':'recovery',dur:d||{tipo:'open'},target:null};
+  }
+  // ── da una seduta ai passi
+  function passi(s,R){
+    const out=[];const arr=Array.isArray(s&&s.corsaFasi)?s.corsaFasi:Object.values(s&&s.corsaFasi||{});
+    arr.forEach(f=>{
+      if(!f)return;
+      const nome=String(f.tipo||'Corsa').slice(0,30),note=[f.zona,f.note].filter(Boolean).join(' - ');
+      const intv=f.reps||f.repDist||f.repPace;
+      if(!intv){
+        out.push({kind:'step',nome,note,intens:intens(f.tipo),dur:durata(f.dist)||{tipo:'open'},target:target(f,'pace',R)});
+        return;
+      }
+      const n=Math.max(1,parseInt(f.reps,10)||1),ser=Math.max(1,parseInt(f.serie,10)||1);
+      const tg=target(f,'repPace',R),rec=recupero(f),pz=pezzi(f.repDist);
+      const lavoro=pz?pz.map((d,i)=>({kind:'step',nome:nome+' '+(i+1),note,intens:'active',dur:d,target:tg})):[{kind:'step',nome,note,intens:'active',dur:durata(f.repDist)||{tipo:'open'},target:tg}];
+      const blocco=[];lavoro.forEach((x,i)=>{blocco.push(x);if(rec&&(pz?i<lavoro.length-1||n>1:true))blocco.push(Object.assign({},rec));});
+      for(let k=0;k<ser;k++){
+        if(n>1)out.push({kind:'repeat',n,steps:blocco.map(x=>Object.assign({},x))});
+        else blocco.forEach(x=>out.push(Object.assign({},x)));
+        if(k<ser-1)out.push({kind:'step',nome:'Fra le serie',note:String(f.recSerie||''),intens:'rest',dur:durata(f.recSerie)||{tipo:'open'},target:null});
+      }
+    });
+    return out;
+  }
+  // passi in fila, con le ripetizioni srotolate: per i conti e per il confronto coi giri
+  function inFila(P){const o=[];P.forEach(x=>{if(x.kind==='repeat'){for(let i=0;i<x.n;i++)x.steps.forEach(y=>o.push(y));}else o.push(x);});return o;}
+  // stima di km e minuti: a tempo col passo del bersaglio (o 6:00), a distanza idem
+  function stima(P){
+    let m=0,s=0;inFila(P).forEach(x=>{const pc=x.target&&x.target.tipo==='pace'?(x.target.lo+x.target.hi)/2:(x.intens==='rest'?900:x.intens==='recovery'?420:360);
+      if(x.dur.tipo==='dist'){m+=x.dur.m;s+=x.dur.m/1000*pc;}else if(x.dur.tipo==='time'){s+=x.dur.s;if(x.intens!=='rest')m+=x.dur.s/pc*1000;}});
+    return {km:Math.round(m/100)/10,min:Math.round(s/60)};
+  }
+  const pTxt=s=>RR().passo(s);
+  function durTxt(d){if(!d||d.tipo==='open')return 'tasto lap';if(d.tipo==='dist')return d.m>=1000?String(Math.round(d.m/100)/10).replace('.',',')+' km':d.m+' m';const m=Math.floor(d.s/60),x=d.s%60;return m?(m+'\''+(x?String(x).padStart(2,'0')+'"':'')):x+'"';}
+  function tgTxt(t){if(!t)return '';if(t.tipo==='pace')return pTxt(t.hi)+'-'+pTxt(t.lo)+' /km';return 'FC '+t.lo+'-'+t.hi;}
+  // righe leggibili, come le vedra' l'orologio
+  function righe(P){const o=[];P.forEach(x=>{if(x.kind==='repeat'){o.push({rip:x.n,righe:x.steps.map(y=>({nome:y.nome,dur:durTxt(y.dur),tg:tgTxt(y.target),intens:y.intens}))});}else o.push({nome:x.nome,dur:durTxt(x.dur),tg:tgTxt(x.target),intens:x.intens});});return o;}
+
+  // ── FIT: scrittura
+  const CRC_T=[0x0000,0xCC01,0xD801,0x1400,0xF001,0x3C00,0x2800,0xE401,0xA001,0x6C00,0x7800,0xB401,0x5000,0x9C01,0x8801,0x4400];
+  function crc16(bytes,crc){crc=crc||0;for(let i=0;i<bytes.length;i++){const b=bytes[i];let t=CRC_T[crc&0xF];crc=(crc>>4)&0x0FFF;crc=crc^t^CRC_T[b&0xF];t=CRC_T[crc&0xF];crc=(crc>>4)&0x0FFF;crc=crc^t^CRC_T[(b>>4)&0xF];}return crc;}
+  function utf8(s){return new TextEncoder().encode(String(s||''));}
+  // passi nell'ordine del file FIT: la ripetizione e' un passo in piu' dopo il blocco
+  function fitLista(P){const st=[];P.forEach(x=>{if(x.kind==='repeat'){const da=st.length;x.steps.forEach(y=>st.push(y));st.push({rep:true,da,n:x.n});}else st.push(x);});return st;}
+  function fitWorkout(nome,P){
+    const B=[];const u8=v=>B.push(v&0xFF),u16=v=>{u8(v);u8(v>>8);},u32=v=>{v=v>>>0;u8(v);u8(v>>>8);u8(v>>>16);u8(v>>>24);};
+    const str=(s,n)=>{let b=utf8(s);if(b.length>n-1){b=b.slice(0,n-1);while(b.length&&(b[b.length-1]&0xC0)===0x80)b=b.slice(0,-1);if(b.length&&b[b.length-1]>=0xC0)b=b.slice(0,-1);}for(let i=0;i<n;i++)u8(i<b.length?b[i]:0);};
+    const def=(loc,glob,fields)=>{u8(0x40|loc);u8(0);u8(0);u16(glob);u8(fields.length);fields.forEach(([n,s,t])=>{u8(n);u8(s);u8(t);});};
+    // passi FIT: le ripetizioni diventano un passo "ripeti dal passo k per n volte"
+    const st=fitLista(P);
+    const now=Math.floor(Date.now()/1000)-FIT_EPOCH;
+    // file_id
+    def(0,0,[[0,1,0x00],[1,2,0x84],[2,2,0x84],[3,4,0x8C],[4,4,0x86]]);
+    u8(0);u8(5);u16(255);u16(0);u32((Math.random()*0xFFFFFFF)|1);u32(now);
+    // workout
+    def(1,26,[[8,40,0x07],[4,1,0x00],[11,1,0x00],[6,2,0x84]]);
+    u8(1);str(nome,40);u8(1);u8(0);u16(st.length);
+    // workout_step
+    def(2,27,[[254,2,0x84],[0,32,0x07],[1,1,0x00],[2,4,0x86],[3,1,0x00],[4,4,0x86],[5,4,0x86],[6,4,0x86],[7,1,0x00],[8,64,0x07]]);
+    const INT={active:0,rest:1,warmup:2,cooldown:3,recovery:4};
+    st.forEach((x,i)=>{
+      u8(2);u16(i);
+      if(x.rep){str('',32);u8(6);u32(x.da);u8(0xFF);u32(x.n);u32(0);u32(0);u8(0);str('',64);return;}
+      str(x.nome,32);
+      if(x.dur.tipo==='dist'){u8(1);u32(Math.round(x.dur.m*100));}
+      else if(x.dur.tipo==='time'){u8(0);u32(Math.round(x.dur.s*1000));}
+      else{u8(5);u32(0);}
+      if(x.target&&x.target.tipo==='pace'){u8(0);u32(0);u32(Math.round(1000/x.target.lo*1000));u32(Math.round(1000/x.target.hi*1000));}
+      else if(x.target&&x.target.tipo==='hr'){u8(1);u32(0);u32(x.target.lo+100);u32(x.target.hi+100);}
+      else{u8(2);u32(0);u32(0);u32(0);}
+      u8(INT[x.intens]!=null?INT[x.intens]:0);
+      str(x.note||'',64);
+    });
+    const data=new Uint8Array(B);
+    const h=[];const w16=v=>{h.push(v&0xFF,(v>>8)&0xFF);};
+    h.push(14,0x10);w16(2132);const ds=data.length;h.push(ds&0xFF,(ds>>8)&0xFF,(ds>>16)&0xFF,(ds>>>24)&0xFF);h.push(46,70,73,84);
+    const hc=crc16(new Uint8Array(h));w16(hc);
+    const out=new Uint8Array(14+ds+2);out.set(h,0);out.set(data,14);
+    const c=crc16(out.subarray(0,14+ds));out[14+ds]=c&0xFF;out[15+ds]=(c>>8)&0xFF;
+    return out;
+  }
+  // ── testo per il costruttore di intervals.icu
+  function icu(P){
+    const L=[];const d=x=>x.dur.tipo==='dist'?(x.dur.m>=1000&&x.dur.m%100===0?String(x.dur.m/1000)+'km':x.dur.m+'mtr'):x.dur.tipo==='time'?(Math.floor(x.dur.s/60)?Math.floor(x.dur.s/60)+'m':'')+(x.dur.s%60?x.dur.s%60+'s':''):'';
+    const t=x=>x.target&&x.target.tipo==='pace'?' '+pTxt(x.target.hi)+'/km-'+pTxt(x.target.lo)+'/km Pace':x.target&&x.target.tipo==='hr'?' '+x.target.lo+'-'+x.target.hi+'bpm HR':'';
+    const riga=x=>'- '+(d(x)?'':'Press lap ')+(x.intens==='warmup'?'Warmup ':x.intens==='cooldown'?'Cooldown ':'')+String(x.nome).replace(/[-\n]/g,' ')+' '+(d(x)||(x.intens==='rest'?'3m':x.intens==='recovery'?'2m':'5m'))+t(x);
+    P.forEach(x=>{if(x.kind==='repeat'){if(L.length&&L[L.length-1]!=='')L.push('');L.push(x.n+'x');x.steps.forEach(y=>L.push(riga(y)));L.push('');}else L.push(riga(x));});
+    return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  // ── passi in JSON neutro (velocita' in m/s), per il connettore Garmin
+  function jsonPassi(P){
+    const one=x=>({nome:x.nome,note:x.note||'',tipo:x.intens,durata:x.dur.tipo==='dist'?{metri:x.dur.m}:x.dur.tipo==='time'?{secondi:x.dur.s}:{lap:true},
+      bersaglio:x.target?(x.target.tipo==='pace'?{passo:pTxt(x.target.hi)+'-'+pTxt(x.target.lo),ms_min:Math.round(1000/x.target.lo*1000)/1000,ms_max:Math.round(1000/x.target.hi*1000)/1000}:{fc_min:x.target.lo,fc_max:x.target.hi}):null});
+    return P.map(x=>x.kind==='repeat'?{ripeti:x.n,passi:x.steps.map(one)}:one(x));
+  }
+  // ── ZIP senza compressione (piu' file .fit in uno)
+  let CRC32=null;
+  function crc32(b){if(!CRC32){CRC32=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;CRC32[n]=c>>>0;}}let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC32[(c^b[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+  function zip(files){
+    const parti=[],centr=[];let off=0;
+    const le=(n,v)=>{const a=[];for(let i=0;i<n;i++)a.push((v>>>(8*i))&0xFF);return a;};
+    const d=new Date(),dt=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1)),dd=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate());
+    files.forEach(f=>{
+      const nm=utf8(f.nome),c=crc32(f.dati),n=f.dati.length;
+      const h=[].concat(le(4,0x04034b50),le(2,20),le(2,0x0800),le(2,0),le(2,dt),le(2,dd),le(4,c),le(4,n),le(4,n),le(2,nm.length),le(2,0));
+      parti.push(new Uint8Array(h),nm,f.dati);
+      centr.push(new Uint8Array([].concat(le(4,0x02014b50),le(2,20),le(2,20),le(2,0x0800),le(2,0),le(2,dt),le(2,dd),le(4,c),le(4,n),le(4,n),le(2,nm.length),le(2,0),le(2,0),le(2,0),le(2,0),le(4,0),le(4,off))),nm);
+      off+=h.length+nm.length+n;
+    });
+    const cs=centr.reduce((t,x)=>t+x.length,0);
+    const fine=new Uint8Array([].concat(le(4,0x06054b50),le(2,0),le(2,0),le(2,files.length),le(2,files.length),le(4,cs),le(4,off),le(2,0)));
+    const tot=parti.concat(centr,[fine]);const out=new Uint8Array(tot.reduce((t,x)=>t+x.length,0));let p=0;tot.forEach(x=>{out.set(x,p);p+=x.length;});
+    return out;
+  }
+  function scarica(nome,dati,mime){
+    const b=dati instanceof Uint8Array?new Blob([dati],{type:mime||'application/octet-stream'}):new Blob([dati],{type:mime||'text/plain;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nome;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+  }
+  function nomeFile(s){return String(s||'seduta').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,48)||'seduta';}
+  // giorno di una seduta: lunedi' della data di inizio + settimane + giorno
+  function giorno(p,wi,dow){
+    const t=String(p&&p.startDate||'');const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t)||null;const x=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    const d=m?new Date(+m[3],+m[2]-1,+m[1]):x?new Date(+x[1],+x[2]-1,+x[3]):null;if(!d||dow==null)return null;
+    d.setDate(d.getDate()-((d.getDay()+6)%7)+wi*7+(+dow));return d;
+  }
+  function iso(d){return d?d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'):null;}
+
+  // ── FIT: lettura di un'attivita'
+  function leggiFit(buf){
+    const v=new DataView(buf),hs=v.getUint8(0);
+    if(buf.byteLength<14||String.fromCharCode(v.getUint8(8),v.getUint8(9),v.getUint8(10),v.getUint8(11))!=='.FIT')throw new Error('Non e\' un file FIT');
+    const fine=Math.min(buf.byteLength-2,hs+v.getUint32(4,true));
+    const defs={},sess=[],laps=[],recs=[];let p=hs,lastTs=0,sport=null;
+    const leggi=(t,le,o,s)=>{const b=t&0x1F;
+      try{switch(b){case 0:case 2:case 10:case 13:return s===1?v.getUint8(o):null;case 1:return v.getInt8(o);
+        case 3:return s===2?v.getInt16(o,le):null;case 4:case 11:return s===2?v.getUint16(o,le):null;case 5:return s===4?v.getInt32(o,le):null;case 6:case 12:return s===4?v.getUint32(o,le):null;case 8:return s===4?v.getFloat32(o,le):null;default:return null;}}catch(e){return null;}};
+    const INV={1:0xFF,2:0xFFFF,4:0xFFFFFFFF};
+    while(p<fine){
+      const h=v.getUint8(p++);
+      if(h&0x80){const loc=(h>>5)&3,d=defs[loc];if(!d)break;const off=h&0x1F;lastTs=(lastTs&~0x1F)+off+((off<(lastTs&0x1F))?0x20:0);const o=leggiMsg(d,p);o[253]=o[253]||lastTs;p+=d.size;salva(d.g,o);continue;}
+      if(h&0x40){
+        const dev=!!(h&0x20),loc=h&0x0F;p++;const le=v.getUint8(p++)===0;const g=v.getUint16(p,le);p+=2;const n=v.getUint8(p++);
+        const f=[];let size=0;for(let i=0;i<n;i++){f.push({n:v.getUint8(p),s:v.getUint8(p+1),t:v.getUint8(p+2)});size+=v.getUint8(p+1);p+=3;}
+        if(dev){const nd=v.getUint8(p++);for(let i=0;i<nd;i++){size+=v.getUint8(p+1);p+=3;}}
+        defs[loc]={g,le,f,size};continue;
+      }
+      const d=defs[h&0x0F];if(!d)break;const o=leggiMsg(d,p);p+=d.size;if(o[253])lastTs=o[253];salva(d.g,o);
+    }
+    function leggiMsg(d,o){const r={};let q=o;d.f.forEach(f=>{const x=leggi(f.t,d.le,q,f.s);if(x!=null&&!(INV[f.s]!=null&&x===INV[f.s]&&(f.t&0x1F)!==1))r[f.n]=x;q+=f.s;});return r;}
+    function salva(g,o){if(g===18)sess.push(o);else if(g===19)laps.push(o);else if(g===20)recs.push(o);else if(g===12&&o[0]!=null)sport=o[0];}
+    const S=sess[0]||{};
+    const ms=x=>x==null?null:x/1000;
+    const lp=laps.map(l=>({m:l[9]!=null?l[9]/100:null,s:ms(l[8]!=null?l[8]:l[7]),fc:l[15]||null,fcMax:l[16]||null,step:l[71]!=null?l[71]:null})).filter(l=>l.s>0);
+    let km=S[9]!=null?S[9]/100000:null,sec=ms(S[8]!=null?S[8]:S[7]),tot=ms(S[7]),fc=S[16]||null,fcMax=S[17]||null,dsl=S[22]||null,start=S[2]!=null?S[2]:(recs[0]&&recs[0][253]);
+    if(km==null&&recs.length){const dd=recs.filter(r=>r[5]!=null);if(dd.length)km=dd[dd.length-1][5]/100000;const ts=recs.filter(r=>r[253]);if(ts.length){sec=sec||ts[ts.length-1][253]-ts[0][253];}const hr=recs.filter(r=>r[3]);if(hr.length&&!fc){fc=Math.round(hr.reduce((t,r)=>t+r[3],0)/hr.length);fcMax=Math.max(...hr.map(r=>r[3]));}}
+    return {fonte:'fit',sport:S[5]!=null?S[5]:sport,start:start?(start+FIT_EPOCH)*1000:null,km:km!=null?Math.round(km*100)/100:null,sec:sec?Math.round(sec):null,tot:tot?Math.round(tot):null,fc,fcMax,dsl,laps:lp};
+  }
+  // ── GPX: lettura (Strava, Garmin, Coros, Suunto esportano tutti GPX)
+  function leggiGpx(txt){
+    const doc=new DOMParser().parseFromString(txt,'application/xml');
+    const pts=[...doc.getElementsByTagName('trkpt')].map(e=>{const t=e.getElementsByTagName('time')[0],hr=e.getElementsByTagNameNS('*','hr')[0],el=e.getElementsByTagName('ele')[0];return {lat:+e.getAttribute('lat'),lon:+e.getAttribute('lon'),t:t?Date.parse(t.textContent):null,hr:hr?+hr.textContent:null,ele:el?+el.textContent:null};}).filter(x=>isFinite(x.lat)&&isFinite(x.lon));
+    if(pts.length<2)throw new Error('Nessun punto nel file GPX');
+    const R=6371000,rad=x=>x*Math.PI/180;
+    let m=0,mov=0,dsl=0,kmL=[],lm=0,lt=pts[0].t,lhr=[];const hrs=[];
+    for(let i=1;i<pts.length;i++){
+      const a=pts[i-1],b=pts[i];const dlat=rad(b.lat-a.lat),dlon=rad(b.lon-a.lon);
+      const h=Math.sin(dlat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dlon/2)**2;const d=2*R*Math.asin(Math.sqrt(h));
+      const dt=a.t&&b.t?(b.t-a.t)/1000:0;
+      m+=d;if(dt>0&&dt<30&&d/dt>0.5)mov+=dt;
+      if(a.ele!=null&&b.ele!=null&&b.ele>a.ele)dsl+=b.ele-a.ele;
+      if(b.hr){hrs.push(b.hr);lhr.push(b.hr);}
+      if(m-lm>=1000){kmL.push({m:Math.round(m-lm),s:Math.round((b.t-lt)/1000),fc:lhr.length?Math.round(lhr.reduce((t,x)=>t+x,0)/lhr.length):null});lm=m;lt=b.t;lhr=[];}
+    }
+    const t0=pts[0].t,t1=pts[pts.length-1].t;
+    if(m-lm>200&&t1&&lt)kmL.push({m:Math.round(m-lm),s:Math.round((t1-lt)/1000),fc:lhr.length?Math.round(lhr.reduce((t,x)=>t+x,0)/lhr.length):null});
+    return {fonte:'gpx',sport:null,start:t0||null,km:Math.round(m/10)/100,sec:Math.round(mov||(t1-t0)/1000),tot:t0&&t1?Math.round((t1-t0)/1000):null,fc:hrs.length?Math.round(hrs.reduce((t,x)=>t+x,0)/hrs.length):null,fcMax:hrs.length?Math.max(...hrs):null,dsl:Math.round(dsl)||null,laps:kmL,auto:true};
+  }
+  async function leggiFile(file){
+    const n=String(file&&file.name||'').toLowerCase();
+    if(/\.gpx$/.test(n))return leggiGpx(await file.text());
+    if(/\.fit$/.test(n))return leggiFit(await file.arrayBuffer());
+    if(/\.tcx$/.test(n))throw new Error('Il .TCX non e\' letto: esporta .FIT o .GPX');
+    // senza estensione: prova FIT poi GPX
+    const b=await file.arrayBuffer();try{return leggiFit(b);}catch(e){return leggiGpx(new TextDecoder().decode(b));}
+  }
+  // ── confronto fra seduta in programma e attivita' fatta
+  function confronta(s,att,R){
+    const P=passi(s,R),pr=stima(P),fila=inFila(P);
+    const out={prev:pr,fatto:{km:att.km,min:att.sec?Math.round(att.sec/60):null,passo:att.km&&att.sec?att.sec/att.km:null,fc:att.fc},giri:[]};
+    // giri dell'orologio con il passo del workout (lap a ogni passo): si mettono accanto ai bersagli
+    const L=(att.laps||[]).filter(l=>l.s>0);
+    const perPasso=L.length&&L.some(l=>l.step!=null);
+    const fl=fitLista(P);
+    const coppie=perPasso?L.map(l=>({l,x:fl[l.step]&&!fl[l.step].rep?fl[l.step]:null})):(!att.auto&&Math.abs(L.length-fila.length)<=1?L.map((l,i)=>({l,x:fila[i]||null})):[]);
+    out.giri=coppie.filter(c=>c.x).map(c=>{const pc=c.l.m>0?c.l.s/(c.l.m/1000):null;const t=c.x.target;let esito='';
+      if(t&&t.tipo==='pace'&&pc){esito=pc>t.lo+3?'lento':pc<t.hi-3?'veloce':'ok';}
+      return {nome:c.x.nome,intens:c.x.intens,bersaglio:tgTxt(t),m:c.l.m,s:c.l.s,passo:pc,fc:c.l.fc,esito};});
+    const q=out.giri.filter(g=>g.intens==='active'&&g.esito);
+    out.centrati=q.length?{ok:q.filter(g=>g.esito==='ok').length,n:q.length}:null;
+    return out;
+  }
+  return {durata,passi,inFila,stima,righe,durTxt,tgTxt,fitWorkout,icu,jsonPassi,zip,scarica,nomeFile,giorno,iso,crc16,leggiFit,leggiGpx,leggiFile,confronta};
 })();

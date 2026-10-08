@@ -1467,6 +1467,16 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rt7-add button{flex:1 1 100%;padding:12px;border-radius:12px;border:0;background:var(--primary);color:#fff;font:600 14px Inter,sans-serif;cursor:pointer}
 .rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
 .prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important}
+.orol-btns{display:flex;gap:8px;padding:0 16px 13px}.orol-btns button{flex:1;padding:10px 8px;border-radius:12px;border:1px solid var(--line6);background:rgba(255,214,196,.04);color:var(--white);font:600 12.5px Inter,sans-serif;cursor:pointer}
+#today-content .orol-btns{padding:10px 0 0}
+.orol-imp{width:100%;padding:12px;border-radius:12px;border:1px dashed rgba(255,106,46,.45);background:rgba(255,106,46,.06);color:#FF9A6B;font:600 13px Inter,sans-serif;cursor:pointer;margin-bottom:14px}
+.orol-ok{border:1px solid rgba(139,92,246,.25);background:rgba(139,92,246,.06);border-radius:14px;padding:12px;margin-bottom:14px}
+.orol-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}.orol-h b{font:600 13.5px Inter,sans-serif;color:var(--white)}.orol-h span{flex:1;font-size:12px;color:var(--muted)}.orol-h button{border:0;background:none;color:var(--muted);font:500 12px Inter,sans-serif;cursor:pointer}
+.orol-ok .f7-num{border:0;padding:0;margin:0 0 6px}
+.orol-c{font-size:12.5px;color:var(--text);margin:6px 0}
+.orol-g{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}.orol-g td{padding:5px 4px;border-top:1px solid var(--line6);color:var(--text)}.orol-g .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.orol-g b{color:var(--white);font-weight:600}.orol-g i{display:block;font-style:normal;font-size:10.5px;color:var(--muted)}
+.orol-g tr.ok b{color:var(--violet2)}.orol-g tr.lento b{color:#FF9A6B}.orol-g tr.veloce b{color:#FB7185}
+.f7-run{padding:0 16px 10px;font-size:12.5px;color:var(--text)}.f7-run b{color:var(--violet2);font-weight:600}
 .corsa-rit{display:inline-block;font:700 10px Inter,sans-serif;color:var(--violet2);background:rgba(139,92,246,.14);border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:1px}
 </style>
 </head>
@@ -2213,6 +2223,7 @@ function fuOpzioni(){
     logsGiorno(di).forEach(l=>{const k=isoLoc(l.ts);if(!(+l.avgRpe)&&!(ST.sess[k]&&+ST.sess[k].rpe))op.push({id:'l:'+l.ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true});});
   }
   op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'},{id:'partita',nome:'Partita',tipo:'match'},{id:'altro',nome:'Altro allenamento',tipo:'altro'});
+  if(FU.extra&&!op.some(o=>o.id===FU.extra.id))op.unshift(FU.extra);
   return op;
 }
 function renderCiFuori(){
@@ -2222,7 +2233,9 @@ function renderCiFuori(){
   if(FU.cosa&&!op.some(o=>o.id===FU.cosa))FU.cosa=null;
   const sc=op.find(o=>o.id===FU.cosa),solo=!!(sc&&sc.solo);
   const manca=[!FU.cosa&&'cosa hai fatto',!solo&&!FU.min&&'i minuti',!FU.rpe&&'l\'RPE'].filter(Boolean);
-  el.innerHTML=`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b></div><div class="ci7-zone">${[['oggi','Oggi'],['ieri','Ieri']].map(([k,t])=>`<button type="button" class="${FU.giorno===k?'on':''}" aria-pressed="${FU.giorno===k}" onclick="fuSet('giorno','${k}')">${t}</button>`).join('')}</div></div>
+  el.innerHTML=(FU.corsa?orolRiepilogo(FU.corsa):`<button type="button" class="orol-imp" onclick="orolImporta(${FU.cosa?`'${FU.cosa}'`:'null'})">Hai l'orologio? Importa la corsa (.FIT o .GPX)</button>`)
+    +(FU.ts?`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b><span>dal file</span></div><div class="ci7-zone"><button type="button" class="on" aria-pressed="true">${GG_LUNGHI[(new Date(FU.ts).getDay()+6)%7]+' '+new Date(FU.ts).toLocaleDateString('it-IT',{day:'numeric',month:'long'})}</button></div></div>`
+    :`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b></div><div class="ci7-zone">${[['oggi','Oggi'],['ieri','Ieri']].map(([k,t])=>`<button type="button" class="${FU.giorno===k?'on':''}" aria-pressed="${FU.giorno===k}" onclick="fuSet('giorno','${k}')">${t}</button>`).join('')}</div></div>`)+`
     <div class="ci7-q"><div class="ci7-qh"><b>Cosa hai fatto</b></div><div class="ci7-lista fu9">${op.map(o=>{const ic=o.tipo==='campo'||o.tipo==='match'?_ri('sport'):o.tipo==='altro'?_ri('conditioning'):(TICONS[o.tipo]||_ri('sedute'));return `<button type="button" class="${FU.cosa===o.id?'on':''}${o.solo?' solo':''}" aria-pressed="${FU.cosa===o.id}" onclick="fuSet('cosa','${o.id}')"><span class="fu9-ic">${ic}</span><span class="fu9-n">${escH(o.nome)}</span><span class="fu9-r"></span></button>`;}).join('')}</div></div>
     ${solo?'':`<div class="ci7-q"><div class="ci7-qh"><b>Minuti</b><span>Dall'inizio del riscaldamento alla fine</span></div><div class="ci7-min"><input type="number" id="fu-min" inputmode="numeric" min="5" max="300" value="${FU.min||''}" placeholder="60" oninput="fuMin(this.value)" aria-label="Minuti">${[45,60,75,90].map(m=>`<button type="button" class="${FU.min===m?'on':''}" onclick="fuSet('min',${m})">${m}</button>`).join('')}</div></div>`}
     <div class="ci7-q"><div class="ci7-qh"><b>Quanto e' stata dura (RPE)</b><span>${FU.rpe?FU.rpe+': '+RPE_PAROLE[FU.rpe-1]:'Da 1 molto facile a 10 massimale, sulla seduta intera'}</span></div><div class="ci7-rpe rpe9">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<button type="button" class="${FU.rpe===v?'on':''} ${v<=4?'z1':v<=7?'z2':'z3'}" aria-pressed="${FU.rpe===v}" aria-label="RPE ${v}, ${RPE_PAROLE[v-1]}" onclick="fuSet('rpe',${v})">${v}</button>`).join('')}</div></div>
@@ -2238,11 +2251,13 @@ window.salvaFuori=async()=>{
   const solo=!!sc.solo;if(!solo&&!(FU.min>0&&FU.min<400)){showToast('Scrivi i minuti, da 5 a 300');return;}
   const b=document.getElementById('fu-invia');if(b){b.disabled=true;b.textContent='Invio...';}
   const nota=(FU.nota||'').trim()||null;
-  let when=new Date();if(FU.giorno==='ieri'){when.setDate(when.getDate()-1);when.setHours(19,0,0,0);}
+  let when=FU.ts?new Date(FU.ts):new Date();if(!FU.ts&&FU.giorno==='ieri'){when.setDate(when.getDate()-1);when.setHours(19,0,0,0);}
   let ts=when.getTime(),nome=sc.nome,min=FU.min,log=null;
   if(solo){const l=ST.logs.find(x=>'l:'+x.ts===sc.id);if(!l)return;ts=l.ts;nome=l.sessName||'Seduta';min=+l.duration||+l.minuti||null;}
   else if(sc.id.startsWith('p:')){const [,pid,wi,sid]=sc.id.split(':');log={ts,date:itData(ts),progId:pid,weekIdx:+wi,sessId:sid,sessName:nome,type:sc.tipo||'pesi',duration:min,avgRpe:FU.rpe,source:'checkin',note:nota};}
   else log={ts,date:itData(ts),sessName:nome,type:sc.tipo,duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.id==='partita'?{minuti:min}:{})};
+  // corsa dall'orologio: km, tempo, FC e giri nel registro
+  if(log&&FU.corsa){log.corsa=FU.corsa;log.source='orologio';if(sc.id==='altro'){log.type='corsa';log.sessName='Corsa '+nfIt(FU.corsa.km||0,1)+' km';}}
   const key=isoLoc(ts),prima=ST.sess[key];
   // un RPE per giorno: se il giorno ne aveva gia' uno (un'altra seduta) si fa la media sui minuti
   let rpeG=FU.rpe,dayLbl=nome;
@@ -2255,7 +2270,7 @@ window.salvaFuori=async()=>{
       set(ref(db,`questionnaires/${aid}/${key}/feedback`),{ts,sessionRpe:FU.rpe,note:nota,fromSession:nome})];
     if(log)w.push(push(ref(db,`session_logs/${aid}`),log));
     await Promise.all(w);
-    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:''});
+    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,extra:null,ts:null});
     renderCiFuori();
     showToast(solo?'RPE registrato':'Allenamento registrato');
   }catch(e){console.error(e);if(b){b.disabled=false;b.textContent='Registra l\'allenamento';}showToast('Non registrato: controlla la connessione e riprova');}
@@ -2434,6 +2449,46 @@ window.rt7Salva=async function(){
   try{await push(ref(db,`race_times/${aid}`),{tipo:'gara',dist:d,sec:t,time:RR.tempo(t),date:date||null,src:'atleta',ts:Date.now()});showToast('Tempo inviato: il preparatore aggiorna i ritmi');}
   catch(e){showToast('Non riesco a salvare, riprova');}
 };
+// ── OROLOGIO
+/* La corsa del programma si scarica come workout .FIT con i passi dell'atleta
+   (window.RSOrologio in sidebar.js) e, fatta, si importa dal file dell'orologio
+   (.FIT o .GPX, anche esportato da Strava): km, tempo, passo, FC e giri finiscono
+   nel registro (session_logs.corsa) con il confronto passo per passo. */
+function orolSess(pid,wi,sid){const p=(ST.progs||{})[pid];if(!p)return null;const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));const w=W[+wi];return w&&w[1].sessions?w[1].sessions[sid]:null;}
+window.orolScarica=(pid,wi,sid)=>{
+  const s=orolSess(pid,wi,sid),O=window.RSOrologio;if(!s||!O)return;
+  const nome=s.name||'Corsa';O.scarica(O.nomeFile(nome)+'.fit',O.fitWorkout(nome,O.passi(s,(window._ath||{}).ritmi)));
+  showToast('Scaricato: copialo nella cartella GARMIN/NewFiles dell\'orologio');
+};
+window.orolImporta=id=>{
+  const inp=document.createElement('input');inp.type='file';inp.accept='.fit,.gpx';
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;try{orolUsa(await window.RSOrologio.leggiFile(f),id);}catch(e){showToast(e&&e.message?e.message:'File non letto');}};
+  inp.click();
+};
+function orolUsa(a,id){
+  if(!a||!(a.km>0||a.sec>0)){showToast('Nel file non ci sono km ne\' tempo');return;}
+  const O=window.RSOrologio,ts=a.start||Date.now();
+  FU.ts=ts;FU.giorno=isoLoc(ts)===isoLoc(new Date(Date.now()-864e5))?'ieri':'oggi';
+  let conf=null;
+  if(id&&String(id).startsWith('p:')){const [,pid,wi,sid]=id.split(':');const s=orolSess(pid,wi,sid);if(s){conf=O.confronta(s,a,(window._ath||{}).ritmi);FU.extra={id,nome:s.name||'Corsa',tipo:s.type||'corsa'};}FU.cosa=id;}
+  FU.min=Math.max(1,Math.round((a.tot||a.sec)/60));FU.rpe=null;
+  const giri=conf&&conf.giri.length?conf.giri.map(g=>({n:g.nome,m:Math.round(g.m||0),s:Math.round(g.s||0),fc:g.fc||null,t:g.bersaglio||null,e:g.esito||null})):(a.laps||[]).slice(0,60).map(l=>({m:Math.round(l.m||0),s:Math.round(l.s||0),fc:l.fc||null}));
+  FU.corsa={fonte:a.fonte,km:a.km,sec:a.sec,tot:a.tot||null,fc:a.fc||null,fcMax:a.fcMax||null,dsl:a.dsl||null,start:a.start||null,passo:a.km&&a.sec?Math.round(a.sec/a.km):null,giri,centrati:conf&&conf.centrati||null,prevKm:conf?conf.prev.km:null};
+  bnSwitch('checkin',document.querySelectorAll('.bn-item')[2]);
+  renderCiFuori();
+  setTimeout(()=>{const e=document.getElementById('ci-fuori');if(e)window.scrollTo(0,e.getBoundingClientRect().top+window.scrollY-120);},80);
+}
+window.orolVia=()=>{FU.corsa=null;FU.ts=null;FU.extra=null;renderCiFuori();};
+function orolRiepilogo(c){
+  const RR=window.RSRitmi,ps=s=>RR?RR.passo(s):'';
+  const num=[[c.km!=null?nfIt(c.km,2):null,'km'],[c.sec?RR.tempo(c.sec):null,'tempo'],[c.passo?ps(c.passo):null,'al km'],[c.fc,'FC media']].filter(x=>x[0]);
+  const conT=c.giri.some(g=>g.t);
+  const giri=c.giri.length?`<table class="orol-g"><tbody>${c.giri.map((g,i)=>`<tr class="${g.e||''}"><td>${escH(g.n||('Giro '+(i+1)))}</td><td class="n">${g.m>=1000?nfIt(g.m/1000,2)+' km':g.m+' m'}</td><td class="n"><b>${g.m>0?ps(g.s/(g.m/1000)):''}</b>${conT&&g.t?'<i>'+escH(g.t)+'</i>':''}</td><td class="n">${g.fc||''}</td></tr>`).join('')}</tbody></table>`:'';
+  return `<div class="orol-ok"><div class="orol-h"><b>Dall'orologio</b><span>${c.start?new Date(c.start).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'numeric'})+' '+new Date(c.start).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):''}</span><button type="button" onclick="orolVia()">Togli</button></div>
+    <div class="f7-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>
+    ${c.centrati?`<p class="orol-c">Nel passo giusto ${c.centrati.ok} su ${c.centrati.n} tratti veloci${c.prevKm?', in programma circa '+nfIt(c.prevKm,1)+' km':''}.</p>`:c.prevKm?`<p class="orol-c">In programma circa ${nfIt(c.prevKm,1)} km.</p>`:''}
+    ${giri}</div>`;
+}
 function renderPfTest(){
   const el=document.getElementById('pf-test-list');if(!el)return;
   const nomi=Object.keys(ST.tests||{});
@@ -2762,6 +2817,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}        </div>
         ${runBody}
         <div class="sess-action">${regBtn('la corsa')}</div>
+        ${hasLive&&nFasi&&window.RSOrologio?`<div class="orol-btns"><button type="button" onclick="orolScarica('${progId}',${weekIdx},'${sessId}')">Sull'orologio (.FIT)</button><button type="button" onclick="orolImporta('p:${progId}:${weekIdx}:${sessId}')">Importa la corsa</button></div>`:''}
       </div>`;
     }
 
@@ -2896,6 +2952,7 @@ function sedutaFattaHtml(l,m){
     <div class="sess-head"><div class="sess-type-tag">${m.icon} ${escH(m.label)}</div><div class="sess-title">${escH(m.title)}</div>${m.progName?`<div class="sess-prog-label">${escH(m.progName)}</div>`:''}</div>
     <div class="f7-ok">${_ri('ok')}<span>Fatta ${quando}</span></div>
     ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${nfIt(v,1)}</b><i>${t}</i></div>`).join('')}</div>`:''}
+    ${l.corsa&&window.RSRitmi?`<div class="f7-run"><b>${nfIt(l.corsa.km||0,2)} km</b>${l.corsa.passo?' a '+window.RSRitmi.passo(l.corsa.passo)+'/km':''}${l.corsa.fc?', FC '+l.corsa.fc:''}${l.corsa.centrati?', nel passo '+l.corsa.centrati.ok+' su '+l.corsa.centrati.n:''}</div>`:''}
     ${rpe?'':`<button type="button" class="f7-rpe" onclick="vaiRpe(${l.ts})">Manca l'RPE della seduta: aggiungilo</button>`}
     ${m.link?`<div class="sess-action"><a class="f7-again" href="${m.link}">Apri di nuovo la seduta</a></div>`:''}
   </div>`;

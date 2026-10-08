@@ -1022,6 +1022,12 @@ body::before{
 /* struttura delle settimane */
 dialog.pzs{margin:auto;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#131212;color:var(--text);padding:0;width:min(860px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
 dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
+.pzo-nav{display:flex;align-items:center;gap:8px}.pzo-nav b{font:600 14px 'Inter',sans-serif;color:var(--white)}.pzo-nav span{margin-left:auto;font-size:12px;color:var(--muted)}
+.pzo-s{border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px}
+.pzo-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pzo-h b{font:650 13px 'Inter',sans-serif;color:var(--white);min-width:62px}.pzo-h span{font-size:13px;color:var(--text);flex:1;min-width:120px}.pzo-h i{font-style:normal;font-size:12px;color:var(--muted)}
+.pzo-p{margin:8px 0 0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text)}.pzo-p em{font-style:normal;color:#A78BFA;font-variant-numeric:tabular-nums}
+.pzo-p li.rip{list-style:none;margin-left:-18px;padding:4px 8px;border-left:2px solid rgba(255,106,46,.5);display:flex;flex-direction:column;gap:2px}.pzo-p li.rip b{font-size:11.5px;color:#FF9A6B}
+.pzo-come summary{font-size:13px;color:var(--muted);cursor:pointer}.pzo-come p{font-size:12.5px;line-height:1.55;color:var(--text);margin:8px 0 0}.pzo-come b{color:var(--white)}
 .pzr-ts{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
 .pzr-t{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:12px;border:1px solid rgba(139,92,246,.22);background:rgba(139,92,246,.06)}
 .pzr-t b{font:700 12px 'Inter',sans-serif;color:#A78BFA}.pzr-t span{font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.pzr-t em{font-style:normal;font-size:11px;color:var(--muted)}
@@ -1230,6 +1236,7 @@ html,body{background:#0A0909!important}
                 <button type="button" id="pz-rifai" onclick="openStudioDaProg()" hidden>Rifai dalla scheda</button>
                 <button type="button" onclick="openModal('gen-meso')">Genera settimane da una base</button>
                 <button type="button" onclick="pzRitmiApri()">Ritmi dell'atleta</button>
+                <button type="button" onclick="pzOrologioApri()">Corse sull'orologio (.FIT, Garmin)</button>
                 <button type="button" onclick="pzImportaApri()">Importa un piano di corsa da file</button>
                 <button type="button" onclick="openModal('copy-prog')">Copia il programma</button>
                 <button type="button" onclick="exportWhatsApp()">Testo per WhatsApp</button>
@@ -6270,6 +6277,77 @@ window.pzRitApplica=async function(){
     showToast(n?n+(n===1?' passo aggiornato':' passi aggiornati')+'. Ctrl+Z annulla':'Fasi legate ai ritmi dell\'atleta');
   }catch(e){console.error(e);showToast('Errore nell\'aggiornamento');}
 };
+/* ── OROLOGIO: LE CORSE IN FILE ──────────────────────────────────────
+   Ogni seduta di corsa diventa un workout strutturato (window.RSOrologio in
+   sidebar.js): .FIT per seduta o .zip per settimana e per programma, testo per
+   intervals.icu, pacchetto .json che Claude carica in Garmin Connect con il
+   connettore Garmin (MCP). I passi legati a un ritmo usano quelli dell'atleta. */
+let pzOrW=null;
+const PZ_GG=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+function pzOrCorse(wi){
+  const W=pzWeeks(),w=W[wi];if(!w)return [];
+  return pzSess(w[1]).filter(([,s])=>s&&s.type==='corsa'&&s.corsaFasi&&Object.keys(s.corsaFasi).length).map(([sid,s])=>({wid:w[0],sid,s,wi,lbl:w[1].label||('S'+(wi+1))}));
+}
+function pzOrNome(x){const p=programs[currentProgId],n=(String(x.lbl).match(/^S\d+/)||['S'+(x.wi+1)])[0];return n+' '+(x.s.dayOfWeek!=null?PZ_GG[x.s.dayOfWeek]+' ':'')+(x.s.name||'Corsa');}
+function pzOrFile(x){const O=window.RSOrologio,R=pzRitR();return {nome:O.nomeFile(pzOrNome(x))+'.fit',dati:O.fitWorkout(pzOrNome(x),O.passi(x.s,R))};}
+window.pzOrologioApri=function(){
+  if(!currentProgId){showToast('Apri prima un programma');return;}
+  pzOrW=currentWeekIdx;
+  let d=document.getElementById('pz-or-dlg');
+  if(!d){d=document.createElement('dialog');d.id='pz-or-dlg';d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
+  pzOrRender();
+  if(typeof d.showModal==='function'&&!d.open)d.showModal();else d.setAttribute('open','');
+};
+window.pzOrSett=function(k){const n=pzWeeks().length;pzOrW=Math.max(0,Math.min(n-1,pzOrW+k));pzOrRender();};
+function pzOrRender(){
+  const d=document.getElementById('pz-or-dlg');if(!d)return;
+  const O=window.RSOrologio,p=programs[currentProgId],R=pzRitR(),aid=pzRitAid(),W=pzWeeks();
+  const C=pzOrCorse(pzOrW),tutte=W.reduce((t,w,i)=>t+pzOrCorse(i).length,0);
+  const righe=C.map((x,k)=>{
+    const P=O.passi(x.s,R),st=O.stima(P),g=O.giorno(p,pzOrW,x.s.dayOfWeek);
+    const passi=O.righe(P).map(r=>r.rip?`<li class="rip"><b>${r.rip} volte</b>${r.righe.map(y=>`<span>${stEsc(y.nome)} ${y.dur}${y.tg?' <em>'+stEsc(y.tg)+'</em>':''}</span>`).join('')}</li>`:`<li><span>${stEsc(r.nome)} ${r.dur}${r.tg?' <em>'+stEsc(r.tg)+'</em>':''}</span></li>`).join('');
+    return `<div class="pzo-s"><div class="pzo-h"><b>${x.s.dayOfWeek!=null?PZ_GG[x.s.dayOfWeek]:''}${g?' '+g.getDate()+'/'+(g.getMonth()+1):''}</b><span>${stEsc(x.s.name||'Corsa')}</span><i>circa ${String(st.km).replace('.',',')} km, ${st.min}'</i>
+      <button type="button" class="btn btn-outline btn-sm" onclick="pzOrFit(${k})">.FIT</button><button type="button" class="btn btn-ghost btn-sm" onclick="pzOrIcu(${k})" title="Testo per il costruttore di allenamenti di intervals.icu">intervals.icu</button></div>
+      <ol class="pzo-p">${passi}</ol></div>`;
+  }).join('');
+  d.innerHTML=`<div class="pzs-b">
+    <div class="pzs-h"><div><h3>Corse sull'orologio</h3><p>${stEsc(p.name||'')}${aid&&athletes[aid]?' &#183; passi di '+stEsc(athletes[aid].name||''):''}${R?' (VDOT '+String(R.vdot).replace('.',',')+')':''}</p></div>
+      <button type="button" class="pzs-x" onclick="this.closest('dialog').close()" aria-label="Chiudi">&#215;</button></div>
+    <div class="pzo-nav"><button type="button" class="btn btn-ghost btn-sm" onclick="pzOrSett(-1)" ${pzOrW<=0?'disabled':''} aria-label="Settimana prima">&#8249;</button><b>${stEsc(String((W[pzOrW]||[])[1]?.label||'S'+(pzOrW+1)))}</b><button type="button" class="btn btn-ghost btn-sm" onclick="pzOrSett(1)" ${pzOrW>=W.length-1?'disabled':''} aria-label="Settimana dopo">&#8250;</button>
+      <span>${C.length} ${C.length===1?'corsa':'corse'}</span></div>
+    ${righe||'<p class="pzs-n">Nessuna corsa con le fasi in questa settimana.</p>'}
+    <details class="pzo-come"><summary>Come arrivano sull'orologio</summary>
+      <p><b>Garmin</b>: collega l'orologio col cavo, copia i .fit nella cartella GARMIN/NewFiles, scollega: li trovi in Allenamenti. <b>Garmin Connect e COROS</b>: in intervals.icu importa il .fit (o incolla il testo nel costruttore) e attiva l'invio degli allenamenti pianificati: arrivano nel calendario e sull'orologio. <b>Suunto</b>: non importa file di allenamento; i passi si copiano nell'app Suunto o arrivano da un servizio collegato (TrainingPeaks). <b>Garmin con Claude</b>: il pacchetto .json lo legge Claude e, con un connettore Garmin (MCP) attivo, mette ogni seduta nel calendario di Garmin Connect alla sua data.</p>
+      <p>I passi a ritmo (E, M, T, I, R) diventano fasce di passo; senza passo, se c'e' la FC di soglia, fasce di frequenza. I recuperi senza durata si chiudono col tasto lap.</p></details>
+    <div class="pzs-f"><span>${tutte} corse nel programma.</span>
+      <button type="button" class="btn btn-outline" onclick="pzOrZip(false)" ${C.length?'':'disabled'}>Settimana .zip</button>
+      <button type="button" class="btn btn-outline" onclick="pzOrZip(true)" ${tutte?'':'disabled'}>Programma .zip</button>
+      <button type="button" class="btn btn-orange" onclick="pzOrJson()" ${tutte?'':'disabled'} title="Per Garmin Connect con Claude e il connettore Garmin">Pacchetto Garmin .json</button></div></div>`;
+}
+window.pzOrFit=function(k){const x=pzOrCorse(pzOrW)[k];if(!x)return;const f=pzOrFile(x);window.RSOrologio.scarica(f.nome,f.dati);showToast('Scaricato '+f.nome);};
+window.pzOrIcu=async function(k){
+  const x=pzOrCorse(pzOrW)[k];if(!x)return;const O=window.RSOrologio;
+  const t=O.icu(O.passi(x.s,pzRitR()));
+  try{await navigator.clipboard.writeText(t);showToast('Testo copiato: incollalo nel costruttore di intervals.icu');}
+  catch(e){O.scarica(O.nomeFile(pzOrNome(x))+'.txt',t);}
+};
+window.pzOrZip=function(tutto){
+  const O=window.RSOrologio,p=programs[currentProgId];
+  const C=tutto?pzWeeks().flatMap((w,i)=>pzOrCorse(i)):pzOrCorse(pzOrW);if(!C.length)return;
+  const files=C.map(pzOrFile);const visti={};files.forEach(f=>{let n=f.nome,i=2;while(visti[n])n=f.nome.replace(/\.fit$/,'_'+(i++)+'.fit');visti[n]=1;f.nome=n;});
+  const nome=O.nomeFile((p.name||'programma')+(tutto?'':' '+pzOrNome(C[0]).split(' ')[0]))+'.zip';
+  O.scarica(nome,O.zip(files),'application/zip');showToast(files.length+' allenamenti in '+nome);
+};
+window.pzOrJson=function(){
+  const O=window.RSOrologio,p=programs[currentProgId],R=pzRitR(),aid=pzRitAid();
+  const all=pzWeeks().flatMap((w,i)=>pzOrCorse(i)).map(x=>{const P=O.passi(x.s,R),st=O.stima(P),g=O.giorno(p,x.wi,x.s.dayOfWeek);
+    return {data:O.iso(g),settimana:x.wi+1,giorno:x.s.dayOfWeek!=null?PZ_GG[x.s.dayOfWeek]:null,nome:'RS '+pzOrNome(x),km:st.km,minuti:st.min,passi:O.jsonPassi(P),testo:O.icu(P)};});
+  const out={formato:'rs-allenamenti-orologio',versione:1,creato:new Date().toISOString(),programma:p.name||'',atleta:aid&&athletes[aid]?athletes[aid].name:'',
+    ritmi:R?{vdot:R.vdot,E:window.RSRitmi.testo(R.E),M:window.RSRitmi.testo(R.M),T:window.RSRitmi.testo(R.T),I:window.RSRitmi.testo(R.I),R:window.RSRitmi.testo(R.R)}:null,
+    nota:'Durate in metri o secondi, bersagli di passo in min/km e in m/s (ms_min lento, ms_max veloce). "ripeti" = blocco da ripetere. Per Garmin Connect: un allenamento di corsa per voce, pianificato alla data.',allenamenti:all};
+  O.scarica(O.nomeFile('Garmin '+(p.name||'programma'))+'.json',JSON.stringify(out,null,1),'application/json');
+  showToast(all.length+' allenamenti nel pacchetto per Garmin');
+};
 /* ── IMPORTA UN PIANO DI CORSA DA FILE ─────────────────────────────
    Un piano scritto altrove (un PDF del preparatore trasformato in file .json,
    formato "rs-piano-corsa") entra nel programma aperto: la settimana 1 del file
@@ -7709,6 +7787,7 @@ function pzComandi(){
     }
     if(p.intake)add('Programma','Struttura delle settimane',()=>pzStrutApri(),'scarichi e km, e rigenera le sedute');
     add('Programma','Ritmi dell\'atleta',()=>pzRitmiApri(),'passi dai tempi: E, M, T, I, R');
+    add('Programma','Corse sull\'orologio',()=>pzOrologioApri(),'.FIT, intervals.icu, Garmin');
     add('Programma','Importa un piano di corsa da file',()=>pzImportaApri(),'file .json del piano');
     if(p.intake)add('Programma','Rifai dalla scheda',()=>openStudioDaProg());
     add('Programma','Modifica nome e dati del programma',()=>openModal('edit-prog'));
