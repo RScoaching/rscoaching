@@ -1583,6 +1583,11 @@ document.addEventListener('DOMContentLoaded',function(){
   window._parseDistM=function(str){
     if(str==null) return 0;
     var s=String(str).toLowerCase().replace(',','.');
+    if(/^\s*mezza maratona/.test(s)) return 21097;
+    if(/^\s*maratona/.test(s)) return 42195;
+    // una fase scritta a tempo ("45'", "15 min", "1h 20'") non e' una distanza: prima
+    // "45'" valeva 45 km e il volume della settimana usciva enorme
+    if(/\d\s*(?:'|′|min|h\b|ore|")/.test(s)&&!/\d\s*(?:km|k\b|m\b|metri)/.test(s)) return 0;
     var m=s.match(/(\d+(?:\.\d+)?)/);
     if(!m) return 0;
     var n=parseFloat(m[1]);
@@ -1594,10 +1599,13 @@ document.addEventListener('DOMContentLoaded',function(){
   // Ritmo "m:ss" (per km) → secondi/km.
   window._parsePaceSec=function(str){
     if(str==null) return 0;
-    var m=String(str).match(/(\d+):(\d{1,2})/);
-    if(!m) return 0;
-    var sec=parseInt(m[1],10)*60+parseInt(m[2],10);
-    return (sec>0&&sec<3600)?sec:0;                 // pace plausibile (< 60:00/km)
+    // anche "5'40", e un intervallo ("5:51-6:20") vale la media, non il primo valore
+    var t=String(str).replace(/(\d+)\s*'\s*(\d{1,2})/g,'$1:$2');
+    var all=t.match(/(\d+):(\d{1,2})/g);
+    if(!all) return 0;
+    var v=all.map(function(x){var q=x.split(':');return parseInt(q[0],10)*60+parseInt(q[1],10);}).filter(function(x){return x>0&&x<3600;});
+    if(!v.length) return 0;
+    return Math.round(v.reduce(function(a,b){return a+b;},0)/v.length);   // pace plausibile (< 60:00/km)
   };
   // Tempo libero ("2'", "90''", "1:30", "2 min", "30 sec") → secondi. Doppio apice = secondi, singolo = minuti.
   window._parseTimeSec=function(str){
@@ -1627,6 +1635,9 @@ document.addEventListener('DOMContentLoaded',function(){
       var d=window._parseDistM(f.dist), p=window._parsePaceSec(f.pace);
       out.meters=d;
       if(d&&p) out.seconds=(d/1000)*p;
+      // fase a tempo: i minuti sono quelli scritti, i metri si stimano dal ritmo se c'e'
+      if(!d){var ts=window._parseTimeSec(f.dist);if(!ts){var hm=String(f.dist||'').toLowerCase().match(/(\d+)\s*h(?:\s*(\d+))?/);if(hm)ts=(+hm[1]*60+(+hm[2]||0))*60;}
+        if(ts){out.seconds=ts;if(p)out.meters=Math.round(ts/p*1000);}}
     }
     return out;
   };

@@ -3274,6 +3274,9 @@ window.saveCorsa=async function(wid,sid){
   const agg={corsaFasi,corsaTipo:null,corsaZona:null,corsaDist:null,corsaPace:null,corsaNote:null};
   const RX=/^Circa \d+(?:[.,]\d+)? km\.\s*/;
   if(RX.test(s0.notes||''))agg.notes=(kmN?'Circa '+pzKmTxt(kmN)+' km. ':'')+String(s0.notes).replace(RX,'');
+  // corse a tempo: la nota "Circa 50 minuti." segue le fasi nuove allo stesso modo
+  const RXm=/^Circa \d+ minuti\.\s*/,minN=pzCorsaMin(Object.assign({},nuova,{notes:''}));
+  if(agg.notes==null&&RXm.test(s0.notes||'')&&minN)agg.notes='Circa '+(Math.round(minN/5)*5)+' minuti. '+String(s0.notes).replace(RXm,'');
   await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),agg);
   if(/circa \d+(?:[.,]\d+)? km/.test(w0.notes||'')){
     const sess=Object.assign({},w0.sessions,{[sid]:Object.assign({},nuova,agg.notes!=null?{notes:agg.notes}:{})});
@@ -4366,7 +4369,16 @@ function stDate(s){const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||'').
 function stFmtD(d){return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();}
 function stLunediProssimo(){const d=new Date();d.setHours(12,0,0,0);const g=(d.getDay()+6)%7;d.setDate(d.getDate()+(g===0?0:7-g));return d;}
 // tempo "mm:ss" o "h:mm:ss" in secondi
-function stSec(t){const p=String(t||'').trim().split(':').map(Number);if(!p.length||p.some(x=>!isFinite(x)))return null;return p.length===3?p[0]*3600+p[1]*60+p[2]:p.length===2?p[0]*60+p[1]:null;}
+// Secondi da un tempo o da un ritmo. Prima capiva solo "5:40": un ritmo scritto come
+// intervallo ("5:51-6:20"), con "/km" ("5:40 /km") o con gli apici ("5'40\"") non valeva
+// niente e la durata della corsa veniva stimata a 5:30/km. Un intervallo vale la media.
+function stSec1(t){const p=String(t||'').trim().split(':').map(Number);if(!p.length||p.some(x=>!isFinite(x)))return null;return p.length===3?p[0]*3600+p[1]*60+p[2]:p.length===2?p[0]*60+p[1]:null;}
+function stSec(t){
+  t=String(t==null?'':t).trim().replace(/\s*(?:min\s*)?\/\s*km\b\.?/gi,'').replace(/(\d+)\s*'\s*(\d{1,2})\s*"?/g,'$1:$2').trim();
+  if(!t)return null;
+  if(/\d\s*[-\u2013]\s*\d/.test(t)){const v=t.split(/\s*[-\u2013]\s*/).map(stSec1).filter(x=>x!=null);return v.length?Math.round(v.reduce((x,y)=>x+y,0)/v.length):null;}
+  return stSec1(t);
+}
 function stPace(sec){if(!sec||!isFinite(sec))return '';const t=Math.round(sec),m=Math.floor(t/60),s=t%60;return m+':'+String(s).padStart(2,'0');}
 function stNum(v){const x=parseFloat(String(v==null?'':v).replace(',','.'));return isFinite(x)?x:null;}
 
@@ -6595,6 +6607,11 @@ function pzStatSess(s){
     const pct=pzNum(e.pct),r=pzNum(e.reps);
     if(isFinite(pct)&&isFinite(r)&&!/["”]/.test(String(e.reps))){o.nl+=sets*r;o.pctW+=sets*r*pct;}
   });
+  if(o.min==null&&s.type==='corsa'){
+    // prima contava solo gli esercizi di attivazione e rinforzo: le ore della settimana
+    // di un piano di corsa uscivano molto sotto il vero
+    const c=pzCorsaMin(s);o.min=c?Math.round((c+(exs.length?o.sec/60:0))/5)*5:null;
+  }
   if(o.min==null)o.min=exs.length?Math.round((o.sec/60+8)/5)*5:0;
   return o;
 }
@@ -7129,8 +7146,19 @@ function pzMinDa(t,passo){
   t=stDistNorm(t).toLowerCase();let m;
   if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(t)))return parseFloat(m[1].replace(',','.'))*passo/60;
   if((m=/(\d+)\s*m\b/.exec(t)))return +m[1]/1000*passo/60;
-  if((m=/(\d+)\s*(?:'|min)/.exec(t)))return +m[1];
+  if((m=/(\d+)\s*h(?:\s*(\d+))?/.exec(t)))return +m[1]*60+(+m[2]||0);
+  if((m=/(\d+)\s*(?:'|min)\s*(?:(\d{1,2})\s*"?)?/.exec(t)))return +m[1]+(+m[2]||0)/60;
   if((m=/(\d+)\s*"/.exec(t)))return +m[1]/60;
+  return 0;
+}
+// minuti di un recupero. Nel campo "recupero" un numero nudo sono secondi ("90"),
+// mai metri: prima "1'30\"" valeva 1 minuto e "120" diventava 120 metri.
+function pzMinTempo(t){
+  t=String(t==null?'':t).toLowerCase().trim();if(!t)return 0;let m;
+  if((m=/(\d+)\s*:\s*(\d{1,2})/.exec(t)))return +m[1]+(+m[2])/60;
+  if((m=/(\d+)\s*(?:'|min)\s*(?:(\d{1,2})\s*"?)?/.exec(t)))return +m[1]+(+m[2]||0)/60;
+  if((m=/(\d+)\s*(?:"|s\b|sec)/.exec(t)))return +m[1]/60;
+  if((m=/^(\d+)$/.exec(t)))return +m[1]/60;
   return 0;
 }
 function pzCorsaMin(s){
@@ -7140,8 +7168,10 @@ function pzCorsaMin(s){
       const n=(+f.serie>1?+f.serie:1)*(parseInt(f.reps,10)||1);
       const pr=stSec(f.repPace)||passo*0.85;
       const lav=/-/.test(String(f.repDist))&&/m\b/.test(String(f.repDist))?String(f.repDist).split('-').reduce((t,x)=>t+(parseInt(x,10)||0),0)/1000*pr/60:pzMinDa(f.repDist,pr)*(/-/.test(String(f.repDist))?1:n);
-      const rec=pzMinDa(f.recTime,passo)||1;
-      tot+=lav+rec*Math.max(0,n-1);
+      const rec=pzMinTempo(f.recTime)||pzMinTempo(f.rec)||1;
+      const ser=+f.serie>1?+f.serie:1;
+      // recupero fra le ripetute di ogni serie, piu' quello fra una serie e l'altra
+      tot+=lav+rec*Math.max(0,n-ser)+(ser>1?(pzMinTempo(f.recSerie)||rec)*(ser-1):0);
     }else tot+=pzMinDa(f.dist,stSec(f.pace)||passo);
   });
   const km=/Circa (\d+) km/.exec(s.notes||'');
