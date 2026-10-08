@@ -129,7 +129,7 @@ window.initSidebarToggle = function() {
 window.SIDEBAR_CSS = `
 .sidebar{
   width:218px;
-  background:#0B0A0D;
+  background:#0A0909;
   border-right:1px solid rgba(255,255,255,.07);
   display:flex;flex-direction:column;
   position:sticky;top:0;height:100vh;
@@ -154,24 +154,24 @@ window.SIDEBAR_CSS = `
 }
 .nav-s{padding:10px 8px 0;flex:1;}
 .nav-lbl{
-  font-size:11px;font-weight:500;color:rgba(248,250,255,.32);
+  font-size:11px;font-weight:500;color:#77726E;
   padding:0 8px 4px;margin-top:18px;
 }
 .nav-item{
   display:flex;align-items:center;gap:9px;
   padding:9px 10px;font-size:13px;font-weight:500;
-  color:rgba(248,250,255,.55);
+  color:#B9B4B0;
   cursor:pointer;border-radius:8px;margin-bottom:2px;
   text-decoration:none;
   transition:color .15s ease,background .15s ease;
 }
 .nav-item:hover{
-  color:rgba(248,250,255,.78);
+  color:#fff;
   background:rgba(255,255,255,.05);
 }
 .nav-item.active{
   color:#fff;
-  background:rgba(255,255,255,.07);
+  background:rgba(255,255,255,.08);
   font-weight:600;
 }
 .nav-icon{display:inline-flex;width:18px;height:18px;opacity:.6;flex-shrink:0;transition:opacity .2s;}
