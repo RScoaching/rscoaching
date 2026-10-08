@@ -1402,6 +1402,16 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .ci7-body{scrollbar-width:none}
 .ci7-body::-webkit-scrollbar{display:none}
 .ci7-opt button{min-width:0;overflow-wrap:anywhere;padding-left:2px!important;padding-right:2px!important}
+.bsheet{background:#17141A!important;border-top:1px solid rgba(255,255,255,.08)!important}
+.bsheet-title{font-size:32px!important;letter-spacing:.4px!important;border-bottom:0!important;padding-bottom:6px!important}
+.qci9-top{padding:0 20px 14px;border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:14px}
+.qci9-seg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-bottom:8px}
+.qci9-seg i{height:4px;border-radius:2px;background:rgba(255,255,255,.1);transition:background-color .25s ease}
+.qci9-seg i.on{background:var(--primary)}
+.qci9-txt{font:500 13px Inter,sans-serif;color:var(--mut8)}
+.qci9-txt b{font-weight:700}.qci9-txt b.hi{color:var(--violet2)}.qci9-txt b.mid{color:#FF9A6B}.qci9-txt b.lo{color:#FB7185}
+.ci7-opt button.on i{color:#fff!important}
+.ci7-opt button{transition:background-color .15s ease,border-color .15s ease,transform .14s var(--ease8)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
 </head>
@@ -1655,7 +1665,8 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 <div class="bsheet-overlay" id="qci-overlay" onclick="closeQuickCheckin()"></div>
 <div class="bsheet" id="qci-sheet">
   <div class="bsheet-handle"></div>
-  <div class="bsheet-title">Check-in di oggi</div>
+  <div class="bsheet-title">Come stai oggi?</div>
+  <div class="qci9-top" id="qci-top" aria-live="polite"></div>
   <div class="bsheet-body ci7-body" id="qci-body"></div>
 </div>
 <!-- Match Log Sheet -->
@@ -2045,8 +2056,19 @@ window.qciXT=(k,v)=>{QCI.extra[k]=v;};
    scala da 1 a 10 che il preparatore legge da sempre, e come prontezza del giorno, cosi'
    la seduta non la richiede e la pagina Questionari del preparatore la trova subito. */
 const QCI={v:{},zone:new Set()};
+// v9: in testa al foglio cinque tacche che si riempiono a ogni risposta; a risposte
+// complete compare la prontezza calcolata, la stessa che vedra' il preparatore
+function qciTop(){
+  const t=document.getElementById('qci-top');if(!t)return;
+  const fatte=PR_VOCI.filter(([k])=>QCI.v[k]).length,v=QCI.v;
+  const ok=v.sonno&&v.dolori&&v.energia&&v.stress;
+  const sc=ok?prPunti(v.sonno,v.dolori,v.energia,v.stress):null;
+  t.innerHTML=`<div class="qci9-seg">${PR_VOCI.map(([k])=>`<i class="${QCI.v[k]?'on':''}"></i>`).join('')}</div>
+    <div class="qci9-txt">${sc!=null?`Prontezza <b class="${prCls(sc)}">${sc}</b> · ${prStato(sc).toLowerCase()}`:`Risposte ${fatte} di ${PR_VOCI.length}`}</div>`;
+}
 function qciDisegna(){
   const b=document.getElementById('qci-body');if(!b)return;
+  qciTop();
   const manca=PR_VOCI.filter(([k])=>!QCI.v[k]).length;
   b.innerHTML=PR_VOCI.map(([k,l,dom,parole])=>`<div class="ci7-q"><div class="ci7-qh"><b>${l}</b><span>${dom}</span></div>
       <div class="ci7-opt" role="radiogroup" aria-label="${l}">${parole.map((p,i)=>`<button type="button" role="radio" aria-checked="${QCI.v[k]===i+1}" class="${QCI.v[k]===i+1?'on':''}" onclick="qciSet('${k}',${i+1})"><i>${i+1}</i>${p}</button>`).join('')}</div></div>`).join('')

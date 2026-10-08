@@ -1054,6 +1054,38 @@ button,input,select,textarea{font-family:inherit}
 .ci7-body{scrollbar-width:none}
 .ci7-body::-webkit-scrollbar{display:none}
 .ci7-opt button{min-width:0;overflow-wrap:anywhere;padding-left:2px!important;padding-right:2px!important}
+/* recupero: schermata piena e calma, cronometro grande, +/-15 s, cosa viene dopo */
+.rest-ov{background:#0F0D12!important}
+.rest-full-cnt{gap:22px!important;padding:0 24px;text-align:center}
+.rest-ring-wrap{width:236px!important;height:236px!important}
+.rest-ring-svg{width:236px!important;height:236px!important}
+#rest-ring-fill{stroke-width:4}
+.rest-ring-svg circle:first-child{stroke:rgba(255,255,255,.07)!important;stroke-width:4}
+.rest-ov .rest-big{font-size:84px!important;letter-spacing:0!important;font-variant-numeric:tabular-nums}
+.rest-ov .rest-big.warn{color:#FF9A6B!important}
+.rest-ov .rest-lbl{font-size:13px!important;color:var(--mut8)!important;margin-bottom:2px}
+.rest-adj{display:flex;gap:10px}
+.rest-adj button{appearance:none;min-width:84px;min-height:44px;border-radius:999px;border:0;background:rgba(255,255,255,.08);color:var(--white,#F4F1EC);font:600 14px Inter,sans-serif;font-variant-numeric:tabular-nums;cursor:pointer;transition:transform .14s var(--ease8),background-color .18s ease}
+.rest-adj button:active{transform:scale(.95);background:rgba(255,255,255,.13)}
+.rest-hint{display:flex;flex-direction:column;gap:4px;max-width:30ch}
+.rest-hint span{font-size:13px;color:var(--mut8)}
+.rest-hint strong{font:400 26px/1.05 'Bebas Neue',sans-serif;letter-spacing:.4px;color:var(--white,#F4F1EC)}
+.rest-ov .rest-skip{background:var(--primary)!important;box-shadow:none!important;min-height:52px;min-width:220px;border-radius:16px!important;font:700 16px Inter,sans-serif!important;margin-top:4px!important;transition:transform .14s var(--ease8)}
+.rest-ov .rest-skip:active{transform:scale(.97)}
+.rest-ov.mini{background:#17141A!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border:1px solid rgba(255,106,46,.45)!important;box-shadow:0 6px 20px rgba(0,0,0,.45)!important;border-radius:999px!important;bottom:92px!important;padding:8px 10px 8px 16px!important}
+.rest-mini-time{letter-spacing:0!important;font-variant-numeric:tabular-nums}
+.rest-mini-skip{width:32px!important;height:32px!important}
+@media(prefers-reduced-motion:reduce){.rest-adj button,.rest-ov .rest-skip{transition:none}#rest-ring-fill{transition:none!important}}
+.rest-mini-skip{width:auto!important;height:32px!important;border-radius:999px!important;padding:0 12px!important;font:600 12.5px Inter,sans-serif!important;color:var(--white,#F4F1EC)!important;background:rgba(255,255,255,.08)!important;border:0!important}
+.vol-tracker-unit{margin-left:3px}
+/* "fatto" e' arancio come nel resto dell'app atleta: prima qui era verde
+   (serie, kg, spunte di campo, tasto Completa). La scala dell'RPE resta com'e'. */
+.set-row.done{background:rgba(255,106,46,.05)!important;border-color:rgba(255,106,46,.22)!important}
+.kg-inp.d{border-color:rgba(255,106,46,.35)!important;color:var(--primary2)!important;background:rgba(255,106,46,.06)!important}
+.campo-item.ck{background:rgba(255,106,46,.04)!important}
+.campo-ck.ck{background:var(--primary)!important;border-color:var(--primary)!important;box-shadow:none!important}
+.next-btn.fin{background:var(--primary)!important;background-image:none!important;color:#fff!important;box-shadow:none!important}
+.ci-ok-txt{color:var(--primary2)!important}
 </style>
 </head>
 <body>
@@ -1087,12 +1119,16 @@ button,input,select,textarea{font-family:inherit}
           transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 1s linear;"/>
       </svg>
       <div class="rest-ring-inner">
+        <div class="rest-lbl">Recupero</div>
         <div class="rest-big" id="rest-big">2:00</div>
-        <div class="rest-lbl">recupero</div>
       </div>
     </div>
+    <div class="rest-adj">
+      <button type="button" onclick="event.stopPropagation();restAdd(-15)" aria-label="Togli 15 secondi">-15 s</button>
+      <button type="button" onclick="event.stopPropagation();restAdd(15)" aria-label="Aggiungi 15 secondi">+15 s</button>
+    </div>
     <div class="rest-hint" id="rest-hint"></div>
-    <button class="rest-skip" onclick="event.stopPropagation();skipRest()">Continua →</button>
+    <button class="rest-skip" onclick="event.stopPropagation();skipRest()">Riprendi ora</button>
   </div>
   <!-- Mini pill content -->
   <div class="rest-mini-cnt">
@@ -1101,7 +1137,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="rest-mini-time" id="rest-mini-time">2:00</div>
       <div class="rest-mini-lbl">recupero</div>
     </div>
-    <button class="rest-mini-skip" onclick="event.stopPropagation();skipRest()"></button>
+    <button class="rest-mini-skip" onclick="event.stopPropagation();skipRest()" aria-label="Chiudi il recupero">Salta</button>
   </div>
 </div>
 
@@ -1651,7 +1687,9 @@ function updateVolumeTracker(){
     const sd2=setData[ei]||{};
     return Object.values(sd2).some(s=>s.done);
   }).length;
-  if(volEl)volEl.textContent=tonnes>=1?tonnes.toFixed(1):(totalKg>0?totalKg+'kg':'0');
+  // il numero e la sua unita': tonnellate da 1 t in su, chili sotto (prima usciva "390kg t")
+  if(volEl)volEl.textContent=tonnes>=1?tonnes.toFixed(1).replace('.',','):String(Math.round(totalKg));
+  const vu=document.querySelector('.vol-tracker-unit');if(vu)vu.textContent=tonnes>=1?'t':'kg';
   if(exEl)exEl.textContent=`${doneEx} / ${exs.length} esercizi`;
 }
 
@@ -2232,7 +2270,7 @@ window.toggleDone=function(ei,s){
     const restSecs=parseRest(ex.rest);
     if(restSecs>0&&!allDone){
       const tot=parseInt(ex.sets)||3;
-      const nxt=s<tot-1?`Serie ${s+2} di ${tot} - ${ex.name}`:ei<exs.length-1?`Prossimo: ${exs[ei+1]?.name||exs[ei+1]?.items?.[0]?.name||'-'}`:'';
+      const nxt=s<tot-1?`${ex.name} · serie ${s+2} di ${tot}`:ei<exs.length-1?`${exs[ei+1]?.name||exs[ei+1]?.items?.[0]?.name||'-'}`:'';
       startRest(restSecs,nxt);
     }
   }
@@ -2344,7 +2382,7 @@ function parseRest(str){
 
 function startRest(secs,hint){
   restTotal=secs;restLeft=secs;
-  document.getElementById('rest-hint').innerHTML=hint?`Prossimo: <strong>${hint}</strong>`:'';
+  document.getElementById('rest-hint').innerHTML=hint?`<span>Dopo</span><strong>${hint}</strong>`:'';
   const ov=document.getElementById('rest-ov');
   ov.classList.remove('h','mini');
   updateRest();
@@ -2366,9 +2404,9 @@ function updateRest(){
   const pf=document.getElementById('rest-pf');
   const rf=document.getElementById('rest-ring-fill');
   if(el){el.textContent=timeStr;el.className='rest-big'+(restLeft<=10?' warn':'');}
-  if(mt){mt.textContent=timeStr;mt.style.color=restLeft<=10?'var(--amber)':'var(--white)';}
+  if(mt){mt.textContent=timeStr;mt.style.color=restLeft<=10?'#FF9A6B':'var(--white)';}
   if(pf)pf.style.width=`${Math.max(0,restLeft/restTotal*100)}%`;
-  if(rf){const pct=restTotal>0?restLeft/restTotal:1;rf.setAttribute('stroke-dashoffset',String(314*(1-pct)));rf.style.stroke=restLeft<=10?'var(--gold)':'#FF6A2E';}
+  if(rf){const pct=restTotal>0?restLeft/restTotal:1;rf.setAttribute('stroke-dashoffset',String(314*(1-pct)));rf.style.stroke=restLeft<=10?'#FF9A6B':'#FF6A2E';}
 }
 function expandRest(){
   const ov=document.getElementById('rest-ov');
@@ -2382,6 +2420,9 @@ function expandRest(){
     },6000);
   }
 }
+// il recupero si allunga o si accorcia di 15 secondi senza ripartire da capo
+window.restAdd=d=>{restLeft=Math.max(5,restLeft+d);if(restLeft>restTotal)restTotal=restLeft;updateRest();
+  clearTimeout(restMinTmr);restMinTmr=setTimeout(()=>{const o=document.getElementById('rest-ov');if(!o.classList.contains('h'))o.classList.add('mini');},6000);};
 window.skipRest=()=>{
   clearInterval(restIv);clearTimeout(restMinTmr);
   const ov=document.getElementById('rest-ov');
