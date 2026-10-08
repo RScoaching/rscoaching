@@ -1833,7 +1833,10 @@ async function pzAllineaKm(id){
   Object.entries(p.weeks).forEach(([wid,w])=>{
     let toccata=false;const sess=Object.assign({},w.sessions||{});
     Object.entries(w.sessions||{}).forEach(([sid,x])=>{
-      if(!x||x.type!=='corsa'||!pzFasiDist(x))return;const m=RX.exec(x.notes||'');if(!m)return;
+      if(!x||x.type!=='corsa')return;
+      const fn=(x.corsaFasi||[]).map(f=>f?Object.assign({},f,f.dist?{dist:stDistNorm(f.dist)}:{},f.repDist?{repDist:stDistNorm(f.repDist)}:{}):f);
+      if(JSON.stringify(fn)!==JSON.stringify(x.corsaFasi||[])){agg[`weeks/${wid}/sessions/${sid}/corsaFasi`]=fn;x=Object.assign({},x,{corsaFasi:fn});sess[sid]=x;toccata=true;}
+      if(!pzFasiDist(x))return;const m=RX.exec(x.notes||'');if(!m)return;
       const kv=pzCorsaKm(Object.assign({},x,{notes:''}));if(!kv)return;
       if(Math.abs(kv-parseFloat(m[1].replace(',','.')))<0.5)return;
       const nota='Circa '+pzKmTxt(kv)+' km. '+String(x.notes).replace(RX,'');
@@ -3263,7 +3266,7 @@ window.saveCond=async function(wid,sid){
 window.saveCorsa=async function(wid,sid){
   const rows=[...document.querySelectorAll('#m-fasi-list .fase-row')];
   // campi vuoti fuori: nessuno dei lettori (app atleta, planner, stampa) ne ha bisogno
-  const corsaFasi=rows.map(r=>{const f=window._faseLeggi(r);Object.keys(f).forEach(k=>{if(f[k]==='')delete f[k];});if(!f.serie||+f.serie<=1){delete f.serie;delete f.recSerie;}return f;}).filter(f=>Object.keys(f).length);
+  const corsaFasi=rows.map(r=>{const f=window._faseLeggi(r);if(f.dist)f.dist=stDistNorm(f.dist);if(f.repDist)f.repDist=stDistNorm(f.repDist);Object.keys(f).forEach(k=>{if(f[k]==='')delete f[k];});if(!f.serie||+f.serie<=1){delete f.serie;delete f.recSerie;}return f;}).filter(f=>Object.keys(f).length);
   // la nota "Circa X km" e quella della settimana ("circa 40 km") si aggiornano con le fasi
   // nuove: le leggono la stampa, le schede e l'app dell'atleta
   const w0=programs[currentProgId]?.weeks?.[wid]||{},s0=w0.sessions?.[sid]||{};
@@ -5250,8 +5253,19 @@ function stQualita(I,w,ruolo,kmW,rit,tipo){
   return {nome:x.nome,km:Math.round(x.r===riscI?(basso?12:15)*60/ps.pe+10*60/ps.pe+x.km:(x.r.dist==='2 km'?2+10*60/ps.pe+x.km:((basso?10:12)+10)*60/ps.pe+x.km)),fasi:[x.r,x.m,def]};
 }
 // una fase di corsa scritta per esteso, uguale ovunque: "2 serie x 4 x 400 m @ 3:50 /km, rec 60" trotto, 3' camminata fra le serie"
+// Distanza scritta senza unita': nella corsa "6" o "10" vuol dire chilometri (i minuti si
+// scrivono con l'apice), "400" o "1000" metri. Prima un numero nudo non contava niente: il
+// lungo "6 + 10 a ritmo gara + 5Km" usciva 5 km e mezz'ora invece di 21 km.
+function stDistNorm(t){
+  t=String(t==null?'':t).trim();if(!t)return t;
+  t=t.replace(/(\d)\s*k[mM]\b/g,'$1 km').replace(/(\d)\s*K[mM]\b/g,'$1 km');
+  const m=/^(\d+(?:[.,]\d+)?)$/.exec(t);if(!m)return t;
+  const n=parseFloat(m[1].replace(',','.'));
+  return n<=45?t+' km':n>=100?t+' m':t;
+}
 function stCorsaTesto(f){
   if(!f)return '';
+  f=Object.assign({},f,{dist:stDistNorm(f.dist),repDist:stDistNorm(f.repDist)});
   const pk=p=>{p=String(p||'').trim();return !p?'':/km|\//i.test(p)?p:p+' /km';};
   if(f.reps||f.repDist||f.repPace){
     let t=(f.serie&&+f.serie>1?f.serie+' serie x ':'')+(f.reps&&String(f.reps)!=='1'?String(f.reps).replace(/\s*[x×]\s*$/i,'')+' x ':'')+(f.repDist||'');
@@ -6861,15 +6875,15 @@ function pzSlotSess(w,k){const x=pzSlotChiavi(w).find(y=>y[0]===k);return x?[x[1
 // le fasi dicono una distanza esplicita (km, metri, mezza o maratona): allora il loro conto
 // e' esatto. Per le corse scritte solo a tempo la nota del programma guidato resta la stima
 // migliore, perche' e' fatta con i ritmi dell'atleta.
-function pzFasiDist(s){return (s.corsaFasi||[]).some(f=>/\d\s*(?:km|m)\b/i.test(String(f.dist||''))||f.repDist||/^(?:mezza )?maratona$/i.test(String(f.dist||'')));}
+function pzFasiDist(s){return (s.corsaFasi||[]).some(f=>/\d\s*(?:km|m)\b/i.test(stDistNorm(f.dist))||f.repDist||/^(?:mezza )?maratona$/i.test(String(f.dist||'')));}
 function pzCorsaKm(s){
   const nn=/Circa (\d+(?:[.,]\d+)?) km/.exec(s.notes||'');
   if(nn&&!pzFasiDist(s))return parseFloat(nn[1].replace(',','.'));
   let km=0;
   (s.corsaFasi||[]).forEach(f=>{
-    const t=String(f.dist||'');let m;
+    const t=stDistNorm(f.dist);let m;
     if(/^mezza maratona$/i.test(t)){km+=21.1;return;}if(/^maratona$/i.test(t)){km+=42.2;return;}
-    if(f.reps||f.repDist){const c=(+f.serie>1?+f.serie:1)*(parseInt(f.reps,10)||1),r=String(f.repDist||'');
+    if(f.reps||f.repDist){const c=(+f.serie>1?+f.serie:1)*(parseInt(f.reps,10)||1),r=stDistNorm(f.repDist);
       if(/-/.test(r)&&/m\b/.test(r))km+=r.split('-').reduce((a,x)=>a+(parseInt(x,10)||0),0)/1000;
       else if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(r)))km+=c*parseFloat(m[1].replace(',','.'));
       else if((m=/(\d+)\s*m\b/.exec(r)))km+=c*m[1]/1000;
@@ -7111,8 +7125,8 @@ function pzMappa(){
    giorni (Alt copia), doppio clic su un giorno aggiunge, Invio apre la seduta. */
 const PZ_TIPO_BREVE={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Recupero'};
 function pzMinDa(t,passo){
-  // minuti da "15'", "8 km", "1000 m", "45 min"
-  t=String(t||'').toLowerCase();let m;
+  // minuti da "15'", "8 km", "1000 m", "45 min" (e "6" nudo, che vale 6 km)
+  t=stDistNorm(t).toLowerCase();let m;
   if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(t)))return parseFloat(m[1].replace(',','.'))*passo/60;
   if((m=/(\d+)\s*m\b/.exec(t)))return +m[1]/1000*passo/60;
   if((m=/(\d+)\s*(?:'|min)/.exec(t)))return +m[1];

@@ -2626,7 +2626,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
         detail=line;
       }else{
         const parts=[];
-        if(f.dist)parts.push(esc(resolveVars(f.dist)));
+        if(f.dist)parts.push(esc(distNorm(resolveVars(f.dist))));
         if(f.pace)parts.push(esc(pk(resolveVars(f.pace))));
         detail=parts.join(' · ');
       }
@@ -2891,12 +2891,15 @@ async function loadWeekPlan(athlete){
 }
 
 // riga sotto il nome della seduta: esercizi, oppure fasi e km per la corsa
+// distanza senza unita' nelle fasi di corsa: "6" vuol dire 6 km, "400" vuol dire 400 m
+// (stessa regola del builder, per i programmi salvati prima che la scrivesse da solo)
+function distNorm(t){t=String(t==null?'':t).trim().replace(/(\d)\s*km\b/gi,'$1 km');const m=/^(\d+(?:[.,]\d+)?)$/.exec(t);if(!m)return t;const n=parseFloat(m[1].replace(',','.'));return n<=45?t+' km':n>=100?t+' m':t;}
 function pcMeta(s){
   const ne=Object.keys(s.exercises||{}).length;
   const f=Array.isArray(s.corsaFasi)?s.corsaFasi:Object.values(s.corsaFasi||{});
   if(!f.length)return ne+' esercizi';
   let km=0;
-  f.forEach(x=>{if(!x)return;const d=/([\d.,]+)\s*km/i.exec(String(x.dist||''));if(d)km+=parseFloat(d[1].replace(',','.'));
+  f.forEach(x=>{if(!x)return;const d=/([\d.,]+)\s*km/i.exec(distNorm(x.dist));if(d)km+=parseFloat(d[1].replace(',','.'));
     const r=/([\d.,]+)\s*(km|m)\b/i.exec(String(x.repDist||''));if(r){const v=parseFloat(r[1].replace(',','.'))/(r[2].toLowerCase()==='m'?1000:1);km+=v*(parseInt(x.reps)||1)*(parseInt(x.serie)||1);}});
   const parti=[f.length===1?'1 fase':f.length+' fasi'];
   if(km)parti.push(String(Math.round(km*10)/10).replace('.',',')+' km');
