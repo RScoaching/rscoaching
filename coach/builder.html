@@ -1821,7 +1821,30 @@ window.selectProg=function(id){
   renderProgList();
   renderEditor();
   pzCaricaRM();if(!pzModelli)pzCaricaModelli();
+  pzAllineaKm(id);
 };
+/* Programmi creati prima della correzione: se una corsa e' stata cambiata, la nota
+   "Circa X km" della seduta e quella della settimana dicono ancora il valore vecchio.
+   All'apertura si riallineano alle fasi, una sola scrittura e solo se qualcosa e'
+   cambiato di almeno mezzo chilometro. */
+async function pzAllineaKm(id){
+  const p=programs[id];if(!p||!p.weeks)return;
+  const RX=/^Circa (\d+(?:[.,]\d+)?) km\.\s*/,agg={};
+  Object.entries(p.weeks).forEach(([wid,w])=>{
+    let toccata=false;const sess=Object.assign({},w.sessions||{});
+    Object.entries(w.sessions||{}).forEach(([sid,x])=>{
+      if(!x||x.type!=='corsa'||!pzFasiDist(x))return;const m=RX.exec(x.notes||'');if(!m)return;
+      const kv=pzCorsaKm(Object.assign({},x,{notes:''}));if(!kv)return;
+      if(Math.abs(kv-parseFloat(m[1].replace(',','.')))<0.5)return;
+      const nota='Circa '+pzKmTxt(kv)+' km. '+String(x.notes).replace(RX,'');
+      agg[`weeks/${wid}/sessions/${sid}/notes`]=nota;sess[sid]=Object.assign({},x,{notes:nota});toccata=true;
+    });
+    const mw=/circa (\d+(?:[.,]\d+)?) km/.exec(w.notes||'');
+    if(mw){const kw=Math.round(pzKmSett({sessions:sess}));if(kw&&Math.abs(kw-parseFloat(mw[1].replace(',','.')))>=0.5)agg[`weeks/${wid}/notes`]=String(w.notes).replace(/circa \d+(?:[.,]\d+)? km/,'circa '+kw+' km');}
+  });
+  if(!Object.keys(agg).length)return;
+  try{await update(ref(db,`programs/${id}`),agg);showToast('Km delle corse riallineati alle fasi');}catch(e){}
+}
 
 // RENDER EDITOR
 function renderEditor(){
@@ -3241,11 +3264,20 @@ window.saveCorsa=async function(wid,sid){
   const rows=[...document.querySelectorAll('#m-fasi-list .fase-row')];
   // campi vuoti fuori: nessuno dei lettori (app atleta, planner, stampa) ne ha bisogno
   const corsaFasi=rows.map(r=>{const f=window._faseLeggi(r);Object.keys(f).forEach(k=>{if(f[k]==='')delete f[k];});if(!f.serie||+f.serie<=1){delete f.serie;delete f.recSerie;}return f;}).filter(f=>Object.keys(f).length);
-  await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),{
-    corsaFasi,
-    corsaTipo:null,corsaZona:null,corsaDist:null,corsaPace:null,corsaNote:null
-  });
-  closeModal();showToast('Corsa salvata');
+  // la nota "Circa X km" e quella della settimana ("circa 40 km") si aggiornano con le fasi
+  // nuove: le leggono la stampa, le schede e l'app dell'atleta
+  const w0=programs[currentProgId]?.weeks?.[wid]||{},s0=w0.sessions?.[sid]||{};
+  const nuova=Object.assign({},s0,{corsaFasi}),kmN=pzCorsaKm(Object.assign({},nuova,{notes:''}));
+  const agg={corsaFasi,corsaTipo:null,corsaZona:null,corsaDist:null,corsaPace:null,corsaNote:null};
+  const RX=/^Circa \d+(?:[.,]\d+)? km\.\s*/;
+  if(RX.test(s0.notes||''))agg.notes=(kmN?'Circa '+pzKmTxt(kmN)+' km. ':'')+String(s0.notes).replace(RX,'');
+  await update(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions/${sid}`),agg);
+  if(/circa \d+(?:[.,]\d+)? km/.test(w0.notes||'')){
+    const sess=Object.assign({},w0.sessions,{[sid]:Object.assign({},nuova,agg.notes!=null?{notes:agg.notes}:{})});
+    const kw=Math.round(pzKmSett({sessions:sess}));
+    await update(ref(db,`programs/${currentProgId}/weeks/${wid}`),{notes:String(w0.notes).replace(/circa \d+(?:[.,]\d+)? km/,'circa '+kw+' km')});
+  }
+  closeModal();showToast(kmN?'Corsa salvata: circa '+pzKmTxt(kmN)+' km':'Corsa salvata');
 };
 
 // data di inizio del programma: si salva come gg/mm/aaaa, lo stesso formato del programma guidato
@@ -3657,7 +3689,7 @@ function pdfSettimanaHTML(p,fio){
   const kgOf=e=>{if(!kgAid||!e||!e.pct)return '';const mx=pzMax(e.name);const pc=pzNum(e.pct);return mx&&isFinite(pc)?String(pzR25(mx.v*pc/100)).replace('.',',')+' kg':'';};
   const dose=e=>{const d=[e.sets&&e.reps?e.sets+'x'+String(e.reps).replace(' per lato','/lato'):(e.reps||e.sets||'')];if(e.pct)d.push(String(e.pct).replace('.',',')+'%'+(kgOf(e)?' ('+kgOf(e)+')':''));if(e.rpe)d.push('RPE '+e.rpe);return d.filter(Boolean).join(' ');};
   const corpoSess=s=>{
-    if(s.type==='corsa'){const f=s.corsaFasi||[];const km=/Circa (\d+(?:,\d)?) km/.exec(s.notes||'');
+    if(s.type==='corsa'){const f=s.corsaFasi||[];const kv=pzCorsaKm(s),km=kv?[null,pzKmTxt(kv)]:null;
       return f.map(x=>{const cen=/Z[345]/.test(x.zona||'')&&!/Riscaldamento|Defaticamento/.test(x.tipo);return '<li'+(cen?' class="k"':'')+'><i>'+esc(x.zona||'')+'</i>'+esc(stCorsaTesto(x)||x.tipo)+'</li>';}).join('')+(km?'<li class="km">'+km[1]+' km</li>':'');}
     if(s.type==='conditioning')return '<li>'+esc((s.duration?s.duration+': ':'')+String(s.condContent||'').replace(/\n/g,'; '))+'</li>';
     const ex=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
@@ -3667,7 +3699,7 @@ function pdfSettimanaHTML(p,fio){
   const md=s=>{const m=/^(MD[+-]\d)/.exec(s.notes||'');return m?m[1]:'';};
   const pag=W.map((w,i)=>{
     const ss=sessOf(w),perG=GG.map(()=>[]),senza=[];ss.forEach(s=>(s.dayOfWeek!=null?perG[s.dayOfWeek]:senza).push(s));
-    const km=/circa (\d+) km/.exec(w.notes||'');
+    const kw=Math.round(pzKmSett(w)),km=kw?[null,String(kw)]:null;
     const testa='<div class="w-h"><div><h1>Settimana '+(i+1)+(lun0?' &#183; dal '+dm(giorno(i,0))+' al '+dm(giorno(i,6)):'')+'</h1><span>'+esc(String(w.label||'').replace(/^S\d+\s*/,''))+' &#183; '+ss.length+(ss.length===1?' seduta':' sedute')+(km?' &#183; circa '+km[1]+' km di corsa':'')+(athl.length?' &#183; '+esc(athl.join(', ')):'')+'</span></div><div class="w-b">'+(fio?'Fiorentina Primavera':'<b>RS</b>COACHING')+'<small>'+esc(p.name)+'</small></div></div>';
     const col=GG.map((g,d)=>'<div class="w-d'+(perG[d].length?'':' off')+'"><div class="w-dh">'+g+' <span>'+dm(giorno(i,d))+'</span>'+(perG[d].length&&md(perG[d][0])?'<em>'+md(perG[d][0])+'</em>':'')+'</div>'
       +(perG[d].length?perG[d].map(s=>'<div class="w-s"><span class="w-t t-'+esc(s.type)+'">'+esc(TIPO[s.type]||s.type||'')+'</span><b>'+esc(s.name)+'</b><ul>'+corpoSess(s)+'</ul></div>').join(''):'<div class="w-rip">riposo</div>')+'</div>').join('');
@@ -3712,8 +3744,8 @@ function pdfCalendarioHTML(p,fio){
   const ini=stDate(p.startDate),lun0=ini?(()=>{const x=new Date(ini);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;})():null;
   const giorno=(i,g)=>{if(!lun0)return null;const a=new Date(lun0);a.setDate(a.getDate()+i*7+g);return a;};
   const athl=Object.keys(p.assignedTo||{}).map(id=>(athletes[id]||{}).name).filter(Boolean);
-  const kmS=s=>{const m=/Circa (\d+(?:,\d)?) km/.exec(s.notes||'')||(s.type==='corsa'&&/^Gara/i.test(s.name||'')?/(\d+(?:,\d)?) km/.exec(s.name):null);return m?+m[1].replace(',','.'):0;};
-  const kmW=W.map(w=>{const m=/circa (\d+) km/.exec(w.notes||'');const g=sessOf(w).filter(s=>s.type==='corsa'&&/^Gara/i.test(s.name||'')).reduce((t,s)=>t+kmS(s),0);return m?+m[1]+(/piu' la gara/.test(w.notes||'')?Math.round(g):0):Math.round(sessOf(w).filter(s=>s.type==='corsa').reduce((t,s)=>t+kmS(s),0));});
+  const kmS=s=>{if(s.type!=='corsa')return 0;const v=pzCorsaKm(s);if(v)return v;const m=/^Gara/i.test(s.name||'')?/(\d+(?:,\d)?) km/.exec(s.name):null;return m?+m[1].replace(',','.'):0;};
+  const kmW=W.map(w=>Math.round(sessOf(w).filter(s=>s.type==='corsa').reduce((t,s)=>t+kmS(s),0)));
   // zone: per ogni zona il ritmo che compare piu' spesso nelle sedute
   const conta={};W.forEach(w=>sessOf(w).forEach(s=>(s.corsaFasi||[]).forEach(f=>{const z=(/Z[1-5]/.exec(f.zona||'')||[])[0];const pc=f.repPace||f.pace;if(!z||!pc)return;conta[z]=conta[z]||{};conta[z][pc]=(conta[z][pc]||0)+1;})));
   const ZN={Z1:'recupero',Z2:'facile',Z3:'medio',Z4:'soglia',Z5:'VO2max'};
@@ -3821,7 +3853,7 @@ function pdfSchedeHTML(p,wi,fio){
     const d=x.dayOfWeek,dd=d!=null?B.giorno(wi,d):null;
     const ex=B.exOf(x),lav=ex.filter(e=>!B.prev(e)),pv=ex.filter(B.prev);
     let min='';try{const m=pzStatSess(x).min;if(m)min='circa '+Math.round(m)+' minuti';}catch(e){}
-    const km=/Circa (\d+(?:,\d)?) km/.exec(x.notes||'');
+    const kx=x.type==='corsa'?pzCorsaKm(x):0,km=kx?[null,pzKmTxt(kx)]:null;
     let h='<section class="sc"><div class="sch"><div><span class="tg t-'+esc(x.type)+'">'+esc(B.TIPO[x.type]||x.type||'')+'</span><h2>'+esc(x.name)+'</h2></div><div class="scm">'+(d!=null?B.GGL[d]+(dd?' '+B.dm(dd):''):'')+'<br>'+(km?'circa '+km[1]+' km':min)+'</div></div>';
     const nota=String(x.notes||'').replace(/^Circa \d+(?:,\d)? km\.\s*/,'').trim();
     if(nota)h+='<p class="scn">'+esc(nota)+'</p>';
@@ -6822,9 +6854,17 @@ function pzSlots(){
   return [...m.values()].sort((a,b)=>(a.d==null?9:a.d)-(b.d==null?9:b.d)||a.k.localeCompare(b.k));
 }
 function pzSlotSess(w,k){const x=pzSlotChiavi(w).find(y=>y[0]===k);return x?[x[1],x[2]]:null;}
-// km di una corsa: dalle note ("Circa 12 km") o dalle fasi
+// km di una corsa: dalle fasi. La nota "Circa 12 km" la scrive il programma guidato
+// quando crea la seduta e prima vinceva lei: cambiando le fasi (18 km diventati 21) il
+// totale, i km della settimana e l'uscita piu' lunga restavano fermi. Adesso la nota
+// conta solo se le fasi non bastano a dire una distanza.
+// le fasi dicono una distanza esplicita (km, metri, mezza o maratona): allora il loro conto
+// e' esatto. Per le corse scritte solo a tempo la nota del programma guidato resta la stima
+// migliore, perche' e' fatta con i ritmi dell'atleta.
+function pzFasiDist(s){return (s.corsaFasi||[]).some(f=>/\d\s*(?:km|m)\b/i.test(String(f.dist||''))||f.repDist||/^(?:mezza )?maratona$/i.test(String(f.dist||'')));}
 function pzCorsaKm(s){
-  const n=/Circa (\d+(?:[.,]\d+)?) km/.exec(s.notes||'');if(n)return parseFloat(n[1].replace(',','.'));
+  const nn=/Circa (\d+(?:[.,]\d+)?) km/.exec(s.notes||'');
+  if(nn&&!pzFasiDist(s))return parseFloat(nn[1].replace(',','.'));
   let km=0;
   (s.corsaFasi||[]).forEach(f=>{
     const t=String(f.dist||'');let m;
@@ -6833,12 +6873,19 @@ function pzCorsaKm(s){
       if(/-/.test(r)&&/m\b/.test(r))km+=r.split('-').reduce((a,x)=>a+(parseInt(x,10)||0),0)/1000;
       else if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(r)))km+=c*parseFloat(m[1].replace(',','.'));
       else if((m=/(\d+)\s*m\b/.exec(r)))km+=c*m[1]/1000;
-      else km+=c*pzMinDa(r,270)*60/270;}
+      else{const pr=stSec(f.repPace)||270;km+=c*pzMinDa(r,pr)*60/pr;}}
     else if((m=/(\d+(?:[.,]\d+)?)\s*km/.exec(t)))km+=parseFloat(m[1].replace(',','.'));
-    else km+=pzMinDa(t,330)*60/330;
+    else{const pr=stSec(f.pace)||330;km+=pzMinDa(t,pr)*60/pr;}
   });
-  return Math.round(km*10)/10;
+  km=Math.round(km*10)/10;
+  if(km>0)return km;
+  const n=/Circa (\d+(?:[.,]\d+)?) km/.exec(s.notes||'');
+  return n?parseFloat(n[1].replace(',','.')):0;
 }
+// km di corsa della settimana, gara esclusa (come la nota della settimana: "circa 40 km piu' la gara")
+function pzKmSett(w){return Object.values((w&&w.sessions)||{}).filter(x=>x&&x.type==='corsa'&&!/^Gara/i.test(x.name||'')).reduce((t,x)=>t+pzCorsaKm(x),0);}
+// stesso numero in forma di testo, con la virgola
+function pzKmTxt(v){return String(Math.round(v*10)/10).replace('.',',');}
 function pzCorsaPrincipale(s){
   const ff=(s.corsaFasi||[]).filter(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo||''));
   return (ff.length?ff:(s.corsaFasi||[])).map(f=>(f.tipo&&!/Fondo Lento|Long Run/.test(f.tipo)?f.tipo+' ':'')+stCorsaTesto(f)).join(' + ');
@@ -7167,7 +7214,7 @@ function pzGiorni(wid,w){
   if(!riposo&&ss.length)av.push('Nessun giorno di riposo');
   const senza=perG('');
   const card=(sid,x)=>{
-    const k=pzIntensita(x),fatta=pzLog(wi,sid),r=pzGgRighe(x),km=/Circa (\d+) km/.exec(x.notes||'');
+    const k=pzIntensita(x),fatta=pzLog(wi,sid),r=pzGgRighe(x),kx=x.type==='corsa'?pzCorsaKm(x):0,km=kx?[null,String(Math.round(kx))]:null;
     return `<div class="pz-chip2 pz-dcard t-${x.type||'pesi'}${fatta?' fatta':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" onclick="pzApriSess('${wid}','${sid}')" title="Invio o clic: apri nella Griglia">
       <em>${stEsc(PZ_TIPO_BREVE[x.type]||'Seduta')}${k.dura?' <u>dura</u>':''}</em>
       <b>${stEsc(x.name||'Seduta')}</b>
