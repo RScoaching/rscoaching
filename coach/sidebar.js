@@ -658,11 +658,14 @@ window.RSGarmin = (function(){
     if(/run|corsa|trail|treadmill|track|jog/.test(t))return 'corsa';
     if(/ride|cycl|bike|bici|spin|gravel/.test(t))return 'bici';
     if(/swim|nuoto/.test(t))return 'nuoto';
-    if(/strength|weight|gym|forza|crossfit|hiit|training$/.test(t))return 'pesi';
+    if(/breath|meditat|respir|sleep|nap/.test(t))return 'pausa';
+    if(/strength|weight|gym|forza/.test(t))return 'pesi';
     if(/walk|hik|cammin/.test(t))return 'cammino';
     if(/soccer|football|calcio/.test(t))return 'calcio';
     return 'altro';}
   const NOMI={corsa:'Corsa',bici:'Bici',nuoto:'Nuoto',pesi:'Forza',cammino:'Camminata',calcio:'Calcio',altro:'Attivita\''};
+  // sport in cui i km dicono qualcosa (nel calcio o in palestra no)
+  const CON_KM={corsa:1,bici:1,nuoto:1,cammino:1};
   function quando(s){if(typeof s==='number')return s>1e12?s:s*1000;const m=/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(s||''));return m?new Date(+m[1],+m[2]-1,+m[3],+(m[4]||12),+(m[5]||0),+(m[6]||0)).getTime():null;}
   function iso(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
   function norm(id,a){
@@ -675,7 +678,7 @@ window.RSGarmin = (function(){
   }
   // attivita' senza doppioni, dalla piu' recente
   function attivita(gd){
-    const L=Object.entries(gd&&gd.activities||{}).map(([id,a])=>a?norm(id,a):null).filter(Boolean).sort((x,y)=>x.ts-y.ts);
+    const L=Object.entries(gd&&gd.activities||{}).map(([id,a])=>a?norm(id,a):null).filter(a=>a&&a.tipo!=='pausa'&&!(a.sec&&a.sec<180)).sort((x,y)=>x.ts-y.ts);
     const out=[];
     L.forEach(a=>{
       // stessa uscita dalle due fonti: stessa ora di inizio (entro 3'), oppure stesso giorno, tipo e durata simile.
@@ -692,14 +695,14 @@ window.RSGarmin = (function(){
   function giorno(gd,d){return gd&&gd.days?gd.days[d]||null:null;}
   // sonno su 5 come nel questionario: dal punteggio, se manca dalle ore
   function sonno5(g){if(!g)return null;const s=+g.sleepScore;if(s>0)return s<40?1:s<60?2:s<75?3:s<88?4:5;const h=(+g.sleepSeconds||0)/3600;if(!h)return null;return h<5?1:h<6?2:h<7?3:h<8?4:5;}
-  const HRV_ST={BALANCED:'nella norma',UNBALANCED:'sbilanciata',LOW:'bassa',POOR:'molto bassa'};
+  const HRV_ST={BALANCED:'nella norma',UNBALANCED:'sbilanciata',LOW:'bassa',POOR:'molto bassa',NONE:null,NO_STATUS:null};
   // i numeri del giorno con la media dei 7 giorni prima (per HRV e FC a riposo)
   function sintesi(gd,d){
     const g=giorno(gd,d);if(!g)return null;
     const prima=[];for(let i=1;i<=7;i++){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()-i);const y=giorno(gd,iso(x.getTime()));if(y)prima.push(y);}
     const media=k=>{const v=prima.map(y=>+y[k]).filter(x=>x>0);return v.length>=3?Math.round(v.reduce((t,x)=>t+x,0)/v.length):null;};
     const o={readiness:+g.trainingReadiness>0?Math.round(g.trainingReadiness):null,sonnoSec:+g.sleepSeconds||null,sleepScore:+g.sleepScore||null,sonno5:sonno5(g),
-      hrv:+g.hrvLastNightAvg||null,hrvBase:+g.hrvWeeklyAvg||media('hrvLastNightAvg'),hrvStatus:g.hrvStatus?HRV_ST[g.hrvStatus]||String(g.hrvStatus).toLowerCase():null,
+      hrv:+g.hrvLastNightAvg||null,hrvBase:+g.hrvWeeklyAvg||media('hrvLastNightAvg'),hrvStatus:g.hrvStatus&&HRV_ST[g.hrvStatus]!==null?HRV_ST[g.hrvStatus]||String(g.hrvStatus).toLowerCase().replace(/_/g,' '):null,
       fcRiposo:+g.restingHR||null,fcBase:media('restingHR'),bb:+g.bodyBatteryHigh||null,ctl:+g.ctl||null,atl:+g.atl||null,passi:+g.steps||null,stress:+g.stressAvg||null};
     // segnali da guardare: HRV sotto la sua media del 10% o piu', FC a riposo sopra di 5 battiti o piu'
     o.hrvGiu=o.hrv&&o.hrvBase?o.hrv<=o.hrvBase*0.9:false;o.fcSu=o.fcRiposo&&o.fcBase?o.fcRiposo>=o.fcBase+5:false;
@@ -741,14 +744,17 @@ window.RSGarmin = (function(){
       if(k){usati.add(k);const l=out[k];
         out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
-      const P=(pianificate?pianificate(a.giorno):[]).filter(p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false));
-      const p=P[0];if(p)fatteProg.add(p.pid+'|'+p.wi+'|'+p.sid);
+      const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
+      let p=(pianificate?pianificate(a.giorno):[]).filter(adatta)[0];
+      // la corsa spostata: se quel giorno non c'e' niente da fare, vale per la seduta saltata piu' vicina
+      // nei giorni prima della stessa settimana (mai in avanti: quella si fa ancora)
+      if(!p&&pianificate){const d=new Date(a.ts),dow=(d.getDay()+6)%7;for(let i=1;i<=dow&&!p;i++){const x=new Date(a.ts-i*864e5);p=pianificate(iso(x.getTime())).filter(adatta)[0];}}if(p)fatteProg.add(p.pid+'|'+p.wi+'|'+p.sid);
       if(p&&corsa&&p.s&&window.RSOrologio){try{corsa.prevKm=window.RSOrologio.stima(window.RSOrologio.passi(p.s,null)).km||null;}catch(e){}}
       const d=new Date(a.ts);
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,
         avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},
-        corsa?{corsa}:{},a.tipo!=='corsa'&&a.km?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
+        corsa?{corsa}:{},a.tipo!=='corsa'&&a.km&&CON_KM[a.tipo]?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
     });
     return out;
   }

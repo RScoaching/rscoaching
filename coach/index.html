@@ -1944,8 +1944,12 @@ function renderQuestionari(){
     if(b){const x=Math.round(g.score-b.m);dlt=(x>0?'+':'')+x;if(x<=-Math.max(10,1.5*b.sd))al.push(`<span class="at-al" title="La sua media nelle 4 settimane prima: ${Math.round(b.m)}, su ${b.n} risposte">${x} sulla sua media</span>`);}
     QZ_VOCI.forEach(([k,lbl,verso])=>{const v=g[k];if(v!=null&&(verso>0?v===1:v===5))al.push(`<span class="at-al">${lbl} ${v}/5</span>`);});
     if(g.pains.length)al.push(`<span class="at-al" title="Dolore segnalato nel check-in">Dolore: ${dEsc(g.pains.join(', '))}</span>`);
+    // segnali dell'orologio: HRV sotto la sua media, FC a riposo alta
+    const o=g.orologio;
+    if(o&&o.hrvGiu)al.push(`<span class="at-al" title="HRV ${Math.round(o.hrv)} contro una media di ${o.hrvBase}">HRV bassa</span>`);
+    if(o&&o.fcSu)al.push(`<span class="at-al" title="${o.fcRiposo} battiti contro una media di ${o.fcBase}">FC a riposo alta</span>`);
     if(al.length)segnali++;
-    const ora=g.ts?new Date(g.ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'';
+    const ora=g.ts?new Date(g.ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):(g.orologio?'orologio':'');
     const pv=dPreviste(id,d),pp=pv.length?qzProposta(g,b):null;
     const prop=pp?`<div class="qz-prop ${pp.liv}"><b>${dEsc(pv.map(v=>v.x.name||'Seduta').join(' + '))} ${eOggi?'oggi':'in programma'}.</b> Proposta: ${dEsc(pp.txt)}.</div>`:'';
     return `<div class="qz-r${prop?' con-prop':''}">${chi(id)}<span class="qz-sc ${qzCls(g.score)}" data-l="Prontezza" title="Dal ${g.da}${b?', la sua media e\' '+Math.round(b.m):''}"><b>${g.score}</b>${dlt?`<small>${dlt}</small>`:''}</span>${QZ_VOCI.map(([k,lbl,verso])=>voce(g[k],verso,lbl)).join('')}<span class="qz-al">${al.join('')||'<span class="at-no">-</span>'}</span><span class="qz-ora" data-l="Ora">${ora}</span></div>`+prop;
@@ -2042,6 +2046,9 @@ function athStats(aid){
   if(avgFat!=null&&avgFat>7)add('Fatica '+f1(avgFat),'p-red','media degli ultimi '+ci3.length+' check-in, su 10',3);
   if(avgMot!=null&&avgMot<4)add('Motivazione '+f1(avgMot),'p-warn','media degli ultimi '+ci3.length+' check-in, su 10',1);
   const go=gmOggi(aid);
+  // dati dell'orologio fermi: la sincronizzazione sul Mac non e' passata (token scaduti, Mac spento, atleta scollegato)
+  const gl=garminData[aid]&&+garminData[aid].lastSync;
+  if(gl&&Date.now()-gl>36*3600e3)add('Orologio fermo','p-warn','ultimi dati dall\'orologio '+ggFa(gl)+(garminData[aid].lastSyncVia?' (da '+garminData[aid].lastSyncVia+')':'')+': controlla la sincronizzazione',1);
   if(go){
     if(go.hrvGiu)add('HRV '+Math.round(go.hrv),'p-warn','orologio'+(go.ieri?', ieri':'')+': HRV '+Math.round(go.hrv)+' contro una media di '+go.hrvBase+(go.hrvStatus?', '+go.hrvStatus:''),2);
     if(go.fcSu)add('FC riposo '+go.fcRiposo,'p-warn','orologio'+(go.ieri?', ieri':'')+': '+go.fcRiposo+' battiti contro una media di '+go.fcBase,1);
