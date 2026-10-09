@@ -677,7 +677,9 @@ window.RSGarmin = (function(){
     const L=Object.entries(gd&&gd.activities||{}).map(([id,a])=>a?norm(id,a):null).filter(Boolean).sort((x,y)=>x.ts-y.ts);
     const out=[];
     L.forEach(a=>{
-      const d=out.find(b=>b.giorno===a.giorno&&b.tipo===a.tipo&&b.fonti[0]!==a.fonti[0]&&a.sec&&b.sec&&Math.abs(a.sec-b.sec)<=Math.max(300,0.12*Math.max(a.sec,b.sec)));
+      // stessa uscita dalle due fonti: stessa ora di inizio (entro 3'), oppure stesso giorno, tipo e durata simile.
+      // Garmin da' il tempo totale, intervals.icu quello in movimento: nel calcio differiscono di parecchi minuti
+      const d=out.find(b=>b.tipo===a.tipo&&b.fonti[0]!==a.fonti[0]&&(Math.abs(a.ts-b.ts)<=180000||(b.giorno===a.giorno&&a.sec&&b.sec&&Math.abs(a.sec-b.sec)<=Math.max(300,0.12*Math.max(a.sec,b.sec)))));
       if(!d){out.push(a);return;}
       // tiene Garmin come base (training effect), prende da intervals.icu RPE, sensazioni e carico
       const g=d.fonti[0]==='garmin'?d:a,o=g===d?a:d;
@@ -732,7 +734,8 @@ window.RSGarmin = (function(){
     const fatteProg=new Set(Object.values(out).filter(l=>l&&l.progId&&l.sessId!=null).map(l=>l.progId+'|'+l.weekIdx+'|'+l.sessId));
     const compat=(l,a)=>{const t=l.type||(l.totalSets?'pesi':'');if(a.tipo==='corsa')return t==='corsa'||!!l.corsa;if(a.tipo==='pesi')return t==='pesi'||(!t&&!l.corsa);return !['corsa','pesi'].includes(t)&&!l.corsa;};
     A.slice().sort((x,y)=>x.ts-y.ts).forEach(a=>{
-      const k=Object.keys(out).find(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&iso(l.ts)===a.giorno&&compat(l,a);});
+      // prima il registro gia' legato a questa attivita' (RPE dato dall'atleta), poi uno dello stesso giorno
+      const k=Object.keys(out).find(k=>!usati.has(k)&&out[k].gmId!=null&&String(out[k].gmId)===String(a.id))||Object.keys(out).find(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&l.gmId==null&&iso(l.ts)===a.giorno&&compat(l,a);});
       const corsa=a.tipo==='corsa'?{fonte:a.fonti.join('+'),km:a.km,sec:a.sec,fc:a.fc,fcMax:a.fcMax,dsl:a.dsl,passo:a.passo,load:a.load,te:a.te}:null;
       if(k){usati.add(k);const l=out[k];
         out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});

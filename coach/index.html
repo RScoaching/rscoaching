@@ -2087,7 +2087,8 @@ function athCarico(aid){
   const aSess=Object.values(sessions[aid]||{}).filter(s=>s&&s.ts&&s.rpe>0);
   const logs=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts);
   const durBy={};
-  logs.forEach(l=>{const m=+l.duration;if(m>0&&m<400){const k=isoDay(l.ts);durBy[k]=(durBy[k]||0)+m;}});
+  // i minuti delle attivita' dell'orologio non prendono l'RPE del giorno: contano solo col loro RPE (sotto)
+  logs.forEach(l=>{const m=+l.duration;if(!l.gm&&m>0&&m<400){const k=isoDay(l.ts);durBy[k]=(durBy[k]||0)+m;}});
   const durs=Object.values(durBy).sort((a,b)=>a-b);
   const tipica=durs.length?durs[Math.floor(durs.length/2)]:60;
   const day={};let stimati=0;
@@ -2098,9 +2099,8 @@ function athCarico(aid){
     const d=day[k]||(day[k]={load:0,rpe:0,min:0,n:0,stimato:false});
     d.load+=s.rpe*min;d.rpe=Math.max(d.rpe,s.rpe);d.min+=min;d.n++;if(!durBy[k])d.stimato=true;
   });
-  // l'RPE scritto in intervals.icu vale nei giorni senza check-in, sui minuti misurati dall'orologio
-  const conRpe=new Set(aSess.map(s=>isoDay(s.ts)));
-  logs.filter(l=>l.gm&&+l.avgRpe>0&&+l.duration>0&&!conRpe.has(isoDay(l.ts))).forEach(l=>{const k=isoDay(l.ts),d=day[k]||(day[k]={load:0,rpe:0,min:0,n:0,stimato:false});d.load+=l.avgRpe*l.duration;d.rpe=Math.max(d.rpe,l.avgRpe);d.min+=+l.duration;d.n++;});
+  // le attivita' dell'orologio con il loro RPE (intervals.icu) sono un carico a parte, sui minuti misurati
+  logs.filter(l=>l.gm&&+l.avgRpe>0&&+l.duration>0).forEach(l=>{const k=isoDay(l.ts),d=day[k]||(day[k]={load:0,rpe:0,min:0,n:0,stimato:false});d.load+=l.avgRpe*l.duration;d.rpe=Math.max(d.rpe,l.avgRpe);d.min+=+l.duration;d.n++;});
   // serie giornaliera degli ultimi 91 giorni, oggi compreso, con gli zeri
   const oggi=new Date();oggi.setHours(12,0,0,0);
   const serie=[];
@@ -2559,7 +2559,8 @@ function athCalendario(aid){
     const gs=d.toDateString(),L=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts&&new Date(l.ts).toDateString()===gs),C=Object.values(sessions[aid]||{}).filter(x=>x&&x.ts&&new Date(x.ts).toDateString()===gs);
     // i registri gia' legati a una seduta del programma si vedono sul giorno previsto
     const Ls=L.filter(l=>!(l.progId&&l.sessId!=null&&l.weekIdx!=null&&programs[l.progId]&&legati.has(l)));
-    const F=(L.length?Ls:C).map((x,j)=>Object.assign({},x,{rpe:x.rpe||(C[j]&&C[j].rpe)||(C[0]&&C[0].rpe)||''}));
+    // l'RPE del check-in del giorno non va sulle attivita' dell'orologio: hanno solo il loro
+    const F=(L.length?Ls:C).map((x,j)=>Object.assign({},x,{rpe:x.gm?(x.avgRpe||''):(x.rpe||(C[j]&&C[j].rpe)||(C[0]&&C[0].rpe)||'')}));
     const P=dPreviste(aid,d),pass=d<oggi&&d.toDateString()!==oggi.toDateString(),og=d.toDateString()===oggi.toDateString();
     let c='';
     let usate=0;
@@ -2567,7 +2568,7 @@ function athCalendario(aid){
       const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<F.length?F[usate++]:null;
       const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
       let txt='in programma';
-      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.rpe||lg.avgRpe||rpeDel(lg.ts);txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):''):'')+(r?' &#183; RPE '+r:'');}
+      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?lg.avgRpe:(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):''):'')+(r?' &#183; RPE '+r:'');}
       else if(stesso)txt='fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:'');
       else if(st==='saltata')txt='non registrata';
       c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});

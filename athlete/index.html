@@ -2251,7 +2251,7 @@ function fuOpzioni(){
   const di=ieri?oggi-1:oggi,op=[];
   if(di>=0){
     pianoSett()[di].forEach(x=>{if(x.pid&&!logDi(x))op.push({id:'p:'+x.pid+':'+x.wi+':'+x.sid,nome:x.nome,tipo:x.tipo});});
-    logsGiorno(di).forEach(l=>{const k=isoLoc(l.ts);if(!(+l.avgRpe)&&!(ST.sess[k]&&+ST.sess[k].rpe))op.push({id:'l:'+l.ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true});});
+    logsGiorno(di).forEach(l=>{const k=isoLoc(l.ts);if(!(+l.avgRpe)&&(l.gm||!(ST.sess[k]&&+ST.sess[k].rpe)))op.push({id:'l:'+l.ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true});});
   }
   op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'},{id:'partita',nome:'Partita',tipo:'match'},{id:'altro',nome:'Altro allenamento',tipo:'altro'});
   if(FU.extra&&!op.some(o=>o.id===FU.extra.id))op.unshift(FU.extra);
@@ -2283,8 +2283,10 @@ window.salvaFuori=async()=>{
   const b=document.getElementById('fu-invia');if(b){b.disabled=true;b.textContent='Invio...';}
   const nota=(FU.nota||'').trim()||null;
   let when=FU.ts?new Date(FU.ts):new Date();if(!FU.ts&&FU.giorno==='ieri'){when.setDate(when.getDate()-1);when.setHours(19,0,0,0);}
-  let ts=when.getTime(),nome=sc.nome,min=FU.min,log=null;
-  if(solo){const l=ST.logs.find(x=>'l:'+x.ts===sc.id);if(!l)return;ts=l.ts;nome=l.sessName||'Seduta';min=+l.duration||+l.minuti||null;}
+  let ts=when.getTime(),nome=sc.nome,min=FU.min,log=null,gmL=null;
+  if(solo){const l=ST.logs.find(x=>'l:'+x.ts===sc.id);if(!l)return;ts=l.ts;nome=l.sessName||'Seduta';min=+l.duration||+l.minuti||null;if(l.gm)gmL=l;}
+  // attivita' dell'orologio: l'RPE resta sulla sua seduta (registro con gmId), il giorno fa la media come per le altre
+  if(gmL){log=Object.assign({},gmL,{avgRpe:FU.rpe,note:nota,source:'orologio'});delete log.gm;Object.keys(log).forEach(k=>{if(log[k]==null)delete log[k];});}
   else if(sc.id.startsWith('p:')){const [,pid,wi,sid]=sc.id.split(':');log={ts,date:itData(ts),progId:pid,weekIdx:+wi,sessId:sid,sessName:nome,type:sc.tipo||'pesi',duration:min,avgRpe:FU.rpe,source:'checkin',note:nota};}
   else log={ts,date:itData(ts),sessName:nome,type:sc.tipo,duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.id==='partita'?{minuti:min}:{})};
   // corsa dall'orologio: km, tempo, FC e giri nel registro
@@ -2292,12 +2294,12 @@ window.salvaFuori=async()=>{
   const key=isoLoc(ts),prima=ST.sess[key];
   // un RPE per giorno: se il giorno ne aveva gia' uno (un'altra seduta) si fa la media sui minuti
   let rpeG=FU.rpe,dayLbl=nome;
-  if(!solo&&prima&&+prima.rpe>0){
+  if((!solo||gmL)&&prima&&+prima.rpe>0){
     const m0=+prima.min||ST.logs.filter(l=>isoLoc(l.ts)===key).reduce((t,l)=>t+(+l.duration||+l.minuti||0),0)||60;
     rpeG=Math.round((prima.rpe*m0+FU.rpe*min)/(m0+min)*10)/10;dayLbl=(prima.day||'Seduta')+' + '+nome;
   }
   try{
-    const w=[set(ref(db,`sessions/${aid}/${key}`),{...(prima||{}),ts,date:itData(ts),rpe:rpeG,day:dayLbl,note:nota||(prima&&prima.note)||null,min:solo?((prima&&+prima.min)||min||null):(((prima&&+prima.min)||0)+(min||0))||null}),
+    const w=[set(ref(db,`sessions/${aid}/${key}`),{...(prima||{}),ts,date:itData(ts),rpe:rpeG,day:dayLbl,note:nota||(prima&&prima.note)||null,min:solo&&!gmL?((prima&&+prima.min)||min||null):(((prima&&+prima.min)||0)+(min||0))||null}),
       set(ref(db,`questionnaires/${aid}/${key}/feedback`),{ts,sessionRpe:FU.rpe,note:nota,fromSession:nome})];
     if(log)w.push(push(ref(db,`session_logs/${aid}`),log));
     await Promise.all(w);
@@ -2314,6 +2316,8 @@ window.vaiRegistra=id=>{
 };
 window.vaiRpe=ts=>{
   FU.giorno=isoLoc(ts)===isoLoc(new Date())?'oggi':'ieri';FU.cosa='l:'+ts;FU.rpe=null;
+  // anche una seduta di piu' giorni fa (per esempio un'attivita' dell'orologio arrivata dopo) si puo' completare
+  const l=ST.logs.find(x=>x.ts===ts);FU.extra=l?{id:'l:'+ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true}:null;
   bnSwitch('checkin',document.querySelectorAll('.bn-item')[2]);
   setTimeout(()=>{const e=document.getElementById('ci-fuori');if(e)window.scrollTo(0,e.getBoundingClientRect().top+window.scrollY-120);},80);
 };
@@ -2342,7 +2346,7 @@ function renderWorkoutLogs(logs){
   const GGc=['dom','lun','mar','mer','gio','ven','sab'];
   el.innerHTML=logs.slice(0,4).map(l=>{
     const d=new Date(l.ts),k=isoLoc(l.ts);
-    const rpe=+l.avgRpe||+(ST.sess[k]&&ST.sess[k].rpe)||null;
+    const rpe=rpeLog(l)||null;
     const min=+l.duration||+l.minuti||null;
     const bits=[];
     if(l.type==='match'){if(l.gol)bits.push(l.gol+' gol');if(l.assist)bits.push(l.assist+' assist');}
@@ -2385,7 +2389,8 @@ function renderWorkoutStorico(logs){
   if(!tutti&&logs.length>12)h+=`<button type="button" class="pf-more" onclick="document.getElementById('wstorico-list').dataset.tutti='1';renderWorkoutStorico(window._weekLogs||[])">Mostra tutte le ${logs.length} sedute</button>`;
   el.innerHTML=h;
 }
-function rpeLog(l){return +l.avgRpe||+(ST.sess[isoLoc(l.ts)]&&ST.sess[isoLoc(l.ts)].rpe)||0;}
+// un'attivita' dell'orologio ha solo il suo RPE: quello del giorno e' di un'altra seduta
+function rpeLog(l){return +l.avgRpe||(l.gm?0:+(ST.sess[isoLoc(l.ts)]&&ST.sess[isoLoc(l.ts)].rpe))||0;}
 // sedute e carico settimana per settimana: barre del carico, numero di sedute sopra
 function renderProfSett(logs){
   const el=document.getElementById('prof-sett');if(!el)return;
@@ -2976,7 +2981,7 @@ function renderNoPlan(title,sub){
 function sedutaFattaHtml(l,m){
   const d=new Date(l.ts),k=isoLoc(l.ts);
   const quando=k===isoLoc(new Date())?'oggi alle '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):GG_LUNGHI[(d.getDay()+6)%7]+' '+d.getDate();
-  const rpe=+l.avgRpe||+(ST.sess[k]&&ST.sess[k].rpe)||null;
+  const rpe=rpeLog(l)||null;
   const min=+l.duration||+l.minuti||null,pr=(l.newPRs||[]).length;
   const num=[[min,'minuti'],[+l.totalSets||null,'serie'],[rpe,'RPE'],[pr||null,'record']].filter(x=>x[0]);
   return `<div class="sess-card fatta7">
