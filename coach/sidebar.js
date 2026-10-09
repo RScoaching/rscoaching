@@ -311,8 +311,9 @@ window.RSRitmi = (function(){
   // ritmo gara di un programma: tempo obiettivo della scheda, poi quello fissato, poi la previsione
   function rgProgramma(p,R){
     const I=p&&p.intake||{};const D=+I.garaDist;
-    if(I.obiettivo==='gara'&&D&&sec(I.garaTempo))return Math.round(sec(I.garaTempo)/(DIST[String(D)]||D*1000)*1000);
+    // un ritmo gara fissato da un piano importato (PDF del preparatore) e' la decisione piu' recente: vince sulla scheda
     if(p&&p.ritmi&&p.ritmi.RGfisso&&p.ritmi.RG)return p.ritmi.RG;
+    if(I.obiettivo==='gara'&&D&&sec(I.garaTempo))return Math.round(sec(I.garaTempo)/(DIST[String(D)]||D*1000)*1000);
     if(I.obiettivo==='gara'&&D&&R&&R.vdot)return Math.round(previsto(R.vdot,DIST[String(D)]||D*1000)/((DIST[String(D)]||D*1000)/1000));
     return p&&p.ritmi&&p.ritmi.RG||null;
   }
