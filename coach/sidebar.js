@@ -748,5 +748,7 @@ window.RSGarmin = (function(){
     });
     return out;
   }
-  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando};
+  // gli script possono scrivere garmin_data/{nome_cognome} invece dell'ID dell'atleta: stessa chiave dal nome
+  function chiave(nome){return String(nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');}
+  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave};
 })();

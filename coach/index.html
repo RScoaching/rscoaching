@@ -1618,6 +1618,7 @@ if(_goto){sessionStorage.removeItem('goto');if(_goto==='database'||_goto==='tool
 
 onValue(ref(db,'athletes'),s=>{
   athletes=s.val()||{};
+  gmRifondi();
   renderAll();
   // Se la pagina chat è attiva, aggiorna la lista conversazioni
   const gcPage=document.getElementById('page-chat-global');
@@ -1637,7 +1638,7 @@ onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};gmRifondi();renderDashboard();});
 onValue(ref(db,'session_logs'),s=>{sessionLogsRaw=s.val()||{};gmRifondi();renderDashboard();});
 // dati dell'orologio (Garmin e intervals.icu, scritti dagli script sul Mac): entrano nei registri e nella prontezza
-onValue(ref(db,'garmin_data'),s=>{garminData=s.val()||{};gmRifondi();renderAll();renderDashboard();renderQuestionari();if(currentAid&&document.getElementById('detail-panel')?.classList.contains('open'))openAthlete(currentAid,true);});
+onValue(ref(db,'garmin_data'),s=>{garminRaw=s.val()||{};gmRifondi();renderAll();renderDashboard();renderQuestionari();if(currentAid&&document.getElementById('detail-panel')?.classList.contains('open'))openAthlete(currentAid,true);});
 onValue(ref(db,'questionnaires'),s=>{questionnaires=s.val()||{};renderAthletes();renderQuestionari();});
 // domande in piu' scritte dal preparatore
 onValue(ref(db,'questionnaire_defs'),s=>{qDefs=s.val()||{};renderQuestionari();});
@@ -1690,10 +1691,13 @@ function dSettIdx(pid,p,aid,data){
 /* Registri delle sedute = quelli scritti dall'app + le attivita' dell'orologio (window.RSGarmin
    in sidebar.js). Un'uscita dell'orologio arricchisce la seduta registrata lo stesso giorno o
    diventa la seduta fatta, agganciata a quella in programma: vale quello che l'atleta ha corso. */
-let sessionLogsRaw={},garminData={};
+let sessionLogsRaw={},garminData={},garminRaw={};
 function gmPian(aid,iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);if(!m)return [];return dPreviste(aid,new Date(+m[1],+m[2]-1,+m[3],12)).map(v=>({pid:v.pid,wi:v.k,sid:v.sid,tipo:v.x.type,nome:v.x.name||'Seduta',s:v.x}));}
+// i dati scritti col nome dell'atleta (mario_rossi) vanno sul suo ID; se ci sono entrambi vince l'ID
+function gmPerId(g){const out={};Object.entries(g).forEach(([k,v])=>{if(athletes[k]){out[k]=v;return;}const id=window.RSGarmin&&Object.keys(athletes).find(a=>window.RSGarmin.chiave(athletes[a].name)===k);if(id&&!g[id])out[id]=v;});return out;}
 function gmRifondi(){
   if(!window.RSGarmin){sessionLogs=sessionLogsRaw;return;}
+  garminData=gmPerId(garminRaw);
   const out={};new Set(Object.keys(sessionLogsRaw).concat(Object.keys(garminData))).forEach(aid=>{out[aid]=garminData[aid]?window.RSGarmin.fondi(sessionLogsRaw[aid]||{},garminData[aid],iso=>gmPian(aid,iso)):sessionLogsRaw[aid];});
   sessionLogs=out;
 }
