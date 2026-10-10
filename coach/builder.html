@@ -1032,6 +1032,7 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 .pzr-t{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:12px;border:1px solid rgba(139,92,246,.22);background:rgba(139,92,246,.06)}
 .pzr-t b{font:700 12px 'Inter',sans-serif;color:#A78BFA}.pzr-t span{font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.pzr-t em{font-style:normal;font-size:11px;color:var(--muted)}
 .pzr-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pzr-add input,.pzr-add select{width:auto;min-width:0;flex:0 1 150px}
+.pzr-cods{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;color:var(--text);margin-bottom:8px}.pzr-cods span{color:var(--muted)}.pzr-cods label{display:flex;gap:6px;align-items:center;cursor:pointer}.pzr-cods input{accent-color:var(--primary)}
 .pzr-tab{width:100%;border-collapse:collapse;font-size:13px}.pzr-tab td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);color:var(--text)}.pzr-tab td b{color:#A78BFA}.pzr-tab .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.pzr-tab .a{color:var(--white);font-weight:600}
 .pzs-b{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
 .pzs-h{display:flex;justify-content:space-between;gap:12px}
@@ -6216,9 +6217,12 @@ function pzRitPasso(cod){
   const v=RR.valore(R,cod,RR.rgProgramma(p,R));
   return v?RR.testo(v):'';
 }
-let pzRitAgg=null;
+let pzRitAgg=null,pzRitOr=null,pzRitSolo=null;   // pzRitSolo: dalla soglia dell'orologio si parte con la sola T
 window.pzRitmiApri=async function(){
   if(!currentProgId){showToast('Apri prima un programma');return;}
+  // soglia dell'orologio (garmin_data/{aid}/profilo, anche sotto il nome dell'atleta)
+  const aidO=pzRitAid();pzRitOr=null;
+  if(aidO&&window.RSGarmin){try{let g=(await get(ref(db,'garmin_data/'+aidO+'/profilo'))).val();if(!g&&athletes[aidO])g=(await get(ref(db,'garmin_data/'+window.RSGarmin.chiave(athletes[aidO].name)+'/profilo'))).val();const pf=g?window.RSGarmin.profilo({profilo:g}):null;if(pf&&pf.soglia)pzRitOr={aid:aidO,s:pf.soglia};}catch(e){}}
   let d=document.getElementById('pz-rit-dlg');
   if(!d){d=document.createElement('dialog');d.id='pz-rit-dlg';d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
   pzRitRender();
@@ -6237,12 +6241,14 @@ function pzRitRender(){
     <div class="pzs-h"><div><h3>Ritmi dell'atleta</h3><p>${a?stEsc(a.name||''):'Nessun atleta assegnato'}${R?' &#183; VDOT '+String(R.vdot).replace('.',',')+' da '+stEsc(R.fonte||''):''}</p></div>
       <button type="button" class="pzs-x" onclick="this.closest('dialog').close()" aria-label="Chiudi">&#215;</button></div>
     ${R?`<div class="pzr-ts">${tiles}</div>`:`<p class="pzs-n">${a?'Ancora nessun tempo per '+stEsc(a.name||'')+'. Scrivi un tempo recente: i ritmi si calcolano subito.':'Assegna il programma a un atleta per usare i suoi ritmi.'}</p>`}
+    ${pzRitOr&&pzRitOr.aid===aid&&pzRitOr.s&&pzRitOr.s.sec&&!(R&&Math.abs((R.T||0)-pzRitOr.s.sec)<3)?`<div class="pzr-add"><span class="pzs-n" style="margin:0;flex:1">Soglia dall'orologio (${stEsc(pzRitOr.s.fonte)}${pzRitOr.s.data?', '+stEsc(pzRitOr.s.data.split('-').reverse().join('/')):''}): <b style="color:var(--white)">${RR.passo(pzRitOr.s.sec)}/km</b>${pzRitOr.s.fc?' a FC '+pzRitOr.s.fc:''}${R&&R.T?', ritmi ora con T '+RR.passo(R.T):''}.</span><button type="button" class="btn btn-orange btn-sm" onclick="pzRitSoglia()">Usa questa soglia</button></div>`:''}
     ${aid?`<div class="pzr-add"><select id="pzr-d" aria-label="Distanza">${[['5','5 km'],['10','10 km'],['21','Mezza'],['42','Maratona'],['soglia','Soglia /km']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
       <input id="pzr-t" placeholder="tempo, es. 47:30" aria-label="Tempo" onkeydown="if(event.key==='Enter')pzRitTempo()">
       <input id="pzr-dt" value="${stFmtD(new Date())}" aria-label="Data" style="width:110px">
       <button type="button" class="btn btn-outline btn-sm" onclick="pzRitTempo()">Aggiungi il tempo</button>
       <a class="pzs-auto" href="./index.html?goto=athletes" onclick="sessionStorage.setItem('goto','athletes')">Storico in Atleti</a></div>`:''}
     ${R?(gruppi.length?`<div><p class="pzs-n" style="margin-bottom:8px">${veri.length} ${veri.length===1?'passo cambia':'passi cambiano'} in questo programma${altri.length?' (assegnato anche a '+stEsc(altri.join(', '))+': nell\'app ognuno vede i suoi ritmi)':''}:</p>
+      ${new Set(gruppi.map(x=>x.cod)).size>1?`<div class="pzr-cods"><span>Ritmi da aggiornare</span>${[...new Set(gruppi.map(x=>x.cod))].map(c=>`<label><input type="checkbox" class="pzr-cod" value="${c}" ${!pzRitSolo||pzRitSolo.includes(c)?'checked':''}> <b>${c}</b> ${stEsc(RR.NOMI[c]||'')}</label>`).join('')}</div>`:''}
       <table class="pzr-tab"><tbody>${gruppi.map(x=>`<tr><td><b>${x.cod}</b> ${stEsc(RR.NOMI[x.cod]||'')}</td><td class="n">${stEsc(x.da||'-')}</td><td class="n a">${stEsc(x.a)}</td><td class="n">${x.n} ${x.n===1?'fase':'fasi'}</td></tr>`).join('')}</tbody></table></div>`
       :`<p class="pzs-n">${res.cambi.length?'I passi del programma sono gia\' questi.':'Nessuna fase di corsa a ritmo in questo programma.'}</p>`):''}
     <p class="pzs-n">Nel campo Passo di una fase si puo' scrivere E, M, T, I, R o RG: prende il ritmo dell'atleta e lo segue quando arrivano tempi nuovi. Progressivi, fartlek e salite restano come sono.</p>
@@ -6250,6 +6256,18 @@ function pzRitRender(){
       <button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button>
       ${res.cambi.length?`<button type="button" class="btn btn-orange" id="pzr-ok" onclick="pzRitApplica()">${veri.length?'Aggiorna '+veri.length+(veri.length===1?' passo':' passi'):'Lega le fasi ai ritmi'}</button>`:''}</div></div>`;
 }
+window.pzRitSoglia=async function(){
+  const RR=window.RSRitmi,aid=pzRitAid();if(!aid||!pzRitOr)return;const s=pzRitOr.s,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s.data||'');
+  const voce={tipo:'soglia',sec:s.sec,fc:s.fc||null,date:m?m[3]+'/'+m[2]+'/'+m[1]:stFmtD(new Date()),note:'soglia del lattato '+s.fonte,src:'orologio',ts:Date.now()};
+  try{
+    const r=push(ref(db,'race_times/'+aid));await set(r,voce);
+    const tempi=(await get(ref(db,'race_times/'+aid))).val()||{};
+    const R=RR.calcola(tempi,athletes[aid].ritmiBase||null);
+    await update(ref(db,'athletes/'+aid),{ritmi:R||null});
+    athletes[aid]=Object.assign({},athletes[aid],{ritmi:R});
+    pzRitSolo=['T'];showToast('Soglia dell\'orologio: T '+RR.passo(R&&R.T||s.sec)+'/km');pzRitRender();
+  }catch(e){console.error(e);showToast('Errore nel salvataggio della soglia');}
+};
 window.pzRitTempo=async function(){
   const RR=window.RSRitmi,aid=pzRitAid();if(!aid)return;
   const dist=document.getElementById('pzr-d').value,t=RR.sec(document.getElementById('pzr-t').value),date=(document.getElementById('pzr-dt').value||'').trim()||stFmtD(new Date());
@@ -6272,8 +6290,12 @@ window.pzRitTempo=async function(){
 window.pzRitApplica=async function(){
   if(!pzRitAgg||!currentProgId)return;
   const RR=window.RSRitmi,pid=currentProgId,p=programs[pid],{R}=pzRitAgg,res=RR.ricalcola(p,R),up={};
+  const sc=document.querySelectorAll('.pzr-cod').length?new Set([...document.querySelectorAll('.pzr-cod:checked')].map(i=>i.value)):null;
+  if(sc)res.cambi=res.cambi.filter(c=>sc.has(c.cod));pzRitSolo=null;
   res.cambi.forEach(c=>{const b=`programs/${pid}/weeks/${c.wid}/sessions/${c.sid}/corsaFasi/${c.i}`;up[b+'/'+c.campo]=c.a;up[b+'/rit']=c.cod;});
-  up[`programs/${pid}/ritmi`]=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+  const snap=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+  if(sc)RR.CODICI.forEach(c=>{if(!sc.has(c)){if(p.ritmi&&p.ritmi[c]!=null)snap[c]=p.ritmi[c];else delete snap[c];}});
+  up[`programs/${pid}/ritmi`]=snap;
   const n=res.cambi.filter(c=>c.da!==c.a).length;
   try{
     pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();

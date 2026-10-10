@@ -2456,19 +2456,24 @@ const pfTs=d=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d||'').trim
    preparatore dai tempi di gara (athletes/{aid}/ritmi). Le fasi di corsa legate a un
    ritmo (campo rit) mostrano il passo dell'atleta, anche nei programmi di gruppo.
    Un tempo scritto qui va in race_times con src 'atleta' e aspetta il preparatore. */
-function ritPasso(f,campo){const R=(window._ath||{}).ritmi;return window.RSRitmi?window.RSRitmi.passoFase(f,R,campo):(f[campo]||'');}
+// i ritmi personali valgono nei programmi di gruppo; in quelli di un solo atleta vale il passo scritto
+// dal preparatore (lo aggiorna lui dai tempi, con l'anteprima)
+let _ritPid=null;
+function ritPersonali(pid){const p=pid&&(ST.progs||{})[pid];return !!(p&&p.assignedTo&&Object.keys(p.assignedTo).filter(k=>p.assignedTo[k]).length>1);}
+function ritPasso(f,campo){const R=ritPersonali(_ritPid)?(window._ath||{}).ritmi:null;return window.RSRitmi?window.RSRitmi.passoFase(f,R,campo):(f[campo]||'');}
 function ritChip(f){return f&&f.rit?`<span class="corsa-rit" title="${escH(window.RSRitmi?window.RSRitmi.NOMI[f.rit]||'':'')}">${escH(f.rit)}</span>`:'';}
 function renderPfRitmi(){
   const el=document.getElementById('pf-ritmi');if(!el||!window.RSRitmi)return;
-  const RR=window.RSRitmi,R=(window._ath||{}).ritmi;
+  const RR=window.RSRitmi,R=(window._ath||{}).ritmi,pfO=ST.gd&&window.RSGarmin?window.RSGarmin.profilo(ST.gd):null;
   const L=Object.values(ST.tempi||{}).filter(x=>x&&x.sec>0).sort((a,b)=>RR.dataTs(b.date)-RR.dataTs(a.date)||(b.ts||0)-(a.ts||0));
   let h='';
   if(R&&R.vdot){
-    const zf=RR.zoneFc(R.fcSoglia);
+    const zf=(pfO&&pfO.zone?window.RSGarmin.zoneTxt(pfO.zone):null)||RR.zoneFc(R.fcSoglia);
     h+=`<div class="rt7"><div class="rt7-h"><div><span style="font-size:11.5px;color:var(--muted)">VDOT</span> <b>${nfIt(R.vdot,1)}</b></div><span>dal ${escH(R.fonte||'')}</span></div>`
       +['E','M','T','I','R'].map(c=>`<div class="rt7-r"><span class="rt7-c">${c}</span><div class="rt7-n"><b>${RR.NOMI[c]}</b><span>${escH(RR.DESC[c])}</span></div><div class="rt7-p">${RR.testo(R[c])}<small>/km</small></div></div>`).join('')
       +(R.prev?`<div class="rt7-prev"><span>Oggi vali:</span>${['5','10','21','42'].map(d=>R.prev[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(R.prev[d])}</b></span>`:'').join('')}</div>`:'')
-      +(zf?`<div class="rt7-fc">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:'')+`</div>`;
+      +(zf?`<div class="rt7-fc">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:'')
+      +(pfO&&pfO.previsioni?`<div class="rt7-prev"><span>Il tuo orologio stima:</span>${['5','10','21','42'].map(d=>pfO.previsioni[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(pfO.previsioni[d])}</b></span>`:'').join('')}</div>`:'')+`</div>`;
   }else h+=`<div class="empty">I ritmi arrivano dai tuoi tempi: scrivi un 5 km, un 10 km, una mezza o una maratona recenti e il preparatore li calcola.</div>`;
   h+=`<div class="pf-sec"><div class="pf-h"><h3>Aggiungi un tempo</h3><span>gara o test a tutta</span></div></div>
     <div class="rt7-add"><select id="rt7-d" aria-label="Distanza"><option value="5">5 km</option><option value="10">10 km</option><option value="21">Mezza</option><option value="42">Maratona</option></select>
@@ -2494,7 +2499,7 @@ window.rt7Salva=async function(){
 function orolSess(pid,wi,sid){const p=(ST.progs||{})[pid];if(!p)return null;const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));const w=W[+wi];return w&&w[1].sessions?w[1].sessions[sid]:null;}
 window.orolScarica=(pid,wi,sid)=>{
   const s=orolSess(pid,wi,sid),O=window.RSOrologio;if(!s||!O)return;
-  const nome=s.name||'Corsa';O.scarica(O.nomeFile(nome)+'.fit',O.fitWorkout(nome,O.passi(s,(window._ath||{}).ritmi)));
+  const nome=s.name||'Corsa';O.scarica(O.nomeFile(nome)+'.fit',O.fitWorkout(nome,O.passi(s,ritPersonali(pid)?(window._ath||{}).ritmi:null)));
   showToast('Scaricato: copialo nella cartella GARMIN/NewFiles dell\'orologio');
 };
 window.orolImporta=id=>{
@@ -2852,6 +2857,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     // ── CORSA (running): self-contained card with zone/pace/%FCmax, no set-by-set player
     if(RUN_TYPES_ATH.has(type)){
       const nFasi=corsaFasi?(Array.isArray(corsaFasi)?corsaFasi.length:Object.keys(corsaFasi).length):0;
+      _ritPid=progId||null;
       const runBody=nFasi?corsaHtml(corsaFasi):(exercises&&exercises.length?exListHtml(exercises):'');
       return `<div class="sess-card">
         <div class="sess-head">

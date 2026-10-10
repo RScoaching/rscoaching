@@ -790,5 +790,18 @@ window.RSGarmin = (function(){
   }
   // gli script possono scrivere garmin_data/{nome_cognome} invece dell'ID dell'atleta: stessa chiave dal nome
   function chiave(nome){return String(nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');}
-  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave};
+  // soglia, zone e previsioni dell'orologio: Garmin prima, poi intervals.icu
+  function profilo(gd){
+    const P=gd&&gd.profilo||{},g=P.garmin||{},i=P.intervals_icu||{};
+    const sg=g.soglia||{},si=i.soglia||{};
+    const sec=sg.sec||si.sec||null,fc=sg.fc||si.fc||null;
+    const o={};
+    if(sec||fc)o.soglia={sec,fc,data:sg.data||si.data||null,fonte:sg.sec||sg.fc?'Garmin':'intervals.icu'};
+    if(g.previsioni)o.previsioni=g.previsioni;
+    const z=g.zone||i.zone;if(z&&Array.isArray(z.z))o.zone=Object.assign({fonte:g.zone?'Garmin':'intervals.icu'},z);
+    return Object.keys(o).length?o:null;
+  }
+  // zone FC leggibili: Z1..Z5 dai limiti inferiori
+  function zoneTxt(z){if(!z||!Array.isArray(z.z))return null;const L=z.z.slice(0,5),o={};L.forEach((v,k)=>{const n=L[k+1];o['Z'+(k+1)]=n?v+'-'+(n-1):'>'+v;});return o;}
+  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt};
 })();

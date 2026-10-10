@@ -1318,6 +1318,7 @@ input,select,textarea{border-radius:10px}
 .rt-pg .tdet-tab{margin:8px 0 0}.rt-pg .tdet-tab td.a{color:var(--violet2);font-weight:600}
 .gm-giri{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;border-top:1px solid var(--border)}.gm-giri td{padding:4px 6px 4px 0;color:var(--text)}.gm-giri .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.gm-giri b{color:var(--white);font-weight:600}.gm-giri i{display:block;font-style:normal;font-size:10px;color:var(--muted)}.gm-giri .e{color:var(--muted);white-space:nowrap}.gm-giri tr.ok .e,.gm-giri tr.ok b{color:var(--violet2)}.gm-giri tr.veloce .e,.gm-giri tr.veloce b{color:#FB7185}.gm-giri tr.lento .e,.gm-giri tr.lento b{color:#FF9A6B}
 .qz7-or{font-style:normal;font-size:9.5px;color:var(--violet2);margin-left:3px}
+.rt-cods{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:var(--text);margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}.rt-cods span{color:var(--muted);margin-right:4px}.rt-cods label{display:flex;gap:6px;align-items:center;cursor:pointer}.rt-cods input{accent-color:var(--primary)}
 .rt-sum{margin:8px 0 0}.rt-sum td{padding:5px 8px}
 .rt-pg .cond{font-size:11.5px;color:var(--muted);margin-top:6px}
 </style>
@@ -2826,17 +2827,36 @@ function rtLista(aid){return Object.entries(raceTimes[aid]||{}).map(([id,x])=>Ob
 function rtCalcola(aid,tempi,base){return window.RSRitmi.calcola(tempi||raceTimes[aid]||{},base!==undefined?base:(athletes[aid]?.ritmiBase||null));}
 function rtPb(aid){const pb={};rtLista(aid).filter(x=>x.tipo!=='soglia'&&x.sec>0).forEach(x=>{const k=String(x.dist);if(!pb[k]||x.sec<pb[k].sec)pb[k]=x;});return pb;}
 function rtRiga(R){const RR=window.RSRitmi;return R&&R.vdot?['E','M','T','I','R'].map(c=>c+' <b>'+RR.testo(R[c])+'</b>').join(' &#183; '):'';}
+// soglia dell'orologio diversa da quella dei ritmi: si propone di usarla
+function rtSogliaNuova(aid){
+  const pf=window.RSGarmin&&garminData[aid]?window.RSGarmin.profilo(garminData[aid]):null,s=pf&&pf.soglia;if(!s||!s.sec)return null;
+  const ult=rtLista(aid).find(x=>x.tipo==='soglia'&&x.sec>0),R=athletes[aid]?.ritmi;
+  if(ult&&Math.abs(ult.sec-s.sec)<3&&(!s.fc||+ult.fc===+s.fc))return null;
+  if(!ult&&R&&R.T&&Math.abs(R.T-s.sec)<3)return null;
+  return {s,pf,ora:R&&R.T?R.T:null};
+}
+window.rtSogliaOrologio=async function(aid){
+  const x=rtSogliaNuova(aid);if(!x)return;const s=x.s,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s.data||'');
+  const voce={tipo:'soglia',sec:s.sec,fc:s.fc||null,date:m?m[3]+'/'+m[2]+'/'+m[1]:new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),note:'soglia del lattato '+s.fonte,src:'orologio',ts:Date.now()};
+  const r=push(ref(db,`race_times/${aid}`));await set(r,voce);
+  const tempi=Object.assign({},raceTimes[aid]||{},{[r.key]:voce}),R=rtCalcola(aid,tempi,athletes[aid]?.ritmiBase||null);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null});
+  rtSoloCod=['T'];
+  if(R&&R.vdot){if(!rtAnteprima(aid,R,true))showToast('Soglia dell\'orologio salvata, ritmi aggiornati');}else showToast('Soglia salvata');
+};
 function renderDetRitmi(aid){
   const RR=window.RSRitmi;if(!RR)return '';
   const L=rtLista(aid),R=athletes[aid]?.ritmi||null,pb=rtPb(aid);
+  const sn=rtSogliaNuova(aid),pf=window.RSGarmin&&garminData[aid]?window.RSGarmin.profilo(garminData[aid]):null;
   const nuovi=L.filter(x=>x.src==='atleta'&&(!R||(x.ts||0)>(R.ts||0)));
   let top='';
   if(R&&R.vdot){
-    const zf=RR.zoneFc(R.fcSoglia);
+    const zg=pf&&pf.zone?window.RSGarmin.zoneTxt(pf.zone):null,zf=zg||RR.zoneFc(R.fcSoglia);
     top=`<div class="rt-box"><div class="rt-h"><div><span class="rt-vd">VDOT <b>${String(R.vdot).replace('.',',')}</b></span><span class="rt-src">da ${athEsc(R.fonte||'')}${R.sogliaMisurata?', soglia misurata':''}</span></div>
       <div class="rt-prev"><span>Vale oggi:</span>${['5','10','21','42'].map(d=>R.prev&&R.prev[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(R.prev[d])}</b></span>`:'').join('')}</div></div>
       <div class="rt-tiles">${['E','M','T','I','R'].map(c=>`<div class="rt-t" title="${athEsc(RR.DESC[c])}"><b>${c}</b><span class="rt-p">${RR.testo(R[c])}<small>/km</small></span><span class="rt-n">${RR.NOMI[c]}</span></div>`).join('')}</div>
-      ${zf?`<div class="rt-fc">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:''}</div>`;
+      ${zf?`<div class="rt-fc">${zg?'Zone FC '+athEsc(pf.zone.fonte)+(pf.zone.fcSoglia?', soglia <b>'+pf.zone.fcSoglia+'</b>':''):'FC di soglia <b>'+R.fcSoglia+'</b>'}${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div>`:''}
+      ${pf&&pf.previsioni?`<div class="rt-fc">L'orologio stima${['5','10','21','42'].map(d=>pf.previsioni[d]?`<span>${RR.DNOME[d]} <b>${RR.tempo(pf.previsioni[d])}</b></span>`:'').join('')}</div>`:''}</div>`;
   }else if(R&&R.fcSoglia){
     const zf=RR.zoneFc(R.fcSoglia);
     top=`<div class="rt-box"><div class="rt-fc" style="margin:0">FC di soglia <b>${R.fcSoglia}</b>${Object.entries(zf).map(([z,v])=>`<span>${z} ${v}</span>`).join('')}</div><p class="tdet-vuoto" style="margin:8px 0 0">Per i ritmi serve un tempo di gara o il passo di soglia.</p></div>`;
@@ -2853,6 +2873,7 @@ function renderDetRitmi(aid){
       <td class="x" style="white-space:nowrap">${!sogl&&V&&!base?`<button type="button" class="ub" title="Calcola i ritmi da questo tempo" onclick="rtBase('${aid}','${x.id}')">Usa</button>`:''}<button type="button" class="tdel" aria-label="Elimina il tempo del ${athEsc(x.date||'')}" onclick="rtDel('${aid}','${x.id}')">&#215;</button></td></tr>`;
   }).join('');
   return `<h3 class="det-sec">Tempi e ritmi</h3>`
+    +(sn?`<div class="rt-new"><span>Soglia dall'orologio (${athEsc(sn.s.fonte)}${sn.s.data?', '+athEsc(sn.s.data.split('-').reverse().join('/')):''}): <b>${RR.passo(sn.s.sec)}/km</b>${sn.s.fc?' a FC '+sn.s.fc:''}.${sn.ora?' I ritmi ora usano T '+RR.passo(sn.ora)+'.':''}</span><button type="button" class="btn btn-orange btn-sm" onclick="rtSogliaOrologio('${aid}')">Usa questa soglia</button></div>`:'')
     +(nuovi.length?`<div class="rt-new"><span>${nuovi.length===1?'Un tempo nuovo':nuovi.length+' tempi nuovi'} dall'app dell'atleta: ${nuovi.map(x=>athEsc((x.tipo==='soglia'?'soglia':RR.distNome(x.dist))+' '+(x.tipo==='soglia'?RR.passo(x.sec):RR.tempo(x.sec)))).join(', ')}.</span><button type="button" class="btn btn-orange btn-sm" onclick="rtRicalcola('${aid}')">Aggiorna i ritmi</button></div>`:'')
     +top
     +(L.length?`<table class="tdet-tab rt-tab"><thead><tr><th>Data</th><th>Gara</th><th class="n">Tempo</th><th class="n">Passo</th><th class="n">VDOT</th><th>Note</th><th></th></tr></thead><tbody>${righe}</tbody></table>`:'')
@@ -2954,6 +2975,7 @@ function rtProgrammi(aid,R){
 }
 function rtGruppi(c){const g={};c.forEach(x=>{const k=x.cod+'|'+x.da+'|'+x.a;(g[k]=g[k]||{cod:x.cod,da:x.da,a:x.a,n:0}).n++;});const o=window.RSRitmi.CODICI;return Object.values(g).sort((a,b)=>o.indexOf(a.cod)-o.indexOf(b.cod)||b.n-a.n);}
 // anteprima dei passi che cambiano; dopoTempo: se non c'e' niente da cambiare non apre la finestra
+let rtSoloCod=null;   // dalla soglia dell'orologio: di partenza si aggiorna solo T
 window.rtAnteprima=function(aid,R,dopoTempo){
   R=R||athletes[aid]?.ritmi;if(!R||!R.vdot){showToast('Servono i ritmi: aggiungi un tempo');return false;}
   const PG=rtProgrammi(aid,R);
@@ -2963,6 +2985,8 @@ window.rtAnteprima=function(aid,R,dopoTempo){
     showToast(PG.length?'I passi dei programmi sono gia\' questi':'Nessun programma con fasi di corsa');return true;
   }
   const RR=window.RSRitmi;
+  const cods=RR.CODICI.filter(c=>PG.some(x=>x.veri.some(v=>v.cod===c)));
+  const scelta=`<div class="rt-cods"><span>Ritmi da aggiornare</span>${cods.map(c=>`<label><input type="checkbox" class="rt-cod" value="${c}" ${!rtSoloCod||rtSoloCod.includes(c)?'checked':''}> <b>${c}</b> ${athEsc(RR.NOMI[c]||'')}</label>`).join('')}</div>`;
   const blocchi=PG.map(x=>{
     const tab=x.veri.slice(0,80).map(c=>`<tr><td>${athEsc(String(c.week).replace(/\s.*$/,''))}</td><td>${athEsc(c.sess)}</td><td>${athEsc(c.tipo)}</td><td><b>${c.cod}</b></td><td class="n">${athEsc(c.da||'-')}</td><td class="n a">${athEsc(c.a)}</td></tr>`).join('');
     return `<div class="rt-pg"><label><input type="checkbox" data-pid="${x.pid}" ${x.altri.length?'':'checked'}> <b>${athEsc(x.p.name||'Programma')}</b><span>${x.veri.length?x.veri.length+(x.veri.length===1?' passo cambia':' passi cambiano'):'gia\' allineato'}</span></label>
@@ -2975,7 +2999,7 @@ window.rtAnteprima=function(aid,R,dopoTempo){
   document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
   mb.innerHTML=`<h3>Passi nei programmi</h3>
     <div class="tdet-sub">Ritmi nuovi di ${athEsc(athletes[aid]?.name||'')}: ${rtRiga(R).replace(/<\/?b>/g,'')}. Cambiano solo le fasi a ritmo (facile, soglia, intervalli, ripetute, passo gara); progressivi, fartlek e salite restano come sono.</div>
-    ${blocchi}
+    ${cods.length>1?scelta:''}${blocchi}
     <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Non ora</button><button class="btn btn-orange" id="rt-ok" onclick="rtApplica('${aid}')">Aggiorna i passi</button></div>
     <div class="cond" style="font-size:11.5px;color:var(--muted);margin-top:10px">Dopo l'aggiornamento Ctrl+Z riporta i passi di prima.</div>`;
   document.getElementById('modal-overlay').classList.add('open');
@@ -2983,12 +3007,17 @@ window.rtAnteprima=function(aid,R,dopoTempo){
 };
 window.rtApplica=async function(aid,R,pids,quiet){
   R=R||athletes[aid]?.ritmi;
+  const daFinestra=!pids;
   pids=pids||[...document.querySelectorAll('.rt-pg input[data-pid]:checked')].map(i=>i.dataset.pid);
   if(!pids.length){closeModal();return;}
+  // ritmi scelti nella finestra (se c'e' la scelta): gli altri restano come sono scritti
+  const sc=daFinestra&&document.querySelectorAll('.rt-cod').length?new Set([...document.querySelectorAll('.rt-cod:checked')].map(i=>i.value)):null;
+  rtSoloCod=null;
   const RR=window.RSRitmi,up={},prima={};let n=0;
   pids.forEach(pid=>{
     const p=programs[pid];if(!p)return;
     const res=RR.ricalcola(p,R);
+    if(sc)res.cambi=res.cambi.filter(c=>sc.has(c.cod));
     res.cambi.forEach(c=>{
       const base=`programs/${pid}/weeks/${c.wid}/sessions/${c.sid}/corsaFasi/${c.i}`;
       const f=p.weeks[c.wid].sessions[c.sid].corsaFasi[c.i];
@@ -2996,7 +3025,10 @@ window.rtApplica=async function(aid,R,pids,quiet){
       up[base+'/rit']=c.cod;prima[base+'/rit']=f.rit==null?null:f.rit;
       if(c.da!==c.a)n++;
     });
-    up[`programs/${pid}/ritmi`]=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+    const snap=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+    // i ritmi non scelti restano quelli con cui il programma e' scritto
+    if(sc)RR.CODICI.forEach(c=>{if(!sc.has(c)){if(p.ritmi&&p.ritmi[c]!=null)snap[c]=p.ritmi[c];else delete snap[c];}});
+    up[`programs/${pid}/ritmi`]=snap;
     prima[`programs/${pid}/ritmi`]=p.ritmi?JSON.parse(JSON.stringify(p.ritmi)):null;
   });
   if(!Object.keys(up).length){closeModal();return;}
