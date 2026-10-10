@@ -7051,6 +7051,13 @@ function pzStatWeek(w){
   pzSess(w).forEach(([,s])=>{const x=pzStatSess(s);o.sed++;o.serie+=x.serie;o.min+=x.min||0;o.nl+=x.nl;o.pctW+=x.pctW;Object.entries(x.gr).forEach(([k,v])=>o.gr[k]=(o.gr[k]||0)+v);});
   return o;
 }
+// km di corsa della settimana: in programma e corsi (registri e orologio dell'atleta scelto)
+function pzKmFatti(w){
+  if(!pzHaLog())return '';
+  const prev=Math.round(pzKmSett(w));
+  const fatti=pzSess(w).map(([sid])=>pzLog(currentWeekIdx,sid)).filter(l=>l&&l.corsa&&+l.corsa.km>0).reduce((t,l)=>t+(+l.corsa.km),0);
+  return fatti?`<span><b>${String(Math.round(fatti*10)/10).replace('.',',')}</b> km corsi${prev?' su '+prev+' in programma':''}</span>`:'';
+}
 function pzWeekBar(w){
   const o=pzStatWeek(w);if(!o.sed)return '';
   const p=programs[currentProgId]||{},lim=+((p.intake||{}).minuti)||0;
@@ -7060,7 +7067,7 @@ function pzWeekBar(w){
   if(sp>=6&&ti<sp*0.75)av.push('Poca tirata rispetto alla spinta ('+ti+' contro '+sp+' serie)');
   if(lim){const lunghe=pzSess(w).filter(([,s])=>pzStatSess(s).min>lim*1.1).map(([,s])=>s.name);if(lunghe.length)av.push('Oltre i '+lim+'\' disponibili: '+lunghe.join(', '));}
   return `<div class="pz-ws">
-    <div class="pz-ws-n"><span><b>${o.sed}</b> sedute${pzHaLog()?` (<b>${pzSess(w).filter(([sid])=>pzLog(currentWeekIdx,sid)).length}</b> fatte da ${stEsc((athletes[pzKgAid]?.name||'').split(' ')[0])})`:''}</span><span><b>${o.serie}</b> serie</span><span><b>${pzMinTxt(o.min)}</b> stimate</span>${o.nl?`<span><b>${o.nl}</b> sollevamenti al <b>${Math.round(o.pctW/o.nl)}%</b> medio</span>`:''}</div>
+    <div class="pz-ws-n"><span><b>${o.sed}</b> sedute${pzHaLog()?` (<b>${pzSess(w).filter(([sid])=>pzLog(currentWeekIdx,sid)).length}</b> fatte da ${stEsc((athletes[pzKgAid]?.name||'').split(' ')[0])})`:''}</span><span><b>${o.serie}</b> serie</span><span><b>${pzMinTxt(o.min)}</b> stimate</span>${pzKmFatti(w)}${o.nl?`<span><b>${o.nl}</b> sollevamenti al <b>${Math.round(o.pctW/o.nl)}%</b> medio</span>`:''}</div>
     <div class="pz-ws-g">${gr}</div>
     ${av.length?`<div class="pz-ws-a">${av.map(stEsc).join('. ')}.</div>`:''}
   </div>`;
