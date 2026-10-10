@@ -1317,6 +1317,7 @@ input,select,textarea{border-radius:10px}
 .rt-pg details{margin-top:8px}.rt-pg summary{font-size:12px;color:var(--muted);cursor:pointer}
 .rt-pg .tdet-tab{margin:8px 0 0}.rt-pg .tdet-tab td.a{color:var(--violet2);font-weight:600}
 .gm-giri{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;border-top:1px solid var(--border)}.gm-giri td{padding:4px 6px 4px 0;color:var(--text)}.gm-giri .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.gm-giri b{color:var(--white);font-weight:600}.gm-giri i{display:block;font-style:normal;font-size:10px;color:var(--muted)}.gm-giri .e{color:var(--muted);white-space:nowrap}.gm-giri tr.ok .e,.gm-giri tr.ok b{color:var(--violet2)}.gm-giri tr.veloce .e,.gm-giri tr.veloce b{color:#FB7185}.gm-giri tr.lento .e,.gm-giri tr.lento b{color:#FF9A6B}
+.gm-rec{height:230px}.gm-rec-n{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--text);margin:-6px 0 16px}.gm-rec-n b{color:var(--white);font-variant-numeric:tabular-nums}.gm-rec-n i{font-style:normal;color:var(--muted);font-size:11px}.gm-rec-n .male b{color:#FF9A6B}.gm-rec-n em{flex-basis:100%;font-style:normal;font-size:11px;color:var(--muted)}
 .qz7-or{font-style:normal;font-size:9.5px;color:var(--violet2);margin-left:3px}
 .rt-cods{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:var(--text);margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}.rt-cods span{color:var(--muted);margin-right:4px}.rt-cods label{display:flex;gap:6px;align-items:center;cursor:pointer}.rt-cods input{accent-color:var(--primary)}
 .rt-sum{margin:8px 0 0}.rt-sum td{padding:5px 8px}
@@ -3415,7 +3416,7 @@ function gmTiles(aid,tile){
 }
 function renderDetLoad(aid,aSess){
   const c=athCarico(aid);
-  if(!c.nSedute)return '<div class="empty">Nessuna seduta con RPE: il carico si calcola dalle sedute registrate dall\'atleta.</div>';
+  if(!c.nSedute)return '<div class="empty">Nessuna seduta con RPE: il carico si calcola dalle sedute registrate dall\'atleta.</div>'+gmRecupero(aid,c);
   const nf=x=>Math.round(x).toLocaleString('it-IT');
   const last=c.settimane[c.settimane.length-1],prev=c.settimane[c.settimane.length-2];
   const tile=(l,v,s,cls)=>`<div class="ld-t${cls?' '+cls:''}"><div class="ld-l">${l}</div><div class="ld-v">${v}</div><div class="ld-s">${s}</div></div>`;
@@ -3460,7 +3461,37 @@ function renderDetLoad(aid,aSess){
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8E8678',font:{size:10},boxWidth:12}}},
         scales:{x:{ticks:{color:'#8E8678',font:{size:9}},grid:{display:false}},y:{ticks:{color:'#8E8678',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}},y1:{position:'right',min:0,suggestedMax:3,ticks:{color:'#A78BFA',font:{size:9}},grid:{display:false}}}}});
   },80);
-  return tiles+nota+`<div class="ld-chart"><canvas id="lc-${aid}"></canvas></div>`+tab+exHtml;
+  return tiles+nota+`<div class="ld-chart"><canvas id="lc-${aid}"></canvas></div>`+gmRecupero(aid,c)+tab+exHtml;
+}
+/* Carico e recupero: ultimi 28 giorni, il carico di ogni giorno (barre, minuti x RPE) con
+   HRV, FC a riposo e sonno dell'orologio (linee). Si vede quando il carico pesa sul recupero:
+   HRV che scende e FC a riposo che sale dopo i giorni duri. */
+function gmRecupero(aid,c){
+  const gd=garminData[aid];if(!gd||!gd.days||!window.RSGarmin)return '';
+  const oggi=new Date();oggi.setHours(12,0,0,0);
+  const G=[];for(let i=27;i>=0;i--){const t=oggi.getTime()-i*864e5,k=isoDay(t),d=gd.days[k]||{},sr=(c&&c.serie||[]).find(x=>x.k===k);
+    G.push({k,t,load:sr?Math.round(sr.load):0,hrv:+d.hrvLastNightAvg||null,fc:+d.restingHR||null,sonno:+d.sleepSeconds?Math.round(d.sleepSeconds/360)/10:null});}
+  if(!G.some(g=>g.hrv||g.fc||g.sonno))return '';
+  const media=(a,k)=>{const v=a.map(g=>g[k]).filter(x=>x);return v.length?v.reduce((t,x)=>t+x,0)/v.length:null;};
+  const u7=G.slice(-7),p21=G.slice(0,21),f1=x=>x==null?'-':String(Math.round(x*10)/10).replace('.',',');
+  const riga=(lbl,k,u,verso)=>{const a=media(u7,k),b=media(p21,k);if(a==null)return '';const d=b?a-b:null,male=d!=null&&(verso>0?d<=-(b*0.07):d>=(b*0.07));
+    return `<span${male?' class="male"':''}>${lbl} <b>${f1(a)}${u}</b>${b?` <i>prima ${f1(b)}</i>`:''}</span>`;};
+  setTimeout(()=>{
+    const cv=document.getElementById(`gc-${aid}`);if(!cv||!window.Chart)return;
+    if(cv._chart)cv._chart.destroy();
+    cv._chart=new Chart(cv,{data:{labels:G.map(g=>{const d=new Date(g.t);return d.getDate()+'/'+(d.getMonth()+1);}),
+      datasets:[{type:'bar',label:'Carico (UA)',data:G.map(g=>g.load),backgroundColor:'rgba(255,106,46,.45)',borderRadius:3,yAxisID:'y',order:3},
+        {type:'line',label:'HRV (ms)',data:G.map(g=>g.hrv),borderColor:'#A78BFA',backgroundColor:'#A78BFA',borderWidth:2,pointRadius:2,tension:.3,spanGaps:true,yAxisID:'y1',order:1},
+        {type:'line',label:'FC a riposo',data:G.map(g=>g.fc),borderColor:'#FB7185',backgroundColor:'#FB7185',borderWidth:2,pointRadius:2,tension:.3,spanGaps:true,yAxisID:'y1',order:1},
+        {type:'line',label:'Sonno (ore)',data:G.map(g=>g.sonno),borderColor:'#67E8F9',backgroundColor:'#67E8F9',borderWidth:1.5,borderDash:[4,3],pointRadius:1.5,tension:.3,spanGaps:true,yAxisID:'y2',order:2}]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#8E8678',font:{size:10},boxWidth:12}}},
+        scales:{x:{ticks:{color:'#8E8678',font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:10},grid:{display:false}},
+          y:{position:'left',ticks:{color:'#8E8678',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'},title:{display:true,text:'carico',color:'#8E8678',font:{size:9}}},
+          y1:{position:'right',ticks:{color:'#A78BFA',font:{size:9}},grid:{display:false},title:{display:true,text:'HRV e FC',color:'#8E8678',font:{size:9}}},
+          y2:{display:false,min:0,max:12}}}});
+  },90);
+  return `<div class="tdet-h" style="margin-top:6px">Carico e recupero, ultimi 28 giorni</div><div class="ld-chart gm-rec"><canvas id="gc-${aid}"></canvas></div>
+    <div class="gm-rec-n">${riga('HRV','hrv',' ms',1)}${riga('FC a riposo','fc','',-1)}${riga('Sonno','sonno',' h',1)}<em>media degli ultimi 7 giorni contro i 21 prima; in arancio se peggiora di oltre il 7%</em></div>`;
 }
 
 // cinque schede come Relay: ognuna raccoglie uno o piu' pannelli di prima
