@@ -835,6 +835,7 @@ window.RSTraccia = (function(){
 .trk2-v{padding:8px 12px;min-width:74px;border-right:1px solid var(--bd)}.trk2-v i{display:block;font-style:normal;font-size:10.5px;color:var(--mu);letter-spacing:.2px}.trk2-v b{display:block;font-size:16px;font-weight:650;color:var(--tx);font-variant-numeric:tabular-nums;line-height:1.25}
 .trk2-v.passo b{color:var(--c-passo)}.trk2-v.fc b{color:var(--c-fc)}.trk2-v.cad b{color:var(--c-cad)}
 .trk2-tg{margin-left:auto;display:flex;align-items:center;gap:6px;padding:6px 10px}
+.trk2-cf{font:500 11.5px Inter,sans-serif;padding:5px 8px;border-radius:999px;border:1px solid var(--bd);background:transparent;color:var(--tx);max-width:190px}
 .trk2-tg button{font:600 11.5px Inter,sans-serif;padding:5px 10px;border-radius:999px;border:1px solid var(--bd);background:transparent;color:var(--mu);cursor:pointer}.trk2-tg button.on{background:var(--tx);border-color:var(--tx);color:var(--bg)}
 .trk2-sel{display:none;flex-wrap:wrap;align-items:center;gap:4px 16px;padding:8px 12px;font-size:12.5px;color:var(--tx);background:var(--sel);border-bottom:1px solid var(--bd)}.trk2-sel.on{display:flex}.trk2-sel b{font-variant-numeric:tabular-nums}.trk2-sel span i{font-style:normal;color:var(--mu);margin-right:4px}
 .trk2-sel button{margin-left:auto;font:600 12px Inter,sans-serif;padding:5px 12px;border-radius:999px;border:0;background:#FF6A2E;color:#fff;cursor:pointer}
@@ -892,6 +893,7 @@ window.RSTraccia = (function(){
       tratti=B.map((b,k)=>{const a=acc;acc+=b.m;const i0=D.findIndex(x=>x!=null&&x>=a),i1=D.findIndex(x=>x!=null&&x>=acc);return {k,i0:Math.max(0,i0),i1:i1<0?n-1:i1,m:b.m,s:b.s,passo:b.passo,fc:b.fc,lav:B.length>1&&b.passo<med-5};}).filter(x=>x.i1>x.i0);}
     const kmSplit=[];if(D[n-1]){let a=0;for(let k=1;k<=Math.ceil(D[n-1]/1000);k++){const lim=k*1000;let b=D.findIndex((x,i)=>i>a&&x!=null&&x>=lim);if(b<0)b=n-1;if(b>a&&(D[b]-D[a])>=150)kmSplit.push({i0:a,i1:b,nome:k<=Math.floor(D[n-1]/1000)?String(k):kmTxt(D[n-1])});a=b;if(b>=n-1)break;}}
     let SP=(()=>{try{return localStorage.getItem('rs_trk_split')||'km';}catch(e){return 'km';}})();
+    let B=null,Bnome='';   // corsa di confronto: curve tratteggiate sulla stessa scala
     let T0=tema(),AX=asse(),v0=0,v1=n-1,cur=null,drag=null,map=null,mk=null,lineSel=null,lineAll=null;
     el.innerHTML=`<div class="trk2 ${T0}">
       <div class="trk2-bar"></div><div class="trk2-sel"></div>
@@ -917,8 +919,12 @@ window.RSTraccia = (function(){
         +(FC?cel('fc',tot?'FC media':'FC',(tot?Math.round(med(FC)||0):(FC[i]||'-'))):'')
         +(CAD?cel('cad',tot?'Cadenza media':'Cadenza',(tot?Math.round(med(CAD)||0):(CAD[i]||'-'))):'')
         +(Q?cel('','Quota',(tot?Math.round(med(Q)||0):(Q[i]!=null?Math.round(Q[i]):'-'))+' m'):'')
-        +`<div class="trk2-tg"><button type="button" data-ax="km" class="${AX==='km'?'on':''}">Km</button><button type="button" data-ax="tempo" class="${AX==='tempo'?'on':''}">Tempo</button><button type="button" data-te="${T0==='chiaro'?'scuro':'chiaro'}">${T0==='chiaro'?'Scuro':'Chiaro'}</button></div>`;
+        +`<div class="trk2-tg">${opz.altre&&opz.altre.length?`<select class="trk2-cf" aria-label="Confronta con un'altra corsa"><option value="">Confronta con...</option>${opz.altre.map(a=>`<option value="${a.id}"${B&&B._id===a.id?' selected':''}>${a.nome}</option>`).join('')}</select>`:''}<button type="button" data-ax="km" class="${AX==='km'?'on':''}">Km</button><button type="button" data-ax="tempo" class="${AX==='tempo'?'on':''}">Tempo</button><button type="button" data-te="${T0==='chiaro'?'scuro':'chiaro'}">${T0==='chiaro'?'Scuro':'Chiaro'}</button></div>`;
     }
+    bar.addEventListener('change',async e=>{const sel=e.target.closest('.trk2-cf');if(!sel)return;
+      if(!sel.value){B=null;Bnome='';disegna();return;}
+      try{const t2=await opz.carica(sel.value);if(t2&&t2.t&&t2.t.length>3){B={t:t2.t,d:t2.d||[],p:passi(t2.v),fc:t2.fc||null,cad:t2.cad||null,q:t2.q||null,_id:sel.value};Bnome=sel.options[sel.selectedIndex].text;}else{B=null;}}catch(x){B=null;}
+      disegna();});
     bar.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.ax){AX=b.dataset.ax;try{localStorage.setItem('rs_trk_asse',AX);}catch(x){}}
       if(b.dataset.te){T0=b.dataset.te;try{localStorage.setItem('rs_trk_tema',T0);}catch(x){}colori();tessere();pannelloFc();}
@@ -955,6 +961,11 @@ window.RSTraccia = (function(){
         g.fillStyle=C.mu;g.font='600 10.5px Inter, sans-serif';g.fillText(L.lbl,PAD.l+4,y+11);
         // la curva: un punto per pixel (il minimo o massimo del pixel), cosi' resta liscia e veloce
         g.save();g.beginPath();g.rect(PAD.l,y,pw,L.h);g.clip();
+        // corsa di confronto: stessa distanza (o stesso tempo) dall'inizio, tratteggiata
+        const bd=B?(L.k==='passo'?B.p:L.k==='fc'?B.fc:L.k==='cad'?B.cad:L.k==='q'?B.q:null):null;
+        if(bd){g.strokeStyle=T0==='chiaro'?'#0EA5E9':'#38BDF8';g.globalAlpha=.85;g.lineWidth=1.3;g.setLineDash([4,3]);g.beginPath();let su=false;
+          for(let i=0;i<B.t.length;i++){const v=bd[i],xv=AX==='tempo'?B.t[i]:B.d[i];if(v==null||xv==null||xv<x0||xv>x1){su=false;continue;}const px=sx(xv),py=sy(v);if(!su){g.moveTo(px,py);su=true;}else g.lineTo(px,py);}
+          g.stroke();g.setLineDash([]);g.globalAlpha=1;}
         g.strokeStyle=C[L.k];g.fillStyle=C[L.k];g.lineWidth=1.6;g.lineJoin='round';
         if(L.punti){for(let i=v0;i<=v1;i++){const v=L.d[i];if(v==null)continue;g.fillRect(sx(X(i))-1,sy(v)-1,2,2);}}
         else{g.beginPath();let su=false;for(let i=v0;i<=v1;i++){const v=L.d[i];if(v==null){su=false;continue;}const px=sx(X(i)),py=sy(v);if(!su){g.moveTo(px,py);su=true;}else g.lineTo(px,py);}g.stroke();
@@ -962,6 +973,7 @@ window.RSTraccia = (function(){
         g.restore();
         y+=L.h+GAP;
       });
+      if(B){g.font='600 10px Inter, sans-serif';g.textAlign='right';g.fillStyle=T0==='chiaro'?'#0EA5E9':'#38BDF8';g.fillText('- - '+Bnome,W-PAD.r-4,PAD.t+11);g.textAlign='left';}
       // asse in basso: km o tempo
       g.fillStyle=C.mu;g.font='10px Inter, sans-serif';g.textAlign='center';
       const span=x1-x0,step=AX==='tempo'?[60,120,300,600,900,1200,1800,3600].find(s=>span/s<=8)||3600:[100,200,500,1000,2000,5000,10000].find(s=>span/s<=8)||10000;

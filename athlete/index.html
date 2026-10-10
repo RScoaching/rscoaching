@@ -2536,7 +2536,10 @@ window.apriTraccia=async(id,tit)=>{
   const bd=document.getElementById('trk-bd');if(!bd)return;
   if(!tr||!window.Chart){bd.innerHTML='<p class="empty">Traccia non disponibile per questa corsa.</p>';return;}
   const gd=ST.gd||{},pf=window.RSGarmin?window.RSGarmin.profilo(gd):null,act=(gd.activities||{})[id];
-  window.RSTraccia.mostra(bd,tr,{zone:pf&&pf.zone,giri:act&&act.laps?(Array.isArray(act.laps)?act.laps:Object.values(act.laps)):null});
+  const altre=Object.entries(gd.activities||{}).filter(([k,a])=>a&&a.traccia&&k!==id).map(([k,a])=>({id:k,ts:window.RSGarmin.quando(a.start),a})).filter(x=>x.ts).sort((x,y)=>y.ts-x.ts).slice(0,60)
+    .map(x=>{const d=new Date(x.ts);return {id:x.id,nome:d.getDate()+'/'+(d.getMonth()+1)+' '+String(x.a.name||'Corsa').slice(0,24)+(x.a.distanceM?' '+String(Math.round(x.a.distanceM/100)/10).replace('.',',')+' km':'')};});
+  const carica=async k=>{for(const c of chiavi){try{const t=(await get(ref(db,`garmin_tracce/${c}/${k}`))).val();if(t)return t;}catch(e){}}return null;};
+  window.RSTraccia.mostra(bd,tr,{zone:pf&&pf.zone,giri:act&&act.laps?(Array.isArray(act.laps)?act.laps:Object.values(act.laps)):null,altre,carica});
 };
 function giriTab(G){
   const P=window.RSRitmi.passo,conT=G.some(g=>g.t);
