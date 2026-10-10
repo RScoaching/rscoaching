@@ -696,7 +696,7 @@ window.RSGarmin = (function(){
     return {id,fonti:[a.source==='intervals.icu'?'intervals':'garmin'],nome:a.name||'',tipo:tipo(a.type),ts,giorno:iso(ts),sec,km,
       passo:v>0.5?Math.round(1000/v):(km&&sec?Math.round(sec/km):null),fc:+a.avgHR?Math.round(a.avgHR):null,fcMax:+a.maxHR?Math.round(a.maxHR):null,
       dsl:+a.elevGain?Math.round(a.elevGain):null,load:+a.trainingLoad?Math.round(a.trainingLoad):null,rpe:+a.rpe>0?Math.round(+a.rpe):null,feel:+a.feel||null,
-      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
+      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,traccia:a.traccia?id:null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
   }
   // attivita' senza doppioni, dalla piu' recente
   function attivita(gd){
@@ -775,7 +775,7 @@ window.RSGarmin = (function(){
       if(k){usati.add(k);const l=out[k];
         const pl=l.progId&&pianificate?pianificate(a.giorno).find(x=>x.pid===l.progId&&x.sid===l.sessId):null;
         if(corsa&&!l.corsa)Object.assign(corsa,giriDi(corsa,pl&&pl.s));
-        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
+        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},a.traccia?{gmTraccia:a.traccia}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
       const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
       let p=(pianificate?pianificate(a.giorno):[]).filter(adatta)[0];
@@ -787,7 +787,7 @@ window.RSGarmin = (function(){
       const d=new Date(a.ts);
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,
-        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},
+        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},a.traccia?{gmTraccia:a.traccia}:{},
         !a.rpe&&rpeDaFc(a.fc,lthr)?{rpeStima:rpeDaFc(a.fc,lthr)}:{},
         corsa?{corsa}:{},a.tipo!=='corsa'&&a.km&&CON_KM[a.tipo]?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
     });
@@ -810,4 +810,81 @@ window.RSGarmin = (function(){
   // zone FC leggibili: Z1..Z5 dai limiti inferiori
   function zoneTxt(z){if(!z||!Array.isArray(z.z))return null;const L=z.z.slice(0,5),o={};L.forEach((v,k)=>{const n=L[k+1];o['Z'+(k+1)]=n?v+'-'+(n-1):'>'+v;});return o;}
   return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt,rpeDaFc};
+})();
+
+// ── TRACCIA DI UNA CORSA: GRAFICI E MAPPA ─────────────────────────────
+/* La traccia (garmin_data -> garmin_tracce/{aid}/{id}, un punto ogni 10 secondi:
+   t, d, fc, cad, v, q, lat, lon) diventa nel sito quello che si vede su intervals.icu:
+   mappa del percorso e grafici di passo, FC, cadenza e quota sulla stessa scala dei km,
+   allineati: passando su un grafico si muovono gli altri e il punto sulla mappa.
+   Chart.js c'e' gia' nelle pagine; Leaflet si carica solo quando serve. */
+window.RSTraccia = (function(){
+  let css=false,leaflet=null;
+  function stili(){if(css)return;css=true;const s=document.createElement('style');s.textContent=`
+.trk{display:flex;flex-direction:column;gap:10px}
+.trk-num{display:flex;flex-wrap:wrap;gap:6px 18px}.trk-num div{display:flex;flex-direction:column}.trk-num b{font:600 18px Inter,sans-serif;color:#F4F1EC;font-variant-numeric:tabular-nums}.trk-num i{font-style:normal;font-size:11px;color:#8E8678}
+.trk-map{height:260px;border-radius:12px;overflow:hidden;background:#151213;border:1px solid rgba(255,255,255,.08)}
+.trk-c{position:relative;height:118px}.trk-c.q{height:84px}
+.trk-l{font:600 11px Inter,sans-serif;color:#8E8678;margin:2px 0 -4px}
+.trk-dot{width:12px;height:12px;border-radius:50%;background:#F4F1EC;border:3px solid #FF6A2E;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+.trk .trk-osm{filter:invert(1) hue-rotate(180deg) brightness(.8) contrast(.9) saturate(.6)}
+.trk .leaflet-container{background:#151213;font-family:Inter,sans-serif}.trk .leaflet-control-attribution{background:rgba(0,0,0,.5);color:#8E8678}.trk .leaflet-control-attribution a{color:#A78BFA}`;document.head.appendChild(s);}
+  function carica(){
+    if(window.L)return Promise.resolve(window.L);
+    if(leaflet)return leaflet;
+    leaflet=new Promise((ok,ko)=>{
+      const l=document.createElement('link');l.rel='stylesheet';l.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(l);
+      const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=()=>ok(window.L);s.onerror=ko;document.head.appendChild(s);
+    });
+    return leaflet;
+  }
+  const mmss=s=>{if(!s||!isFinite(s))return '';s=Math.round(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
+  const hms=s=>{s=Math.round(s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0');};
+  const media=a=>{const v=a.filter(x=>x!=null&&x>0);return v.length?v.reduce((t,x)=>t+x,0)/v.length:null;};
+  // passo dalla velocita', liscio su 3 punti, fermo = vuoto
+  function passi(v){const p=(v||[]).map(x=>x&&x>1.2?1000/x:null);return p.map((x,i)=>{if(x==null)return null;const w=[p[i-1],x,p[i+1]].filter(y=>y!=null);return w.reduce((t,y)=>t+y,0)/w.length;});}
+  function mostra(el,tr,opz){
+    stili();opz=opz||{};
+    const n=(tr.t||[]).length;if(!n){el.innerHTML='<p style="color:#8E8678">Traccia vuota.</p>';return;}
+    const km=(tr.d||[]).map(x=>x!=null?Math.round(x/10)/100:null),P=passi(tr.v);
+    const dist=(tr.d||[])[n-1]||0,tempo=tr.t[n-1]||0;
+    let dsl=0;(tr.q||[]).forEach((x,i)=>{const y=tr.q[i-1];if(x!=null&&y!=null&&x>y)dsl+=x-y;});
+    const num=[[dist?String(Math.round(dist/10)/100).replace('.',','):'-','km'],[hms(tempo),'tempo'],[dist?mmss(tempo/(dist/1000)):'-','passo medio /km'],[tr.fc?Math.round(media(tr.fc)):'-','FC media'],[tr.cad?Math.round(media(tr.cad)):'-','cadenza'],[tr.q?Math.round(dsl)+' m':'-','dislivello +']];
+    const haMappa=tr.lat&&tr.lat.some(x=>x!=null);
+    el.innerHTML=`<div class="trk"><div class="trk-num">${num.map(([v,l])=>`<div><b>${v}</b><i>${l}</i></div>`).join('')}</div>
+      ${haMappa?'<div class="trk-map"></div>':''}
+      <div class="trk-l">Passo /km</div><div class="trk-c"><canvas></canvas></div>
+      ${tr.fc?'<div class="trk-l">Frequenza cardiaca</div><div class="trk-c"><canvas></canvas></div>':''}
+      ${tr.cad?'<div class="trk-l">Cadenza (passi al minuto)</div><div class="trk-c"><canvas></canvas></div>':''}
+      ${tr.q?'<div class="trk-l">Quota (m)</div><div class="trk-c q"><canvas></canvas></div>':''}</div>`;
+    const cvs=[...el.querySelectorAll('canvas')];
+    const serie=[{d:P,c:'#FF6A2E',inv:true,fmt:mmss}].concat(tr.fc?[{d:tr.fc,c:'#FB7185'}]:[],tr.cad?[{d:tr.cad,c:'#A78BFA',punti:true}]:[],tr.q?[{d:tr.q,c:'#8E8678',area:true}]:[]);
+    let marker=null,map=null;const grafici=[];
+    const muovi=i=>{grafici.forEach(g=>{if(g.__i===i)return;g.__i=i;const a=[{datasetIndex:0,index:i}];g.setActiveElements(a);g.tooltip.setActiveElements(a,{x:0,y:0});g.update('none');});
+      if(marker&&tr.lat[i]!=null)marker.setLatLng([tr.lat[i],tr.lon[i]]);};
+    serie.forEach((s,k)=>{
+      const v=s.d.filter(x=>x!=null).sort((a,b)=>a-b),lo=v[Math.floor(v.length*0.02)],hi=v[Math.floor(v.length*0.98)];
+      const g=new Chart(cvs[k],{type:'line',data:{labels:km,datasets:[{data:s.d,borderColor:s.c,backgroundColor:s.area?'rgba(142,134,120,.18)':s.c,fill:!!s.area,borderWidth:s.punti?0:1.6,pointRadius:s.punti?1.2:0,pointHoverRadius:3,tension:.25,spanGaps:false}]},
+        options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+          onHover:(e,a)=>{if(a&&a.length)muovi(a[0].index);},
+          plugins:{legend:{display:false},tooltip:{displayColors:false,callbacks:{title:it=>it[0]?String(it[0].label).replace('.',',')+' km':'',label:it=>s.fmt?s.fmt(it.parsed.y)+' /km':String(Math.round(it.parsed.y))}}},
+          scales:{x:{type:'category',ticks:{color:'#8E8678',font:{size:9},maxTicksLimit:10,callback:function(val){const l=this.getLabelForValue(val);return l!=null?Math.round(l):''}},grid:{display:false}},
+            y:{reverse:!!s.inv,min:lo!=null?(s.inv?lo-10:lo-(hi-lo)*0.1):undefined,max:hi!=null?(s.inv?hi+15:hi+(hi-lo)*0.1):undefined,ticks:{color:'#8E8678',font:{size:9},maxTicksLimit:4,callback:x=>s.fmt?s.fmt(x):Math.round(x)},grid:{color:'rgba(255,255,255,.05)'}}}}});
+      grafici.push(g);
+    });
+    if(haMappa)carica().then(L=>{
+      const box=el.querySelector('.trk-map');if(!box)return;
+      const pts=tr.lat.map((x,i)=>x!=null&&tr.lon[i]!=null?[x,tr.lon[i]]:null).filter(Boolean);
+      map=L.map(box,{zoomControl:true,attributionControl:true,scrollWheelZoom:false});
+      // OpenStreetMap, scurita col filtro della pagina (.trk-osm) per stare nel tema scuro
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'trk-osm',attribution:'&copy; OpenStreetMap'}).addTo(map);
+      const line=L.polyline(pts,{color:'#FF6A2E',weight:3.5,opacity:.95}).addTo(map);
+      L.circleMarker(pts[0],{radius:5,color:'#A78BFA',fillColor:'#A78BFA',fillOpacity:1}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:5,color:'#F4F1EC',fillColor:'#F4F1EC',fillOpacity:1}).addTo(map);
+      marker=L.marker(pts[0],{icon:L.divIcon({className:'',html:'<div class="trk-dot"></div>',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(map);
+      map.fitBounds(line.getBounds(),{padding:[16,16]});setTimeout(()=>map.invalidateSize(),120);
+    }).catch(()=>{const b=el.querySelector('.trk-map');if(b)b.innerHTML='<p style="color:#8E8678;padding:12px">Mappa non disponibile (senza connessione).</p>';});
+    return {grafici,map:()=>map};
+  }
+  return {mostra,carica};
 })();

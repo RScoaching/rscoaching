@@ -1317,9 +1317,11 @@ input,select,textarea{border-radius:10px}
 .rt-pg details{margin-top:8px}.rt-pg summary{font-size:12px;color:var(--muted);cursor:pointer}
 .rt-pg .tdet-tab{margin:8px 0 0}.rt-pg .tdet-tab td.a{color:var(--violet2);font-weight:600}
 .gm-giri{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;border-top:1px solid var(--border)}.gm-giri td{padding:4px 6px 4px 0;color:var(--text)}.gm-giri .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.gm-giri b{color:var(--white);font-weight:600}.gm-giri i{display:block;font-style:normal;font-size:10px;color:var(--muted)}.gm-giri .e{color:var(--muted);white-space:nowrap}.gm-giri tr.ok .e,.gm-giri tr.ok b{color:var(--violet2)}.gm-giri tr.veloce .e,.gm-giri tr.veloce b{color:#FB7185}.gm-giri tr.lento .e,.gm-giri tr.lento b{color:#FF9A6B}
+.gm-trk-b{margin-top:8px}
 .gm-rec{height:230px}.gm-rec-h{display:flex;align-items:center;gap:6px}.gm-rec-h span{flex:1}.gm-rec-h button{font:500 11.5px Inter,sans-serif;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer}.gm-rec-h button.on{background:var(--primary);border-color:var(--primary);color:#fff}.gm-rec-n{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--text);margin:-6px 0 16px}.gm-rec-n b{color:var(--white);font-variant-numeric:tabular-nums}.gm-rec-n i{font-style:normal;color:var(--muted);font-size:11px}.gm-rec-n .male b{color:#FF9A6B}.gm-rec-n em{flex-basis:100%;font-style:normal;font-size:11px;color:var(--muted)}
 .qz7-or{font-style:normal;font-size:9.5px;color:var(--violet2);margin-left:3px}
 .rt-cods{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:var(--text);margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}.rt-cods span{color:var(--muted);margin-right:4px}.rt-cods label{display:flex;gap:6px;align-items:center;cursor:pointer}.rt-cods input{accent-color:var(--primary)}
+.rt-uff{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text);margin:0 0 12px;cursor:pointer}.rt-uff input{accent-color:var(--primary)}
 .rt-sum{margin:8px 0 0}.rt-sum td{padding:5px 8px}
 .rt-pg .cond{font-size:11.5px;color:var(--muted);margin-top:6px}
 </style>
@@ -2841,7 +2843,8 @@ function rtSogliaNuova(aid){
 function rtRecordNuovi(aid){
   const pf=window.RSGarmin&&garminData[aid]?window.RSGarmin.profilo(garminData[aid]):null,R=pf&&pf.record;if(!R)return [];
   const L=rtLista(aid);
-  return Object.entries(R).filter(([d,x])=>x&&x.sec&&!L.some(y=>y.tipo!=='soglia'&&String(y.dist)===d&&Math.abs(y.sec-x.sec)<=2)).map(([d,x])=>({d,sec:x.sec,data:x.data}));
+  // solo i record dell'orologio migliori dei tempi gia' scritti (un PB ufficiale scritto a mano vince)
+  return Object.entries(R).filter(([d,x])=>x&&x.sec&&!L.some(y=>y.tipo!=='soglia'&&String(y.dist)===d&&y.sec<=x.sec+2)).map(([d,x])=>({d,sec:x.sec,data:x.data}));
 }
 window.rtUsaRecord=async function(aid,d){
   const x=rtRecordNuovi(aid).find(r=>r.d===d);if(!x)return;const RR=window.RSRitmi,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(x.data||'');
@@ -2882,7 +2885,7 @@ function renderDetRitmi(aid){
     const sogl=x.tipo==='soglia',m=RR.metri(x.dist),V=!sogl&&m?RR.vdot(m,x.sec):null;
     const isPb=!sogl&&pb[String(x.dist)]&&pb[String(x.dist)].id===x.id&&L.filter(y=>String(y.dist)===String(x.dist)&&y.tipo!=='soglia').length>1;
     const base=R&&R.baseId===x.id;
-    return `<tr><td>${athEsc(x.date||'-')}</td><td>${sogl?'Soglia':athEsc(RR.distNome(x.dist))}${isPb?'<span class="pb">PB</span>':''}${base?'<span class="bs">base dei ritmi</span>':''}</td>
+    return `<tr><td>${athEsc(x.date||'-')}</td><td>${sogl?'Soglia':athEsc(RR.distNome(x.dist))}${isPb?'<span class="pb">PB</span>':''}${x.ufficiale?'<span class="bs">ufficiale</span>':''}${x.src==='orologio'?'<span class="bs">orologio</span>':''}${base?'<span class="bs">base dei ritmi</span>':''}</td>
       <td class="n"><b>${sogl?(x.sec?RR.passo(x.sec)+' /km':''):RR.tempo(x.sec)}</b>${sogl&&x.fc?' &#183; FC '+x.fc:''}</td>
       <td class="n">${!sogl&&m?RR.passo(x.sec/(m/1000))+' /km':''}</td><td class="n">${V?V.toFixed(1).replace('.',','):''}</td>
       <td class="nt">${athEsc(x.note||'')}${x.src==='atleta'?' (dall\'app)':''}</td>
@@ -2894,7 +2897,7 @@ function renderDetRitmi(aid){
     +(nuovi.length?`<div class="rt-new"><span>${nuovi.length===1?'Un tempo nuovo':nuovi.length+' tempi nuovi'} dall'app dell'atleta: ${nuovi.map(x=>athEsc((x.tipo==='soglia'?'soglia':RR.distNome(x.dist))+' '+(x.tipo==='soglia'?RR.passo(x.sec):RR.tempo(x.sec)))).join(', ')}.</span><button type="button" class="btn btn-orange btn-sm" onclick="rtRicalcola('${aid}')">Aggiorna i ritmi</button></div>`:'')
     +top
     +(L.length?`<table class="tdet-tab rt-tab"><thead><tr><th>Data</th><th>Gara</th><th class="n">Tempo</th><th class="n">Passo</th><th class="n">VDOT</th><th>Note</th><th></th></tr></thead><tbody>${righe}</tbody></table>`:'')
-    +`<div class="test-acts"><button type="button" class="btn btn-orange btn-sm" onclick="rtNuovo('${aid}')">+ Nuovo tempo</button>${R&&R.vdot?`<button type="button" class="btn btn-outline btn-sm" onclick="rtAnteprima('${aid}')">Aggiorna i passi nei programmi</button>`:''}${rtUndo.length?`<button type="button" class="btn btn-ghost btn-sm" onclick="rtAnnulla()" title="Ctrl+Z">Annulla l'ultimo aggiornamento</button>`:''}</div>`;
+    +`<div class="test-acts"><button type="button" class="btn btn-orange btn-sm" onclick="rtNuovo('${aid}')">+ Tempo o PB</button>${R&&R.vdot?`<button type="button" class="btn btn-outline btn-sm" onclick="rtAnteprima('${aid}')">Aggiorna i passi nei programmi</button>`:''}${rtUndo.length?`<button type="button" class="btn btn-ghost btn-sm" onclick="rtAnnulla()" title="Ctrl+Z">Annulla l'ultimo aggiornamento</button>`:''}</div>`;
 }
 function refreshRitmi(){if(currentAid){const el=document.getElementById('det-ritmi');if(el&&el.style.display!=='none')el.innerHTML=renderDetRitmi(currentAid);}}
 window.rtNuovo=function(aid){
@@ -2909,6 +2912,7 @@ window.rtNuovo=function(aid){
       <div class="field rt-sogl" style="display:none"><label>Passo di soglia /km</label><input id="m-rt-sp" placeholder="es. 4:35" oninput="rtLive('${aid}')"></div>
       <div class="field rt-sogl" style="display:none"><label>FC di soglia</label><input id="m-rt-fc" inputmode="numeric" placeholder="es. 172" oninput="rtLive('${aid}')"></div>
       <div class="field"><label>Data</label><input id="m-rt-d" value="${oggi}" placeholder="gg/mm/aaaa" oninput="rtLive('${aid}')"></div></div>
+    <label class="rt-uff"><input type="checkbox" id="m-rt-uff"> Gara ufficiale (PB): anche vecchia, l'orologio puo' non averla</label>
     <div class="field"><label>Note</label><input id="m-rt-n" placeholder="gara, test in pista, percorso, condizioni" onkeydown="if(event.key==='Enter')rtSalva('${aid}')"></div>
     <div id="rt-live" class="rt-live"></div>
     <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="rtSalva('${aid}')">Salva e aggiorna i ritmi</button></div>`;
@@ -2951,7 +2955,7 @@ window.rtSalva=async function(aid){
   if(!x){showToast(rtDist==='soglia'?'Scrivi il passo o la FC di soglia':'Scrivi il tempo');return;}
   if(x.errore){showToast(x.errore);return;}
   const note=(document.getElementById('m-rt-n')?.value||'').trim();
-  const voce=Object.assign({},x,{note:note||null,src:'coach',ts:Date.now()});
+  const voce=Object.assign({},x,{note:note||null,src:'coach',ts:Date.now()},document.getElementById('m-rt-uff')?.checked?{ufficiale:true}:{});
   const r=push(ref(db,`race_times/${aid}`));
   await set(r,voce);
   const tempi=Object.assign({},raceTimes[aid]||{},{[r.key]:voce});
@@ -3277,6 +3281,7 @@ function renderDetSessList(aid,aSess){
     const note=ci?.note||wlog?.note||'';
     // corsa dall'orologio: tratto per tratto, con il passo in programma accanto
     if(wlog?.corsa?.giri?.length&&window.RSRitmi)exHtml+=gmGiriHtml(wlog.corsa.giri);
+    if(wlog?.gmTraccia)exHtml+=`<button type="button" class="btn btn-outline btn-sm gm-trk-b" onclick="gmApriTraccia('${aid}','${String(wlog.gmTraccia).replace(/'/g,'')}','${athEsc((wlog.sessName||'Corsa').replace(/'/g,''))} ${athEsc(wlog.date||'')}')">Grafici e mappa</button>`;
     return `<div class="sess-item">
       <div class="sess-date">${date||'-'}</div>
       <div class="sess-body">
@@ -3420,6 +3425,18 @@ function renderDetCheckin(aid,aCi){
 }
 
 // carico esterno dall'orologio accanto a quello interno: km di corsa in 7 giorni e CTL/ATL di intervals.icu
+// grafici e mappa di una corsa (garmin_tracce): si leggono solo quando si apre
+window.gmApriTraccia=async function(aid,id,tit){
+  const mb=document.getElementById('modal-body');
+  document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
+  mb.innerHTML=`<h3>${tit||'Corsa'}</h3><div id="gm-trk"><p style="color:var(--muted)">Carico la traccia...</p></div><div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  const chiavi=[aid].concat(window.RSGarmin&&athletes[aid]?[window.RSGarmin.chiave(athletes[aid].name)]:[]);
+  let tr=null;for(const k of chiavi){try{tr=(await get(ref(db,`garmin_tracce/${k}/${id}`))).val();}catch(e){}if(tr)break;}
+  const box=document.getElementById('gm-trk');if(!box)return;
+  if(!tr||!window.RSTraccia||!window.Chart){box.innerHTML='<p style="color:var(--muted)">Traccia non disponibile per questa corsa.</p>';return;}
+  window.RSTraccia.mostra(box,tr);
+};
 function gmGiriHtml(G){
   const P=window.RSRitmi.passo,km=m=>m>=1000?String(Math.round(m/100)/10).replace('.',',')+' km':m+' m';
   return `<table class="gm-giri"><tbody>${G.slice(0,24).map(g=>`<tr class="${g.e||''}"><td>${athEsc(g.n||'')}</td><td class="n">${km(g.m)}</td><td class="n"><b>${g.m>0?P(g.s/(g.m/1000)):''}</b>${g.t?`<i>${athEsc(g.t)}</i>`:''}</td><td class="n">${g.fc?g.fc:''}</td><td class="e">${g.e==='ok'?'nel passo':g.e==='veloce'?'piu\' veloce':g.e==='lento'?'piu\' lento':''}</td></tr>`).join('')}</tbody></table>`;
