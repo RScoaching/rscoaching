@@ -696,7 +696,7 @@ window.RSGarmin = (function(){
     return {id,fonti:[a.source==='intervals.icu'?'intervals':'garmin'],nome:a.name||'',tipo:tipo(a.type),ts,giorno:iso(ts),sec,km,
       passo:v>0.5?Math.round(1000/v):(km&&sec?Math.round(sec/km):null),fc:+a.avgHR?Math.round(a.avgHR):null,fcMax:+a.maxHR?Math.round(a.maxHR):null,
       dsl:+a.elevGain?Math.round(a.elevGain):null,load:+a.trainingLoad?Math.round(a.trainingLoad):null,rpe:+a.rpe>0?Math.round(+a.rpe):null,feel:+a.feel||null,
-      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,traccia:a.traccia?id:null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
+      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,zt:Array.isArray(a.zoneTimes)?a.zoneTimes:(a.zoneTimes&&typeof a.zoneTimes==='object'?Object.values(a.zoneTimes):null),traccia:a.traccia?id:null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
   }
   // attivita' senza doppioni, dalla piu' recente
   function attivita(gd){
@@ -775,7 +775,7 @@ window.RSGarmin = (function(){
       if(k){usati.add(k);const l=out[k];
         const pl=l.progId&&pianificate?pianificate(a.giorno).find(x=>x.pid===l.progId&&x.sid===l.sessId):null;
         if(corsa&&!l.corsa)Object.assign(corsa,giriDi(corsa,pl&&pl.s));
-        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},a.traccia?{gmTraccia:a.traccia}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
+        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
       const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
       let p=(pianificate?pianificate(a.giorno):[]).filter(adatta)[0];
@@ -787,7 +787,7 @@ window.RSGarmin = (function(){
       const d=new Date(a.ts);
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,
-        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},a.traccia?{gmTraccia:a.traccia}:{},
+        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},
         !a.rpe&&rpeDaFc(a.fc,lthr)?{rpeStima:rpeDaFc(a.fc,lthr)}:{},
         corsa?{corsa}:{},a.tipo!=='corsa'&&a.km&&CON_KM[a.tipo]?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
     });
@@ -841,6 +841,20 @@ window.RSTraccia = (function(){
 .trk2-tl{position:relative;cursor:crosshair;touch-action:pan-y;user-select:none;-webkit-user-select:none}.trk2-tl canvas{display:block;width:100%}
 .trk2-gi{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-top:1px solid var(--bd)}.trk2-gi:empty{display:none}
 .trk2-gi button{font:500 11.5px Inter,sans-serif;padding:5px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--pan);color:var(--tx);cursor:pointer;font-variant-numeric:tabular-nums}.trk2-gi button.lav{border-color:rgba(255,106,46,.45)}.trk2-gi button b{color:var(--c-passo)}
+.trk2-sp{padding:10px 12px 4px;border-bottom:1px solid var(--bd)}.trk2-sp:empty{display:none}
+.trk2-sph{display:flex;align-items:center;gap:6px;margin-bottom:6px}.trk2-sph b{font-size:12.5px;color:var(--tx);margin-right:6px}.trk2-sph i{margin-left:auto;font-style:normal;font-size:10.5px;color:var(--mu)}
+.trk2-sph button{font:600 11px Inter,sans-serif;padding:4px 9px;border-radius:999px;border:1px solid var(--bd);background:transparent;color:var(--mu);cursor:pointer}.trk2-sph button.on{background:var(--tx);border-color:var(--tx);color:var(--bg)}
+.trk2-spb{display:flex;align-items:flex-end;gap:3px;height:118px}
+.trk2-spb button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;height:100%;border-radius:6px}
+.trk2-spb button i{font-style:normal;font-size:9.5px;color:var(--mu)}.trk2-spb button u{display:block;width:100%;border-radius:4px 4px 0 0;background:var(--c-passo);opacity:.55;margin:2px 0}
+.trk2-spb button.svelto u{opacity:.95}.trk2-spb button.lento u{opacity:.3}.trk2-spb button.sel u{outline:2px solid var(--tx)}
+.trk2-spb button b{font-size:10.5px;color:var(--tx);font-variant-numeric:tabular-nums}.trk2-spb button s{text-decoration:none;font-size:9.5px;color:var(--c-fc)}
+.trk2-spb button:hover u{opacity:1}
+.trk2-spt{margin:6px 0 6px}.trk2-spt summary{font-size:11.5px;color:var(--mu);cursor:pointer}.trk2-spt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;color:var(--tx)}.trk2-spt th{text-align:right;font-weight:500;color:var(--mu);font-size:10.5px;padding:3px 6px;border-bottom:1px solid var(--bd)}.trk2-spt td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}.trk2-spt th:first-child,.trk2-spt td:first-child{text-align:left}.trk2-spt b{color:var(--c-passo)}
+.trk2-fc{padding:10px 12px;border-top:1px solid var(--bd)}.trk2-fc:empty{display:none}
+.trk2-fch{display:flex;gap:8px;align-items:baseline;margin-bottom:8px}.trk2-fch b{font-size:12.5px;color:var(--tx)}.trk2-fch i{font-style:normal;font-size:11px;color:var(--mu)}
+.trk2-zone{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.trk2-zone div{display:grid;grid-template-columns:26px 1fr 56px 34px;align-items:center;gap:8px;font-size:11.5px;color:var(--tx)}.trk2-zone span{color:var(--mu);font-weight:600}.trk2-zone u{display:block;height:9px;border-radius:5px;background:var(--pan);overflow:hidden}.trk2-zone em{display:block;height:100%;border-radius:5px}.trk2-zone b{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}.trk2-zone i{font-style:normal;text-align:right;color:var(--mu)}
+.trk2-fcn{display:flex;flex-wrap:wrap;gap:8px 22px}.trk2-fcn span{display:flex;flex-direction:column}.trk2-fcn i{font-style:normal;font-size:10.5px;color:var(--mu)}.trk2-fcn b{font-size:15px;color:var(--tx);font-variant-numeric:tabular-nums}.trk2-fcn b.male{color:#F97316}.trk2-fcn em{font-style:normal;font-size:10.5px;color:var(--mu)}
 .trk2-map{height:300px;border-top:1px solid var(--bd);background:var(--pan)}
 .trk2-aiuto{padding:7px 12px;font-size:11px;color:var(--mu);border-top:1px solid var(--bd)}
 .trk2.scuro .trk2-osm{filter:invert(1) hue-rotate(180deg) brightness(.8) contrast(.9) saturate(.6)}
@@ -876,14 +890,18 @@ window.RSTraccia = (function(){
     let tratti=[];
     if(opz.giri&&window.RSOrologio&&D[n-1]){let acc=0;const B=window.RSOrologio.blocchi(opz.giri);const med=quant(B.map(b=>b.passo),0.5);
       tratti=B.map((b,k)=>{const a=acc;acc+=b.m;const i0=D.findIndex(x=>x!=null&&x>=a),i1=D.findIndex(x=>x!=null&&x>=acc);return {k,i0:Math.max(0,i0),i1:i1<0?n-1:i1,m:b.m,s:b.s,passo:b.passo,fc:b.fc,lav:B.length>1&&b.passo<med-5};}).filter(x=>x.i1>x.i0);}
+    const kmSplit=[];if(D[n-1]){let a=0;for(let k=1;k<=Math.ceil(D[n-1]/1000);k++){const lim=k*1000;let b=D.findIndex((x,i)=>i>a&&x!=null&&x>=lim);if(b<0)b=n-1;if(b>a&&(D[b]-D[a])>=150)kmSplit.push({i0:a,i1:b,nome:k<=Math.floor(D[n-1]/1000)?String(k):kmTxt(D[n-1])});a=b;if(b>=n-1)break;}}
+    let SP=(()=>{try{return localStorage.getItem('rs_trk_split')||'km';}catch(e){return 'km';}})();
     let T0=tema(),AX=asse(),v0=0,v1=n-1,cur=null,drag=null,map=null,mk=null,lineSel=null,lineAll=null;
     el.innerHTML=`<div class="trk2 ${T0}">
       <div class="trk2-bar"></div><div class="trk2-sel"></div>
+      <div class="trk2-sp"></div>
       <div class="trk2-tl"><canvas></canvas></div>
       <div class="trk2-gi"></div>
+      <div class="trk2-fc"></div>
       ${haMappa?'<div class="trk2-map"></div>':''}
       <div class="trk2-aiuto">Passa sopra per i valori del punto. Trascina per scegliere un tratto e zoomare, doppio clic per tornare a tutta la corsa.</div></div>`;
-    const box=el.querySelector('.trk2'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=box.querySelector('.trk2-gi');
+    const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=box.querySelector('.trk2-gi');
     function colori(){const C=TEMI[T0];box.className='trk2 '+T0;['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
     colori();
     const X=i=>AX==='tempo'?T[i]:(D[i]!=null?D[i]:0);
@@ -903,7 +921,7 @@ window.RSTraccia = (function(){
     }
     bar.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.ax){AX=b.dataset.ax;try{localStorage.setItem('rs_trk_asse',AX);}catch(x){}}
-      if(b.dataset.te){T0=b.dataset.te;try{localStorage.setItem('rs_trk_tema',T0);}catch(x){}colori();tessere();}
+      if(b.dataset.te){T0=b.dataset.te;try{localStorage.setItem('rs_trk_tema',T0);}catch(x){}colori();tessere();pannelloFc();}
       valori(cur);disegna();});
     // statistiche del tratto selezionato
     function selezione(){
@@ -958,7 +976,42 @@ window.RSTraccia = (function(){
     // da pixel a indice (ricerca sul valore dell'asse)
     function idx(px){const x0=X(v0),x1=X(v1),pw=(cv._W||600)-PAD.l-PAD.r,val=x0+Math.max(0,Math.min(1,(px-PAD.l)/pw))*(x1-x0);let lo=v0,hi=v1;while(hi-lo>1){const m=(lo+hi)>>1;if(X(m)<val)lo=m;else hi=m;}return Math.abs(X(lo)-val)<=Math.abs(X(hi)-val)?lo:hi;}
     function cursore(i){cur=i;valori(i);disegna();if(mk&&i!=null&&tr.lat[i]!=null)mk.setLatLng([tr.lat[i],tr.lon[i]]);}
-    function zoom(a,b){v0=Math.max(0,Math.min(a,b));v1=Math.min(n-1,Math.max(a,b));if(v1-v0<3){v0=0;v1=n-1;}cur=null;valori(null);selezione();disegna();mappaSel();}
+    // statistiche di un pezzo [a,b]
+    function stat(a,b){const dur=T[b]-T[a],dist=(D[b]||0)-(D[a]||0);let fs=0,fc=0,fm=0,cs=0,cc=0,gain=0;
+      for(let k=a;k<=b;k++){if(FC&&FC[k]){fs+=FC[k];fc++;fm=Math.max(fm,FC[k]);}if(CAD&&CAD[k]){cs+=CAD[k];cc++;}if(Q&&k>a&&Q[k]!=null&&Q[k-1]!=null&&Q[k]>Q[k-1])gain+=Q[k]-Q[k-1];}
+      return {dur,dist,passo:dist>0?dur/(dist/1000):null,fc:fc?Math.round(fs/fc):null,fcMax:fm||null,cad:cc?Math.round(cs/cc):null,gain:Math.round(gain)};}
+    // split sopra la linea temporale: per km o per tratti dell'allenamento, barre alte quanto la velocita'
+    function split(){
+      const L=SP==='tratti'&&tratti.length>1?tratti.map(t=>({i0:t.i0,i1:t.i1,nome:String(t.k+1),lav:t.lav})):kmSplit;
+      if(L.length<2){spBox.innerHTML='';return;}
+      const S=L.map(x=>Object.assign({},x,stat(x.i0,x.i1))).filter(x=>x.passo),ps=S.map(x=>x.passo),lo=Math.min(...ps),hi=Math.max(...ps),med=quant(ps,0.5);
+      const tot=S.reduce((t,x)=>t+x.dist,0);
+      spBox.innerHTML=`<div class="trk2-sph"><b>Split</b><button type="button" data-sp="km" class="${SP!=='tratti'?'on':''}">Per km</button>${tratti.length>1?`<button type="button" data-sp="tratti" class="${SP==='tratti'?'on':''}">Per allenamento</button>`:''}<i>clic su una barra per zoomare</i></div>
+        <div class="trk2-spb">${S.map((x,k)=>{const h=hi>lo?28+Math.round((hi-x.passo)/(hi-lo)*52):60,dentro=x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1);
+          return `<button type="button" data-k="${k}" class="${x.passo<med-3?'svelto':x.passo>med+8?'lento':''}${dentro?' sel':''}" style="flex:${Math.max(0.35,x.dist/tot*S.length)}" title="${x.nome}: ${kmTxt(x.dist)} km in ${hms(x.dur)}"><i>${x.nome}</i><u style="height:${h}px"></u><b>${mmss(x.passo)}</b>${x.fc?`<s>${x.fc}</s>`:''}</button>`;}).join('')}</div>
+        <details class="trk2-spt"><summary>Tabella degli split</summary><table><thead><tr><th>${SP==='tratti'?'Tratto':'Km'}</th><th>Dist.</th><th>Tempo</th><th>Passo</th><th>FC</th><th>max</th><th>Cad.</th><th>Salita</th></tr></thead><tbody>${S.map(x=>`<tr><td>${x.nome}</td><td>${kmTxt(x.dist)}</td><td>${hms(x.dur)}</td><td><b>${mmss(x.passo)}</b></td><td>${x.fc||'-'}</td><td>${x.fcMax||'-'}</td><td>${x.cad||'-'}</td><td>${x.gain} m</td></tr>`).join('')}</tbody></table></details>`;
+      spBox._S=S;
+    }
+    spBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+      if(b.dataset.sp){SP=b.dataset.sp;try{localStorage.setItem('rs_trk_split',SP);}catch(x){}split();return;}
+      const x=(spBox._S||[])[+b.dataset.k];if(x)zoom(x.i0,x.i1);});
+    // frequenza cardiaca della vista: tempo nelle zone, deriva cardiaca (passo su FC fra prima e seconda meta'), sopra soglia
+    function pannelloFc(){
+      if(!FC){fcBox.innerHTML='';return;}
+      const z=opz.zone&&Array.isArray(opz.zone.z)?opz.zone.z.slice(0,5):null,dt=k=>k>0?T[k]-T[k-1]:0;
+      let zt=[0,0,0,0,0],tot=0,sopra=0;const soglia=opz.zone&&opz.zone.fcSoglia;
+      for(let k=v0+1;k<=v1;k++){const f=FC[k];if(!f)continue;const d=dt(k);tot+=d;if(soglia&&f>=soglia)sopra+=d;if(z){let zi=0;for(let j=0;j<5;j++)if(f>=z[j])zi=j;zt[zi]+=d;}}
+      // deriva: rapporto velocita'/FC nella prima e nella seconda meta' della vista
+      const mid=v0+Math.floor((v1-v0)/2),rap=(a,b)=>{let sv=0,sf=0,c=0;for(let k=a;k<=b;k++){if(FC[k]&&tr.v&&tr.v[k]>1.2){sv+=tr.v[k];sf+=FC[k];c++;}}return c?sv/sf:null;};
+      const r1=rap(v0,mid),r2=rap(mid,v1),der=r1&&r2?(r1-r2)/r1*100:null;
+      const C=TEMI[T0];
+      fcBox.innerHTML=`<div class="trk2-fch"><b>Frequenza cardiaca</b>${!(v0===0&&v1===n-1)?'<i>del tratto scelto</i>':''}</div>
+        ${z?`<div class="trk2-zone">${zt.map((t,k)=>{const pc=tot?t/tot*100:0;return `<div><span>Z${k+1}</span><u><em style="width:${pc.toFixed(1)}%;background:${['#94A3B8','#3B82F6','#22C55E','#F97316','#E11D48'][k]}"></em></u><b>${hms(t)}</b><i>${Math.round(pc)}%</i></div>`;}).join('')}</div>`:''}
+        <div class="trk2-fcn">${der!=null?`<span><i>Deriva cardiaca</i><b class="${der>5?'male':''}">${der>0?'+':''}${der.toFixed(1).replace('.',',')}%</b><em>${der<=5?'sotto il 5%: tenuta aerobica buona':'oltre il 5%: la FC sale a parita\' di passo'}</em></span>`:''}
+          ${soglia?`<span><i>Sopra la soglia (${soglia})</i><b>${hms(sopra)}</b></span>`:''}
+          <span><i>FC media e massima</i><b>${Math.round(stat(v0,v1).fc||0)} / ${stat(v0,v1).fcMax||'-'}</b></span></div>`;
+    }
+    function zoom(a,b){v0=Math.max(0,Math.min(a,b));v1=Math.min(n-1,Math.max(a,b));if(v1-v0<3){v0=0;v1=n-1;}cur=null;valori(null);selezione();disegna();mappaSel();split();pannelloFc();}
     const pos=e=>{const r=cv.getBoundingClientRect();const p=e.touches?e.touches[0]:e;return p.clientX-r.left;};
     wrap.addEventListener('mousemove',e=>{const x=pos(e);if(drag){drag.b=x;}cursore(idx(x));});
     wrap.addEventListener('mouseleave',()=>{if(!drag){cur=null;valori(null);disegna();}});
@@ -987,7 +1040,7 @@ window.RSTraccia = (function(){
       mk=L.marker(pts[0],{icon:L.divIcon({className:'',html:'<div class="trk2-dot"></div>',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(map);
       mappaSel();setTimeout(()=>{map.invalidateSize();mappaSel();},150);
     }).catch(()=>{const b=box.querySelector('.trk2-map');if(b)b.innerHTML='<p style="padding:12px;color:#8E8678">Mappa non disponibile (senza connessione).</p>';});
-    valori(null);disegna();
+    valori(null);disegna();split();pannelloFc();
     if(window.ResizeObserver){new ResizeObserver(()=>disegna()).observe(wrap);}
     return {zoom,ridisegna:disegna};
   }

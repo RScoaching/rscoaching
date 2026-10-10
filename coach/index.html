@@ -1148,6 +1148,20 @@ body::before,body::after{display:none;}
 .ac-s.saltata{border-color:rgba(244,63,94,.28)}.ac-s.saltata span{color:#FB7185}
 .ac-s.prog{border-style:dashed}
 .ac-s.fuori{background:rgba(255,106,46,.08);border-color:rgba(255,106,46,.25)}.ac-s.fuori span{color:#FF9A6B}
+/* calendario come intervals.icu: colonna della settimana, mattino dell'orologio, schede delle attivita' */
+.ac-g8{grid-template-columns:minmax(84px,.9fr) repeat(7,minmax(0,1fr))}
+.ac-wk{padding:7px 8px;display:flex;flex-direction:column;gap:3px;background:rgba(255,255,255,.015)}.ac-wk b{font:600 12px Inter,sans-serif;color:var(--white);margin-bottom:2px}
+.ac-wk span{display:flex;justify-content:space-between;gap:4px;font-size:11px;color:var(--white);font-variant-numeric:tabular-nums}.ac-wk i{font-style:normal;color:var(--muted)}.ac-wk em{font-style:normal}.ac-wk em.fi{color:#38BDF8}.ac-wk em.fa{color:var(--violet2)}
+.ac-wl{display:flex;flex-wrap:wrap;gap:1px 6px;margin:0 0 5px 2px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.ac-wl i{font-style:normal}.ac-wl i.fc{color:#FB7185}
+.ac-a{all:unset;box-sizing:border-box;display:flex;flex-direction:column;width:100%;cursor:pointer;border-radius:8px;overflow:hidden;margin-bottom:5px;border:1px solid var(--line);background:rgba(255,255,255,.03);transition:border-color .15s ease,transform .12s ease}
+.ac-a:hover{border-color:rgba(255,255,255,.28)}.ac-a:active{transform:scale(.98)}.ac-a:focus-visible{outline:2px solid var(--primary)}
+.ac-ah{display:block;padding:4px 7px;font:650 11.5px Inter,sans-serif;color:#fff;background:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-a.t-corsa .ac-ah{background:#5B5FD6}.ac-a.t-pesi .ac-ah{background:#E8622C}
+.ac-ab{display:flex;flex-direction:column;align-items:center;padding:4px 4px 2px;gap:1px}.ac-ab i{font-style:normal;font-size:10.5px;color:var(--white);font-variant-numeric:tabular-nums;text-align:center}.ac-ab i.fc{color:#FB7185;font-weight:600}.ac-ab i.ps{color:#A5B4FC;font-weight:600}.ac-ab i.rp{color:#34D399}.ac-ab i.rp.st{color:var(--muted)}
+.ac-az{display:flex;align-items:flex-end;gap:2px;height:28px;padding:0 8px 2px}.ac-az u{flex:1;border-radius:2px 2px 0 0}
+.ac-an{display:block;padding:2px 6px 5px;font-size:10.5px;color:var(--muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aa-num{display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:10px}.aa-num div{display:flex;flex-direction:column}.aa-num b{font:600 18px Inter,sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.aa-num i{font-style:normal;font-size:11px;color:var(--muted)}.aa-n{font-size:12.5px;color:var(--text);margin:10px 0 0}
+@media(max-width:900px){.ac-g8{grid-template-columns:repeat(7,minmax(0,1fr))}.ac-g8 .ac-wk{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:4px 14px}.ac-g8>.ac-hd:first-child{display:none}}
 a.ac-s:hover{border-color:var(--line2)}
 .det-sec{font:600 14px Inter,sans-serif;color:var(--white);margin:6px 0 10px}
 .test-grid.solo-misurati .test-card.vuoto{display:none}
@@ -2556,43 +2570,80 @@ function athCalendario(aid){
   let nP=0,nF=0,nS=0;
   // il registro dice a quale seduta del programma appartiene (programma, settimana, seduta):
   // una seduta fatta in un altro giorno della settimana conta come fatta, non come fuori programma
-  const logs=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts);
+  const logs=Object.entries(sessionLogs[aid]||{}).filter(([,l])=>l&&l.ts).map(([k,l])=>Object.assign({_k:k},l));
+  window._acLogs=window._acLogs||{};logs.forEach(l=>{window._acLogs[aid+'|'+l._k]=l;});
   // solo se registrata entro una settimana dal giorno previsto: oltre e' un altro discorso
   const logDi=(x,d)=>logs.find(l=>l.progId===x.pid&&l.weekIdx===x.k&&l.sessId===x.sid&&Math.abs(l.ts-d.getTime())<=7*864e5);
-  const GGB=['dom','lun','mar','mer','gio','ven','sab'];
-  // i registri che trovano la loro seduta in programma nelle quattro settimane mostrate
   const legati=new Set();
   for(let i=0;i<28;i++){const d=new Date(lun);d.setDate(d.getDate()+i);dPreviste(aid,d).forEach(x=>{const l=logDi(x,d);if(l)legati.add(l);});}
   const rpeDel=ts=>{const g=new Date(ts).toDateString();const c=Object.values(sessions[aid]||{}).find(x=>x&&x.ts&&new Date(x.ts).toDateString()===g);return c&&c.rpe;};
+  const car=athCarico(aid),loadDi=k=>{const x=(car.serie||[]).find(s=>s.k===k);return x?x.load:0;};
+  const gd=garminData[aid]||null,P=window.RSRitmi?window.RSRitmi.passo:(x=>x);
+  const ZC=['#94A3B8','#3B82F6','#22C55E','#F97316','#E11D48'];
+  const f1=x=>String(Math.round(x*10)/10).replace('.',',');
+  const durTxt=m=>m>=60?Math.floor(m/60)+'h'+String(Math.round(m%60)).padStart(2,'0'):Math.round(m)+'\'';
+  // scheda di un'attivita' fatta, come su intervals.icu: clic = analisi
+  const scheda=(l,titolo)=>{
+    const tipo=l.type==='corsa'||l.corsa?'corsa':l.type==='pesi'||l.totalSets?'pesi':'altro';
+    const km=l.corsa&&l.corsa.km||l.km,min=+l.duration||+l.minuti||0,fc=(l.corsa&&l.corsa.fc)||l.gmFc;
+    const rpe=+l.avgRpe||(!l.gm&&rpeDel(l.ts))||null,rs=!rpe&&l.rpeStima?l.rpeStima:null,ua=Math.round((rpe||rs||0)*min);
+    const zt=(l.gmZt||[]).slice(0,5),ztot=zt.reduce((t,x)=>t+(+x||0),0);
+    return `<button type="button" class="ac-a t-${tipo}" onclick="athAttivita('${aid}','${l._k}')" title="Apri l'analisi">
+      <span class="ac-ah">${min?durTxt(min):''}${km?' &#183; '+f1(km)+' km':''}</span>
+      <span class="ac-ab">${fc?`<i class="fc">${fc} bpm</i>`:''}${l.corsa&&l.corsa.passo?`<i class="ps">${P(l.corsa.passo)}/km</i>`:''}${ua?`<i>Carico ${ua}${rs?' ~':''}</i>`:''}${rpe?`<i class="rp">RPE ${rpe}</i>`:rs?`<i class="rp st">RPE ~${rs}</i>`:''}${l.corsa&&l.corsa.centrati?`<i>passo ${l.corsa.centrati.ok}/${l.corsa.centrati.n}</i>`:''}</span>
+      ${ztot?`<span class="ac-az">${zt.map((x,k)=>`<u style="height:${Math.max(2,Math.round((+x||0)/ztot*26))}px;background:${ZC[k]}"></u>`).join('')}</span>`:''}
+      <span class="ac-an">${athEsc(titolo||l.sessName||'Attivita\'')}</span></button>`;
+  };
   let h=`<div class="ac-h"><button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',-1)" aria-label="Settimane prima">&#8249;</button><b>${tit}</b><button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',1)" aria-label="Settimane dopo">&#8250;</button>${athCalOff!==-2?`<button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',0)">Oggi</button>`:''}<span class="ac-sum" id="ac-sum"></span></div>
-  <div class="ac-g">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(g=>`<div class="ac-hd">${g}</div>`).join('')}`;
-  for(let i=0;i<28;i++){
-    const d=new Date(lun);d.setDate(d.getDate()+i);
-    // una seduta registrata e il check-in dello stesso allenamento sono una cosa sola:
-    // il registro da' il nome, il check-in l'RPE
-    const gs=d.toDateString(),L=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts&&new Date(l.ts).toDateString()===gs),C=Object.values(sessions[aid]||{}).filter(x=>x&&x.ts&&new Date(x.ts).toDateString()===gs);
-    // i registri gia' legati a una seduta del programma si vedono sul giorno previsto
-    const Ls=L.filter(l=>!(l.progId&&l.sessId!=null&&l.weekIdx!=null&&programs[l.progId]&&legati.has(l)));
-    // l'RPE del check-in del giorno non va sulle attivita' dell'orologio: hanno solo il loro
-    const F=(L.length?Ls:C).map((x,j)=>Object.assign({},x,{rpe:x.gm?(x.avgRpe||(x.rpeStima?'~'+x.rpeStima:'')):(x.rpe||(C[j]&&C[j].rpe)||(C[0]&&C[0].rpe)||'')}));
-    const P=dPreviste(aid,d),pass=d<oggi&&d.toDateString()!==oggi.toDateString(),og=d.toDateString()===oggi.toDateString();
-    let c='';
-    let usate=0;
-    P.forEach(x=>{
-      const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<F.length?F[usate++]:null;
-      const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
-      let txt='in programma';
-      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?(lg.avgRpe||(lg.rpeStima?'~'+lg.rpeStima:'')):(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):'')+(lg.corsa.centrati?' &#183; passo '+lg.corsa.centrati.ok+'/'+lg.corsa.centrati.n:''):'')+(r?' &#183; RPE '+r:'');}
-      else if(stesso)txt='fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:'');
-      else if(st==='saltata')txt='non registrata';
-      c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
-    (L.length?F:F.slice(usate)).forEach(f=>{const km=f.corsa&&f.corsa.km||f.km;c+=`<div class="ac-s fuori"><b>${athEsc(f.sessName||f.name||f.day||'Seduta')}</b><span>${f.gm?'dall\'orologio':'fuori programma'}${km?' &#183; '+String(km).replace('.',',')+' km':''}${f.rpe||f.avgRpe?' &#183; RPE '+(f.rpe||f.avgRpe):''}</span></div>`;});
-    h+=`<div class="ac-c${og?' oggi':''}${!c?' vuoto':''}"><div class="ac-d">${d.getDate()}${d.getDate()===1?' '+MESI[d.getMonth()].slice(0,3):''}</div>${c}</div>`;
+  <div class="ac-g ac-g8"><div class="ac-hd">Settimana</div>${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(g=>`<div class="ac-hd">${g}</div>`).join('')}`;
+  for(let w=0;w<4;w++){
+    // colonna della settimana: tempo, km di corsa, carico, forma e fatica
+    const a0=new Date(lun);a0.setDate(a0.getDate()+w*7);const a1=new Date(a0);a1.setDate(a1.getDate()+7);
+    const Lw=logs.filter(l=>l.ts>=a0.setHours(0,0,0,0)&&l.ts<a1.setHours(0,0,0,0));
+    const min=Lw.reduce((t,l)=>t+(+l.duration||+l.minuti||0),0),km=Lw.reduce((t,l)=>t+(l.corsa&&+l.corsa.km||0),0);
+    let ua=0;for(let i=0;i<7;i++){const d=new Date(a0);d.setDate(d.getDate()+i);ua+=loadDi(isoDay(d.getTime()));}
+    let fo=null;if(gd&&gd.days)for(let i=6;i>=0&&!fo;i--){const d=new Date(a0);d.setDate(d.getDate()+i);if(d>oggi)continue;const x=gd.days[isoDay(d.getTime())];if(x&&x.ctl)fo=x;}
+    h+=`<div class="ac-wk"><b>Sett. ${(()=>{const d=new Date(a0);d.setHours(12);const t=new Date(d);t.setDate(t.getDate()+3-((t.getDay()+6)%7));const y=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-y)/864e5-3+((y.getDay()+6)%7))/7);})()}</b>
+      <span><i>Tempo</i>${min?durTxt(min):'-'}</span><span><i>Corsa</i>${km?f1(km)+' km':'-'}</span><span><i>Carico</i>${ua?Math.round(ua):'-'}</span>
+      ${fo?`<span><i>Fitness</i><em class="fi">${Math.round(fo.ctl)}</em></span><span><i>Fatica</i><em class="fa">${Math.round(fo.atl||0)}</em></span><span><i>Forma</i><em>${Math.round(fo.ctl-(fo.atl||0))}</em></span>`:''}</div>`;
+    for(let g=0;g<7;g++){
+      const d=new Date(a0);d.setDate(d.getDate()+g);d.setHours(12,0,0,0);
+      const gs=d.toDateString(),L=logs.filter(l=>new Date(l.ts).toDateString()===gs),C=Object.values(sessions[aid]||{}).filter(x=>x&&x.ts&&new Date(x.ts).toDateString()===gs);
+      const Ls=L.filter(l=>!(l.progId&&l.sessId!=null&&l.weekIdx!=null&&programs[l.progId]&&legati.has(l)));
+      const Pv=dPreviste(aid,d),pass=d<oggi&&d.toDateString()!==oggi.toDateString(),og=d.toDateString()===oggi.toDateString();
+      // il mattino dall'orologio: FC a riposo, HRV, sonno
+      const wd=gd&&gd.days?gd.days[isoDay(d.getTime())]:null;
+      const well=wd?[wd.restingHR?'<i class="fc">FC '+wd.restingHR+'</i>':'',wd.hrvLastNightAvg?'<i>HRV '+Math.round(wd.hrvLastNightAvg)+'</i>':'',wd.sleepSeconds?'<i>'+window.RSGarmin.oreTxt(wd.sleepSeconds).replace(' ','')+'</i>':''].filter(Boolean).join(''):'';
+      let c='';let usate=0;const Fc=L.length?Ls:[];
+      Pv.forEach(x=>{
+        const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<C.length?C[usate++]:null;
+        const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
+        if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString();c+=scheda(lg,(x.x.name||'Seduta')+(altro?' ('+['dom','lun','mar','mer','gio','ven','sab'][dl.getDay()]+' '+dl.getDate()+')':''));return;}
+        const txt=stesso?'fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:''):st==='saltata'?'non registrata':'in programma';
+        c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}: apri nel programma"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
+      Fc.forEach(l=>{c+=scheda(l);});
+      if(!L.length)C.slice(usate).forEach(f=>{c+=`<div class="ac-s fuori"><b>${athEsc(f.day||'Seduta')}</b><span>fuori programma${f.rpe?' &#183; RPE '+f.rpe:''}</span></div>`;});
+      h+=`<div class="ac-c${og?' oggi':''}${!c?' vuoto':''}"><div class="ac-d">${d.getDate()}${d.getDate()===1?' '+MESI[d.getMonth()].slice(0,3):''}</div>${well?`<div class="ac-wl">${well}</div>`:''}${c}</div>`;
+    }
   }
   h+='</div>';
   const sum=nP?`<b>${nF}</b> fatte su ${nP} passate${nS?`, <b>${nS}</b> non registrate`:''}`:'';
   return h.replace('<span class="ac-sum" id="ac-sum"></span>',`<span class="ac-sum">${sum}</span>`);
 }
+// analisi di un'attivita' dal calendario: con la traccia i grafici, se no i numeri e i tratti
+window.athAttivita=function(aid,k){
+  const l=(window._acLogs||{})[aid+'|'+k];if(!l)return;
+  const tit=(l.sessName||'Attivita\'')+' '+(l.date||'');
+  if(l.gmTraccia){gmApriTraccia(aid,String(l.gmTraccia),tit);return;}
+  const P=window.RSRitmi?window.RSRitmi.passo:(x=>x),c=l.corsa||{},min=+l.duration||+l.minuti||0,rpe=+l.avgRpe||null;
+  const num=[[min?min+'\'':null,'durata'],[c.km?String(c.km).replace('.',',')+' km':(l.km?String(l.km).replace('.',',')+' km':null),'distanza'],[c.passo?P(c.passo)+'/km':null,'passo'],[c.fc||l.gmFc||null,'FC media'],[rpe||(l.rpeStima?'~'+l.rpeStima:null),'RPE'],[l.totalSets||null,'serie']].filter(x=>x[0]);
+  const mb=document.getElementById('modal-body');
+  document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
+  mb.innerHTML=`<h3>${athEsc(tit)}</h3><div class="aa-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>
+    ${c.giri&&c.giri.length?gmGiriHtml(c.giri):''}${l.note?`<p class="aa-n">"${athEsc(l.note)}"</p>`:''}
+    <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button>${l.progId&&programs[l.progId]?`<a class="btn btn-orange" href="./builder.html?prog=${encodeURIComponent(l.progId)}">Apri nel programma</a>`:''}</div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+};
 
 // ── PHASE 3: Readiness / Feedback (questionnaires)
 function qEntries(aid){return Object.entries(questionnaires[aid]||{}).map(([date,q])=>({date,r:q&&q.readiness,f:q&&q.feedback})).sort((a,b)=>b.date.localeCompare(a.date));}
