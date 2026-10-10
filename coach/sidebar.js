@@ -642,7 +642,29 @@ window.RSOrologio = (function(){
     out.centrati=q.length?{ok:q.filter(g=>g.esito==='ok').length,n:q.length}:null;
     return out;
   }
-  return {durata,passi,inFila,stima,righe,durTxt,tgTxt,fitWorkout,icu,jsonPassi,zip,scarica,nomeFile,giorno,iso,crc16,leggiFit,leggiGpx,leggiFile,confronta};
+  // giri dell'orologio (per km o per passo dell'allenamento) -> blocchi: per passo se l'orologio lo dice,
+  // se no per cambio di ritmo (oltre 12" o 4% dal blocco in corso). Fuori i giri sotto i 50 m.
+  function blocchi(laps){
+    const L=(laps||[]).filter(l=>l&&+l.s>0&&+l.m>=50);if(!L.length)return [];
+    const conStep=L.some(l=>l.step!=null),pc=x=>x.s/(x.m/1000),out=[];
+    L.forEach(l=>{const b=out[out.length-1];
+      const stesso=b&&(conStep?b.step===l.step:(Math.abs(pc(l)-pc(b))<=Math.max(12,0.04*pc(l))&&!!l.tipo===!!b.tipo));
+      if(stesso){b.ft+=(+l.fc||0)*l.s;b.fs+=l.fc?l.s:0;b.m+=+l.m;b.s+=+l.s;b.n++;}
+      else out.push({m:+l.m,s:+l.s,ft:(+l.fc||0)*l.s,fs:l.fc?+l.s:0,step:l.step,tipo:l.tipo||null,n:1});});
+    return out.map(b=>({m:b.m,s:b.s,passo:b.s/(b.m/1000),fc:b.fs?Math.round(b.ft/b.fs):null,n:b.n,step:b.step}));
+  }
+  // confronto fra le fasi in programma e i blocchi corsi: si accoppiano in ordine quando sono tanti quanti
+  function confrontaGiri(s,laps,R){
+    const B=blocchi(laps);if(!B.length)return null;
+    const fila=inFila(passi(s,R)).filter(x=>x.dur.tipo!=='open'||x.intens==='active');
+    if(B.length!==fila.length)return {blocchi:B,giri:[],centrati:null};
+    const giri=B.map((b,i)=>{const x=fila[i],t=x.target;let e='';
+      if(t&&t.tipo==='pace')e=b.passo>t.lo+3?'lento':b.passo<t.hi-3?'veloce':'ok';
+      return {nome:x.nome,intens:x.intens,bersaglio:tgTxt(t),m:b.m,s:b.s,passo:b.passo,fc:b.fc,esito:e};});
+    const q=giri.filter(g=>g.intens==='active'&&g.esito);
+    return {blocchi:B,giri,centrati:q.length?{ok:q.filter(g=>g.esito==='ok').length,n:q.length}:null};
+  }
+  return {durata,passi,inFila,stima,righe,durTxt,tgTxt,fitWorkout,icu,jsonPassi,zip,scarica,nomeFile,giorno,iso,crc16,leggiFit,leggiGpx,leggiFile,confronta,blocchi,confrontaGiri};
 })();
 
 // ── DATI DELL'OROLOGIO (garmin_data) DENTRO L'APP ──────────────────────
@@ -674,7 +696,7 @@ window.RSGarmin = (function(){
     return {id,fonti:[a.source==='intervals.icu'?'intervals':'garmin'],nome:a.name||'',tipo:tipo(a.type),ts,giorno:iso(ts),sec,km,
       passo:v>0.5?Math.round(1000/v):(km&&sec?Math.round(sec/km):null),fc:+a.avgHR?Math.round(a.avgHR):null,fcMax:+a.maxHR?Math.round(a.maxHR):null,
       dsl:+a.elevGain?Math.round(a.elevGain):null,load:+a.trainingLoad?Math.round(a.trainingLoad):null,rpe:+a.rpe>0?Math.round(+a.rpe):null,feel:+a.feel||null,
-      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null};
+      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
   }
   // attivita' senza doppioni, dalla piu' recente
   function attivita(gd){
@@ -687,6 +709,7 @@ window.RSGarmin = (function(){
       if(!d){out.push(a);return;}
       // tiene Garmin come base (training effect), prende da intervals.icu RPE, sensazioni e carico
       const g=d.fonti[0]==='garmin'?d:a,o=g===d?a:d;
+      if(!(g.laps&&g.laps.length)&&o.laps)g.laps=o.laps;
       Object.keys(o).forEach(k=>{if(g[k]==null&&o[k]!=null)g[k]=o[k];});
       g.fonti=['garmin','intervals'];if(g!==d){out[out.indexOf(d)]=g;}
     });
@@ -741,7 +764,13 @@ window.RSGarmin = (function(){
       // prima il registro gia' legato a questa attivita' (RPE dato dall'atleta), poi uno dello stesso giorno
       const k=Object.keys(out).find(k=>!usati.has(k)&&out[k].gmId!=null&&String(out[k].gmId)===String(a.id))||Object.keys(out).find(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&l.gmId==null&&iso(l.ts)===a.giorno&&compat(l,a);});
       const corsa=a.tipo==='corsa'?{fonte:a.fonti.join('+'),km:a.km,sec:a.sec,fc:a.fc,fcMax:a.fcMax,dsl:a.dsl,passo:a.passo,load:a.load,te:a.te}:null;
+      // senza seduta in programma restano i tratti corsi (per km o per cambio di ritmo)
+      const giriDi=(c,ps)=>{if(!c||!a.laps||!window.RSOrologio)return c;try{const r=ps?window.RSOrologio.confrontaGiri(ps,a.laps,null):{blocchi:window.RSOrologio.blocchi(a.laps),giri:[],centrati:null};if(!r||!r.blocchi.length)return c;
+          const gi=r.giri.length?r.giri.map(x=>({n:x.nome,m:Math.round(x.m),s:Math.round(x.s),fc:x.fc,t:x.bersaglio||null,e:x.esito||null})):r.blocchi.map((x,i)=>({n:'Tratto '+(i+1),m:Math.round(x.m),s:Math.round(x.s),fc:x.fc}));
+          return Object.assign({},c,{giri:gi},r.centrati?{centrati:r.centrati}:{});}catch(e){return c;}};
       if(k){usati.add(k);const l=out[k];
+        const pl=l.progId&&pianificate?pianificate(a.giorno).find(x=>x.pid===l.progId&&x.sid===l.sessId):null;
+        if(corsa&&!l.corsa)Object.assign(corsa,giriDi(corsa,pl&&pl.s));
         out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
       const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
@@ -750,6 +779,7 @@ window.RSGarmin = (function(){
       // nei giorni prima della stessa settimana (mai in avanti: quella si fa ancora)
       if(!p&&pianificate){const d=new Date(a.ts),dow=(d.getDay()+6)%7;for(let i=1;i<=dow&&!p;i++){const x=new Date(a.ts-i*864e5);p=pianificate(iso(x.getTime())).filter(adatta)[0];}}if(p)fatteProg.add(p.pid+'|'+p.wi+'|'+p.sid);
       if(p&&corsa&&p.s&&window.RSOrologio){try{corsa.prevKm=window.RSOrologio.stima(window.RSOrologio.passi(p.s,null)).km||null;}catch(e){}}
+      if(corsa)Object.assign(corsa,giriDi(corsa,p&&p.s));
       const d=new Date(a.ts);
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,

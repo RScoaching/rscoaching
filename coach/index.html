@@ -1316,6 +1316,7 @@ input,select,textarea{border-radius:10px}
 .rt-pg input{accent-color:var(--primary);width:16px;height:16px}
 .rt-pg details{margin-top:8px}.rt-pg summary{font-size:12px;color:var(--muted);cursor:pointer}
 .rt-pg .tdet-tab{margin:8px 0 0}.rt-pg .tdet-tab td.a{color:var(--violet2);font-weight:600}
+.gm-giri{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px;border-top:1px solid var(--border)}.gm-giri td{padding:4px 6px 4px 0;color:var(--text)}.gm-giri .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.gm-giri b{color:var(--white);font-weight:600}.gm-giri i{display:block;font-style:normal;font-size:10px;color:var(--muted)}.gm-giri .e{color:var(--muted);white-space:nowrap}.gm-giri tr.ok .e,.gm-giri tr.ok b{color:var(--violet2)}.gm-giri tr.veloce .e,.gm-giri tr.veloce b{color:#FB7185}.gm-giri tr.lento .e,.gm-giri tr.lento b{color:#FF9A6B}
 .qz7-or{font-style:normal;font-size:9.5px;color:var(--violet2);margin-left:3px}
 .rt-sum{margin:8px 0 0}.rt-sum td{padding:5px 8px}
 .rt-pg .cond{font-size:11.5px;color:var(--muted);margin-top:6px}
@@ -2575,7 +2576,7 @@ function athCalendario(aid){
       const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<F.length?F[usate++]:null;
       const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
       let txt='in programma';
-      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?lg.avgRpe:(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):''):'')+(r?' &#183; RPE '+r:'');}
+      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?lg.avgRpe:(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):'')+(lg.corsa.centrati?' &#183; passo '+lg.corsa.centrati.ok+'/'+lg.corsa.centrati.n:''):'')+(r?' &#183; RPE '+r:'');}
       else if(stesso)txt='fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:'');
       else if(st==='saltata')txt='non registrata';
       c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
@@ -3223,6 +3224,8 @@ function renderDetSessList(aid,aSess){
       }
     }
     const note=ci?.note||wlog?.note||'';
+    // corsa dall'orologio: tratto per tratto, con il passo in programma accanto
+    if(wlog?.corsa?.giri?.length&&window.RSRitmi)exHtml+=gmGiriHtml(wlog.corsa.giri);
     return `<div class="sess-item">
       <div class="sess-date">${date||'-'}</div>
       <div class="sess-body">
@@ -3366,6 +3369,10 @@ function renderDetCheckin(aid,aCi){
 }
 
 // carico esterno dall'orologio accanto a quello interno: km di corsa in 7 giorni e CTL/ATL di intervals.icu
+function gmGiriHtml(G){
+  const P=window.RSRitmi.passo,km=m=>m>=1000?String(Math.round(m/100)/10).replace('.',',')+' km':m+' m';
+  return `<table class="gm-giri"><tbody>${G.slice(0,24).map(g=>`<tr class="${g.e||''}"><td>${athEsc(g.n||'')}</td><td class="n">${km(g.m)}</td><td class="n"><b>${g.m>0?P(g.s/(g.m/1000)):''}</b>${g.t?`<i>${athEsc(g.t)}</i>`:''}</td><td class="n">${g.fc?g.fc:''}</td><td class="e">${g.e==='ok'?'nel passo':g.e==='veloce'?'piu\' veloce':g.e==='lento'?'piu\' lento':''}</td></tr>`).join('')}</tbody></table>`;
+}
 function gmTiles(aid,tile){
   if(!garminData[aid]||!window.RSGarmin)return '';
   const t7=Date.now()-7*864e5,t28=Date.now()-28*864e5,L=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.corsa&&+l.corsa.km>0);
