@@ -2110,7 +2110,8 @@ function athCarico(aid){
     d.load+=s.rpe*min;d.rpe=Math.max(d.rpe,s.rpe);d.min+=min;d.n++;if(!durBy[k])d.stimato=true;
   });
   // le attivita' dell'orologio con il loro RPE (intervals.icu) sono un carico a parte, sui minuti misurati
-  logs.filter(l=>l.gm&&+l.avgRpe>0&&+l.duration>0).forEach(l=>{const k=isoDay(l.ts),d=day[k]||(day[k]={load:0,rpe:0,min:0,n:0,stimato:false});d.load+=l.avgRpe*l.duration;d.rpe=Math.max(d.rpe,l.avgRpe);d.min+=+l.duration;d.n++;});
+  // senza RPE vale quello stimato dalla FC (segnato come stima)
+  logs.filter(l=>l.gm&&(+l.avgRpe>0||+l.rpeStima>0)&&+l.duration>0).forEach(l=>{const r=+l.avgRpe||+l.rpeStima,k=isoDay(l.ts),d=day[k]||(day[k]={load:0,rpe:0,min:0,n:0,stimato:false});d.load+=r*l.duration;d.rpe=Math.max(d.rpe,r);d.min+=+l.duration;d.n++;if(!(+l.avgRpe))d.stimato=true;});
   // serie giornaliera degli ultimi 91 giorni, oggi compreso, con gli zeri
   const oggi=new Date();oggi.setHours(12,0,0,0);
   const serie=[];
@@ -2570,7 +2571,7 @@ function athCalendario(aid){
     // i registri gia' legati a una seduta del programma si vedono sul giorno previsto
     const Ls=L.filter(l=>!(l.progId&&l.sessId!=null&&l.weekIdx!=null&&programs[l.progId]&&legati.has(l)));
     // l'RPE del check-in del giorno non va sulle attivita' dell'orologio: hanno solo il loro
-    const F=(L.length?Ls:C).map((x,j)=>Object.assign({},x,{rpe:x.gm?(x.avgRpe||''):(x.rpe||(C[j]&&C[j].rpe)||(C[0]&&C[0].rpe)||'')}));
+    const F=(L.length?Ls:C).map((x,j)=>Object.assign({},x,{rpe:x.gm?(x.avgRpe||(x.rpeStima?'~'+x.rpeStima:'')):(x.rpe||(C[j]&&C[j].rpe)||(C[0]&&C[0].rpe)||'')}));
     const P=dPreviste(aid,d),pass=d<oggi&&d.toDateString()!==oggi.toDateString(),og=d.toDateString()===oggi.toDateString();
     let c='';
     let usate=0;
@@ -2578,7 +2579,7 @@ function athCalendario(aid){
       const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<F.length?F[usate++]:null;
       const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
       let txt='in programma';
-      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?lg.avgRpe:(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):'')+(lg.corsa.centrati?' &#183; passo '+lg.corsa.centrati.ok+'/'+lg.corsa.centrati.n:''):'')+(r?' &#183; RPE '+r:'');}
+      if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString(),r=lg.gm?(lg.avgRpe||(lg.rpeStima?'~'+lg.rpeStima:'')):(lg.rpe||lg.avgRpe||rpeDel(lg.ts));txt='fatta'+(altro?' '+GGB[dl.getDay()]+' '+dl.getDate():'')+(lg.corsa&&lg.corsa.km?' &#183; '+String(lg.corsa.km).replace('.',',')+' km'+(lg.corsa.passo&&window.RSRitmi?' a '+window.RSRitmi.passo(lg.corsa.passo):'')+(lg.corsa.centrati?' &#183; passo '+lg.corsa.centrati.ok+'/'+lg.corsa.centrati.n:''):'')+(r?' &#183; RPE '+r:'');}
       else if(stesso)txt='fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:'');
       else if(st==='saltata')txt='non registrata';
       c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
@@ -2836,6 +2837,20 @@ function rtSogliaNuova(aid){
   if(!ult&&R&&R.T&&Math.abs(R.T-s.sec)<3)return null;
   return {s,pf,ora:R&&R.T?R.T:null};
 }
+// record dell'orologio che non sono ancora fra i tempi
+function rtRecordNuovi(aid){
+  const pf=window.RSGarmin&&garminData[aid]?window.RSGarmin.profilo(garminData[aid]):null,R=pf&&pf.record;if(!R)return [];
+  const L=rtLista(aid);
+  return Object.entries(R).filter(([d,x])=>x&&x.sec&&!L.some(y=>y.tipo!=='soglia'&&String(y.dist)===d&&Math.abs(y.sec-x.sec)<=2)).map(([d,x])=>({d,sec:x.sec,data:x.data}));
+}
+window.rtUsaRecord=async function(aid,d){
+  const x=rtRecordNuovi(aid).find(r=>r.d===d);if(!x)return;const RR=window.RSRitmi,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(x.data||'');
+  const voce={tipo:'gara',dist:d,sec:x.sec,time:RR.tempo(x.sec),date:m?m[3]+'/'+m[2]+'/'+m[1]:null,note:'record Garmin',src:'orologio',ts:Date.now()};
+  const r=push(ref(db,`race_times/${aid}`));await set(r,voce);
+  const tempi=Object.assign({},raceTimes[aid]||{},{[r.key]:voce}),R=rtCalcola(aid,tempi,null);
+  await update(ref(db,`athletes/${aid}`),{ritmi:R||null,ritmiBase:null});
+  if(R&&R.vdot){if(!rtAnteprima(aid,R,true))showToast('Record aggiunto, ritmi aggiornati');}else showToast('Record aggiunto');
+};
 window.rtSogliaOrologio=async function(aid){
   const x=rtSogliaNuova(aid);if(!x)return;const s=x.s,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s.data||'');
   const voce={tipo:'soglia',sec:s.sec,fc:s.fc||null,date:m?m[3]+'/'+m[2]+'/'+m[1]:new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),note:'soglia del lattato '+s.fonte,src:'orologio',ts:Date.now()};
@@ -2874,6 +2889,7 @@ function renderDetRitmi(aid){
       <td class="x" style="white-space:nowrap">${!sogl&&V&&!base?`<button type="button" class="ub" title="Calcola i ritmi da questo tempo" onclick="rtBase('${aid}','${x.id}')">Usa</button>`:''}<button type="button" class="tdel" aria-label="Elimina il tempo del ${athEsc(x.date||'')}" onclick="rtDel('${aid}','${x.id}')">&#215;</button></td></tr>`;
   }).join('');
   return `<h3 class="det-sec">Tempi e ritmi</h3>`
+    +(()=>{const rc=rtRecordNuovi(aid);return rc.length?`<div class="rt-new"><span>Record dall'orologio: ${rc.map(x=>`${RR.DNOME[x.d]} <b>${RR.tempo(x.sec)}</b>${x.data?' ('+athEsc(x.data.split('-').reverse().join('/'))+')':''} <button type="button" class="ub" style="color:var(--primary)" onclick="rtUsaRecord('${aid}','${x.d}')">Usa</button>`).join(' &#183; ')}</span></div>`:'';})()
     +(sn?`<div class="rt-new"><span>Soglia dall'orologio (${athEsc(sn.s.fonte)}${sn.s.data?', '+athEsc(sn.s.data.split('-').reverse().join('/')):''}): <b>${RR.passo(sn.s.sec)}/km</b>${sn.s.fc?' a FC '+sn.s.fc:''}.${sn.ora?' I ritmi ora usano T '+RR.passo(sn.ora)+'.':''}</span><button type="button" class="btn btn-orange btn-sm" onclick="rtSogliaOrologio('${aid}')">Usa questa soglia</button></div>`:'')
     +(nuovi.length?`<div class="rt-new"><span>${nuovi.length===1?'Un tempo nuovo':nuovi.length+' tempi nuovi'} dall'app dell'atleta: ${nuovi.map(x=>athEsc((x.tipo==='soglia'?'soglia':RR.distNome(x.dist))+' '+(x.tipo==='soglia'?RR.passo(x.sec):RR.tempo(x.sec)))).join(', ')}.</span><button type="button" class="btn btn-orange btn-sm" onclick="rtRicalcola('${aid}')">Aggiorna i ritmi</button></div>`:'')
     +top
@@ -3214,10 +3230,12 @@ function renderDetSessList(aid,aSess){
 
   return merged.map(({date,ci,wlog})=>{
     const rpe=ci?.rpe||wlog?.avgRpe||0;
+    const rpeSt=!rpe&&wlog?.rpeStima?wlog.rpeStima:0;
     const rpeCls=rpe>=9?'p-red':rpe>=7?'p-warn':'p-ok';
     const SLBL={forza:'Forza',sprint:'Sprint',plyo:'Pliometria',rec:'Recupero',priming:'Priming',squadra:'Squadra',riposo:'Riposo',pesi:'Pesi',campo:'Campo',conditioning:'Conditioning',match:'Partita',test:'Test atletico'};
     let pills='';
     if(rpe>0)pills+=`<span class="pill ${rpeCls}">RPE ${rpe}</span>`;
+    else if(rpeSt)pills+=`<span class="pill p-gray" title="Stimato dalla FC media rispetto alla FC di soglia: l'atleta non l'ha scritto">RPE ~${rpeSt}</span>`;
     if(ci?.doms)pills+=`<span class="pill p-gray">DOMS ${ci.doms}</span>`;
     if(ci?.sleep)pills+=`<span class="pill p-blue">Sonno ${ci.sleep}</span>`;
     if(wlog?.type==='match'){

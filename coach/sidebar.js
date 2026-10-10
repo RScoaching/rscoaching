@@ -750,6 +750,9 @@ window.RSGarmin = (function(){
     if(q&&typeof q.score==='number'&&o.sonno5&&punti&&q.dolori&&q.energia&&q.stress){r.score=punti(o.sonno5,q.dolori,q.energia,q.stress);r.da=(q.da||'questionario')+' con il sonno dell\'orologio';return r;}
     return q?r:Object.assign(r,{score:null});
   }
+  // RPE stimato dalla FC media rispetto alla FC di soglia (o al 90% della massima): solo dove manca l'RPE
+  function rpeDaFc(fc,lthr){if(!fc||!lthr)return null;const r=fc/lthr;return r<0.75?2:r<0.82?3:r<0.87?4:r<0.91?5:r<0.95?6:r<0.99?7:r<1.02?8:r<1.05?9:10;}
+  function fcSogliaDi(gd){const p=profilo(gd);return p&&((p.zone&&p.zone.fcSoglia)||(p.soglia&&p.soglia.fc)||(p.zone&&p.zone.fcMax&&Math.round(p.zone.fcMax*0.9)))||null;}
   // attivita' -> registri delle sedute fatte.
   // logs: i registri veri {chiave: log}; pianificate(iso) -> [{pid,wi,sid,tipo,nome}] le sedute in programma quel giorno.
   // Una corsa dell'orologio arricchisce la corsa registrata a mano lo stesso giorno; se non c'e' diventa una seduta
@@ -757,6 +760,7 @@ window.RSGarmin = (function(){
   function fondi(logs,gd,pianificate){
     const out={};Object.entries(logs||{}).forEach(([k,l])=>{if(l)out[k]=l;});
     const A=attivita(gd);if(!A.length)return out;
+    const lthr=fcSogliaDi(gd);
     const usati=new Set();
     const fatteProg=new Set(Object.values(out).filter(l=>l&&l.progId&&l.sessId!=null).map(l=>l.progId+'|'+l.weekIdx+'|'+l.sessId));
     const compat=(l,a)=>{const t=l.type||(l.totalSets?'pesi':'');if(a.tipo==='corsa')return t==='corsa'||!!l.corsa;if(a.tipo==='pesi')return t==='pesi'||(!t&&!l.corsa);return !['corsa','pesi'].includes(t)&&!l.corsa;};
@@ -784,6 +788,7 @@ window.RSGarmin = (function(){
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,
         avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},
+        !a.rpe&&rpeDaFc(a.fc,lthr)?{rpeStima:rpeDaFc(a.fc,lthr)}:{},
         corsa?{corsa}:{},a.tipo!=='corsa'&&a.km&&CON_KM[a.tipo]?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
     });
     return out;
@@ -798,10 +803,11 @@ window.RSGarmin = (function(){
     const o={};
     if(sec||fc)o.soglia={sec,fc,data:sg.data||si.data||null,fonte:sg.sec||sg.fc?'Garmin':'intervals.icu'};
     if(g.previsioni)o.previsioni=g.previsioni;
+    if(g.record)o.record=g.record;
     const z=g.zone||i.zone;if(z&&Array.isArray(z.z))o.zone=Object.assign({fonte:g.zone?'Garmin':'intervals.icu'},z);
     return Object.keys(o).length?o:null;
   }
   // zone FC leggibili: Z1..Z5 dai limiti inferiori
   function zoneTxt(z){if(!z||!Array.isArray(z.z))return null;const L=z.z.slice(0,5),o={};L.forEach((v,k)=>{const n=L[k+1];o['Z'+(k+1)]=n?v+'-'+(n-1):'>'+v;});return o;}
-  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt};
+  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt,rpeDaFc};
 })();
