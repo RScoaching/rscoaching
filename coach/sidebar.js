@@ -323,7 +323,7 @@ window.RSRitmi = (function(){
   // ritmi fissati a mano dal preparatore per un programma (programs/{pid}/ritmi/fissi): valgono sui calcolati
   function conFissi(p,R){const P=p&&p.ritmi,F=P&&P.fissi;if(!F)return R;const o=Object.assign({},R||{});Object.keys(F).forEach(c=>{if(F[c]&&c!=='RG'&&P[c]!=null)o[c]=P[c];});return o;}
   function rgProgramma(p,R){
-    const I=p&&p.intake||{};const D=+I.garaDist;
+    const I0=p&&p.intake||{},I=I0.obiettivo==='ibrido'&&[5,10,21].includes(+I0.ibGara)?Object.assign({},I0,{obiettivo:'gara',garaDist:+I0.ibGara}):I0;const D=+I.garaDist;
     // un ritmo gara fissato da un piano importato (PDF del preparatore) e' la decisione piu' recente: vince sulla scheda
     if(p&&p.ritmi&&p.ritmi.RGfisso&&p.ritmi.RG)return p.ritmi.RG;
     if(I.obiettivo==='gara'&&D&&sec(I.garaTempo))return Math.round(sec(I.garaTempo)/(DIST[String(D)]||D*1000)*1000);
