@@ -4498,7 +4498,7 @@ function stDefault(){
   return {aid:'',nome:'',sesso:'',sport:'nessuno',sportNome:'',sqAll:3,sqGiorni:[],partita:6,stagione:'pre',
     attivita:'pesi',livello:'princ',kmSett:'',uscite:'',lungo:'',t5:'',t10:'',rmSquat:'',rmPanca:'',rmStacco:'',
     giorni:[true,false,true,false,true,false,false],minuti:60,materiale:'palestra',attrezzi:[],
-    obiettivo:'salute',garaDist:10,ibGara:'',garaData:'',garaTempo:'',liftObj:'Squat',liftDa:'',liftA:'',
+    obiettivo:'salute',garaDist:10,ibGara:'',ibPrio:'auto',garaData:'',garaTempo:'',liftObj:'Squat',liftDa:'',liftA:'',
     carenze:[],inizio:stFmtD(stLunediProssimo()),settimane:8,blocco:3,nomeProg:'',
     // quante sedute per tipo: null vuol dire "il consigliato"
     nForza:null,nCorsa:null,nVel:null,nCond:null,nMob:null,split:'auto',
@@ -4523,7 +4523,7 @@ function stNorm(I){
   Object.keys(I.esAdd).forEach(k=>{if(!Array.isArray(I.esAdd[k]))I.esAdd[k]=Object.values(I.esAdd[k]||{});});
   if(I.settimana&&!Array.isArray(I.settimana))I.settimana=Object.values(I.settimana);
   if(I.scarichiMan&&!Array.isArray(I.scarichiMan))I.scarichiMan=Object.values(I.scarichiMan);
-  if(I.obiettivo==='ibrido'&&[5,10,21].includes(+I.ibGara))I.garaDist=+I.ibGara;
+  if(I.obiettivo==='ibrido'&&[5,10,21,42].includes(+I.ibGara))I.garaDist=+I.ibGara;
   const N=stNumeri(I);
   I.attivita=I.sport!=='nessuno'?'sport':N.corsa&&N.forza?'ibrido':N.corsa?'corsa':'pesi';
   return I;
@@ -4564,7 +4564,7 @@ function stNomiFasi(I){
   return nomi;
 }
 // la corsa ha una gara: obiettivo gara, o ibrido con una gara fino alla mezza (forza e corsa insieme)
-function stGr(I){return I.obiettivo==='gara'||(I.obiettivo==='ibrido'&&[5,10,21].includes(+I.ibGara));}
+function stGr(I){return I.obiettivo==='gara'||(I.obiettivo==='ibrido'&&[5,10,21,42].includes(+I.ibGara));}
 function stTaper(I){return stGr(I)?({5:1,10:1,21:2,42:3}[I.garaDist]||1):0;}
 function stFasi(I){
   const N=stSettimane(I),B=Math.max(2,Math.min(5,+I.blocco||3))+1; // 3 vuol dire 3 di carico e 1 di scarico
@@ -4592,7 +4592,27 @@ function stFasi(I){
   // chi e' fermo o fa oggi molto meno di quanto chiede il programma parte con due o tre settimane di rientro
   const R=stRientro(I);out.forEach((w,i)=>{w.rientro=i<R&&w.tipo==='carico';});
   let fz='',pp=0;out.forEach((w,i)=>{if(w.fase!==fz||(i&&out[i-1].tipo==='scarico')){fz=w.fase;pp=0;}w.pp=Math.min(2,pp);if(w.tipo==='carico')pp++;});
+  if(I.obiettivo==='ibrido')stEnfasi(I,out);
   return out;
+}
+/* Ibrido a blocchi (Issurin): migliorare forza e corsa insieme si puo', ma non tutto al
+   massimo nello stesso momento. Ogni settimana ha un'enfasi:
+   - corsa: il volume di corsa cresce, la forza va in mantenimento (1-2 sedute pesanti
+     e corte, 3-5 ripetizioni all'80-85%: Ronnestad 2011 e 2015, la forza resta per mesi
+     e l'economia di corsa migliora);
+   - forza: progressione di forza, la corsa tiene i km senza crescere;
+   - equilibrio: tutte e due, come prima.
+   Con una gara le ultime settimane (dalla maratona 12 alla 5 km 6) sono un blocco di
+   corsa e il resto equilibrio; senza gara si alternano blocchi di forza e di corsa. */
+function stEnfasi(I,fasi){
+  const pr=I.ibPrio||'auto',B=Math.max(2,Math.min(5,+I.blocco||3))+1,n=fasi.length;
+  let seq;
+  if(pr==='forza'||pr==='corsa'||pr==='equi')seq=fasi.map(()=>pr);
+  else if(pr==='alterna'||(pr==='auto'&&!stGr(I)))seq=fasi.map((w,i)=>Math.floor(i/B)%2===0?'forza':'corsa');
+  else{const fin=({5:6,10:8,21:10,42:12}[+I.garaDist]||8);seq=fasi.map((w,i)=>i>=n-fin?'corsa':'equi');}
+  fasi.forEach((w,i)=>{w.enf=w.tipo==='taper'||w.tipo==='gara'?'corsa':seq[i];});
+  // quante volte e' gia' venuto un blocco di forza: il primo accumula, i successivi intensificano
+  let k=0,prev='';fasi.forEach(w=>{if(w.enf==='forza'&&prev!=='forza')k++;w.blkF=w.enf==='forza'?k:0;prev=w.enf;});
 }
 
 // ── quante sedute e di che tipo ───────────────────────────────────
@@ -4616,7 +4636,9 @@ function stConsigli(I){
   else if(o==='estetica'){c.forza=Math.min(d,{zero:2,princ:3,inter:4,avanz:5}[L]);if(d>c.forza)c.cond=1;}
   // ibrido: tre corse (qualita', facile, lungo) e due o tre di forza; con 5 giorni
   // una doppia (corsa facile e parte alta), come nei programmi ibridi di riferimento
-  else if(o==='ibrido'){c.forza=L==='zero'?2:Math.min(3,Math.max(2,d-2));c.corsa=Math.min(3,Math.max(2,d-1));if(L==='zero')c.corsa=Math.min(c.corsa,2);}
+  else if(o==='ibrido'){c.forza=L==='zero'?2:Math.min(3,Math.max(2,d-2));c.corsa=Math.min(3,Math.max(2,d-1));if(L==='zero')c.corsa=Math.min(c.corsa,2);
+    // maratona nell'ibrido: quattro corse e la forza a due
+    if(stGr(I)&&+I.garaDist===42&&L!=='zero'){c.corsa=Math.min(4,Math.max(3,d-1));c.forza=2;}}
   else if(o==='sport'||sport){
     c.forza=L==='zero'?1:(+I.sqAll>=(I.stagione==='in'?4:5)?1:2);
     const lib=d-c.forza;
@@ -5078,7 +5100,7 @@ function stPrescr0(I,w,ruolo,name){
     return {sets:3,reps:'6-8',rpe:String(7+Math.min(1,pp)),rest:'2\''};
   }
   // sport in stagione: poco volume e niente cedimento, la fatica la fanno campo e partita
-  const ins=I.obiettivo==='sport'&&I.stagione==='in';
+  const ins=(I.obiettivo==='sport'&&I.stagione==='in')||(I.obiettivo==='ibrido'&&w.enf==='corsa');
   if(ins&&!scarico&&['acc','iso','main2','mainU'].includes(ruolo))return ruolo==='main2'||ruolo==='mainU'?{sets:2+Math.min(1,pp),reps:'4-5',rpe:'7-8',rest:'2\'',cue:'mantenimento: carico alto, lontano dal cedimento'}:{sets:2,reps:ruolo==='iso'?'8-10':'6-8',rpe:'7',rest:'75"'};
   if(ruolo==='iso')return {sets:scarico?2:3,reps:'10-12',rpe:scarico?'6':String(7+Math.min(1,pp)),rest:'60"'};
   if(ruolo==='acc'){
@@ -5110,7 +5132,9 @@ function stPrescr0(I,w,ruolo,name){
   // le altre principali restano sui carichi dell'intensificazione
   let ff=f,idx=pp;
   if(I.obiettivo==='forza'&&/Realizzazione/.test(f)&&name&&name!==I.liftObj){ff='Intensificazione';idx=2;}
-  if(I.obiettivo==='gara'||I.obiettivo==='ibrido')ff=fr===1?'Intensificazione':fr===2?'Mantenimento':'Accumulo';
+  if(I.obiettivo==='gara')ff=fr===1?'Intensificazione':fr===2?'Mantenimento':'Accumulo';
+  // ibrido: la forza segue l'enfasi del blocco
+  if(I.obiettivo==='ibrido')ff=w.enf==='corsa'?'Mantenimento':w.enf==='forza'?(w.blkF>=2?'Intensificazione':'Accumulo'):(fr===1?'Intensificazione':fr===2?'Mantenimento':'Accumulo');
   let tab;
   if(/Accumulo|Ipertrofia|Adattamento|Base|Forza generale|Ricondizionamento/.test(ff))tab=[[3,'10',65],[4,'8',70],[4,'8',72.5]];
   else if(/Intensificazione|Forza massima|Sviluppo|Costruzione|Rinforzo/.test(ff))tab=[[4,'6',75],[5,'5',77.5],[5,'4',80]];
@@ -5155,8 +5179,9 @@ function stKm(I,fasi,nC){
   const li={zero:0,princ:1,inter:2,avanz:3}[L]||1;
   // il picco tiene conto delle uscite: con tre corse a settimana 50 km vorrebbero
   // dire corse facili da 18 km, che nessuno prescrive
-  const tetto=nC?nC*({zero:5,princ:9,inter:13,avanz:16}[L]||12):999;
-  const picco=stNum(I.kmPicco)||Math.min(Math.max(start,tetto),stGr(I)?Math.max(start,picchi[D][li]*(I.obiettivo==='ibrido'?0.85:1)):start*1.3);
+  // per mezza e maratona il lungo pesa di piu' sulla settimana: il tetto lo tiene in conto
+  const tetto=nC?nC*({zero:5,princ:9,inter:13,avanz:16}[L]||12)+(stGr(I)&&D>=21?Math.round(stLungoMax(I)*0.6):0):999;
+  const picco=stNum(I.kmPicco)||Math.min(Math.max(start,tetto),stGr(I)?Math.max(start,picchi[D][li]*(I.obiettivo==='ibrido'?({forza:0.75,corsa:1}[I.ibPrio]||(D>=42?0.95:0.9)):1)):start*1.3);
   // quanto serve crescere a settimana per arrivare al picco prima del taper, ma mai piu' del 10%
   const carico=fasi.filter(w=>w.tipo==='carico').length;
   // dopo una lesione di tendine, piede, caviglia o crociato la corsa cresce al massimo del 5% a settimana
@@ -5164,6 +5189,7 @@ function stKm(I,fasi,nC){
   const passo=Math.min(tendini?1.05:1.10,Math.max(1.03,Math.pow(Math.max(1,picco/start),1/Math.max(1,carico-2))));
   let km=start;const out=[];
   fasi.forEach(w=>{
+    if(w.enf==='forza'&&w.tipo==='carico'){out.push(Math.round(km*0.9));return;}
     if(w.tipo==='scarico')out.push(Math.round(km*0.75));
     else if(w.tipo==='taper')out.push(Math.round(km*(w.n===fasi.length-1?0.6:0.75)));
     else if(w.tipo==='gara')out.push(Math.round(km*0.45));
@@ -5173,9 +5199,11 @@ function stKm(I,fasi,nC){
 }
 function stLungoMax(I){
   const D=+I.garaDist||10;
-  // nell'ibrido il lungo si ferma un po' prima: le gambe servono anche alla forza
-  if(I.obiettivo==='ibrido'&&stGr(I))return stNum(I.lungoMax)||({5:10,10:14,21:19}[D]||14);
-  return stNum(I.lungoMax)||(I.obiettivo==='gara'?({5:12,10:16,21:22,42:I.livello==='avanz'?34:32}[D]||16):14);
+  // il lungo massimo dipende da distanza e livello: per la mezza chi e' avanti fa anche
+  // 22-24 km (sopra la distanza di gara, Pfitzinger), per la maratona 30-35 (mai oltre ~3 ore)
+  const LM={5:{zero:6,princ:8,inter:12,avanz:15},10:{zero:8,princ:12,inter:16,avanz:20},21:{zero:14,princ:18,inter:21,avanz:24},42:{zero:26,princ:28,inter:32,avanz:35}};
+  if(stGr(I))return stNum(I.lungoMax)||(LM[D]||LM[10])[I.livello]||16;
+  return stNum(I.lungoMax)||14;
 }
 // il lungo ha la sua progressione: da quello di oggi al lungo massimo, raggiunto
 // nell'ultima settimana di carico prima del taper; scarico al 70%, taper a scendere
@@ -5183,11 +5211,13 @@ function stLunghi(I,fasi){
   const kmS=stNum(I.kmSett)||{zero:6,princ:15,inter:28,avanz:45}[I.livello];
   const L0=Math.max(6,stNum(I.lungo)||Math.round(kmS*0.35));
   const Lmax=Math.max(L0,stLungoMax(I));
-  const car=fasi.map((w,i)=>w.tipo==='carico'?i:-1).filter(i=>i>=0);
+  // nei blocchi di forza dell'ibrido il lungo non cresce
+  const car=fasi.map((w,i)=>w.tipo==='carico'&&w.enf!=='forza'?i:-1).filter(i=>i>=0);
   const n=Math.max(1,car.length-1);
   const out=[];let ult=L0;
   fasi.forEach((w,i)=>{
-    if(w.tipo==='carico'){const k=car.indexOf(i);ult=Math.round(L0+(Lmax-L0)*Math.min(1,k/n));out.push(ult);}
+    if(w.tipo==='carico'&&w.enf==='forza')out.push(Math.round(ult*0.9));
+    else if(w.tipo==='carico'){const k=car.indexOf(i);ult=Math.round(L0+(Lmax-L0)*Math.min(1,k/n));out.push(ult);}
     else if(w.tipo==='scarico')out.push(Math.round(ult*0.7));
     else if(w.tipo==='taper')out.push(Math.round(ult*(i===fasi.length-2?0.5:0.65)));
     else out.push(0);
@@ -5209,7 +5239,8 @@ function stPassi(I,rit){
 }
 function stQuota(I,nC){
   const D=+I.garaDist||10;let q=nC>=5?0.33:nC===4?0.37:0.42;
-  if(stGr(I)&&D>=42)q+=0.05;else if(stGr(I)&&D>=21)q+=0.07;
+  // maratona nell'ibrido: meno corse, il lungo arriva a meta' della settimana (amatori con 4 uscite)
+  if(stGr(I)&&D>=42)q+=I.obiettivo==='ibrido'?0.13:0.05;else if(stGr(I)&&D>=21)q+=0.07;
   return q;
 }
 function stKmRuoli(I,w,kmW,tipo,rit){
@@ -5992,7 +6023,9 @@ function stProposta(I){
   if(stDonna(I)&&(sportF||I.obiettivo==='gara'||I.obiettivo==='ibrido'))avvisi.push('Energia: tre mesi senza ciclo, ciclo che cambia con l\'allenamento, stanchezza che non passa o fratture da stress sono segnali di bassa disponibilita\' energetica (RED-S): se ci sono si mangia di piu\' e si sente il medico prima di aumentare i carichi.');
   if(I.sport==='calcio')avvisi.push('Calcio: in settimana una volta oltre il 90% della velocita\' massima (a MD-3 o MD-4), Nordic e Copenhagen per tutta la stagione (Copenhagen: problemi all\'inguine -41%, Haroy 2019). Chi gioca poco recupera lo sprint il giorno dopo la partita.');
   if(I.obiettivo==='ibrido'&&stGr(I)&&+I.garaDist===21&&T.nC<3)avvisi.push('Ibrido con la mezza: servono almeno 3 corse a settimana (lungo, qualita\' e facile), ne sono previste '+T.nC+'.');
-  if(I.obiettivo==='ibrido'&&stGr(I))avvisi.push('Ibrido con gara: la forza resta pesante fino al taper, poi scende a mantenimento; le gambe pesanti mai il giorno prima del lungo o della qualita\'.');
+  if(I.obiettivo==='ibrido'){const bl=[];fasi.forEach(w=>{const e=w.enf||'equi';const u=bl[bl.length-1];if(u&&u.e===e)u.b=w.n;else bl.push({e,a:w.n,b:w.n});});
+    avvisi.push('Ibrido a blocchi: '+bl.map(x=>'S'+x.a+(x.b>x.a?'-'+x.b:'')+' '+({forza:'forza (la corsa tiene i km)',corsa:'corsa (forza in mantenimento, 2 sedute pesanti e corte)',equi:'equilibrio'}[x.e])).join(', ')+'. La forza pesante non toglie corsa: migliora l\'economia (Ronnestad); in mantenimento bastano 1-2 sedute a settimana.');
+    if(+I.garaDist===42&&stGr(I)&&T.nC<4)avvisi.push('Maratona nell\'ibrido: con '+T.nC+' corse a settimana e\' dura; meglio 4, con la forza solo in mantenimento.');}
   if(I.obiettivo==='ibrido'&&stUomo(I))avvisi.push('Ibrido: negli uomini la corsa toglie un po\' di forza alle gambe (nelle donne meno, Schumann 2023). Le gambe vanno prima della corsa o ad almeno 3 ore, le ripetute brevi (fino a 10 secondi) non danno interferenza.');
   if(I.obiettivo==='gara'&&I.livello!=='zero')avvisi.push(I.livello==='avanz'&&+I.garaDist<=10?'Intensita\': distribuzione polarizzata, quasi tutto facile e la qualita\' a VO2max, che negli atleti allenati alza di piu\' il massimo consumo di ossigeno (Rosenblat 2025).':'Intensita\': distribuzione piramidale, tanto facile, una parte a soglia e poco a VO2max: per chi corre per se\' rende quanto la polarizzata ed e\' piu\' sostenibile (Rosenblat 2025).');
   const tdol=stTendDol(I),tst=stTendStab(I);
@@ -6034,7 +6067,7 @@ function stCostruisci(I,P){
     const sessions={};
     let ord=0,kmSett=0;
     const bi=P.fasi.slice(0,wi).filter(x=>x.tipo==='scarico').length,dl=w.tipo==='scarico'||w.tipo==='taper';
-    const lbl='S'+w.n+' '+w.fase+(w.tipo==='scarico'?' scarico':w.tipo==='taper'?' taper':w.tipo==='gara'?' gara':'');
+    const lbl='S'+w.n+' '+w.fase+(w.tipo==='scarico'?' scarico':w.tipo==='taper'?' taper':w.tipo==='gara'?' gara':'')+(I.obiettivo==='ibrido'&&w.tipo!=='taper'&&w.tipo!=='gara'&&w.enf&&w.enf!=='equi'?' · blocco '+w.enf:'');
     // test d'ingresso nella prima settimana, e di nuovo in fondo se non c'e' una gara
     const conTest=wi===0||(wi===P.fasi.length-1&&I.obiettivo!=='gara'&&P.fasi.length>=6);
     const fine=wi>0;
@@ -6070,6 +6103,8 @@ function stCostruisci(I,P){
     P.tipo.forEach((g,gi)=>{
       if(gi===iTest)return;
       if((w.tipo==='taper'||w.tipo==='gara')&&g.tipo==='pesi'&&pesiTaper.indexOf(gi)>0)return;
+      // ibrido, blocco di corsa: la forza si mantiene con due sedute al massimo
+      if(I.obiettivo==='ibrido'&&w.enf==='corsa'&&g.tipo==='pesi'&&pesiTaper.indexOf(gi)>=2)return;
       if(w.tipo==='gara'&&g!==lg){
         if(g.d>=dGara)return;
         if(g.tipo!=='corsa'&&dGara-g.d<=3)return;
@@ -6651,7 +6686,8 @@ function stForm(){
   h+=`<section class="pz-sec"><h4><b>2</b>Obiettivo</h4>`+
     stRiga('Obiettivo',stChips('obiettivo',Object.entries(ST_OBJ)))+
     (I.obiettivo==='gara'?stRiga('Gara',stChips('garaDist',Object.entries(ST_DIST)))+stRiga('Data e tempo',`<span class="pz-inline">${stIn('garaData','gg/mm/aaaa',100)} obiettivo ${stIn('garaTempo','h:mm:ss',80)}</span>`):'')+
-    (I.obiettivo==='ibrido'?stRiga('Gara di corsa',stChips('ibGara',[['','Nessuna'],['5','5 km'],['10','10 km'],['21','Mezza maratona']]),'facoltativa: al massimo la mezza')+(stGr(I)?stRiga('Data e tempo',`<span class="pz-inline">${stIn('garaData','gg/mm/aaaa',100)} obiettivo ${stIn('garaTempo','h:mm:ss',80)}</span>`):''):'')+
+    (I.obiettivo==='ibrido'?stRiga('Gara di corsa',stChips('ibGara',[['','Nessuna'],['5','5 km'],['10','10 km'],['21','Mezza maratona'],['42','Maratona']]),'facoltativa')+
+      stRiga('Priorita\'',stChips('ibPrio',[['auto',stGr(I)?'Dalla gara':'Blocchi alterni'],['equi','Equilibrio'],['forza','Piu\' forza'],['corsa','Piu\' corsa']].concat(stGr(I)?[['alterna','Blocchi alterni']]:[])),stGr(I)?'prima equilibrio, poi il blocco della gara':'forza e corsa a blocchi alterni')+(stGr(I)?stRiga('Data e tempo',`<span class="pz-inline">${stIn('garaData','gg/mm/aaaa',100)} obiettivo ${stIn('garaTempo','h:mm:ss',80)}</span>`):''):'')+
     (I.obiettivo==='forza'?stRiga('Esercizio',`<select class="pz-in pz-sel" data-st-sel="liftObj">${ST_LIFT.map(x=>`<option${I.liftObj===x?' selected':''}>${x}</option>`).join('')}</select> <span class="pz-inline">da ${stIn('liftDa','kg',56,'decimal')} a ${stIn('liftA','kg',56,'decimal')} kg</span>`):'')+
     (I.obiettivo==='sport'?stRiga('Sport',stChips('sport',[['calcio','Calcio'],['altro','Altro sport']])+(I.sport==='altro'?stIn('sportNome','quale',140):''))+
       stRiga('Periodo',stChips('stagione',[['pre','Pre-campionato'],['in','In stagione'],['off','Fuori stagione']]),'decide fasi e volumi')+
@@ -6909,8 +6945,8 @@ document.addEventListener('click',e=>{
     if((k==='obiettivo'||k==='garaDist')&&stI.obiettivo==='gara')stI.settimane={5:8,10:10,21:12,42:16}[stI.garaDist]||10;
     // cambiata la lesione del ritorno: quella di prima non resta come infortunio recente
     if(k==='rtpInf'&&old&&old!==stI.rtpInf&&stI.infortuni[old]==='rec')delete stI.infortuni[old];
-    if(['obiettivo','garaDist','ibGara','stagione','livello','split','sport','qualita','materiale','sesso','rtpFase','rtpSport'].includes(k))stI.settimana=null;
-    if(['obiettivo','settimane','blocco','garaDist','ibGara','stagione','rtpFase','rtpSport','rtpGrado','rtpTend','rtpMecc'].includes(k)){stI.fasiW=null;stI.scarichiMan=null;}
+    if(['obiettivo','garaDist','ibGara','ibPrio','stagione','livello','split','sport','qualita','materiale','sesso','rtpFase','rtpSport'].includes(k))stI.settimana=null;
+    if(['obiettivo','settimane','blocco','garaDist','ibGara','ibPrio','stagione','rtpFase','rtpSport','rtpGrado','rtpTend','rtpMecc'].includes(k)){stI.fasiW=null;stI.scarichiMan=null;}
     if(k==='rtpInf')stI.rtpGrado='';
     stRender();return;}
   const g=t.closest('[data-st-g]');
