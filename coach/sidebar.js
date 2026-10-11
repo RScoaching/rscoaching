@@ -855,6 +855,7 @@ window.RSTraccia = (function(){
 .trk2-spb button:hover u{opacity:1}
 .trk2-spt{margin:6px 0 6px}.trk2-spt summary{font-size:11.5px;color:var(--mu);cursor:pointer}.trk2-spt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;color:var(--tx)}.trk2-spt th{text-align:right;font-weight:500;color:var(--mu);font-size:10.5px;padding:3px 6px;border-bottom:1px solid var(--bd)}.trk2-spt td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}.trk2-spt th:first-child,.trk2-spt td:first-child{text-align:left}.trk2-spt b{color:var(--c-passo)}
 .trk2-fc{padding:10px 12px;border-top:1px solid var(--bd)}.trk2-fc:empty{display:none}
+.trk2-mgl{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 10px}.trk2-mgl button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;font:500 11px Inter,sans-serif;padding:7px 11px;border-radius:10px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums;min-width:78px}.trk2-mgl button b{font-size:14px;color:var(--tx)}.trk2-mgl button i{font-style:normal;color:var(--c-passo)}.trk2-mgl button.sel{outline:2px solid var(--tx)}
 .trk2-mg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--bd)}.trk2-mg:empty{display:none}.trk2-mg>b{font-size:12.5px;color:var(--tx);margin-right:4px}
 .trk2-mg button{font:500 11.5px Inter,sans-serif;padding:5px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums}.trk2-mg button b{color:var(--tx)}.trk2-mg button i{font-style:normal;color:var(--c-passo)}
 .trk2-fch{display:flex;gap:8px;align-items:baseline;margin-bottom:8px}.trk2-fch b{font-size:12.5px;color:var(--tx)}.trk2-fch i{font-style:normal;font-size:11px;color:var(--mu)}
@@ -911,18 +912,17 @@ window.RSTraccia = (function(){
       tratti=B.map((b,k)=>{const a=acc;acc+=b.m;const i0=D.findIndex(x=>x!=null&&x>=a),i1=D.findIndex(x=>x!=null&&x>=acc);return {k,i0:Math.max(0,i0),i1:i1<0?n-1:i1,m:b.m,s:b.s,passo:b.passo,fc:b.fc,lav:B.length>1&&b.passo<med-5};}).filter(x=>x.i1>x.i0);}
     const kmSplit=[];if(D[n-1]){let a=0;for(let k=1;k<=Math.ceil(D[n-1]/1000);k++){const lim=k*1000;let b=D.findIndex((x,i)=>i>a&&x!=null&&x>=lim);if(b<0)b=n-1;if(b>a&&(D[b]-D[a])>=150)kmSplit.push({i0:a,i1:b,nome:k<=Math.floor(D[n-1]/1000)?String(k):kmTxt(D[n-1])});a=b;if(b>=n-1)break;}}
     let SP=(()=>{try{return localStorage.getItem('rs_trk_split')||'km';}catch(e){return 'km';}})();
+    const MG=migliori(tr);   // migliori tratti della corsa, una scheda degli split
     let B=null,Bnome='';   // corsa di confronto: curve tratteggiate sulla stessa scala
     let T0=tema(),AX=asse(),v0=0,v1=n-1,cur=null,drag=null,map=null,mk=null,lineSel=null,lineAll=null;
     el.innerHTML=`<div class="trk2 ${T0}">
       <div class="trk2-bar"></div><div class="trk2-sel"></div>
       <div class="trk2-sp"></div>
-      <div class="trk2-tl"><canvas></canvas></div>
-      <div class="trk2-gi"></div>
-      <div class="trk2-mg"></div>
+      <div class="trk2-tl" title="Trascina per zoomare su un tratto, doppio clic per tutta la corsa"><canvas></canvas></div>
       <div class="trk2-fc"></div>
       ${haMappa?'<div class="trk2-map"></div>':''}
-      <div class="trk2-aiuto">Passa sopra per i valori del punto. Trascina per scegliere un tratto e zoomare, doppio clic per tornare a tutta la corsa.</div></div>`;
-    const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=box.querySelector('.trk2-gi'),mgBox=box.querySelector('.trk2-mg');
+</div>`;
+    const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=null;
     function colori(){const C=TEMI[T0];box.className='trk2 '+T0;['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
     colori();
     const X=i=>AX==='tempo'?T[i]:(D[i]!=null?D[i]:0);
@@ -1023,11 +1023,13 @@ window.RSTraccia = (function(){
       return {dur,dist,passo:dist>0?dur/(dist/1000):null,fc:fc?Math.round(fs/fc):null,fcMax:fm||null,cad:cc?Math.round(cs/cc):null,gain:Math.round(gain)};}
     // split sopra la linea temporale: per km o per tratti dell'allenamento, barre alte quanto la velocita'
     function split(){
+      const tabs=`<div class="trk2-sph"><b>Split</b><button type="button" data-sp="km" class="${SP!=='tratti'&&SP!=='migliori'?'on':''}">Per km</button>${tratti.length>1?`<button type="button" data-sp="tratti" class="${SP==='tratti'?'on':''}">Per allenamento</button>`:''}${MG.length?`<button type="button" data-sp="migliori" class="${SP==='migliori'?'on':''}">Migliori tratti</button>`:''}<i>clic per zoomare</i></div>`;
+      if(SP==='migliori'&&MG.length){spBox.innerHTML=tabs+`<div class="trk2-mgl">${MG.map((x,k)=>`<button type="button" data-mg="${k}" class="${x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1)?'sel':''}"><span>${DMNOME[x.m]}</span><b>${hms(x.s)}</b><i>${mmss(x.s/(x.m/1000))}/km</i></button>`).join('')}</div>`;spBox._S=null;return;}
       const L=SP==='tratti'&&tratti.length>1?tratti.map(t=>({i0:t.i0,i1:t.i1,nome:String(t.k+1),lav:t.lav})):kmSplit;
-      if(L.length<2){spBox.innerHTML='';return;}
+      if(L.length<2){spBox.innerHTML=MG.length?tabs:'';return;}
       const S=L.map(x=>Object.assign({},x,stat(x.i0,x.i1))).filter(x=>x.passo),ps=S.map(x=>x.passo),lo=Math.min(...ps),hi=Math.max(...ps),med=quant(ps,0.5);
       const tot=S.reduce((t,x)=>t+x.dist,0);
-      spBox.innerHTML=`<div class="trk2-sph"><b>Split</b><button type="button" data-sp="km" class="${SP!=='tratti'?'on':''}">Per km</button>${tratti.length>1?`<button type="button" data-sp="tratti" class="${SP==='tratti'?'on':''}">Per allenamento</button>`:''}<i>clic su una barra per zoomare</i></div>
+      spBox.innerHTML=tabs+`
         <div class="trk2-spb">${S.map((x,k)=>{const h=hi>lo?28+Math.round((hi-x.passo)/(hi-lo)*52):60,dentro=x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1);
           return `<button type="button" data-k="${k}" class="${x.passo<med-3?'svelto':x.passo>med+8?'lento':''}${dentro?' sel':''}" style="flex:${Math.max(0.35,x.dist/tot*S.length)}" title="${x.nome}: ${kmTxt(x.dist)} km in ${hms(x.dur)}"><i>${x.nome}</i><u style="height:${h}px"></u><b>${mmss(x.passo)}</b>${x.fc?`<s>${x.fc}</s>`:''}</button>`;}).join('')}</div>
         <details class="trk2-spt"><summary>Tabella degli split</summary><table><thead><tr><th>${SP==='tratti'?'Tratto':'Km'}</th><th>Dist.</th><th>Tempo</th><th>Passo</th><th>FC</th><th>max</th><th>Cad.</th><th>Salita</th></tr></thead><tbody>${S.map(x=>`<tr><td>${x.nome}</td><td>${kmTxt(x.dist)}</td><td>${hms(x.dur)}</td><td><b>${mmss(x.passo)}</b></td><td>${x.fc||'-'}</td><td>${x.fcMax||'-'}</td><td>${x.cad||'-'}</td><td>${x.gain} m</td></tr>`).join('')}</tbody></table></details>`;
@@ -1035,6 +1037,7 @@ window.RSTraccia = (function(){
     }
     spBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.sp){SP=b.dataset.sp;try{localStorage.setItem('rs_trk_split',SP);}catch(x){}split();return;}
+      if(b.dataset.mg!=null){const m=MG[+b.dataset.mg];if(m)zoom(m.i0,m.i1);return;}
       const x=(spBox._S||[])[+b.dataset.k];if(x)zoom(x.i0,x.i1);});
     // frequenza cardiaca della vista: tempo nelle zone, deriva cardiaca (passo su FC fra prima e seconda meta'), sopra soglia
     function pannelloFc(){
@@ -1063,12 +1066,6 @@ window.RSTraccia = (function(){
     wrap.addEventListener('touchstart',e=>cursore(idx(pos(e))),{passive:true});
     wrap.addEventListener('touchmove',e=>cursore(idx(pos(e))),{passive:true});
     // tratti dell'orologio come pulsanti: clic = zoom su quel tratto
-    giBox.innerHTML=tratti.length>1?tratti.map(t=>`<button type="button" data-k="${t.k}" class="${t.lav?'lav':''}">${t.k+1} &#183; ${kmTxt(t.m)} km &#183; <b>${mmss(t.passo)}</b>${t.fc?' &#183; '+t.fc:''}</button>`).join(''):'';
-    giBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const t=tratti[+b.dataset.k];if(t)zoom(t.i0,t.i1);});
-    // migliori tratti della corsa: clic = zoom su quel pezzo
-    const MG=migliori(tr);
-    mgBox.innerHTML=MG.length?`<b>Migliori tratti</b>${MG.map((x,k)=>`<button type="button" data-k="${k}" title="${DMNOME[x.m]} in ${hms(x.s)}">${DMNOME[x.m]} <b>${hms(x.s)}</b> <i>${mmss(x.s/(x.m/1000))}/km</i></button>`).join('')}`:'';
-    mgBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const x=MG[+b.dataset.k];if(x)zoom(x.i0,x.i1);});
     // mappa
     let tile=null;
     function tessere(){if(!map||!window.L)return;if(tile)map.removeLayer(tile);tile=window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'trk2-osm',attribution:'&copy; OpenStreetMap'}).addTo(map);}
