@@ -866,7 +866,9 @@ window.RSTraccia = (function(){
 .trk2-lnb{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 12px 2px}.trk2-lnb>i{font-style:normal;font-size:10.5px;color:var(--mu);margin-right:2px}
 .trk2-lnb button{font:600 11px Inter,sans-serif;padding:4px 10px;border-radius:999px;border:1px solid var(--bd);background:transparent;color:var(--mu);cursor:pointer;text-decoration:line-through;opacity:.7}
 .trk2-lnb button.on{text-decoration:none;opacity:1;color:var(--tx);background:var(--pan)}.trk2-lnb button.on.c-passo{box-shadow:inset 0 -2px 0 var(--c-passo)}.trk2-lnb button.on.c-fc{box-shadow:inset 0 -2px 0 var(--c-fc)}.trk2-lnb button.on.c-cad{box-shadow:inset 0 -2px 0 var(--c-cad)}
-.trk2-rzl{display:inline-flex;gap:3px;margin-left:auto}.trk2-rzl em{font:700 9.5px Inter,sans-serif;font-style:normal;padding:2px 6px;border-radius:5px;color:var(--tx);background:color-mix(in srgb,var(--z) 22%,transparent)}
+.trk2-fas{display:inline-flex;align-items:center;gap:4px;margin-left:auto;flex-wrap:wrap}.trk2-fas>i{font-style:normal;font-size:10.5px;color:var(--mu);margin-right:2px}
+.trk2-fas button{font:600 11px Inter,sans-serif;padding:4px 10px;border-radius:999px;border:1px solid var(--bd);background:transparent;color:var(--mu);cursor:pointer}.trk2-fas button.on{background:var(--tx);border-color:var(--tx);color:var(--bg)}
+.trk2-fas em{font:700 9.5px Inter,sans-serif;font-style:normal;padding:2px 6px;border-radius:5px;color:var(--tx);background:color-mix(in srgb,var(--z) 22%,transparent)}
 .trk2-mgl{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 10px}.trk2-mgl button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;font:500 11px Inter,sans-serif;padding:7px 11px;border-radius:10px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums;min-width:78px}.trk2-mgl button b{font-size:14px;color:var(--tx)}.trk2-mgl button i{font-style:normal;color:var(--c-passo)}.trk2-mgl button.sel{outline:2px solid var(--tx)}
 .trk2-mg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--bd)}.trk2-mg:empty{display:none}.trk2-mg>b{font-size:12.5px;color:var(--tx);margin-right:4px}
 .trk2-mg button{font:500 11.5px Inter,sans-serif;padding:5px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums}.trk2-mg button b{color:var(--tx)}.trk2-mg button i{font-style:normal;color:var(--c-passo)}
@@ -923,7 +925,11 @@ window.RSTraccia = (function(){
     const LNOME={passo:'Passo',fc:'FC',cad:'Cadenza',q:'Quota',map:'Mappa'};
     // fasce dei ritmi dell'atleta (E, M, T, I, R) sul passo: dove cade ogni tratto rispetto ai suoi ritmi
     const RZC={E:'#3B82F6',M:'#22C55E',T:'#EAB308',I:'#F97316',R:'#E11D48'},RZN={E:'Facile',M:'Maratona',T:'Soglia',I:'Intervalli',R:'Ripetute'};
+    const HZ=!!(opz.zone&&Array.isArray(opz.zone.z)&&FC);
     const RZ=opz.ritmi?['E','M','T','I','R'].map(c=>{const v=opz.ritmi[c];if(!v)return null;const a=Array.isArray(v)?Math.min(v[0],v[1]):v-4,b=Array.isArray(v)?Math.max(v[0],v[1]):v+4;return {c,a,b,m:(a+b)/2};}).filter(Boolean):[];
+    // fasce di sfondo, una scelta sola: ritmi dell'atleta sul passo, zone FC sulla FC, o nessuna
+    let FAS=(()=>{try{return localStorage.getItem('rs_trk_fasce')||'';}catch(e){return '';}})();
+    if(!['ritmi','fc','no'].includes(FAS)||(FAS==='ritmi'&&!RZ.length)||(FAS==='fc'&&!HZ))FAS=RZ.length?'ritmi':HZ?'fc':'no';
     const haMappa=tr.lat&&tr.lat.some(x=>x!=null);
     // tratti dai giri dell'orologio (per passo dell'allenamento o cambio di ritmo), posati sulla traccia per distanza
     let tratti=[];
@@ -946,7 +952,7 @@ window.RSTraccia = (function(){
     const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=null;
     // mostra o nascondi le corsie e la mappa
     function corsie(){const lb=box.querySelector('.trk2-lnb');if(!lb)return;
-      lb.innerHTML='<i>Mostra</i>'+lanes.map(L=>`<button type="button" data-ln="${L.k}" class="c-${L.k}${NASC.includes(L.k)?'':' on'}">${LNOME[L.k]}</button>`).join('')+(haMappa?`<button type="button" data-ln="map" class="c-map${NASC.includes('map')?'':' on'}">Mappa</button>`:'')+(RZ.length&&!NASC.includes('passo')?'<span class="trk2-rzl">'+RZ.map(z=>`<em style="--z:${RZC[z.c]}">${z.c}</em>`).join('')+'</span>':'');}
+      lb.innerHTML='<i>Mostra</i>'+lanes.map(L=>`<button type="button" data-ln="${L.k}" class="c-${L.k}${NASC.includes(L.k)?'':' on'}">${LNOME[L.k]}</button>`).join('')+(haMappa?`<button type="button" data-ln="map" class="c-map${NASC.includes('map')?'':' on'}">Mappa</button>`:'')+(RZ.length||HZ?`<span class="trk2-fas"><i>Fasce</i>${(RZ.length?[['ritmi','Ritmi']]:[]).concat(HZ?[['fc','Zone FC']]:[],[['no','Nessuna']]).map(([k,t])=>`<button type="button" data-fas="${k}" class="${FAS===k?'on':''}">${t}</button>`).join('')}${FAS==='ritmi'?RZ.map(z=>`<em style="--z:${RZC[z.c]}">${z.c}</em>`).join(''):''}</span>`:'');}
     function colori(){const C=TEMI[T0];box.className='trk2 '+T0+(SEMP?' semp':'');['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
     colori();
     const X=i=>AX==='tempo'?T[i]:(D[i]!=null?D[i]:0);
@@ -1000,8 +1006,8 @@ window.RSTraccia = (function(){
         let lo=lo0,hi=hi0;if(lo==null){y+=L.h+GAP;return;}if(hi-lo<1){lo-=1;hi+=1;}const pad=(hi-lo)*0.12;lo-=pad;hi+=pad;L.lo=lo;L.hi=hi;
         const yL=y,sy=v=>L.inv?yL+(v-lo)/(hi-lo)*L.h:yL+L.h-(v-lo)/(hi-lo)*L.h;L.sy=sy;
         // zone FC sotto la curva
-        if(L.zone&&opz.zone&&Array.isArray(opz.zone.z)){const z=opz.zone.z;for(let k=0;k<5;k++){const a=z[k],b=z[k+1]||999;const ya=Math.max(y,Math.min(y+L.h,sy(b))),yb=Math.max(y,Math.min(y+L.h,sy(a)));if(yb>ya){g.fillStyle=C.zone[k];g.fillRect(PAD.l,ya,pw,yb-ya);}}}
-        if(L.k==='passo'&&RZ.length){RZ.forEach(z=>{const ya=Math.max(y,Math.min(y+L.h,sy(z.a))),yb=Math.max(y,Math.min(y+L.h,sy(z.b)));if(yb-ya<1)return;g.fillStyle=RZC[z.c];g.globalAlpha=T0==='chiaro'?.10:.13;g.fillRect(PAD.l,ya,pw,yb-ya);g.globalAlpha=.85;g.font='700 9.5px Inter, sans-serif';g.textAlign='right';if(yb-ya>=9)g.fillText(z.c,W-PAD.r-4,(ya+yb)/2+3.5);g.textAlign='left';g.globalAlpha=1;});}
+        if(FAS==='fc'&&L.zone&&opz.zone&&Array.isArray(opz.zone.z)){const z=opz.zone.z;for(let k=0;k<5;k++){const a=z[k],b=z[k+1]||999;const ya=Math.max(y,Math.min(y+L.h,sy(b))),yb=Math.max(y,Math.min(y+L.h,sy(a)));if(yb>ya){g.fillStyle=C.zone[k];g.fillRect(PAD.l,ya,pw,yb-ya);}}}
+        if(FAS==='ritmi'&&L.k==='passo'&&RZ.length){RZ.forEach(z=>{const ya=Math.max(y,Math.min(y+L.h,sy(z.a))),yb=Math.max(y,Math.min(y+L.h,sy(z.b)));if(yb-ya<1)return;g.fillStyle=RZC[z.c];g.globalAlpha=T0==='chiaro'?.10:.13;g.fillRect(PAD.l,ya,pw,yb-ya);g.globalAlpha=.85;g.font='700 9.5px Inter, sans-serif';g.textAlign='right';if(yb-ya>=9)g.fillText(z.c,W-PAD.r-4,(ya+yb)/2+3.5);g.textAlign='left';g.globalAlpha=1;});}
         // griglia e scala a destra
         g.strokeStyle=C.gr;g.lineWidth=1;g.fillStyle=C.mu;g.font='10px Inter, sans-serif';g.textAlign='left';
         for(let k=0;k<=2;k++){const v=lo+(hi-lo)*(0.15+k*0.35),yy=Math.round(sy(v))+.5;g.beginPath();g.moveTo(PAD.l,yy);g.lineTo(W-PAD.r,yy);g.stroke();g.fillText(L.fmt?L.fmt(v):String(Math.round(v)),W-PAD.r+5,yy+3);}
@@ -1121,7 +1127,8 @@ window.RSTraccia = (function(){
       mk=L.marker(pts[0],{icon:L.divIcon({className:'',html:'<div class="trk2-dot"></div>',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(map);
       mappaSel();setTimeout(()=>{map.invalidateSize();mappaSel();},150);
     }).catch(()=>{const b=box.querySelector('.trk2-map');if(b)b.innerHTML='<p style="padding:12px;color:#8E8678">Mappa non disponibile (senza connessione).</p>';});
-    box.querySelector('.trk2-lnb').addEventListener('click',e=>{const b=e.target.closest('[data-ln]');if(!b)return;const k=b.dataset.ln,i=NASC.indexOf(k);
+    box.querySelector('.trk2-lnb').addEventListener('click',e=>{const f=e.target.closest('[data-fas]');if(f){FAS=f.dataset.fas;try{localStorage.setItem('rs_trk_fasce',FAS);}catch(x){}corsie();disegna();return;}
+      const b=e.target.closest('[data-ln]');if(!b)return;const k=b.dataset.ln,i=NASC.indexOf(k);
       if(i>=0)NASC.splice(i,1);else{if(k!=='map'&&lanes.filter(L=>!NASC.includes(L.k)).length<=1)return;NASC.push(k);}
       try{localStorage.setItem('rs_trk_nasc',JSON.stringify(NASC));}catch(x){}
       const mb=box.querySelector('.trk2-map');if(mb){mb.style.display=NASC.includes('map')?'none':'';if(!NASC.includes('map')&&map)setTimeout(()=>{map.invalidateSize();mappaSel();},60);}
