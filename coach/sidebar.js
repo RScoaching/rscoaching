@@ -856,6 +856,13 @@ window.RSTraccia = (function(){
 .trk2-spt{margin:6px 0 6px}.trk2-spt summary{font-size:11.5px;color:var(--mu);cursor:pointer}.trk2-spt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;color:var(--tx)}.trk2-spt th{text-align:right;font-weight:500;color:var(--mu);font-size:10.5px;padding:3px 6px;border-bottom:1px solid var(--bd)}.trk2-spt td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}.trk2-spt th:first-child,.trk2-spt td:first-child{text-align:left}.trk2-spt b{color:var(--c-passo)}
 .trk2-fc{padding:10px 12px;border-top:1px solid var(--bd)}.trk2-fc:empty{display:none}
 .trk2-sph{flex-wrap:wrap}.trk2-sph button{white-space:nowrap}@media (max-width:560px){.trk2-sph i{display:none}.trk2-sph b{width:100%;margin-bottom:2px}.trk2-v{min-width:64px;padding:7px 10px}}
+.trk2.semp .trk2-tl,.trk2.semp .trk2-sph i{display:none}.trk2.semp .trk2-sp{border-bottom:0}
+.trk2-sl{display:flex;flex-direction:column;margin:2px 0 8px;font-variant-numeric:tabular-nums}
+.trk2-slh,.trk2-sl button{display:grid;grid-template-columns:1.1fr 1fr 1fr .8fr;align-items:center;gap:6px;padding:8px 6px;text-align:left}
+.trk2-slh{font-size:10.5px;color:var(--mu);border-bottom:1px solid var(--bd);padding-top:2px}
+.trk2-sl button{all:unset;display:grid;grid-template-columns:1.1fr 1fr 1fr .8fr;gap:6px;padding:9px 6px;border-bottom:1px solid var(--bd);font-size:13px;color:var(--tx);cursor:pointer}
+.trk2-sl button b{font-weight:700;color:var(--tx)}.trk2-sl button.svelto b{color:var(--c-passo)}.trk2-sl button.lento{color:var(--mu)}.trk2-sl button.lento b{color:var(--mu);font-weight:600}
+.trk2-sl button span:last-child{color:var(--c-fc)}.trk2-sl button.sel{background:var(--sel)}
 .trk2-mgl{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 10px}.trk2-mgl button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;font:500 11px Inter,sans-serif;padding:7px 11px;border-radius:10px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums;min-width:78px}.trk2-mgl button b{font-size:14px;color:var(--tx)}.trk2-mgl button i{font-style:normal;color:var(--c-passo)}.trk2-mgl button.sel{outline:2px solid var(--tx)}
 .trk2-mg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--bd)}.trk2-mg:empty{display:none}.trk2-mg>b{font-size:12.5px;color:var(--tx);margin-right:4px}
 .trk2-mg button{font:500 11.5px Inter,sans-serif;padding:5px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums}.trk2-mg button b{color:var(--tx)}.trk2-mg button i{font-style:normal;color:var(--c-passo)}
@@ -915,8 +922,9 @@ window.RSTraccia = (function(){
     let SP=(()=>{try{return localStorage.getItem('rs_trk_split')||'km';}catch(e){return 'km';}})();
     const MG=migliori(tr);   // migliori tratti della corsa, una scheda degli split
     let B=null,Bnome='';   // corsa di confronto: curve tratteggiate sulla stessa scala
-    let T0=tema(),AX=asse(),v0=0,v1=n-1,cur=null,drag=null,map=null,mk=null,lineSel=null,lineAll=null;
-    el.innerHTML=`<div class="trk2 ${T0}">
+    const SEMP=!!opz.semplice;
+    let T0=SEMP?'scuro':tema(),AX=asse(),v0=0,v1=n-1,cur=null,drag=null,map=null,mk=null,lineSel=null,lineAll=null;
+    el.innerHTML=`<div class="trk2 ${T0}${SEMP?' semp':''}">
       <div class="trk2-bar"></div><div class="trk2-sel"></div>
       <div class="trk2-sp"></div>
       <div class="trk2-tl" title="Trascina per zoomare su un tratto, doppio clic per tutta la corsa"><canvas></canvas></div>
@@ -924,7 +932,7 @@ window.RSTraccia = (function(){
       ${haMappa?'<div class="trk2-map"></div>':''}
 </div>`;
     const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=null;
-    function colori(){const C=TEMI[T0];box.className='trk2 '+T0;['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
+    function colori(){const C=TEMI[T0];box.className='trk2 '+T0+(SEMP?' semp':'');['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
     colori();
     const X=i=>AX==='tempo'?T[i]:(D[i]!=null?D[i]:0);
     // barra dei valori: al cursore, se no il totale della vista
@@ -939,7 +947,7 @@ window.RSTraccia = (function(){
         +(FC?cel('fc',tot?'FC media':'FC',(tot?Math.round(med(FC)||0):(FC[i]||'-'))):'')
         +(CAD?cel('cad',tot?'Cadenza media':'Cadenza',(tot?Math.round(med(CAD)||0):(CAD[i]||'-'))):'')
         +(Q?cel('','Quota',(tot?Math.round(med(Q)||0):(Q[i]!=null?Math.round(Q[i]):'-'))+' m'):'')
-        +`<div class="trk2-tg">${opz.altre&&opz.altre.length?`<select class="trk2-cf" aria-label="Confronta con un'altra corsa"><option value="">Confronta con...</option>${opz.altre.map(a=>`<option value="${a.id}"${B&&B._id===a.id?' selected':''}>${a.nome}</option>`).join('')}</select>`:''}<button type="button" data-ax="km" class="${AX==='km'?'on':''}">Km</button><button type="button" data-ax="tempo" class="${AX==='tempo'?'on':''}">Tempo</button><button type="button" data-te="${T0==='chiaro'?'scuro':'chiaro'}">${T0==='chiaro'?'Scuro':'Chiaro'}</button></div>`;
+        +(SEMP?'':`<div class="trk2-tg">${opz.altre&&opz.altre.length?`<select class="trk2-cf" aria-label="Confronta con un'altra corsa"><option value="">Confronta con...</option>${opz.altre.map(a=>`<option value="${a.id}"${B&&B._id===a.id?' selected':''}>${a.nome}</option>`).join('')}</select>`:''}<button type="button" data-ax="km" class="${AX==='km'?'on':''}">Km</button><button type="button" data-ax="tempo" class="${AX==='tempo'?'on':''}">Tempo</button><button type="button" data-te="${T0==='chiaro'?'scuro':'chiaro'}">${T0==='chiaro'?'Scuro':'Chiaro'}</button></div>`);
     }
     bar.addEventListener('change',async e=>{const sel=e.target.closest('.trk2-cf');if(!sel)return;
       if(!sel.value){B=null;Bnome='';disegna();return;}
@@ -1030,6 +1038,7 @@ window.RSTraccia = (function(){
       if(L.length<2){spBox.innerHTML=MG.length?tabs:'';return;}
       const S=L.map(x=>Object.assign({},x,stat(x.i0,x.i1))).filter(x=>x.passo),ps=S.map(x=>x.passo),lo=Math.min(...ps),hi=Math.max(...ps),med=quant(ps,0.5);
       const tot=S.reduce((t,x)=>t+x.dist,0);
+      if(SEMP){spBox.innerHTML=tabs+`<div class="trk2-sl"><div class="trk2-slh"><span>${SP==='tratti'?'Tratto':'Km'}</span><span>Dist.</span><span>Passo</span><span>FC</span></div>${S.map((x,k)=>`<button type="button" data-k="${k}" class="${x.passo<med-3?'svelto':x.passo>med+8?'lento':''}${x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1)?' sel':''}"><span>${x.nome}</span><span>${kmTxt(x.dist)}</span><b>${mmss(x.passo)}</b><span>${x.fc||'-'}</span></button>`).join('')}</div>`;spBox._S=S;return;}
       spBox.innerHTML=tabs+`
         <div class="trk2-spb">${S.map((x,k)=>{const h=hi>lo?28+Math.round((hi-x.passo)/(hi-lo)*52):60,dentro=x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1);
           return `<button type="button" data-k="${k}" class="${x.passo<med-3?'svelto':x.passo>med+8?'lento':''}${dentro?' sel':''}" style="flex:${Math.max(0.35,x.dist/tot*S.length)}" title="${x.nome}: ${kmTxt(x.dist)} km in ${hms(x.dur)}"><i>${x.nome}</i><u style="height:${h}px"></u><b>${mmss(x.passo)}</b>${x.fc?`<s>${x.fc}</s>`:''}</button>`;}).join('')}</div>

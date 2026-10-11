@@ -1312,8 +1312,8 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 #page-oggi .start-btn:active::after{transform:translateX(3px)}
 /* seduta gia' fatta: tre numeri grandi */
 #page-oggi .f7-ok{font-size:14px!important;margin:14px 0 14px!important}
-#page-oggi .f7-num{gap:28px!important}
-#page-oggi .f7-num b{font-size:46px!important}
+#page-oggi .f7-num{gap:14px 24px!important}#page-oggi .f7-run,#page-oggi .f7-giri{padding-left:0;padding-right:0}
+#page-oggi .f7-num b{font-size:40px!important}
 #page-oggi .f7-num i{font-size:12px!important}
 #page-oggi .f7-pross{font-size:13.5px!important;border-top:1px solid rgba(255,214,196,.08)!important;margin-top:16px!important;padding-top:14px!important}
 #page-oggi .f7-again{background:rgba(255,214,196,.06)!important;border:0!important;color:var(--ink8)!important;min-height:48px;display:flex;align-items:center;justify-content:center;border-radius:14px!important}
@@ -2552,7 +2552,8 @@ window.apriTraccia=async(id,tit)=>{
   const altre=Object.entries(gd.activities||{}).filter(([k,a])=>a&&a.traccia&&k!==id).map(([k,a])=>({id:k,ts:window.RSGarmin.quando(a.start),a})).filter(x=>x.ts).sort((x,y)=>y.ts-x.ts).slice(0,60)
     .map(x=>{const d=new Date(x.ts);return {id:x.id,nome:d.getDate()+'/'+(d.getMonth()+1)+' '+String(x.a.name||'Corsa').slice(0,24)+(x.a.distanceM?' '+String(Math.round(x.a.distanceM/100)/10).replace('.',',')+' km':'')};});
   const carica=async k=>{for(const c of chiavi){try{const t=(await get(ref(db,`garmin_tracce/${c}/${k}`))).val();if(t)return t;}catch(e){}}return null;};
-  window.RSTraccia.mostra(bd,tr,{zone:pf&&pf.zone,giri:act&&act.laps?(Array.isArray(act.laps)?act.laps:Object.values(act.laps)):null,altre,carica});
+  // sul telefono niente linea temporale: dati, split in tabella, zone e mappa
+  window.RSTraccia.mostra(bd,tr,{zone:pf&&pf.zone,giri:act&&act.laps?(Array.isArray(act.laps)?act.laps:Object.values(act.laps)):null,altre,carica,semplice:window.innerWidth<760});
 };
 function giriTab(G){
   const P=window.RSRitmi.passo,conT=G.some(g=>g.t);
@@ -3033,13 +3034,16 @@ function sedutaFattaHtml(l,m){
   const quando=k===isoLoc(new Date())?'oggi alle '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):GG_LUNGHI[(d.getDay()+6)%7]+' '+d.getDate();
   const rpe=rpeLog(l)||null;
   const min=+l.duration||+l.minuti||null,pr=(l.newPRs||[]).length;
-  const num=[[min,'minuti'],[+l.totalSets||null,'serie'],[rpe,'RPE'],[pr||null,'record']].filter(x=>x[0]);
+  // una corsa mostra i suoi numeri (km, passo, FC) accanto a minuti e RPE
+  const C=l.corsa&&+l.corsa.km>0&&window.RSRitmi?l.corsa:null;
+  const num=(C?[[nfIt(+C.km,C.km>=10?1:2),'km'],[C.passo?window.RSRitmi.passo(C.passo):null,'al km'],[min?nfIt(min,0):null,'minuti'],[C.fc||null,'FC media'],[rpe?nfIt(rpe,1):null,'RPE']]
+    :[[min?nfIt(min,1):null,'minuti'],[+l.totalSets||null,'serie'],[rpe?nfIt(rpe,1):null,'RPE'],[pr||null,'record']]).filter(x=>x[0]);
   return `<div class="sess-card fatta7">
     <div class="sess-head"><div class="sess-type-tag">${m.icon} ${escH(m.label)}</div><div class="sess-title">${escH(m.title)}</div>${m.progName?`<div class="sess-prog-label">${escH(m.progName)}</div>`:''}</div>
     <div class="f7-ok">${_ri('ok')}<span>Fatta ${quando}</span></div>
-    ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${nfIt(v,1)}</b><i>${t}</i></div>`).join('')}</div>`:''}
-    ${l.corsa&&window.RSRitmi?`<div class="f7-run"><b>${nfIt(l.corsa.km||0,2)} km</b>${l.corsa.passo?' a '+window.RSRitmi.passo(l.corsa.passo)+'/km':''}${l.corsa.fc?', FC '+l.corsa.fc:''}${l.corsa.centrati?', nel passo '+l.corsa.centrati.ok+' su '+l.corsa.centrati.n:''}</div>`:''}
-    ${l.gmTraccia&&window.RSTraccia?`<div class="f7-giri"><button type="button" class="f7-trk" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')">Grafici e mappa</button></div>`:''}
+    ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>`:''}
+    ${l.corsa&&l.corsa.centrati?`<div class="f7-run">Nel passo in <b>${l.corsa.centrati.ok} tratti su ${l.corsa.centrati.n}</b></div>`:''}
+    ${l.gmTraccia&&window.RSTraccia?`<div class="f7-giri"><button type="button" class="f7-trk" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')">Dettagli della corsa</button></div>`:''}
     ${l.corsa&&l.corsa.giri&&l.corsa.giri.length&&window.RSRitmi?`<details class="f7-giri"><summary>${l.corsa.giri.some(g=>g.t)?'Fatto e programma, tratto per tratto':'I tratti della corsa'}</summary>${giriTab(l.corsa.giri)}</details>`:''}
     ${rpe?'':`<button type="button" class="f7-rpe" onclick="vaiRpe(${l.ts})">Manca l'RPE della seduta: aggiungilo</button>`}
     ${m.link?`<div class="sess-action"><a class="f7-again" href="${m.link}">Apri di nuovo la seduta</a></div>`:''}
