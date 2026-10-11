@@ -1030,7 +1030,7 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 .pzo-come summary{font-size:13px;color:var(--muted);cursor:pointer}.pzo-come p{font-size:12.5px;line-height:1.55;color:var(--text);margin:8px 0 0}.pzo-come b{color:var(--white)}
 .pzr-ts{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
 .pzr-t{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:12px;border:1px solid rgba(139,92,246,.22);background:rgba(139,92,246,.06)}
-.pzr-t b{font:700 12px 'Inter',sans-serif;color:#A78BFA}.pzr-t span{font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.pzr-t em{font-style:normal;font-size:11px;color:var(--muted)}
+.pzr-t b{font:700 12px 'Inter',sans-serif;color:#A78BFA}.pzr-t b i{font-style:normal;font-weight:600;font-size:10px;color:#FF9A6B;margin-left:4px}.pzr-t.fx{border-color:rgba(255,106,46,.45);background:rgba(255,106,46,.06)}.pzr-in{width:100%;box-sizing:border-box;font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums;background:transparent;border:1px solid transparent;border-radius:7px;padding:2px 4px;margin-left:-5px}.pzr-in:hover{border-color:rgba(255,255,255,.12)}.pzr-in:focus{outline:none;border-color:#FF6A2E;background:rgba(0,0,0,.25)}.pzr-t em button{all:unset;cursor:pointer;color:#FF6A2E;font-weight:600;margin-left:4px}.pzr-t span{font:650 16px 'Inter',sans-serif;color:var(--white);font-variant-numeric:tabular-nums}.pzr-t em{font-style:normal;font-size:11px;color:var(--muted)}
 .pzr-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pzr-add input,.pzr-add select{width:auto;min-width:0;flex:0 1 150px}
 .pzr-cods{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;color:var(--text);margin-bottom:8px}.pzr-cods span{color:var(--muted)}.pzr-cods label{display:flex;gap:6px;align-items:center;cursor:pointer}.pzr-cods input{accent-color:var(--primary)}
 .pzr-tab{width:100%;border-collapse:collapse;font-size:13px}.pzr-tab td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);color:var(--text)}.pzr-tab td b{color:#A78BFA}.pzr-tab .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.pzr-tab .a{color:var(--white);font-weight:600}
@@ -6211,7 +6211,8 @@ function pzRitAid(){
   const ids=Object.keys(p.assignedTo||{}).filter(k=>p.assignedTo[k]);
   return ids.find(k=>athletes[k]&&athletes[k].ritmi&&athletes[k].ritmi.vdot)||ids[0]||null;
 }
-function pzRitR(){const a=pzRitAid();return a&&athletes[a]&&athletes[a].ritmi&&athletes[a].ritmi.vdot?athletes[a].ritmi:null;}
+// ritmi dell'atleta con quelli fissati a mano in questo programma (programs/{pid}/ritmi/fissi)
+function pzRitR(){const a=pzRitAid(),R=a&&athletes[a]&&athletes[a].ritmi&&athletes[a].ritmi.vdot?athletes[a].ritmi:null,o=window.RSRitmi?window.RSRitmi.conFissi(programs[currentProgId],R):R;return o&&['E','M','T','I','R'].some(c=>o[c])?o:null;}
 function pzRitPasso(cod){
   const RR=window.RSRitmi,R=pzRitR(),p=programs[currentProgId];
   const v=RR.valore(R,cod,RR.rgProgramma(p,R));
@@ -6220,6 +6221,7 @@ function pzRitPasso(cod){
 let pzRitAgg=null,pzRitOr=null,pzRitSolo=null;   // pzRitSolo: dalla soglia dell'orologio si parte con la sola T
 window.pzRitmiApri=async function(){
   if(!currentProgId){showToast('Apri prima un programma');return;}
+  pzRitSolo=null;
   // soglia dell'orologio (garmin_data/{aid}/profilo, anche sotto il nome dell'atleta)
   const aidO=pzRitAid();pzRitOr=null;
   if(aidO&&window.RSGarmin){try{let g=(await get(ref(db,'garmin_data/'+aidO+'/profilo'))).val();if(!g&&athletes[aidO])g=(await get(ref(db,'garmin_data/'+window.RSGarmin.chiave(athletes[aidO].name)+'/profilo'))).val();const pf=g?window.RSGarmin.profilo({profilo:g}):null;if(pf&&pf.soglia)pzRitOr={aid:aidO,s:pf.soglia};}catch(e){}}
@@ -6231,23 +6233,28 @@ window.pzRitmiApri=async function(){
 function pzRitRender(){
   const d=document.getElementById('pz-rit-dlg');if(!d)return;
   const RR=window.RSRitmi,p=programs[currentProgId],aid=pzRitAid(),a=aid?athletes[aid]:null,R=pzRitR();
-  const res=R?RR.ricalcola(p,R):{cambi:[],rg:null},veri=res.cambi.filter(c=>c.da!==c.a);
-  pzRitAgg=R?{R,res}:null;
+  const res=RR.ricalcola(p,R||{}),veri=res.cambi.filter(c=>c.da!==c.a);
+  pzRitAgg={R:R||{},res};
   const g={};veri.forEach(x=>{const k=x.cod+'|'+x.da+'|'+x.a;(g[k]=g[k]||{cod:x.cod,da:x.da,a:x.a,n:0}).n++;});
   const gruppi=Object.values(g).sort((x,y)=>RR.CODICI.indexOf(x.cod)-RR.CODICI.indexOf(y.cod)||y.n-x.n);
   const altri=Object.keys(p.assignedTo||{}).filter(k=>k!==aid&&p.assignedTo[k]).map(k=>athletes[k]&&athletes[k].name).filter(Boolean);
-  const tiles=R?['E','M','T','I','R'].map(c=>`<div class="pzr-t" title="${stEsc(RR.DESC[c])}"><b>${c}</b><span>${RR.testo(R[c])}</span><em>${RR.NOMI[c]}</em></div>`).join('')+(res.rg?`<div class="pzr-t"><b>RG</b><span>${RR.passo(res.rg)}</span><em>Ritmo gara</em></div>`:''):'';
+  // ogni ritmo si puo' correggere a mano: il valore scritto resta fisso in questo programma
+  const F=(p.ritmi&&p.ritmi.fissi)||{},rg=res.rg||RR.rgProgramma(p,R),I=p.intake||{},rgCalc=(I.obiettivo==='gara'&&+I.garaDist)||(p.ritmi&&p.ritmi.prima&&p.ritmi.prima.RG);
+  const tiles=['E','M','T','I','R','RG'].map(c=>{const v=c==='RG'?rg:R&&R[c],fx=c==='RG'?!!(p.ritmi&&p.ritmi.RGfisso&&p.ritmi.RG):!!F[c];
+    return `<div class="pzr-t${fx?' fx':''}" title="${stEsc(c==='RG'?'Ritmo gara del programma':RR.DESC[c])}"><b>${c}${fx?' <i>fisso</i>':''}</b><input class="pzr-in" value="${v?RR.testo(v):''}" placeholder="${c==='E'?'6:10-6:40':'5:10'}" aria-label="Ritmo ${c}" onkeydown="if(event.key==='Enter')this.blur()" onchange="pzRitFissa('${c}',this.value)"><em>${c==='RG'?'Ritmo gara':RR.NOMI[c]}${fx&&(c!=='RG'||rgCalc)?` <button type="button" onclick="pzRitSblocca('${c}')" title="${c==='RG'?'Torna al ritmo gara di prima o a quello della scheda':'Torna al valore calcolato'}">${c==='RG'?'di prima':'calcolato'}</button>`:''}</em></div>`;}).join('');
   d.innerHTML=`<div class="pzs-b">
-    <div class="pzs-h"><div><h3>Ritmi dell'atleta</h3><p>${a?stEsc(a.name||''):'Nessun atleta assegnato'}${R?' &#183; VDOT '+String(R.vdot).replace('.',',')+' da '+stEsc(R.fonte||''):''}</p></div>
+    <div class="pzs-h"><div><h3>Ritmi dell'atleta</h3><p>${a?stEsc(a.name||''):'Nessun atleta assegnato'}${R&&R.vdot?' &#183; VDOT '+String(R.vdot).replace('.',',')+' da '+stEsc(R.fonte||''):''}</p></div>
       <button type="button" class="pzs-x" onclick="this.closest('dialog').close()" aria-label="Chiudi">&#215;</button></div>
-    ${R?`<div class="pzr-ts">${tiles}</div>`:`<p class="pzs-n">${a?'Ancora nessun tempo per '+stEsc(a.name||'')+'. Scrivi un tempo recente: i ritmi si calcolano subito.':'Assegna il programma a un atleta per usare i suoi ritmi.'}</p>`}
+    ${R?'':`<p class="pzs-n">${a?'Ancora nessun tempo per '+stEsc(a.name||'')+'. Scrivi un tempo recente: i ritmi si calcolano subito. Oppure scrivi i ritmi a mano qui sotto.':'Nessun atleta assegnato: scrivi i ritmi a mano qui sotto.'}</p>`}
+    <div class="pzr-ts">${tiles}</div>
+    <p class="pzs-n" style="margin-top:-4px">Per correggere un ritmo scrivilo nella casella (es. 5:10 o 6:10-6:40): resta fisso in questo programma anche quando arrivano tempi nuovi; 'calcolato' lo riporta al calcolo.</p>
     ${pzRitOr&&pzRitOr.aid===aid&&pzRitOr.s&&pzRitOr.s.sec&&!(R&&Math.abs((R.T||0)-pzRitOr.s.sec)<3)?`<div class="pzr-add"><span class="pzs-n" style="margin:0;flex:1">Soglia dall'orologio (${stEsc(pzRitOr.s.fonte)}${pzRitOr.s.data?', '+stEsc(pzRitOr.s.data.split('-').reverse().join('/')):''}): <b style="color:var(--white)">${RR.passo(pzRitOr.s.sec)}/km</b>${pzRitOr.s.fc?' a FC '+pzRitOr.s.fc:''}${R&&R.T?', ritmi ora con T '+RR.passo(R.T):''}.</span><button type="button" class="btn btn-orange btn-sm" onclick="pzRitSoglia()">Usa questa soglia</button></div>`:''}
     ${aid?`<div class="pzr-add"><select id="pzr-d" aria-label="Distanza">${[['5','5 km'],['10','10 km'],['21','Mezza'],['42','Maratona'],['soglia','Soglia /km']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
       <input id="pzr-t" placeholder="tempo, es. 47:30" aria-label="Tempo" onkeydown="if(event.key==='Enter')pzRitTempo()">
       <input id="pzr-dt" value="${stFmtD(new Date())}" aria-label="Data" style="width:110px">
       <button type="button" class="btn btn-outline btn-sm" onclick="pzRitTempo()">Aggiungi il tempo</button>
       <a class="pzs-auto" href="./index.html?goto=athletes" onclick="sessionStorage.setItem('goto','athletes')">Storico in Atleti</a></div>`:''}
-    ${R?(gruppi.length?`<div><p class="pzs-n" style="margin-bottom:8px">${veri.length} ${veri.length===1?'passo cambia':'passi cambiano'} in questo programma${altri.length?' (assegnato anche a '+stEsc(altri.join(', '))+': nell\'app ognuno vede i suoi ritmi)':''}:</p>
+    ${R||res.rg?(gruppi.length?`<div><p class="pzs-n" style="margin-bottom:8px">${veri.length} ${veri.length===1?'passo cambia':'passi cambiano'} in questo programma${altri.length?' (assegnato anche a '+stEsc(altri.join(', '))+': nell\'app ognuno vede i suoi ritmi)':''}:</p>
       ${new Set(gruppi.map(x=>x.cod)).size>1?`<div class="pzr-cods"><span>Ritmi da aggiornare</span>${[...new Set(gruppi.map(x=>x.cod))].map(c=>`<label><input type="checkbox" class="pzr-cod" value="${c}" ${!pzRitSolo||pzRitSolo.includes(c)?'checked':''}> <b>${c}</b> ${stEsc(RR.NOMI[c]||'')}</label>`).join('')}</div>`:''}
       <table class="pzr-tab"><tbody>${gruppi.map(x=>`<tr><td><b>${x.cod}</b> ${stEsc(RR.NOMI[x.cod]||'')}</td><td class="n">${stEsc(x.da||'-')}</td><td class="n a">${stEsc(x.a)}</td><td class="n">${x.n} ${x.n===1?'fase':'fasi'}</td></tr>`).join('')}</tbody></table></div>`
       :`<p class="pzs-n">${res.cambi.length?'I passi del programma sono gia\' questi.':'Nessuna fase di corsa a ritmo in questo programma.'}</p>`):''}
@@ -6256,6 +6263,29 @@ function pzRitRender(){
       <button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button>
       ${res.cambi.length?`<button type="button" class="btn btn-orange" id="pzr-ok" onclick="pzRitApplica()">${veri.length?'Aggiorna '+veri.length+(veri.length===1?' passo':' passi'):'Lega le fasi ai ritmi'}</button>`:''}</div></div>`;
 }
+window.pzRitFissa=async function(c,txt){
+  const RR=window.RSRitmi,pid=currentProgId,p=programs[pid];if(!p)return;
+  const t=String(txt||'').trim();if(!t){pzRitSblocca(c);return;}
+  const parti=t.replace(/\s*\/\s*km/i,'').split(/\s*-\s*/).map(RR.sec);
+  if(!parti.length||parti.length>2||parti.some(x=>!x||x<150||x>600)){showToast('Scrivi il passo al km, es. 5:10 o 6:10-6:40');pzRitRender();return;}
+  const v=parti.length===2?parti.sort((a,b)=>a-b):parti[0],b=`programs/${pid}/ritmi`,up={[b+'/'+c]:v,[b+'/fissi/'+c]:true,[b+'/ts']:Date.now()};
+  // il passo con cui sono scritte le fasi, per riconoscerle finche' non si aggiornano
+  const pr=(p.ritmi||{}).prima||{},old=(p.ritmi||{})[c];if(pr[c]==null&&old!=null)up[b+'/prima/'+c]=old;
+  if(c==='RG')up[b+'/RGfisso']=true;
+  try{pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();await update(ref(db),up);
+    p.ritmi=Object.assign({},p.ritmi||{},{[c]:v,fissi:Object.assign({},(p.ritmi||{}).fissi||{},{[c]:true}),prima:Object.assign({},pr,pr[c]==null&&old!=null?{[c]:old}:{})},c==='RG'?{RGfisso:true}:{});
+    pzRitSolo=[...new Set((pzRitSolo||[]).concat(c))];showToast(c+' fissato a '+RR.testo(v)+': aggiorna le fasi per applicarlo');pzRitRender();
+  }catch(e){console.error(e);showToast('Errore nel salvataggio del ritmo');}
+};
+window.pzRitSblocca=async function(c){
+  const pid=currentProgId,p=programs[pid];if(!p||!p.ritmi)return;const b=`programs/${pid}/ritmi`,up={[b+'/fissi/'+c]:null},pr=p.ritmi.prima||{};if(c==='RG')up[b+'/RGfisso']=null;
+  // senza un ritmo calcolato da cui ripartire torna il valore di prima della correzione
+  if(pr[c]!=null){up[b+'/'+c]=pr[c];up[b+'/prima/'+c]=null;}
+  try{pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();await update(ref(db),up);
+    const F=Object.assign({},p.ritmi.fissi||{}),P2=Object.assign({},pr);delete F[c];if(pr[c]!=null){p.ritmi=Object.assign({},p.ritmi,{[c]:pr[c]});delete P2[c];}p.ritmi=Object.assign({},p.ritmi,{fissi:F,prima:P2});if(c==='RG')delete p.ritmi.RGfisso;
+    pzRitSolo=[...new Set((pzRitSolo||[]).concat(c))];showToast(c+' torna al valore calcolato');pzRitRender();
+  }catch(e){console.error(e);showToast('Errore nel salvataggio');}
+};
 window.pzRitSoglia=async function(){
   const RR=window.RSRitmi,aid=pzRitAid();if(!aid||!pzRitOr)return;const s=pzRitOr.s,m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s.data||'');
   const voce={tipo:'soglia',sec:s.sec,fc:s.fc||null,date:m?m[3]+'/'+m[2]+'/'+m[1]:stFmtD(new Date()),note:'soglia del lattato '+s.fonte,src:'orologio',ts:Date.now()};
@@ -6293,7 +6323,7 @@ window.pzRitApplica=async function(){
   const sc=document.querySelectorAll('.pzr-cod').length?new Set([...document.querySelectorAll('.pzr-cod:checked')].map(i=>i.value)):null;
   if(sc)res.cambi=res.cambi.filter(c=>sc.has(c.cod));pzRitSolo=null;
   res.cambi.forEach(c=>{const b=`programs/${pid}/weeks/${c.wid}/sessions/${c.sid}/corsaFasi/${c.i}`;up[b+'/'+c.campo]=c.a;up[b+'/rit']=c.cod;});
-  const snap=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo));
+  const snap=RR.istantanea(R,res.rg,!!(p.ritmi&&p.ritmi.RGfisso)||!!(p.intake&&p.intake.garaTempo),p);
   if(sc)RR.CODICI.forEach(c=>{if(!sc.has(c)){if(p.ritmi&&p.ritmi[c]!=null)snap[c]=p.ritmi[c];else delete snap[c];}});
   up[`programs/${pid}/ritmi`]=snap;
   const n=res.cambi.filter(c=>c.da!==c.a).length;

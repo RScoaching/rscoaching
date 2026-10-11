@@ -309,6 +309,8 @@ window.RSRitmi = (function(){
   function valore(R,cod,rg){if(cod==='RG')return rg||null;if(!R)return null;return R[cod]||null;}
   function testo(v){return Array.isArray(v)?passo(v[0])+'-'+passo(v[1]):passo(v);}
   // ritmo gara di un programma: tempo obiettivo della scheda, poi quello fissato, poi la previsione
+  // ritmi fissati a mano dal preparatore per un programma (programs/{pid}/ritmi/fissi): valgono sui calcolati
+  function conFissi(p,R){const P=p&&p.ritmi,F=P&&P.fissi;if(!F)return R;const o=Object.assign({},R||{});Object.keys(F).forEach(c=>{if(F[c]&&c!=='RG'&&P[c]!=null)o[c]=P[c];});return o;}
   function rgProgramma(p,R){
     const I=p&&p.intake||{};const D=+I.garaDist;
     // un ritmo gara fissato da un piano importato (PDF del preparatore) e' la decisione piu' recente: vince sulla scheda
@@ -347,7 +349,7 @@ window.RSRitmi = (function(){
   // ricalcola le fasi di un programma con i ritmi nuovi. Restituisce i cambi senza scrivere.
   // p: programma, R: ritmi nuovi dell'atleta, opz.vecchi: ritmi con cui erano scritti
   function ricalcola(p,R,opz){
-    opz=opz||{};const vecchi=opz.vecchi||(p&&p.ritmi)||null;const rg=rgProgramma(p,R);
+    opz=opz||{};let vecchi=opz.vecchi||(p&&p.ritmi)||null;if(vecchi&&vecchi.prima)vecchi=Object.assign({},vecchi,vecchi.prima);R=conFissi(p,R);const rg=rgProgramma(p,R);
     const cambi=[];
     Object.entries(p&&p.weeks||{}).forEach(([wid,w])=>{
       Object.entries(w&&w.sessions||{}).forEach(([sid,s])=>{
@@ -376,10 +378,10 @@ window.RSRitmi = (function(){
   // mette il campo rit sulle fasi che corrispondono ai ritmi con cui sono state scritte
   function etichetta(fasi,vecchi){(fasi||[]).forEach(f=>{if(!f||f.rit)return;const campo=f.repPace?'repPace':(f.pace?'pace':null);if(!campo||/fino a/.test(f[campo]))return;const c=codiceFase(f,f[campo],vecchi);if(c&&vecchi[c]){const v=vecchi[c],x=Array.isArray(v)?(v[0]+v[1])/2:v;if(Math.abs(x-sec(f[campo]))<=6)f.rit=c;}});return fasi;}
   // ritmi da salvare nel programma dopo un ricalcolo, per riconoscere i passi la volta dopo
-  function istantanea(R,rg,fisso){const o={};['E','M','T','I','R'].forEach(c=>{if(R&&R[c])o[c]=R[c];});if(rg)o.RG=rg;if(fisso)o.RGfisso=true;if(R&&R.vdot)o.vdot=R.vdot;o.ts=Date.now();return o;}
+  function istantanea(R,rg,fisso,p){R=conFissi(p,R);const o={};['E','M','T','I','R'].forEach(c=>{if(R&&R[c])o[c]=R[c];});if(rg)o.RG=rg;if(fisso)o.RGfisso=true;if(R&&R.vdot)o.vdot=R.vdot;const F=p&&p.ritmi&&p.ritmi.fissi;if(F)o.fissi=Object.assign({},F);o.ts=Date.now();return o;}
   // passo di una fase per l'app atleta: se la fase ha un codice e l'atleta ha i suoi ritmi, i suoi
   function passoFase(f,R,campo){const v=f&&f.rit&&f.rit!=='RG'&&R?R[f.rit]:null;return v?testo(v):(f?f[campo]||'':'');}
-  return {DIST,DNOME,CODICI,NOMI,DESC,sec,passo,tempo,metri,distNome,vdot,previsto,daVdot,vdotDaSoglia,calcola,zoneFc,valore,testo,rgProgramma,codice,codiceDaPasso,codiceFase,daTesto,etichetta,ricalcola,istantanea,passoFase,dataTs};
+  return {DIST,DNOME,CODICI,NOMI,DESC,sec,passo,tempo,metri,distNome,vdot,previsto,daVdot,vdotDaSoglia,calcola,zoneFc,valore,testo,rgProgramma,conFissi,codice,codiceDaPasso,codiceFase,daTesto,etichetta,ricalcola,istantanea,passoFase,dataTs};
 })();
 
 // ── OROLOGIO: SEDUTE DI CORSA IN FILE E ATTIVITA' DAI FILE ─────────────
