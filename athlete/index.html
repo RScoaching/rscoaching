@@ -1467,6 +1467,7 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rt7-add button{flex:1 1 100%;padding:12px;border-radius:12px;border:0;background:var(--primary);color:#fff;font:600 14px Inter,sans-serif;cursor:pointer}
 .rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
 .prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important} 
+.pf-clic{cursor:pointer}.pf-clic .pf-n::after{content:' \203A';color:var(--orange,#FF6A2E);font-weight:700}.pf-clic:active{opacity:.7}
 .f7-trk{width:100%;padding:10px;border-radius:12px;border:1px solid var(--line6);background:rgba(255,214,196,.04);color:var(--white);font:600 13px Inter,sans-serif;cursor:pointer}
 .trk-ov{position:fixed;inset:0;z-index:400;background:#110C0B;display:flex;flex-direction:column}
 .trk-hd{display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 10px;border-bottom:1px solid var(--line6)}.trk-hd b{font:600 15px Inter,sans-serif;color:var(--white)}.trk-hd button{border:0;background:none;color:var(--muted);font-size:26px;cursor:pointer;line-height:1}
@@ -2384,9 +2385,11 @@ function renderWorkoutStorico(logs){
     const num=[];
     if(l.type==='match'){if(l.minuti)num.push(l.minuti+"' giocati");if(l.gol)num.push(l.gol+' gol');if(l.assist)num.push(l.assist+' assist');}
     else if(l.type==='test'){if(l.sprint10)num.push('10 m '+l.sprint10+'s');if(l.sprint30)num.push('30 m '+l.sprint30+'s');if(l.salto)num.push('salto '+l.salto+' cm');}
-    else{if(l.duration)num.push(l.duration+"'");if(l.totalSets)num.push(l.totalSets+' serie');}
+    else{if(l.duration)num.push(l.duration+"'");if(l.corsa&&+l.corsa.km>0){num.push(String(l.corsa.km).replace('.',',')+' km');if(l.corsa.passo&&window.RSRitmi)num.push(window.RSRitmi.passo(l.corsa.passo)+'/km');}if(l.totalSets)num.push(l.totalSets+' serie');}
     const pr=(l.newPRs||[]).map(x=>x.name+' '+x.value+' kg');
-    h+=`<div class="pf-row"><div class="pf-d"><b>${String(d.getDate()).padStart(2,'0')}</b><i>${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}</i></div>
+    // una corsa con la traccia si apre sull'analisi (grafici, split, mappa)
+    const trk=l.gmTraccia&&window.RSTraccia?`apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')`:'';
+    h+=`<div class="pf-row${trk?' pf-clic':''}"${trk?` role="button" tabindex="0" onclick="${trk}" onkeydown="if(event.key==='Enter')this.click()"`:''}><div class="pf-d"><b>${String(d.getDate()).padStart(2,'0')}</b><i>${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}</i></div>
       <div class="pf-b"><div class="pf-n">${l.sessName||'Seduta'}</div><div class="pf-m">${num.join(' · ')||'&nbsp;'}${pr.length?' <span class="pf-pr">Record: '+pr.join(', ')+'</span>':''}</div>${l.note?`<div class="pf-nt">${String(l.note).slice(0,120).replace(/</g,'&lt;')}</div>`:''}</div>
       <div class="pf-rpe${rpeLog(l)>=9?' hi':''}">${rpeLog(l)?'<b>'+nfIt(rpeLog(l),1)+'</b><i>RPE</i>':''}</div></div>`;
   });
@@ -2625,7 +2628,10 @@ function renderSettimana(){
   // in alto a destra la settimana del programma, al posto del vecchio "Mc"
   const tag=document.getElementById('hero-micro');
   if(tag){const pr=Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived);
-    if(pr.length){const [pid,p]=pr.sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0))[0];const n=Object.keys(p.weeks||{}).length;tag.textContent='Settimana '+(settAttiva(pid,p,n)+1)+' di '+n;tag.style.display='';}
+    const inCorso=pr.filter(([,p])=>!progFinito(p)),oggiPid=(P[oggi]||[]).map(x=>x.pid).find(Boolean);
+    const sc=inCorso.find(([pid])=>pid===oggiPid)||(inCorso.length===1?inCorso[0]:null)||(!inCorso.length?pr.sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0))[0]:null);
+    if(sc){const [pid,p]=sc,n=Object.keys(p.weeks||{}).length;tag.textContent=(inCorso.length>1?(p.sport==='corsa'?'Corsa':p.sport==='forza'?'Forza':String(p.name||'').split(' ')[0])+' · ':'')+'Settimana '+(settAttiva(pid,p,n)+1)+' di '+n;tag.style.display='';}
+    else if(inCorso.length){tag.textContent=inCorso.length+' programmi in corso';tag.style.display='';}
     else tag.style.display='none';}
 }
 function renderWeekDots(){renderSettimana();}
@@ -3102,9 +3108,11 @@ function renderPrograms(progData){
   const SPORT_LABELS={calcio:'Calcio',hybrid:'Hybrid',forza:'Forza',corsa:'Corsa',conditioning:'Conditioning'};
   const SPORT_CLS={calcio:'pst-calcio',hybrid:'pst-hybrid',forza:'pst-forza',corsa:'pst-calcio',conditioning:'pst-hybrid'};
 
-  // il piano attivo e' l'ultimo assegnato fra quelli non archiviati; gli altri vanno in archivio
+  // in corso tutti i programmi non archiviati e non ancora finiti (forza e corsa insieme, per esempio);
+  // in archivio quelli archiviati o finiti. Se nessuno e' in corso resta in vista l'ultimo assegnato.
   myProgs.sort((a,b)=>((a[1].archived?1:0)-(b[1].archived?1:0))||((b[1].createdAt||0)-(a[1].createdAt||0)));
-  const activeIdx=0;
+  let attivi=myProgs.filter(([,p])=>!p.archived&&!progFinito(p));
+  if(!attivi.length&&!myProgs[0][1].archived)attivi=[myProgs[0]];
   const GGL=['lun','mar','mer','gio','ven','sab','dom'];
   const oggiG=(new Date().getDay()+6)%7;
   // il registro di una seduta del programma, in qualunque settimana di calendario
@@ -3131,7 +3139,7 @@ function renderPrograms(progData){
     const dal=ini?' dal '+ini.getDate()+'/'+(ini.getMonth()+1):'';
     return `<div class="prog-card${isActive?'':' prog-archived'}">
       <div class="prog-card-head">
-        ${isActive?'<div class="pc-eyebrow">Piano attivo</div>':''}
+        ${isActive?'<div class="pc-eyebrow">In corso</div>':''}
         <div class="prog-card-name">${p.name}</div>
         <div class="prog-card-meta">Settimana ${cur+1} di ${weeks.length}${dal}${sp?' <span class="prog-sport-tag '+cls+'">'+sp+'</span>':''}</div>
         ${isActive&&weeks.length>1?pc8Bar(pid,weeks,cur):''}
@@ -3171,21 +3179,20 @@ function renderPrograms(progData){
     </div>`;
   }
 
-  const activeProg = myProgs[activeIdx];
-  const archivedProgs = myProgs.filter((_,i)=>i!==activeIdx);
+  const archivedProgs = myProgs.filter(x=>!attivi.includes(x));
 
   // Update page header with active plan name
   const pianoTitle=document.getElementById('piano-page-title');
   if(pianoTitle)pianoTitle.textContent='Piano';
   const pianoSub=document.getElementById('piano-page-sub');
-  if(pianoSub)pianoSub.textContent=activeProg[1].sport?(activeProg[1].sport.charAt(0).toUpperCase()+activeProg[1].sport.slice(1)):'Programmazione';
+  if(pianoSub)pianoSub.textContent=attivi.length>1?attivi.length+' programmi in corso':attivi.length&&attivi[0][1].sport?(attivi[0][1].sport.charAt(0).toUpperCase()+attivi[0][1].sport.slice(1)):'Programmazione';
 
-  let html = buildProgCard(activeProg, true);
+  let html = attivi.map(x=>buildProgCard(x,true)).join('')||'<div class="empty" style="margin:0 18px 10px;">Nessun programma in corso.</div>';
 
   if(archivedProgs.length){
     html += `<div style="margin:4px 16px 0;">
       <button onclick="toggleArchive()" style="width:100%;padding:11px 16px;background:rgba(255,214,196,.04);border:1px solid rgba(255,214,196,.08);border-radius:12px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .2s;" id="archive-toggle-btn">
-        <span>Archivio programmi (${archivedProgs.length})</span>
+        <span>Archiviati e conclusi (${archivedProgs.length})</span>
         <span id="archive-chev" style="font-size:11px;">▾</span>
       </button>
       <div id="archive-list" style="display:none;margin-top:8px;">
@@ -3213,6 +3220,8 @@ window.toggleArchive=()=>{
 // resta la settimana salvata sul telefono, come prima.
 function _lunedi(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
 function _inizioProg(p){const t=String(p&&p.startDate||'');let m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);if(m)return new Date(+m[3],+m[2]-1,+m[1]);m=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
+// finito: oltre l'ultima settimana dalla data di inizio
+function progFinito(p){const i=_inizioProg(p),n=Object.keys(p&&p.weeks||{}).length;return !!(i&&n&&_lunedi(new Date()).getTime()>=_lunedi(i).getTime()+n*7*864e5);}
 function settAttiva(pid,p,n){
   const lun=_lunedi(new Date()).getTime();
   try{const m=JSON.parse(localStorage.getItem(`rsc_weekman_${aid}_${pid}`)||'null');if(m&&m.lun===lun)return Math.max(0,Math.min(n-1,+m.wi||0));}catch(e){}
