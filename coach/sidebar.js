@@ -853,6 +853,8 @@ window.RSTraccia = (function(){
 .trk2-spb button:hover u{opacity:1}
 .trk2-spt{margin:6px 0 6px}.trk2-spt summary{font-size:11.5px;color:var(--mu);cursor:pointer}.trk2-spt table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;color:var(--tx)}.trk2-spt th{text-align:right;font-weight:500;color:var(--mu);font-size:10.5px;padding:3px 6px;border-bottom:1px solid var(--bd)}.trk2-spt td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--bd);font-variant-numeric:tabular-nums}.trk2-spt th:first-child,.trk2-spt td:first-child{text-align:left}.trk2-spt b{color:var(--c-passo)}
 .trk2-fc{padding:10px 12px;border-top:1px solid var(--bd)}.trk2-fc:empty{display:none}
+.trk2-mg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--bd)}.trk2-mg:empty{display:none}.trk2-mg>b{font-size:12.5px;color:var(--tx);margin-right:4px}
+.trk2-mg button{font:500 11.5px Inter,sans-serif;padding:5px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--pan);color:var(--mu);cursor:pointer;font-variant-numeric:tabular-nums}.trk2-mg button b{color:var(--tx)}.trk2-mg button i{font-style:normal;color:var(--c-passo)}
 .trk2-fch{display:flex;gap:8px;align-items:baseline;margin-bottom:8px}.trk2-fch b{font-size:12.5px;color:var(--tx)}.trk2-fch i{font-style:normal;font-size:11px;color:var(--mu)}
 .trk2-zone{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.trk2-zone div{display:grid;grid-template-columns:26px 1fr 56px 34px;align-items:center;gap:8px;font-size:11.5px;color:var(--tx)}.trk2-zone span{color:var(--mu);font-weight:600}.trk2-zone u{display:block;height:9px;border-radius:5px;background:var(--pan);overflow:hidden}.trk2-zone em{display:block;height:100%;border-radius:5px}.trk2-zone b{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}.trk2-zone i{font-style:normal;text-align:right;color:var(--mu)}
 .trk2-fcn{display:flex;flex-wrap:wrap;gap:8px 22px}.trk2-fcn span{display:flex;flex-direction:column}.trk2-fcn i{font-style:normal;font-size:10.5px;color:var(--mu)}.trk2-fcn b{font-size:15px;color:var(--tx);font-variant-numeric:tabular-nums}.trk2-fcn b.male{color:#F97316}.trk2-fcn em{font-style:normal;font-size:10.5px;color:var(--mu)}
@@ -878,6 +880,20 @@ window.RSTraccia = (function(){
   // passo dalla velocita', liscio su 5 punti; fermo o quasi = vuoto
   function passi(v){const p=(v||[]).map(x=>x&&x>1.2?1000/x:null);return p.map((x,i)=>{if(x==null)return null;const w=[p[i-2],p[i-1],x,p[i+1],p[i+2]].filter(y=>y!=null);return w.reduce((t,y)=>t+y,0)/w.length;});}
   function quant(a,q){const v=a.filter(x=>x!=null).sort((x,y)=>x-y);return v.length?v[Math.min(v.length-1,Math.max(0,Math.floor(v.length*q)))]:null;}
+  // migliori tratti della corsa, come i best efforts di intervals.icu: per ogni distanza il pezzo
+  // continuo piu' veloce (finestra mobile sulla distanza, tempo riportato alla distanza esatta).
+  // Punti ogni 10 s: sotto i 400 m il dato e' troppo grezzo. Scarta i salti del GPS (oltre 7 m/s).
+  const DMIG=[400,1000,1609,3000,5000,10000,21097,42195];
+  const DMNOME={400:'400 m',1000:'1 km',1609:'Miglio',3000:'3 km',5000:'5 km',10000:'10 km',21097:'Mezza',42195:'Maratona'};
+  function migliori(tr,dist){
+    const T=tr&&tr.t||[],D=tr&&tr.d||[],n=T.length,out=[];if(n<3)return out;
+    const dd=[];let u=0;for(let i=0;i<n;i++){if(D[i]!=null&&D[i]>=u)u=D[i];dd.push(u);}
+    (dist||DMIG).forEach(m=>{if(dd[n-1]<m)return;let best=null,j=0;
+      for(let i=0;i<n;i++){if(j<i)j=i;while(j<n-1&&dd[j]-dd[i]<m)j++;const dm=dd[j]-dd[i];if(dm<m)break;
+        const s=(T[j]-T[i])*m/dm;if(s>0&&m/s<=7&&(!best||s<best.s))best={m,s:Math.round(s),i0:i,i1:j};}
+      if(best)out.push(best);});
+    return out;
+  }
 
   function mostra(el,tr,opz){
     stili();opz=opz||{};
@@ -900,10 +916,11 @@ window.RSTraccia = (function(){
       <div class="trk2-sp"></div>
       <div class="trk2-tl"><canvas></canvas></div>
       <div class="trk2-gi"></div>
+      <div class="trk2-mg"></div>
       <div class="trk2-fc"></div>
       ${haMappa?'<div class="trk2-map"></div>':''}
       <div class="trk2-aiuto">Passa sopra per i valori del punto. Trascina per scegliere un tratto e zoomare, doppio clic per tornare a tutta la corsa.</div></div>`;
-    const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=box.querySelector('.trk2-gi');
+    const box=el.querySelector('.trk2'),spBox=box.querySelector('.trk2-sp'),fcBox=box.querySelector('.trk2-fc'),bar=box.querySelector('.trk2-bar'),selBox=box.querySelector('.trk2-sel'),wrap=box.querySelector('.trk2-tl'),cv=wrap.querySelector('canvas'),giBox=box.querySelector('.trk2-gi'),mgBox=box.querySelector('.trk2-mg');
     function colori(){const C=TEMI[T0];box.className='trk2 '+T0;['bg','pan','tx','mu','bd','sel'].forEach(k=>box.style.setProperty('--'+k,C[k]));box.style.background=C.bg;['passo','fc','cad'].forEach(k=>box.style.setProperty('--c-'+k,C[k]));}
     colori();
     const X=i=>AX==='tempo'?T[i]:(D[i]!=null?D[i]:0);
@@ -1046,6 +1063,10 @@ window.RSTraccia = (function(){
     // tratti dell'orologio come pulsanti: clic = zoom su quel tratto
     giBox.innerHTML=tratti.length>1?tratti.map(t=>`<button type="button" data-k="${t.k}" class="${t.lav?'lav':''}">${t.k+1} &#183; ${kmTxt(t.m)} km &#183; <b>${mmss(t.passo)}</b>${t.fc?' &#183; '+t.fc:''}</button>`).join(''):'';
     giBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const t=tratti[+b.dataset.k];if(t)zoom(t.i0,t.i1);});
+    // migliori tratti della corsa: clic = zoom su quel pezzo
+    const MG=migliori(tr);
+    mgBox.innerHTML=MG.length?`<b>Migliori tratti</b>${MG.map((x,k)=>`<button type="button" data-k="${k}" title="${DMNOME[x.m]} in ${hms(x.s)}">${DMNOME[x.m]} <b>${hms(x.s)}</b> <i>${mmss(x.s/(x.m/1000))}/km</i></button>`).join('')}`:'';
+    mgBox.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const x=MG[+b.dataset.k];if(x)zoom(x.i0,x.i1);});
     // mappa
     let tile=null;
     function tessere(){if(!map||!window.L)return;if(tile)map.removeLayer(tile);tile=window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'trk2-osm',attribution:'&copy; OpenStreetMap'}).addTo(map);}
@@ -1066,5 +1087,5 @@ window.RSTraccia = (function(){
     if(window.ResizeObserver){new ResizeObserver(()=>disegna()).observe(wrap);}
     return {zoom,ridisegna:disegna};
   }
-  return {mostra,carica};
+  return {mostra,carica,migliori,DMIG,DMNOME};
 })();
