@@ -1467,6 +1467,8 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rt7-add button{flex:1 1 100%;padding:12px;border-radius:12px;border:0;background:var(--primary);color:#fff;font:600 14px Inter,sans-serif;cursor:pointer}
 .rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
 .prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important} 
+.sv-sheet{max-height:88vh;display:flex;flex-direction:column}.sv-body{overflow-y:auto;padding:0 6px 18px;-webkit-overflow-scrolling:touch}.sv-body .sess-card{margin:0 8px}.sv-x{position:absolute;top:10px;right:14px;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,214,196,.06);color:var(--text);font-size:20px;cursor:pointer}
+.f7-del{display:block;margin:12px auto 2px;background:none;border:0;color:#FB7185;font:600 12.5px Inter,sans-serif;cursor:pointer;padding:8px}
 .pf-clic{cursor:pointer}.pf-clic .pf-n::after{content:' \203A';color:var(--orange,#FF6A2E);font-weight:700}.pf-clic:active{opacity:.7}
 .f7-trk{width:100%;padding:10px;border-radius:12px;border:1px solid var(--line6);background:rgba(255,214,196,.04);color:var(--white);font:600 13px Inter,sans-serif;cursor:pointer}
 .trk-ov{position:fixed;inset:0;z-index:400;background:#110C0B;display:flex;flex-direction:column}
@@ -1727,6 +1729,13 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 </div>
 
 <!-- ═══ BOTTOM SHEETS ══════════════════════════════════════════════ -->
+<!-- Seduta: anteprima dal Piano o registrazione dallo Storico -->
+<div class="bsheet-overlay" id="sv-overlay" onclick="chiudiSeduta()"></div>
+<div class="bsheet sv-sheet" id="sv-sheet">
+  <div class="bsheet-handle"></div>
+  <button type="button" class="sv-x" onclick="chiudiSeduta()" aria-label="Chiudi">&#215;</button>
+  <div class="sv-body" id="sv-body" onclick="if(event.target.closest('button,a')&&!event.target.closest('.f7-del,details,summary,.sv-x'))setTimeout(chiudiSeduta,60)"></div>
+</div>
 <!-- Peso Sheet -->
 <div class="bsheet-overlay" id="peso-overlay" onclick="closePesoSheet()"></div>
 <div class="bsheet" id="peso-sheet">
@@ -1890,7 +1899,8 @@ function gmPianIso(iso){
 }
 function gmLogs(){
   const v=ST.gd&&window.RSGarmin?window.RSGarmin.fondi(ST.logsRaw||{},ST.gd,gmPianIso):(ST.logsRaw||{});
-  ST.logs=Object.values(v).filter(l=>l&&l.ts).sort((a,b)=>b.ts-a.ts);
+  const raw=ST.logsRaw||{};
+  ST.logs=Object.entries(v).filter(([,l])=>l&&l.ts).map(([k,l])=>{if(raw[k]&&!l.gm){try{Object.defineProperty(l,'_k',{value:k,configurable:true});}catch(e){}}return l;}).sort((a,b)=>b.ts-a.ts);
 }
 function prGiorno(iso){
   const q=prGiorno0(iso);if(!ST.gd||!window.RSGarmin)return q;
@@ -2388,7 +2398,7 @@ function renderWorkoutStorico(logs){
     else{if(l.duration)num.push(l.duration+"'");if(l.corsa&&+l.corsa.km>0){num.push(String(l.corsa.km).replace('.',',')+' km');if(l.corsa.passo&&window.RSRitmi)num.push(window.RSRitmi.passo(l.corsa.passo)+'/km');}if(l.totalSets)num.push(l.totalSets+' serie');}
     const pr=(l.newPRs||[]).map(x=>x.name+' '+x.value+' kg');
     // una corsa con la traccia si apre sull'analisi (grafici, split, mappa)
-    const trk=l.gmTraccia&&window.RSTraccia?`apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')`:'';
+    const trk=`apriLog(${l.ts})`;
     h+=`<div class="pf-row${trk?' pf-clic':''}"${trk?` role="button" tabindex="0" onclick="${trk}" onkeydown="if(event.key==='Enter')this.click()"`:''}><div class="pf-d"><b>${String(d.getDate()).padStart(2,'0')}</b><i>${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}</i></div>
       <div class="pf-b"><div class="pf-n">${l.sessName||'Seduta'}</div><div class="pf-m">${num.join(' · ')||'&nbsp;'}${pr.length?' <span class="pf-pr">Record: '+pr.join(', ')+'</span>':''}</div>${l.note?`<div class="pf-nt">${String(l.note).slice(0,120).replace(/</g,'&lt;')}</div>`:''}</div>
       <div class="pf-rpe${rpeLog(l)>=9?' hi':''}">${rpeLog(l)?'<b>'+nfIt(rpeLog(l),1)+'</b><i>RPE</i>':''}</div></div>`;
@@ -2826,6 +2836,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     return `<div class="sess-corsa"><div class="sess-mini-label">${arr.length} ${arr.length===1?'fase':'fasi'}</div>${cards}</div>`;
   }
 
+  window._sessionCard=(...a)=>sessionCard(...a);
   function sessionCard(type,title,note,exercises,extra,progId,weekIdx,sessId,progName,corsaFasi){
     const color=SESS_COLORS[type]||'var(--text)';
     const label=SESS_LABELS[type]||type||'Sessione';
@@ -3032,8 +3043,26 @@ function sedutaFattaHtml(l,m){
     ${l.corsa&&l.corsa.giri&&l.corsa.giri.length&&window.RSRitmi?`<details class="f7-giri"><summary>${l.corsa.giri.some(g=>g.t)?'Fatto e programma, tratto per tratto':'I tratti della corsa'}</summary>${giriTab(l.corsa.giri)}</details>`:''}
     ${rpe?'':`<button type="button" class="f7-rpe" onclick="vaiRpe(${l.ts})">Manca l'RPE della seduta: aggiungilo</button>`}
     ${m.link?`<div class="sess-action"><a class="f7-again" href="${m.link}">Apri di nuovo la seduta</a></div>`:''}
+    ${l._k?`<button type="button" class="f7-del" onclick="eliminaLog('${l._k}')">Elimina questa registrazione</button>`:''}
   </div>`;
 }
+// una seduta registrata per sbaglio si toglie (quelle dell'orologio no: arrivano da Garmin o intervals.icu)
+window.eliminaLog=async k=>{
+  if(!k||!confirm('Eliminare questa registrazione? Non si puo\' annullare.'))return;
+  try{await remove(ref(db,`session_logs/${aid}/${k}`));if(ST.logsRaw)delete ST.logsRaw[k];chiudiSeduta();showToast('Registrazione eliminata');}
+  catch(e){console.error(e);showToast('Non eliminata: controlla la connessione');}
+};
+// anteprima di una seduta del Piano: si legge senza avviarla; la forza parte solo con il suo tasto
+window.apriSeduta=(pid,wi,sid)=>{
+  const p=(ST.progs||{})[pid],s=orolSess(pid,wi,sid);if(!p||!s||!window._sessionCard)return;
+  const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),wk=W[+wi]?W[+wi][1]:{};
+  const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
+  const extra=s.type==='conditioning'?`${s.condType||''}${s.duration?' · '+s.duration:''}\n${s.condContent||''}`:'';
+  svApri(window._sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,pid,+wi,sid,`${p.name} · Sett. ${+wi+1}${wk.label?' - '+wk.label:''}`,s.corsaFasi));
+};
+window.apriLog=ts=>{const l=ST.logs.find(x=>x.ts===+ts);if(!l)return;svApri(sedutaFattaHtml(l,{icon:TICONS[l.type]||_ri('sedute'),label:SESS_LABELS[l.type]||'Allenamento',title:l.sessName||'Seduta',progName:'',link:''}));};
+function svApri(html){const b=document.getElementById('sv-body');if(!b)return;b.innerHTML=html;b.scrollTop=0;document.getElementById('sv-overlay').classList.add('open');document.getElementById('sv-sheet').classList.add('open');}
+window.chiudiSeduta=()=>{document.getElementById('sv-overlay')?.classList.remove('open');document.getElementById('sv-sheet')?.classList.remove('open');};
 // le sedute registrate in un giorno della settimana, anche fuori programma
 function fattiGiornoHtml(i){
   return logsGiorno(i).map(l=>sedutaFattaHtml(l,{icon:TICONS[l.type]||_ri('sedute'),label:SESS_LABELS[l.type]||'Allenamento',title:l.sessName||'Seduta',progName:'',link:''})).join('');
@@ -3168,7 +3197,7 @@ function renderPrograms(progData){
           else if(wi<cur||(wi===cur&&s.dayOfWeek!=null&&s.dayOfWeek<oggiG))st='<span class="ps7 no">non registrata</span>';
           else if(wi===cur&&s.dayOfWeek===oggiG)st='<span class="ps7 oggi">oggi</span>';
           return `
-          <a class="sess-start-btn${l?' fatta':''}" href="./session.html?id=${aid}&prog=${pid}&week=${wi}&sess=${sid}">
+          <a class="sess-start-btn${l?' fatta':''}" href="#" onclick="apriSeduta('${pid}',${wi},'${sid}');return false;">
             <div class="pc-giorno">${s.dayOfWeek!=null?GGB[s.dayOfWeek]:''}</div>
             <div class="sess-icon" style="background:${SESS_BGS[s.type]||'rgba(255,214,196,.06)'};">${TICONS[s.type]||_ri('pesi')}</div>
             <div class="sess-info"><div class="sess-start-name">${escH(s.name||s.type||'Sessione')}</div><div class="sess-start-meta">${pcMeta(s)}${s.notes?' · '+escH(s.notes):''}</div></div>
