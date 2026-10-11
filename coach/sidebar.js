@@ -234,6 +234,17 @@ window.SIDEBAR_CSS = `
   .sb-mob-bar{display:none !important;}
   .sb-mob-overlay{display:none !important;}
   #sb-sidebar{display:flex !important;transform:none !important;}
+  /* da computer la barra e' una striscia di icone: passandoci sopra si apre sopra la pagina
+     (larghezza in piu' compensata dal margine, cosi' il contenuto non si sposta) */
+  #sb-sidebar{width:58px;overflow-x:hidden;z-index:700;margin-right:0;transition:width .18s ease .06s,margin-right .18s ease .06s,box-shadow .18s ease}
+  #sb-sidebar:hover,#sb-sidebar:focus-within{width:218px;margin-right:-160px;box-shadow:12px 0 32px rgba(0,0,0,.45);transition-delay:.12s}
+  #sb-sidebar .sb-top{padding:20px 14px 14px}
+  #sb-sidebar .nav-s{padding:10px 9px 0}
+  #sb-sidebar .nav-item{white-space:nowrap}
+  #sb-sidebar .rs-word,#sb-sidebar .logo-sub,#sb-sidebar .nav-lbl,#sb-sidebar .nav-lbl-text,#sb-sidebar .sb-switch span,#sb-sidebar .sb-cred{opacity:0;transition:opacity .12s ease;white-space:nowrap}
+  #sb-sidebar:hover .rs-word,#sb-sidebar:hover .logo-sub,#sb-sidebar:hover .nav-lbl,#sb-sidebar:hover .nav-lbl-text,#sb-sidebar:hover .sb-switch span,#sb-sidebar:hover .sb-cred,
+  #sb-sidebar:focus-within .rs-word,#sb-sidebar:focus-within .logo-sub,#sb-sidebar:focus-within .nav-lbl,#sb-sidebar:focus-within .nav-lbl-text,#sb-sidebar:focus-within .sb-switch span,#sb-sidebar:focus-within .sb-cred{opacity:1;transition-delay:.14s}
+  #sb-sidebar .sb-foot{padding:12px 9px 14px}
 }`;
 
 // ── RITMI DI CORSA DAI TEMPI (VDOT di Daniels) ────────────────────────
