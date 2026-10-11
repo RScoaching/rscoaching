@@ -939,7 +939,7 @@ window.RSTraccia = (function(){
       selBox.classList.add('on');selBox.querySelector('button').onclick=()=>zoom(0,n-1);
     }
     // disegno della linea temporale
-    const PAD={l:8,r:44,t:6,b:22},GAP=8;
+    const PAD={l:8,r:50,t:6,b:22},GAP=8;
     function disegna(){
       const C=TEMI[T0],dpr=window.devicePixelRatio||1,W=wrap.clientWidth||600,H=PAD.t+lanes.reduce((t,l)=>t+l.h+GAP,0)+PAD.b;
       cv.width=W*dpr;cv.height=H*dpr;cv.style.height=H+'px';const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
@@ -952,7 +952,7 @@ window.RSTraccia = (function(){
         L.y=y;
         const vis=L.d.slice(v0,v1+1),lo0=quant(vis,0.02),hi0=quant(vis,0.98);
         let lo=lo0,hi=hi0;if(lo==null){y+=L.h+GAP;return;}if(hi-lo<1){lo-=1;hi+=1;}const pad=(hi-lo)*0.12;lo-=pad;hi+=pad;L.lo=lo;L.hi=hi;
-        const sy=v=>L.inv?y+(v-lo)/(hi-lo)*L.h:y+L.h-(v-lo)/(hi-lo)*L.h;L.sy=sy;
+        const yL=y,sy=v=>L.inv?yL+(v-lo)/(hi-lo)*L.h:yL+L.h-(v-lo)/(hi-lo)*L.h;L.sy=sy;
         // zone FC sotto la curva
         if(L.zone&&opz.zone&&Array.isArray(opz.zone.z)){const z=opz.zone.z;for(let k=0;k<5;k++){const a=z[k],b=z[k+1]||999;const ya=Math.max(y,Math.min(y+L.h,sy(b))),yb=Math.max(y,Math.min(y+L.h,sy(a)));if(yb>ya){g.fillStyle=C.zone[k];g.fillRect(PAD.l,ya,pw,yb-ya);}}}
         // griglia e scala a destra
@@ -982,7 +982,17 @@ window.RSTraccia = (function(){
       if(drag&&drag.b!=null){const a=Math.min(drag.a,drag.b),b=Math.max(drag.a,drag.b);g.fillStyle=C.sel;g.fillRect(a,PAD.t,b-a,H-PAD.t-PAD.b);}
       // cursore su tutte le corsie
       if(cur!=null&&cur>=v0&&cur<=v1){const px=Math.round(sx(X(cur)))+.5;g.strokeStyle=C.cur;g.globalAlpha=.55;g.lineWidth=1;g.beginPath();g.moveTo(px,PAD.t);g.lineTo(px,H-PAD.b);g.stroke();g.globalAlpha=1;
-        lanes.forEach(L=>{const v=L.d[cur];if(v==null||!L.sy)return;g.fillStyle=C.bg;g.strokeStyle=C[L.k];g.lineWidth=2;g.beginPath();g.arc(px,L.sy(v),3.5,0,7);g.fill();g.stroke();});}
+        lanes.forEach(L=>{const v=L.d[cur];if(v==null||!L.sy)return;g.fillStyle=C.bg;g.strokeStyle=C[L.k];g.lineWidth=2;g.beginPath();g.arc(px,L.sy(v),3.5,0,7);g.fill();g.stroke();});
+        // cartellini sulla scala a destra, come su intervals.icu: il valore del punto nel colore della corsia
+        const cy=(L,v)=>Math.max(L.y+8,Math.min(L.y+L.h-8,L.sy(v)));
+        const pill=(L,v,col,dy)=>{if(v==null||!L.sy)return;const txt=L.fmt?L.fmt(v):String(Math.round(v)),yy=dy!=null?dy:cy(L,v),x=W-PAD.r+2,w=PAD.r-4;
+          g.fillStyle=col;g.beginPath();if(g.roundRect)g.roundRect(x,yy-8,w,16,4);else g.rect(x,yy-8,w,16);g.fill();g.fillStyle='#fff';g.font='700 10.5px Inter, sans-serif';g.textAlign='center';g.fillText(txt,x+w/2,yy+4);g.textAlign='left';};
+        // valore della corsa di confronto allo stesso km (o tempo)
+        let bi=null;if(B){const xv=X(cur),arr=AX==='tempo'?B.t:B.d;let lo=0,hi=arr.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if((arr[m]||0)<xv)lo=m;else hi=m;}bi=Math.abs((arr[lo]||0)-xv)<=Math.abs((arr[hi]||0)-xv)?lo:hi;if(Math.abs((arr[bi]||0)-xv)>(AX==='tempo'?30:80))bi=null;}
+        // se il punto esatto manca (pausa, GPS) prende il piu' vicino
+        const vic=d=>{for(let k=0;k<=6;k++){if(d[cur-k]!=null)return d[cur-k];if(d[cur+k]!=null)return d[cur+k];}return null;};
+        lanes.forEach(L=>{const v=vic(L.d);pill(L,v,C[L.k]==='#94A3B8'||C[L.k]==='#6B6460'?'#64748B':C[L.k]);
+          if(bi!=null){const bd=L.k==='passo'?B.p:L.k==='fc'?B.fc:L.k==='cad'?B.cad:L.k==='q'?B.q:null,bv=bd?bd[bi]:null;if(bv!=null){let dy=null;if(v!=null&&L.sy){const a=cy(L,v),b=cy(L,bv);if(Math.abs(b-a)<17){dy=b>=a?a+17:a-17;if(dy>L.y+L.h-8)dy=a-17;if(dy<L.y+8)dy=a+17;}}pill(L,bv,T0==='chiaro'?'#0EA5E9':'#0284C7',dy);}}});}
       cv._sx=sx;cv._W=W;
     }
     // da pixel a indice (ricerca sul valore dell'asse)
