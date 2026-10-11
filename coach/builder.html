@@ -3634,7 +3634,7 @@ ${s.condContent||''}
       }
     });
   });
-  navigator.clipboard.writeText(txt).then(()=>showToast('Copiato per WhatsApp!'));
+  navigator.clipboard.writeText(txt).then(()=>showToast('Copiato per WhatsApp!')).catch(()=>showToast('Copia non riuscita: clicca nella pagina e riprova'));
 };
 
 /* ── PDF compatto, a blocchi ─────────────────────────────────────────
@@ -7504,6 +7504,10 @@ function pzCorsaPrincipale(s){
   const ff=(s.corsaFasi||[]).filter(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo||''));
   return (ff.length?ff:(s.corsaFasi||[])).map(f=>(f.tipo&&!/Fondo Lento|Long Run/.test(f.tipo)?f.tipo+' ':'')+stCorsaTesto(f)).join(' + ');
 }
+// km di qualita' di una corsa: le fasi sopra il facile (soglia, ripetute, passo gara, progressivi...),
+// senza i recuperi fra le ripetute. Il resto e' facile: serve a vedere la proporzione 80/20 della settimana.
+function pzFaseQual(f){return /Ripetute|Soglia|Passo gara|Interval|Fartlek|Progressivo|Collinare/.test(f.tipo||'')||/^(T|I|R|M|RG)$/.test(f.rit||'')||/Z[345]/.test(f.zona||'');}
+function pzCorsaQual(s){return Math.round((s.corsaFasi||[]).filter(f=>f&&pzFaseQual(f)&&!/Allunghi/.test(f.tipo||'')).reduce((t,f)=>{const c=(+f.serie>1?+f.serie:1)*(parseInt(f.reps,10)||1);return t+Math.max(0,pzCorsaKm({corsaFasi:[f]})-pzRecKm(f)*Math.max(0,c-1));},0)*10)/10;}
 function pzProgCorsa(W,k){
   const tutte=k==='__corsa';
   const righe=tutte?pzSlots().filter(x=>x.tipo==='corsa'):[pzSlots().find(x=>x.k===k)].filter(Boolean);
@@ -7514,6 +7518,11 @@ function pzProgCorsa(W,k){
   const rif=i=>{for(let j=i-1;j>=0;j--)if(!pzIsDl(W[j][1]))return kmW[j];return 0;};
   h+=`<tr class="kmr"><td class="nm">Km della settimana</td>${kmW.map((x,i)=>{const pr=pzIsDl(W[i][1])?(i?kmW[i-1]:0):rif(i),cr=pr?Math.round((x-pr)/pr*100):0;return `<td><b>${x?Math.round(x):'-'}</b>${pr&&x&&Math.abs(cr)>=1?`<i class="${cr>10?'alto':cr<0?'giu':''}">${cr>0?'+':''}${cr}%</i>`:''}</td>`;}).join('')}</tr>`;
   h+=`<tr class="kmr"><td class="nm">Uscita piu' lunga</td>${lungo.map(x=>`<td><b>${x?Math.round(x):'-'}</b>${x?' km':''}</td>`).join('')}</tr>`;
+  // la gara non conta: e' l'obiettivo, non allenamento di qualita'
+  const gara=s=>/^gara|\bgara\b|maratona di|mezza di/i.test(s.name||'')||(s.corsaFasi||[]).some(f=>/^(mezza )?maratona$/i.test(stDistNorm(f.dist)||''));
+  const corse=w=>pzSess(w).filter(([,s])=>s.type==='corsa'&&!gara(s));
+  const qW=W.map(([,w])=>corse(w).reduce((t,[,s])=>t+pzCorsaQual(s),0)),kmA=W.map(([,w])=>corse(w).reduce((t,[,s])=>t+pzCorsaKm(s),0));
+  h+=`<tr class="kmr"><td class="nm">Km di qualita'<i>gara esclusa; oltre il 25% in arancio</i></td>${qW.map((q,i)=>{const pc=kmA[i]?Math.round(q/kmA[i]*100):0;return `<td><b>${q?Math.round(q):'-'}</b>${q?` <i class="${pc>25?'alto':''}">${pc}%</i>`:''}</td>`;}).join('')}</tr>`;
   righe.forEach(sl=>{
     h+=`<tr><td class="nm">${stEsc(ST_GG[sl.d]||'Senza giorno')}<i>${stEsc(sl.nome)}</i></td>${W.map(([wid,w])=>{const x=pzSlotSess(w,sl.k);if(!x)return '<td class="na">-</td>';const km=pzCorsaKm(x[1]);
       return `<td><button type="button" class="pz-crc" onclick="openModal('edit-corsa','${wid}','${x[0]}')" title="Apri le fasi della corsa"><b>${stEsc(x[1].name||'')}</b>${(()=>{const t=pzCorsaPrincipale(x[1]);return `<span>${stEsc(t)}</span>${km&&!/^\d+(?:[.,]\d+)?\s*km(?: @ [^+]*)?$/.test(t.trim())?`<em>totale ${Math.round(km)} km</em>`:''}`;})()}</button></td>`;}).join('')}</tr>`;
@@ -8001,7 +8010,7 @@ function pzGiorni(wid,w){
     </div>`;
   });
   if(senza.length)h+=`<div class="pz-day"><div class="pz-dh"><b>Senza giorno</b><small>da mettere in un giorno</small></div><div class="pz-dc pz-dbody" data-w="${wid}" data-d="" tabindex="-1">${senza.map(([sid,x])=>card(sid,x)).join('')}</div></div>`;
-  h+=`</div></div><div class="pz-dfoot"><span><b>${ss.length}</b> sedute in <b>${7-riposo}</b> giorni, <b>${riposo}</b> di riposo</span><span>carico stimato <b>${Math.round(tot)}</b> UA</span>${av.length?`<span class="pz-dav">${av.map(stEsc).join('. ')}.</span>`:'<span class="pz-dok">Distribuzione senza problemi evidenti.</span>'}</div>`;
+  h+=`</div></div><div class="pz-dfoot"><span><b>${ss.length}</b> sedute in <b>${7-riposo}</b> giorni, <b>${riposo}</b> di riposo</span><span>carico stimato <b>${Math.round(tot)}</b> UA</span>${(()=>{const C=ss.filter(([,x])=>x.type==='corsa'),km=C.reduce((t,[,x])=>t+pzCorsaKm(x),0),q=C.reduce((t,[,x])=>t+pzCorsaQual(x),0);return km?`<span>corsa <b>${pzKmTxt(km)}</b> km, di qualita' <b>${pzKmTxt(q)}</b> (${Math.round(q/km*100)}%)</span>`:'';})()}${av.length?`<span class="pz-dav">${av.map(stEsc).join('. ')}.</span>`:'<span class="pz-dok">Distribuzione senza problemi evidenti.</span>'}</div>`;
   return h;
 }
 window.pzApriSett=function(i){const W=pzWeeks();pzMode='giorni';try{localStorage.setItem('rsc_pz_mode_v2','giorni');}catch(e){}selectWeek(i,W[i][0]);};
@@ -8342,7 +8351,7 @@ async function pzSelApplica(el,svuota){
 }
 function pzSelCopia(){
   const C=pzSelCelle(),t=C.map(r=>r.map(x=>x.value).join('\t')).join('\n');
-  try{navigator.clipboard.writeText(t);}catch(e){}
+  try{navigator.clipboard.writeText(t).catch(()=>{});}catch(e){}
   // con la colonna del nome si copiano gli esercizi interi: incollati nella riga + di un'altra seduta arrivano completi
   pzClipEx=C.some(r=>r.some(x=>x.dataset.f==='name'))?C.map(r=>{const x=r[0],e=(((programs[currentProgId].weeks[x.dataset.w]||{}).sessions||{})[x.dataset.s]||{}).exercises;return e&&e[x.dataset.e]?JSON.parse(JSON.stringify(e[x.dataset.e])):null;}).filter(Boolean):null;
   pzClipTxt=t;showToast(pzClipEx&&pzClipEx.length?'Copiati '+pzClipEx.length+(pzClipEx.length===1?' esercizio':' esercizi')+': incolla nella riga + di un\'altra seduta':'Copiate '+pzSelN()+' celle');
