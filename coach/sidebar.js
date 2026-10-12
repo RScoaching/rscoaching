@@ -1486,7 +1486,7 @@ window.RSMuscoli=(function(){
     if(iso)filtra(o=>/isometric|iso\b|wall sit|plank|hold/.test(nm(o)));
     if(ecc)filtra(o=>/nordic|eccentric|ecc\b/.test(nm(o)));
     if(att)filtra(o=>o.i.att===att||(att==='macchina'&&o.i.att==='cavi'));
-    else if(soft)filtra(o=>['macchina','cavi','manubri','multipower','corpo libero','elastico'].includes(o.i.att));
+    else if(soft){filtra(o=>['macchina','cavi','manubri','multipower','corpo libero','elastico'].includes(o.i.att));filtra(o=>['macchina','cavi','multipower'].includes(o.i.att));}
     const sed=has(/^sedut[oa]$/);if(sed)filtra(o=>/seated|sedut/.test(nm(o)));
     if(mono)filtra(o=>o.i.mono);else if(!['polpacci','adduttori','abduttori','core'].includes(g))filtra(o=>!o.i.mono);
     // classifica: prima i riferimenti della scheda, poi il livello giusto per l'intenzione
