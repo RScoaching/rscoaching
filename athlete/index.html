@@ -2630,7 +2630,7 @@ function pianoSett(){
     const wi=settAttiva(pid,p,W.length);const w=W[wi];if(!w)return;
     Object.entries(w[1].sessions||{}).forEach(([sid,s])=>{if(s&&s.dayOfWeek!=null&&g[s.dayOfWeek])g[s.dayOfWeek].push({nome:s.name||'Seduta',tipo:s.type||'pesi',pid,wi,sid});});
   });
-  const pm=window._weekPlanMap||{};
+  const pm=progAttivo()?{}:(window._weekPlanMap||{});
   for(let i=0;i<7;i++){const raw=pm[String(i)]||pm[i];if(!raw)continue;const ss=raw.type!==undefined?[raw]:Object.values(raw).filter(s=>s&&s.type);ss.filter(s=>s.type!=='riposo').forEach(s=>g[i].push({nome:SESS_LABELS[s.type]||s.type,tipo:s.type}));}
   return g;
 }
@@ -2964,8 +2964,10 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   }
 
   // ── Priority 1: athlete_plans (assigned by coach via planner)
-  const qpSnap=await get(ref(db,`athlete_plans/${aid}/${wk}`));
-  if(qpSnap.exists()){
+  // un programma in corso vale piu' di un vecchio piano del Planner rimasto attivo
+  if(!ST.progs){try{ST.progs=(await get(ref(db,'programs'))).val()||{};}catch(e){}}
+  const qpSnap=progAttivo()?null:await get(ref(db,`athlete_plans/${aid}/${wk}`));
+  if(qpSnap&&qpSnap.exists()){
     const qp=qpSnap.val();
     const rawDay=qp.days?.[dayIdx];
     if(rawDay){
@@ -3326,6 +3328,8 @@ window.toggleArchive=()=>{
 // resta la settimana salvata sul telefono, come prima.
 function _lunedi(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
 function _inizioProg(p){const t=String(p&&p.startDate||'');let m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);if(m)return new Date(+m[3],+m[2]-1,+m[1]);m=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
+// c'e' un programma in corso questa settimana? (assegnato, non archiviato, gia' iniziato e non finito)
+function progAttivo(){const oggi=new Date();return Object.values(ST.progs||{}).some(p=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived&&!progFinito(p)&&(!_inizioProg(p)||_lunedi(_inizioProg(p))<=oggi));}
 // finito: oltre l'ultima settimana dalla data di inizio
 function progFinito(p){const i=_inizioProg(p),n=Object.keys(p&&p.weeks||{}).length;return !!(i&&n&&_lunedi(new Date()).getTime()>=_lunedi(i).getTime()+n*7*864e5);}
 function settAttiva(pid,p,n){
