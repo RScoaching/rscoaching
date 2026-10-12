@@ -207,6 +207,7 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pzpv-tutte{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);margin:4px 0 10px;cursor:pointer}
 .pz-t.solo-add thead{display:none}.pz-t.solo-add .pz-q::placeholder{opacity:.6}
 .pz-pt td.grv{font-variant-numeric:tabular-nums;font-weight:600}.pz-pt td.grv.basso{color:#FDBA74}.pz-pt td.grv.alto{color:#FCA5A5}.pz-pt td.grv.ok{color:#86EFAC}.pz-pt tr.gr1 td{border-top:1px solid rgba(255,255,255,.12)}.pz-pt tr.gr td.nm i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);font-weight:500}
+.pz-prl{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px}
 .pz-prall{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border:1px solid var(--border2);border-radius:12px;background:rgba(255,106,46,.05);font-size:12px;color:var(--text)}.pz-prall b{color:var(--white);font-weight:600}.pz-prall span{color:var(--muted);font-size:11px}.pz-prall select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:7px;color:var(--white);font:500 12px Inter,sans-serif;padding:5px 8px}.pz-prall select option{background:#121111}
 .pz-prsel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--white);font:500 11.5px Inter,sans-serif;padding:4px 6px;max-width:170px}.pz-prsel option{background:#121111}
 .pz-opzt{display:inline-block;font:600 10px Inter,sans-serif;font-style:normal;color:#C4B5FD;border:1px dashed rgba(196,181,253,.5);border-radius:999px;padding:0 7px;margin-left:6px;vertical-align:1px}
@@ -4886,7 +4887,7 @@ function stFasi(I){
   // della nuova fase riparte dal suo primo gradino, non dal terzo
   const fiC={};out.forEach(w=>{w.fi=fiC[w.fase]||0;if(w.tipo==='carico')fiC[w.fase]=w.fi+1;});
   // chi e' fermo o fa oggi molto meno di quanto chiede il programma parte con due o tre settimane di rientro
-  const R=stRientro(I);out.forEach((w,i)=>{w.rientro=i<R&&w.tipo==='carico';});
+  const R=stRientro(I);let rp=0;out.forEach((w,i)=>{w.rientro=i<R&&w.tipo==='carico';if(w.rientro)w.rpos=rp++;});
   let fz='',pp=0;out.forEach((w,i)=>{if(w.fase!==fz||(i&&out[i-1].tipo==='scarico')){fz=w.fase;pp=0;}w.pp=Math.min(2,pp);if(w.tipo==='carico')pp++;});
   if(I.obiettivo==='ibrido')stEnfasi(I,out);
   return out;
@@ -5367,11 +5368,13 @@ function stRientro(I){
 function stPrescr(I,w,ruolo,name){
   const p=stPrescr0(I,w,ruolo,name);
   const giu=x=>String(x).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.max(5,parseFloat(v.replace(',','.'))-1)));
+  // rientro da un periodo di fermo: 2-3 settimane per riprendere confidenza con gli esercizi,
+  // niente percentuali alte, 6-8 ripetizioni, RPE 7 la prima e mai oltre 8 (anche nell'ibrido)
   if(w.rientro&&!['core','pliom','pow'].includes(ruolo)){
-    if(+p.sets>2)p.sets=+p.sets-1;
-    if(p.rpe)p.rpe=giu(p.rpe);
-    if(p.pct)p.pct=String(Math.max(55,+p.pct-5));
-    p.cue=(p.cue?p.cue+'; ':'')+'settimana di rientro';
+    const per=/per lato/.test(String(p.reps||''))?' per lato':'';
+    if(['main','main2','mainU','mant'].includes(ruolo)){p.sets=Math.max(2,Math.min(3,+p.sets||3));p.reps='6-8'+per;delete p.pct;p.rpe=(w.rpos||0)===0?'7':'7-8';}
+    else{if(+p.sets>3)p.sets=3;if(p.rpe)p.rpe=String(p.rpe).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.min(8,parseFloat(v.replace(',','.')))));}
+    p.cue=(p.cue?p.cue+'; ':'')+'riadattamento: tecnica e confidenza, carico che lascia 2-3 ripetizioni';
   }
   // post parto: niente sforzi massimali (pressione addominale sul pavimento pelvico)
   if((I.problemi||[]).includes('postparto')&&p.rpe)p.rpe=String(p.rpe).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.min(8,parseFloat(v.replace(',','.')))));
@@ -8673,26 +8676,33 @@ function pzFondamentale(nome){
   return !!x&&['bilanciere','trap bar'].includes(x.att)&&['squat','hinge','spinta_orizz','spinta_vert','tirata_orizz'].includes(x.sc)&&!x.mono;
 }
 const PZ_PRALL=[['auto','Automatica: fondamentali a onde, complementari in doppia'],['pct','Carico +2,5% a settimana'],['rpe','RPE +0,5 a settimana'],['doppia','Doppia progressione per tutti'],['serie','+1 serie ogni 2 settimane']];
-function pzProgAll(chiavi,modo){
-  const W=pzWeeks(),up={},st=pzStileProg(),onde=PZ_ONDE[st];let n=0;
+function pzProgAll(chiavi,modo,opz){
+  opz=opz||{};const W=pzWeeks(),up={},st=opz.st||pzStileProg(),onde=PZ_ONDE[st],fo=opz.fo||'onde',ra=+opz.ra||0;let n=0;
   chiavi.forEach(k=>{
     const righe=Math.max(0,...W.map(([,w])=>{const s=pzSlotSess(w,k);return s?pzExs(s[1]).length:0;}));
     for(let r=0;r<righe;r++){
-      let base=null,kk=0,ka=0,bl=0;
+      let base=null,kk=0,ka=0,bl=0,rr=0,onda=false;
       W.forEach(([wid,w])=>{
         const s=pzSlotSess(w,k);const ex=s&&pzExs(s[1])[r];if(!ex)return;
         const e=ex[1],dl=pzIsDl(w);
-        if(dl){if(base)bl++;kk=0;}
+        if(dl){if(base&&onda)bl++;kk=0;}
         if(/^Prevenzione/.test(e.cue||'')||/^Test|^Controllo/.test(s[1].name||''))return;
         // un altro esercizio in quella riga: si riparte da lui
         if(base&&base.name!==e.name)base=null;
+        // riadattamento: le prime settimane di carico 6-8 ripetizioni, RPE 7 poi 7-8, niente %
+        if(ra&&!dl&&rr<ra&&!(window.RSMuscoli&&/core|pliometria|olimpico/.test(RSMuscoli.info(e.name).sc))){
+          if(base==null)base=e;const per=/per lato/.test(String(base.reps||''))?' per lato':'',isol=window.RSMuscoli&&RSMuscoli.info(e.name).sc==='isolamento';
+          const v={sets:String(Math.max(2,Math.min(3,+base.sets||3))),reps:isol?(base.reps||'10-12'):'6-8'+per,rpe:rr===0?'7':'7-8',pct:null,prog:null,
+            cue:[String(e.cue||'').replace(/,?\s*(riadattamento[^,]*|Avvicinamento[^,]*)/g,'').trim(),'riadattamento: tecnica e confidenza'].filter(Boolean).join(', ')};
+          rr++;const nuovo=Object.assign({},e,v);Object.keys(nuovo).forEach(x=>{if(nuovo[x]==null||nuovo[x]==='')delete nuovo[x];});up[pzBase(wid,s[0])+'/exercises/'+ex[0]]=nuovo;n++;return;}
         if(base==null){base=e;if(modo!=='auto'||!pzFondamentale(e.name)){kk++;ka++;return;}}
         let v=null;const per=/per lato/.test(String(base.reps||''))?' per lato':'';
         const fond=modo==='auto'&&pzFondamentale(e.name),core=window.RSMuscoli&&/core|pliometria|olimpico/.test(RSMuscoli.info(e.name).sc);
         if(modo==='auto'&&core){kk+=dl?0:1;return;}
         if(dl)v=fond?{sets:'3',reps:'5',pct:stPctOk(e.name)?pzNumFmt(60+2.5*bl):null,rpe:stPctOk(e.name)?null:'6'}:pzAvEx(Object.assign({},e,{sets:base.sets,reps:base.reps,rpe:base.rpe||null,pct:base.pct||null}),0,'uguale',true);
-        else if(fond){const o=onde[Math.min(kk,onde.length-1)];const pc=o[2]+2.5*bl;
-          v={sets:String(o[0]),reps:o[1]+per,pct:stPctOk(e.name)?pzNumFmt(Math.min(92.5,pc)):null,rpe:stPctOk(e.name)?null:stPctRpe(pc),rest:pc>=80?'3\'':'2\'30"',prog:null};
+        else if(fond){const o=onde[Math.min(kk,onde.length-1)];let pc=o[2]+2.5*bl;
+          if(fo==='lineare'){const o0=onde[0];pc=o0[2]+2.5*(kk+bl);v={sets:String(o0[0]),reps:o0[1]+per,pct:stPctOk(e.name)?pzNumFmt(Math.min(92.5,pc)):null,rpe:stPctOk(e.name)?null:stPctRpe(pc),rest:'2\'30"',prog:null};}
+          else v={sets:String(o[0]),reps:o[1]+per,pct:stPctOk(e.name)&&fo!=='rpe'?pzNumFmt(Math.min(92.5,pc)):null,rpe:stPctOk(e.name)&&fo!=='rpe'?null:stPctRpe(pc),rest:pc>=80?'3\'':'2\'30"',prog:null};
           if(kk===0&&pc>=75)v.cue=[String(e.cue||'').replace(/,?\s*Avvicinamento[^,]*/,''),'Avvicinamento: 5 al 50%, 3 al 70%'].filter(Boolean).join(', ');}
         else{
           const m=modo==='auto'?'doppia':modo,p=parseFloat(String(base.pct||'').replace(',','.'));
@@ -8701,7 +8711,7 @@ function pzProgAll(chiavi,modo){
           if(m==='rpe')v.rpe=pzSposta(base.rpe||'7',0.5*ka,9.5);
           if(m==='serie'||(modo==='auto'&&st==='ipertrofia'&&kk>=2))v.sets=String(Math.min((+base.sets||3)+3,(+base.sets||3)+(m==='serie'?Math.floor(ka/2):1)));
         }
-        if(!dl){kk++;ka++;}
+        if(!dl){kk++;ka++;if(fond)onda=true;}
         const nuovo=Object.assign({},e,v);Object.keys(nuovo).forEach(x=>{if(nuovo[x]==null)delete nuovo[x];});
         up[pzBase(wid,s[0])+'/exercises/'+ex[0]]=nuovo;n++;
       });
@@ -8713,11 +8723,12 @@ window.pzProgAllApplica=async function(tutto){
   const modo=(document.getElementById('pz-prall-m')||{}).value||'auto';
   const SL=pzSlots().filter(x=>x.tipo!=='corsa');
   const chiavi=tutto?SL.map(x=>x.k):[pzSlotK];
-  const {up,n}=pzProgAll(chiavi,modo);
+  const g0=id=>(document.getElementById(id)||{}).value,O={st:g0('pz-prall-st'),fo:g0('pz-prall-fo'),ra:g0('pz-prall-ra')},g=id=>({'pz-prall-st':O.st,'pz-prall-fo':O.fo,'pz-prall-ra':O.ra})[id];
+  const {up,n}=pzProgAll(chiavi,modo,{st:g('pz-prall-st'),fo:g('pz-prall-fo'),ra:g('pz-prall-ra')});
   if(!n){showToast('Niente da portare avanti: servono almeno due settimane con la seduta');return;}
   pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();
   await update(ref(db),up);
-  showToast((tutto?'Tutte le sedute di forza':'Seduta')+': progressione '+(PZ_PRALL.find(x=>x[0]===modo)||['',''])[1].split(':')[0].toLowerCase()+' su '+n+' righe (stile '+pzStileProg()+'). Ctrl+Z annulla');
+  showToast((tutto?'Tutte le sedute di forza':'Seduta')+': progressione '+(PZ_PRALL.find(x=>x[0]===modo)||['',''])[1].split(':')[0].toLowerCase()+' su '+n+' righe ('+g('pz-prall-st')+(+g('pz-prall-ra')?', '+g('pz-prall-ra')+' di riadattamento':'')+'). Ctrl+Z annulla');
 };
 function pzProgressione(){
   const W=pzWeeks();if(!W.length)return '';
@@ -8728,9 +8739,14 @@ function pzProgressione(){
   const sl=SL.find(x=>x.k===pzSlotK);
   if(pzSlotK==='__corsa'||(sl&&sl.tipo==='corsa'))return h+pzProgCorsa(W,pzSlotK);
   const righe=Math.max(0,...W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);return s?pzExs(s[1]).length:0;}));
+  const pIn=(programs[currentProgId]||{}).intake,rDef=pIn?stRientro(Object.assign(stDefault(),pIn)):0;
+  const sel=(id,L,v,lab)=>`<label class="pz-prl">${lab}<select id="${id}">${L.map(([k,l])=>`<option value="${k}"${String(k)===String(v)?' selected':''}>${l}</option>`).join('')}</select></label>`;
   h+=`<div class="pz-prall"><b>Progressione in un colpo</b><select id="pz-prall-m" aria-label="Modello di progressione">${PZ_PRALL.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
+    ${sel('pz-prall-st',[['forza','Forza'],['ipertrofia','Ipertrofia'],['mantenimento','Mantenimento (corsa, ibrido, sport)']],pzStileProg(),'Stile')}
+    ${sel('pz-prall-fo',[['onde','Onde: serie su, ripetizioni giu\''],['lineare','Lineare: stesse serie, +2,5%'],['rpe','A RPE, senza percentuali']],'onde','Fondamentali')}
+    ${sel('pz-prall-ra',[[0,'Nessuno'],[1,'1 settimana'],[2,'2 settimane'],[3,'3 settimane']],rDef,'Riadattamento')}
     <button type="button" class="pz-b" onclick="pzProgAllApplica(false)">Questa seduta</button><button type="button" class="btn btn-orange btn-sm" onclick="pzProgAllApplica(true)">Tutte le sedute di forza</button>
-    <span>stile ${stEsc(pzStileProg())} dall'obiettivo; parte da come e' scritta la prima settimana</span></div>`;
+    <span>Riadattamento: dopo un fermo, le prime settimane 6-8 ripetizioni a RPE 7-8 senza percentuali, poi parte lo schema. Si parte da come e' scritta la prima settimana.</span></div>`;
   h+=`<div class="pz-pwrap"><table class="pz-pt"><thead><tr><th class="nm">Esercizio</th><th class="an">Andamento</th>${W.map(([wid,w],i)=>`<th class="${pzIsDl(w)?'dl':''}${i===currentWeekIdx?' cur':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}<th></th></tr></thead><tbody>`;
   for(let r=0;r<righe;r++){
     let nome='',prec=null;const serie=[];
