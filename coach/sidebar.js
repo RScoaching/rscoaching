@@ -1513,6 +1513,89 @@ window.RSMuscoli=(function(){
   return {GR,ORD,info,serie,fascia,simili,gradino,norm,intento};
 })();
 
+/* Abitudini e obiettivi (come Everfit e TrueCoach): il preparatore sceglie le abitudini
+   dell'atleta (si'/no o un numero da raggiungere) e gli obiettivi con scadenza; l'atleta le
+   spunta nell'app. Passi e sonno si riempiono da soli dall'orologio. Dati:
+   habits/{aid}/defs/{id} {nome,tipo:'si'|'num',target,unita,auto,attiva,ordine}
+   habits/{aid}/log/{iso}/{id} true o numero
+   goals/{aid}/{id} {titolo,tipo:'forza'|'corsa'|'peso'|'km'|'libero',esercizio,dist,target,partenza,attuale,scadenza,creato,raggiunto} */
+window.RSObiettivi=(function(){
+  const PRESET=[
+    {nome:'Passi',tipo:'num',target:8000,unita:'passi',auto:'passi'},
+    {nome:'Sonno',tipo:'num',target:7,unita:'ore',auto:'sonno'},
+    {nome:'Acqua',tipo:'num',target:2,unita:'litri'},
+    {nome:'Proteine',tipo:'num',target:120,unita:'g'},
+    {nome:'Frutta e verdura',tipo:'num',target:5,unita:'porzioni'},
+    {nome:'Mobilita\' 10 minuti',tipo:'si'},
+    {nome:'Prevenzione',tipo:'si'},
+    {nome:'Niente alcol',tipo:'si'}
+  ];
+  const TIPI_OB={forza:'Massimale',corsa:'Tempo in gara',peso:'Peso corporeo',km:'Km a settimana',libero:'Libero'};
+  const iso=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+  const f1=v=>String(Math.round(v*10)/10).replace('.',',');
+  const numTxt=(v,u)=>{if(v==null||v==='')return '-';const n=+v;const t=Math.abs(n)>=1000?Math.round(n).toLocaleString('it-IT'):f1(n);return u?t+' '+u:t;};
+  function attive(defs){return Object.entries(defs||{}).filter(([,d])=>d&&d.nome&&d.attiva!==false).sort((a,b)=>(a[1].ordine||0)-(b[1].ordine||0)||(a[1].ts||0)-(b[1].ts||0));}
+  // valore del giorno: quello scritto a mano vince, altrimenti l'orologio
+  function valore(d,id,log,gd,g){
+    const m=log&&log[g]&&log[g][id];
+    if(m!=null&&m!=='')return {v:m,fonte:'mano'};
+    if(d.auto&&gd&&gd.days&&gd.days[g]){const x=gd.days[g];
+      if(d.auto==='passi'&&+x.steps>0)return {v:+x.steps,fonte:'orologio'};
+      if(d.auto==='sonno'){const sec=+x.sleepSeconds||+x.sleepSec||0;if(sec>0)return {v:Math.round(sec/360)/10,fonte:'orologio'};}}
+    return {v:null,fonte:null};
+  }
+  function fatta(d,v){if(v==null||v===''||v===false)return false;if(d.tipo==='si')return v===true||v===1||v==='1';const n=+v;return d.target?n>=+d.target:n>0;}
+  // stato degli ultimi n giorni (fino a oggi compreso), giorni di fila e percentuale
+  function storico(d,id,log,gd,n,oggi){
+    const out=[],o=oggi?new Date(oggi):new Date();o.setHours(12,0,0,0);
+    for(let i=n-1;i>=0;i--){const x=new Date(o);x.setDate(o.getDate()-i);const g=iso(x),r=valore(d,id,log,gd,g);out.push({iso:g,v:r.v,fonte:r.fonte,ok:fatta(d,r.v)});}
+    // la fila non si rompe per oggi ancora da fare
+    let fila=0;for(let i=out.length-1;i>=0;i--){if(out[i].ok)fila++;else if(i===out.length-1)continue;else break;}
+    const ok=out.filter(x=>x.ok).length;
+    return {giorni:out,fila,ok,pct:Math.round(ok/n*100)};
+  }
+  function bersaglio(d){return d.tipo==='si'?'ogni giorno':numTxt(d.target,d.unita);}
+  // obiettivi: valore attuale calcolato dai dati quando si puo'
+  function e1(x){const kg=+String(x&&x.kg||'').replace(',','.'),r=parseInt(x&&x.reps)||0,rpe=+(x&&x.rpe)||0;if(!(kg>0&&r>0&&r<=12))return 0;const rir=rpe?Math.max(0,Math.min(4,10-rpe)):0;return kg*(1+(r+rir)/30);}
+  const norm=t=>String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  function massimale(logs,es,giorni){
+    const n=norm(es);if(!n)return null;const t0=Date.now()-(giorni||56)*864e5;let best=0;
+    (logs||[]).forEach(l=>{if(!l||!(l.ts>=t0))return;Object.entries(l.exerciseData||{}).forEach(([nome,serie])=>{const m=norm(nome);if(!(m===n||m.includes(n)||n.includes(m)))return;
+      (Array.isArray(serie)?serie:Object.values(serie||{})).forEach(x=>{const e=e1(x);if(e>best)best=e;});});});
+    return best?Math.round(best*2)/2:null;
+  }
+  function kmSett(logs){const t0=Date.now()-14*864e5;let km=0;(logs||[]).forEach(l=>{if(l&&l.ts>=t0)km+=(l.corsa&&+l.corsa.km)||+l.km||0;});return km?Math.round(km/2*10)/10:null;}
+  function attuale(g,ctx){
+    ctx=ctx||{};
+    if(g.tipo==='forza')return massimale(ctx.logs,g.esercizio);
+    if(g.tipo==='corsa'){const R=ctx.ritmi,RR=window.RSRitmi;const V=R&&(R.vx||R.vdot);return V&&RR&&g.dist?Math.round(RR.previsto(V,+g.dist)):null;}
+    if(g.tipo==='peso')return ctx.peso!=null?+ctx.peso:null;
+    if(g.tipo==='km')return kmSett(ctx.logs);
+    return g.attuale!=null&&g.attuale!==''?+g.attuale:null;
+  }
+  function fmt(g,v){if(v==null||v==='')return '-';
+    if(g.tipo==='corsa')return window.RSRitmi?window.RSRitmi.tempo(+v):String(v);
+    if(g.tipo==='forza'||g.tipo==='peso')return f1(+v)+' kg';
+    if(g.tipo==='km')return f1(+v)+' km';
+    return numTxt(v,g.unita);}
+  function stato(g,ctx){
+    const a=attuale(g,ctx),T=+g.target,P=g.partenza!=null&&g.partenza!==''?+g.partenza:null;
+    // piu' basso e' meglio: tempo in gara, e il peso quando si parte sopra
+    const giu=g.tipo==='corsa'||(g.tipo==='peso'&&P!=null&&P>T)||(g.tipo==='libero'&&g.verso==='giu');
+    let pct=null;
+    if(a!=null&&isFinite(T)){
+      if(P!=null&&P!==T)pct=(a-P)/(T-P);else pct=giu?(a<=T?1:T/a):(T?a/T:null);
+      if(pct!=null)pct=Math.max(0,Math.min(1,pct));
+    }
+    const fatto=!!g.raggiunto||(a!=null&&isFinite(T)&&(giu?a<=T:a>=T));
+    let gg=null;if(g.scadenza){const s=new Date(g.scadenza+'T12:00:00'),o=new Date();o.setHours(12,0,0,0);gg=Math.round((s-o)/864e5);}
+    const manca=a!=null&&isFinite(T)&&!fatto?Math.abs(T-a):null;
+    return {attuale:a,pct,fatto,gg,giu,manca,txt:{attuale:fmt(g,a),target:fmt(g,T),partenza:fmt(g,P),manca:manca!=null?(g.tipo==='corsa'?(window.RSRitmi?window.RSRitmi.tempo(manca):manca):fmt(g,manca)):''}};
+  }
+  function scadTxt(gg){if(gg==null)return '';if(gg<0)return 'scaduto da '+(-gg)+(gg===-1?' giorno':' giorni');if(gg===0)return 'scade oggi';if(gg<=60)return 'mancano '+gg+(gg===1?' giorno':' giorni');const s=Math.round(gg/7);return 'mancano '+s+' settimane';}
+  return {PRESET,TIPI_OB,iso,attive,valore,fatta,storico,bersaglio,numTxt,attuale,stato,fmt,scadTxt,massimale,kmSett};
+})();
+
 /* Logo RS Coaching (provvisorio, dato dall'utente il 12/10): la sigla RS su fondo trasparente,
    la scritta COACHING si scrive sotto col testo, nel colore del contesto. Usato da sito,
    app atleta e PDF: .rs-img prende l'immagine da --rs-logo. */

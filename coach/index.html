@@ -526,6 +526,35 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 .inj-note{font-size:11.5px;color:var(--muted);margin-top:4px;}
 .inj-act{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px;}
 .hl-add{margin-top:6px;}
+.ob-l{display:flex;flex-direction:column}
+.ob-i{padding:11px 0;border-top:1px solid var(--line)}
+.ob-i:first-child{border-top:0;padding-top:2px}
+.ob-i-t{display:flex;align-items:baseline;gap:8px}
+.ob-i-t b{color:var(--white);font-size:13.5px;font-weight:600}
+.ob-i-t em{font-style:normal;font-size:11px;color:var(--muted)}
+.ob-i-t .tdel{margin-left:auto}
+.ob-i-v{display:flex;align-items:baseline;gap:8px;margin:6px 0;font-size:12px;color:var(--muted)}
+.ob-i-v b{font:400 24px/1 'Bebas Neue',sans-serif;letter-spacing:.3px;color:var(--white)}
+.ob-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+.ob-bar>i{display:block;height:100%;background:var(--orange);border-radius:3px}
+.ob-i.ok .ob-bar>i{background:#A78BFA}
+.ob-i-s{font-size:11.5px;color:var(--text);margin-top:5px}
+.ob-i-s .urg{color:#FBBF24}.ob-i.ok .ob-i-s{color:#A78BFA}
+.ab-pre{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.ab-pre button{all:unset;cursor:pointer;font-size:12px;color:var(--text);padding:5px 10px;border-radius:999px;border:1px dashed rgba(255,255,255,.16)}
+.ab-pre button:hover{border-color:var(--orange);color:#fff}
+.ab-i{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.ab-i:first-child{border-top:0}
+.ab-i b{color:var(--white);font-size:13px;font-weight:600}
+.ab-i em{font-style:normal;font-size:11px;color:var(--muted);margin-left:6px}
+.ab-i.off{opacity:.5}
+.ab-28{display:grid;grid-template-columns:repeat(28,1fr);gap:2px;grid-column:1/-1;max-width:420px}
+.ab-28 i{height:10px;border-radius:2px;background:rgba(255,255,255,.07)}
+.ab-28 i.ok{background:#A78BFA}.ab-28 i.no{background:rgba(255,255,255,.13)}
+.ab-pc{font-size:11.5px;color:var(--text);text-align:right;white-space:nowrap}
+.ab-pc b{color:var(--white)}
+.ab-act{display:flex;gap:6px;justify-content:flex-end;grid-column:2}
+.ob-f{display:flex;flex-direction:column;gap:8px}
 .hl-add summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--orange);padding:4px 0;list-style:none;}
 .hl-add summary::before{content:'+ ';}
 .hl-add[open] summary{margin-bottom:10px;}
@@ -1721,6 +1750,8 @@ onValue(ref(db,'race_times'),s=>{raceTimes=s.val()||{};refreshRitmi();});
 onValue(ref(db,'body_log'),s=>{bodyLog=s.val()||{};refreshOverview();});
 onValue(ref(db,'injuries'),s=>{injuries=s.val()||{};refreshHealth();renderAthletes();});
 onValue(ref(db,'coach_notes'),s=>{coachNotes=s.val()||{};refreshHealth();});
+onValue(ref(db,'habits'),s=>{habitsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
+onValue(ref(db,'goals'),s=>{goalsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom overrides only
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
 onValue(ref(db,'programs'),s=>{programs=s.val()||{};gmRifondi();renderDashboard();});
@@ -2442,6 +2473,90 @@ function renderDetHealth(aid){
     </section>
   </div>`;
 }
+// ── OBIETTIVI E ABITUDINI dell'atleta (window.RSObiettivi in sidebar.js)
+/* Come Everfit e TrueCoach: obiettivi con scadenza calcolati dai dati (massimale stimato
+   dalle serie, tempo previsto dai ritmi, peso, km a settimana) o liberi; abitudini da
+   spuntare ogni giorno nell'app, passi e sonno dall'orologio. */
+function obCtx(aid){const P=athPesi(aid);return {logs:Object.values(sessionLogs[aid]||{}),ritmi:(athletes[aid]||{}).ritmi,peso:P.length?P[P.length-1].kg:null};}
+function obLista(aid){return Object.entries(goalsData[aid]||{}).filter(([,g])=>g&&g.titolo&&!g.archiviato).sort((a,b)=>String(a[1].scadenza||'9').localeCompare(String(b[1].scadenza||'9')));}
+function obInScadenza(aid){const O=window.RSObiettivi;if(!O)return 0;const c=obCtx(aid);return obLista(aid).filter(([,g])=>{const s=O.stato(g,c);return !s.fatto&&s.gg!=null&&s.gg>=0&&s.gg<=14;}).length;}
+function refreshObiettivi(){if(!currentAid)return;const el=document.getElementById('det-obiettivi');if(el)el.innerHTML=renderDetObiettivi(currentAid);}
+function renderDetObiettivi(aid){
+  const O=window.RSObiettivi;if(!O)return '';
+  const ctx=obCtx(aid),G=obLista(aid),H=habitsData[aid]||{},defs=H.defs||{},log=H.log||{},gd=garminData[aid]||null;
+  const fatti=Object.entries(goalsData[aid]||{}).filter(([,g])=>g&&g.archiviato).length;
+  const obi=G.length?`<div class="ob-l">${G.map(([id,g])=>{const st=O.stato(g,ctx),pct=st.pct!=null?Math.round(st.pct*100):null;
+      const urg=!st.fatto&&st.gg!=null&&st.gg>=0&&st.gg<=14;
+      return `<div class="ob-i${st.fatto?' ok':''}">
+        <div class="ob-i-t"><b>${athEsc(g.titolo)}</b><em>${O.TIPI_OB[g.tipo]||''}${g.tipo==='forza'&&g.esercizio?', '+athEsc(g.esercizio):''}</em>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="obArchivia('${aid}','${id}')" title="Toglie l'obiettivo dall'app, resta nello storico">Archivia</button>
+          <button type="button" class="tdel" aria-label="Elimina obiettivo" onclick="obElimina('${aid}','${id}')">&times;</button></div>
+        <div class="ob-i-v"><b>${st.txt.attuale}</b>su ${st.txt.target}${g.partenza!=null?' &#183; partito da '+st.txt.partenza:''}</div>
+        ${pct!=null?`<div class="ob-bar"><i style="width:${pct}%"></i></div>`:''}
+        <div class="ob-i-s">${st.fatto?'Raggiunto'+(g.raggiunto?' il '+new Date(g.raggiunto).toLocaleDateString('it-IT'):''):`${st.attuale==null?'Ancora senza dati':'Ancora '+st.txt.manca}${st.gg!=null?' &#183; <span class="'+(urg?'urg':'')+'">'+O.scadTxt(st.gg)+'</span>':''}`}</div>
+      </div>`;}).join('')}</div>`:'<p class="ld-nota">Nessun obiettivo. L\'atleta li vede nella pagina Oggi dell\'app, con quanto manca e la scadenza.</p>';
+  const oggi=new Date();oggi.setDate(oggi.getDate()+60);
+  const esList=[...new Set(ctx.logs.flatMap(l=>Object.keys(l&&l.exerciseData||{})))].sort();
+  const form=`<details class="hl-add"><summary>Nuovo obiettivo</summary><div class="ob-f">
+      <div class="grid2"><div class="field"><label>Tipo</label><select id="obn-tipo" onchange="obTipo()">${Object.entries(O.TIPI_OB).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Scadenza</label><input type="date" id="obn-scad" value="${O.iso(oggi)}"></div></div>
+      <div class="field"><label>Titolo per l'atleta</label><input id="obn-tit" placeholder="Squat a 120 kg"></div>
+      <div class="field" data-ob="forza"><label>Esercizio</label><input id="obn-es" list="obn-es-l" placeholder="Back Squat"><datalist id="obn-es-l">${esList.map(n=>`<option value="${athEsc(n)}">`).join('')}</datalist></div>
+      <div class="field" data-ob="corsa" hidden><label>Distanza</label><select id="obn-dist"><option value="5000">5 km</option><option value="10000">10 km</option><option value="21097.5">Mezza</option><option value="42195">Maratona</option></select></div>
+      <div class="grid2"><div class="field"><label id="obn-tl">Massimale da raggiungere (kg)</label><input id="obn-tg" inputmode="decimal" placeholder="120"></div>
+      <div class="field" data-ob="libero" hidden><label>Unita'</label><input id="obn-un" placeholder="trazioni, cm, minuti"></div></div>
+      <div class="field" data-ob="libero" hidden><label>Valore di partenza</label><input id="obn-pa" inputmode="decimal" placeholder="lo aggiorna l'atleta nell'app"></div>
+      <button type="button" class="btn btn-orange btn-sm" onclick="obSalva('${aid}')">Salva obiettivo</button></div></details>`;
+  // abitudini
+  const L=Object.entries(defs).filter(([,d])=>d&&d.nome).sort((a,b)=>(a[1].ordine||0)-(b[1].ordine||0)||(a[1].ts||0)-(b[1].ts||0));
+  const nomi=new Set(L.map(([,d])=>d.nome.toLowerCase()));
+  const pre=O.PRESET.map((p,i)=>nomi.has(p.nome.toLowerCase())?'':`<button type="button" onclick="abPreset('${aid}',${i})" title="${p.tipo==='si'?'Si\' o no ogni giorno':'Da raggiungere: '+athEsc(O.numTxt(p.target,p.unita))}${p.auto?', dall\'orologio':''}">+ ${athEsc(p.nome)}</button>`).join('');
+  const abi=L.length?L.map(([id,d])=>{const st=O.storico(d,id,log,gd,28),s7=O.storico(d,id,log,gd,7);
+      return `<div class="ab-i${d.attiva===false?' off':''}"><div><b>${athEsc(d.nome)}</b><em>${athEsc(O.bersaglio(d))}${d.auto?', dall\'orologio':''}</em></div>
+        <div class="ab-pc"><b>${s7.pct}%</b> 7 gg &#183; <b>${st.pct}%</b> 28 gg${st.fila>=2?' &#183; '+st.fila+' di fila':''}</div>
+        <div class="ab-28" aria-label="Ultimi 28 giorni">${st.giorni.map(x=>`<i class="${x.ok?'ok':x.v!=null?'no':''}" title="${x.iso.split('-').reverse().join('/')}: ${x.v==null?'niente':d.tipo==='si'?'fatto':athEsc(O.numTxt(x.v,d.unita))}"></i>`).join('')}</div>
+        <div class="ab-act"><button type="button" class="btn btn-ghost btn-sm" onclick="abAttiva('${aid}','${id}',${d.attiva===false})">${d.attiva===false?'Riattiva':'Pausa'}</button><button type="button" class="tdel" aria-label="Elimina abitudine" onclick="abElimina('${aid}','${id}')">&times;</button></div>
+      </div>`;}).join(''):'<p class="ld-nota">Nessuna abitudine. Scegline una qui sopra: l\'atleta la spunta ogni giorno nella pagina Oggi.</p>';
+  const formAb=`<details class="hl-add"><summary>Abitudine personalizzata</summary><div class="ob-f">
+      <div class="field"><label>Nome</label><input id="abn-nome" placeholder="Colazione con proteine"></div>
+      <div class="grid2"><div class="field"><label>Tipo</label><select id="abn-tipo"><option value="si">Si' o no</option><option value="num">Numero da raggiungere</option></select></div>
+      <div class="field"><label>Obiettivo e unita' (se numero)</label><input id="abn-tg" placeholder="30 minuti"></div></div>
+      <button type="button" class="btn btn-orange btn-sm" onclick="abSalva('${aid}')">Aggiungi abitudine</button></div></details>`;
+  return `<div class="hl-grid">
+    <section class="hl-sec"><div class="hl-h"><span>Obiettivi</span><i>${G.length} attivi${fatti?' &#183; '+fatti+' archiviati':''}</i></div>${obi}${form}</section>
+    <section class="hl-sec"><div class="hl-h"><span>Abitudini</span><i>spuntate dall'atleta ogni giorno</i></div><div class="ab-pre">${pre}</div>${abi}${formAb}</section>
+  </div>`;
+}
+const OB_TL={forza:'Massimale da raggiungere (kg)',corsa:'Tempo da fare (es. 45:00 o 1:39:00)',peso:'Peso da raggiungere (kg)',km:'Km a settimana',libero:'Valore da raggiungere'};
+window.obTipo=function(){const t=document.getElementById('obn-tipo').value;document.querySelectorAll('[data-ob]').forEach(e=>{e.hidden=e.dataset.ob!==t;});document.getElementById('obn-tl').textContent=OB_TL[t];
+  const tit=document.getElementById('obn-tit');if(tit)tit.placeholder={forza:'Squat a 120 kg',corsa:'10 km sotto i 45 minuti',peso:'Arrivare a 72 kg',km:'40 km a settimana',libero:'10 trazioni'}[t];};
+window.obSalva=async function(aid){
+  const O=window.RSObiettivi,v=id=>(document.getElementById(id)||{}).value||'',tipo=v('obn-tipo');
+  const g={tipo,titolo:v('obn-tit').trim(),scadenza:v('obn-scad')||null,creato:Date.now()};
+  if(tipo==='corsa'){g.dist=+v('obn-dist');g.target=window.RSRitmi?window.RSRitmi.sec(v('obn-tg')):null;}
+  else g.target=parseFloat(v('obn-tg').replace(',','.'));
+  if(!(g.target>0)){showToast(tipo==='corsa'?'Scrivi il tempo come 45:00':'Scrivi il valore da raggiungere');return;}
+  if(tipo==='forza'){g.esercizio=v('obn-es').trim();if(!g.esercizio){showToast('Scegli l\'esercizio');return;}}
+  if(tipo==='libero'){g.unita=v('obn-un').trim()||null;const pa=parseFloat(v('obn-pa').replace(',','.'));if(isFinite(pa)){g.partenza=pa;g.attuale=pa;}}
+  if(!g.titolo)g.titolo=tipo==='forza'?g.esercizio+' a '+O.fmt(g,g.target):tipo==='corsa'?({5000:'5 km',10000:'10 km',21097.5:'Mezza',42195:'Maratona'}[g.dist]||'Gara')+' in '+O.fmt(g,g.target):tipo==='peso'?'Peso a '+O.fmt(g,g.target):tipo==='km'?O.fmt(g,g.target)+' a settimana':'Obiettivo';
+  // la partenza e' il valore di oggi: serve per la barra di avanzamento
+  if(g.partenza==null){const a=O.attuale(g,obCtx(aid));if(a!=null)g.partenza=a;}
+  if(g.tipo==='libero'&&g.partenza!=null&&g.partenza>g.target)g.verso='giu';
+  {const st=O.stato(g,obCtx(aid));if(st.fatto&&g.tipo!=='libero'&&!confirm('Adesso e\' gia\' a '+st.txt.attuale+': l\'obiettivo risulterebbe gia\' raggiunto. Salvarlo lo stesso?'))return;}
+  await push(ref(db,`goals/${aid}`),g);showToast('Obiettivo salvato: l\'atleta lo vede nell\'app');
+};
+window.obArchivia=async function(aid,id){await update(ref(db,`goals/${aid}/${id}`),{archiviato:Date.now()});showToast('Obiettivo archiviato');};
+window.obElimina=async function(aid,id){if(!confirm('Eliminare l\'obiettivo?'))return;await remove(ref(db,`goals/${aid}/${id}`));};
+window.abPreset=async function(aid,i){const p=window.RSObiettivi.PRESET[i];if(!p)return;await push(ref(db,`habits/${aid}/defs`),Object.assign({},p,{ts:Date.now(),attiva:true}));showToast(p.nome+' aggiunta');};
+window.abSalva=async function(aid){
+  const nome=(document.getElementById('abn-nome').value||'').trim(),tipo=document.getElementById('abn-tipo').value,t=(document.getElementById('abn-tg').value||'').trim();
+  if(!nome){showToast('Scrivi il nome');return;}
+  const d={nome,tipo,ts:Date.now(),attiva:true};
+  if(tipo==='num'){const m=/^([\d.,]+)\s*(.*)$/.exec(t);if(!m){showToast('Scrivi il numero da raggiungere, per esempio 30 minuti');return;}d.target=parseFloat(m[1].replace(',','.'));d.unita=m[2]||null;}
+  await push(ref(db,`habits/${aid}/defs`),d);showToast('Abitudine aggiunta');
+};
+window.abAttiva=async function(aid,id,on){await update(ref(db,`habits/${aid}/defs/${id}`),{attiva:!!on});};
+window.abElimina=async function(aid,id){if(!confirm('Eliminare l\'abitudine? Lo storico delle spunte resta.'))return;await remove(ref(db,`habits/${aid}/defs/${id}`));};
 function refreshHealth(){if(!currentAid)return;const el=document.getElementById('det-health');if(el)el.innerHTML=renderDetHealth(currentAid);}
 window.injSave=async function(aid){
   const g=id=>document.getElementById(id).value.trim();
@@ -2639,6 +2754,7 @@ window.openAthlete=function(aid,silent){
       <div class="tab active" data-t="calendario" onclick="detTab('calendario',this)">Calendario</div>
       <div class="tab" data-t="allenamenti" onclick="detTab('allenamenti',this)">Allenamenti</div>
       <div class="tab" data-t="questionari" onclick="detTab('questionari',this)">Questionari</div>
+      <div class="tab" data-t="obiettivi" onclick="detTab('obiettivi',this)">Obiettivi${obInScadenza(aid)?' <span class="tab-n">'+obInScadenza(aid)+'</span>':''}</div>
       <div class="tab" data-t="profilo" onclick="detTab('profilo',this)">Profilo${injAttivi(aid).length?' <span class="tab-n">'+injAttivi(aid).length+'</span>':''}</div>
       <div class="tab" data-t="chat" id="tab-chat-${aid}" onclick="detTab('chat',this)">Chat${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length>0?` <span style="background:var(--primary);color:#000;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;">${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length}</span>`:''}</div>
     </div>
@@ -2652,7 +2768,8 @@ window.openAthlete=function(aid,silent){
     <div id="det-load" style="display:none;">${renderDetLoad(aid,aSess)}</div>
     <div id="det-health" style="display:none;">${renderDetHealth(aid)}</div>
     <div id="det-maxes" style="display:none;"><div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Caricamento massimali…</div></div>
-    <div id="det-chat" style="display:none;">${renderDetChat(aid)}</div>`;
+    <div id="det-chat" style="display:none;">${renderDetChat(aid)}</div>
+    <div id="det-obiettivi" style="display:none;">${renderDetObiettivi(aid)}</div>`;
   if(!silent){if(!document.body.classList.contains('det-full'))panel.scrollIntoView({behavior:'smooth',block:'start'});pg('athletes',document.querySelectorAll('.nav-item')[1]);}
 };
 
@@ -2778,7 +2895,7 @@ function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:
    per chilo di peso) e per accorgersi di un calo o di un aumento. Per questo non
    e' un campo solo ma un registro, `body_log/{aid}`, e vale l'ultima pesata.
    L'altezza cambia poco e sta nella scheda atleta (`alt`, in cm). */
-let bodyLog={};
+let bodyLog={},habitsData={},goalsData={};
 function athEta(dob){
   const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(dob||'').trim());
   if(!m)return null;
@@ -3969,13 +4086,13 @@ function gmRecupero(aid,c){
 }
 
 // cinque schede come Relay: ognuna raccoglie uno o piu' pannelli di prima
-const DET_GRUPPI={calendario:['calendario','overview'],allenamenti:['allv','sessions','load'],questionari:['checkin'],profilo:['ritmi','tests','maxes','health'],chat:['chat']};
+const DET_GRUPPI={calendario:['calendario','overview'],allenamenti:['allv','sessions','load'],questionari:['checkin'],profilo:['ritmi','tests','maxes','health'],chat:['chat'],obiettivi:['obiettivi']};
 const DET_PADRE={ritmi:'profilo',overview:'calendario',sessions:'allenamenti',load:'allenamenti',checkin:'questionari',tests:'profilo',maxes:'profilo',health:'profilo'};
 window.detTab=function(gid,el){
   if(!el)el=document.querySelector('#detail-panel .tab[data-t="'+gid+'"]');
   if(DET_PADRE[gid]){gid=DET_PADRE[gid];el=document.querySelector('#detail-panel .tab[data-t="'+gid+'"]');}
   const subs=DET_GRUPPI[gid]||[gid];
-  ['calendario','overview','ritmi','tests','allv','sessions','checkin','load','maxes','health','chat'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=subs.includes(t)&&!(gid==='allenamenti'&&(t==='sessions'?athAllV!=='sedute':t==='load'?athAllV==='sedute':false))?'block':'none';});
+  ['calendario','overview','ritmi','tests','allv','sessions','checkin','load','maxes','health','chat','obiettivi'].forEach(t=>{const e=document.getElementById('det-'+t);if(e)e.style.display=subs.includes(t)&&!(gid==='allenamenti'&&(t==='sessions'?athAllV!=='sedute':t==='load'?athAllV==='sedute':false))?'block':'none';});
   document.querySelectorAll('#detail-panel .tab').forEach(t=>t.classList.remove('active'));
   if(el)el.classList.add('active');
   subs.forEach(id=>detTabSub(id));
