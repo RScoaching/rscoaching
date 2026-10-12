@@ -3826,7 +3826,23 @@ function pdfCorsa(W,sessOf){
   const passo=z=>{const c=conta[z];return c?String(Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]).replace(/\s*\/km/,''):'';};
   const pa=[];W.forEach((w,wi)=>sessOf(w).forEach(s=>{if(s.type==='match'&&s.dayOfWeek!=null&&s.dayOfWeek!=='')pa.push(wi*7+(+s.dayOfWeek));}));pa.sort((a,b)=>a-b);
   const md=(wi,d)=>{if(!pa.length)return '';const a=wi*7+d,nx=pa.find(x=>x>=a),pr=[...pa].reverse().find(x=>x<=a);if(nx===a)return 'MD';if(pr!=null&&a-pr<=2)return 'MD+'+(a-pr);if(nx!=null&&nx-a<=5)return 'MD-'+(nx-a);return '';};
-  return {fasi,km,min,q,gara,kmW,qW,lgW,gW,meta,passo,conRitmi:Object.keys(conta).length>0,md,tot:kmW.reduce((a,b)=>a+b,0),ha:W.some(w=>corse(w).length)};
+  // la seduta in sigla, come la scrive un allenatore: 5km E + 11km RG + 5km E, 3km E + 6x1km I (500m E) + 2km E
+  const cod=f=>{if(f.rit)return f.rit;if(/passo gara|ritmo gara/i.test(f.tipo||''))return 'RG';const z=(/Z[1-5]/.exec(f.zona||'')||[''])[0];return {Z1:'E',Z2:'E',Z3:'M',Z4:'T',Z5:'I'}[z]||'';};
+  const dd=x=>{const t=String(stDistNorm(x)||'').trim();if(/^mezza maratona$/i.test(t))return '21,1km';if(/^maratona$/i.test(t))return '42,2km';const u=t.replace(/(\d)\s*(km|m)\b/gi,'$1$2').replace(/\s+/g,' ');const m=/^[\d.,]+(?:\s*-\s*[\d.,]+)?(?:km|m|'\d*"?|"|h)?/.exec(u);return m&&m[0]?m[0]:u;};
+  const rec=f=>{const r=String([f.recDist,f.recTime,f.rec].filter(Boolean).join(' ')).trim();if(!r)return '';
+    const v=r.replace(/(\d)\s*(km|m)\b/gi,'$1$2').replace(/\s*(lento|lenta|trotto|facile|corsa lenta|di corsa)\b/gi,'').replace(/\s*(camminat[ao]|cammino|camminando|da fermo|fermo)\b/gi,' cammino').trim();
+    return ' ('+v+(/cammin|ferm/i.test(r)?'':' E')+')';};
+  const sigla=s=>{if(!s||s.type!=='corsa')return '';
+    return (s.corsaFasi||[]).filter(Boolean).map(f=>{
+      if(/^testo libero$/i.test(f.tipo||''))return String(f.note||'').trim();
+      const c=cod(f);
+      const tutto=[f.tipo,f.reps,f.repDist,f.dist].join(' ');
+      if(/allungh/i.test(tutto)){const n=(/^\s*(\d+(?:\s*-\s*\d+)?)/.exec(String(f.reps||''))||/(\d+(?:\s*-\s*\d+)?)\s*(?:x\s|allungh)/i.exec(tutto)||[])[1],dl=(/(\d+)\s*m\b/.exec(tutto)||[])[1];return (n?n.replace(/\s/g,'')+'x':'')+(dl?dl+'m ':'')+'allunghi';}
+      if(f.reps||f.repDist){const n=String(f.reps||'1').replace(/\s*[x\u00d7]\s*$/i,''),core=(n!=='1'?n+'x':'')+dd(f.repDist)+(c?' '+c:'')+rec(f);
+        return +f.serie>1?f.serie+'x('+core+')'+(f.recSerie?' tra le serie '+f.recSerie:''):core;}
+      return (dd(f.dist)+(c?' '+c:'')).trim();
+    }).filter(Boolean).map(x=>x.length<=24?x.replace(/ /g,'\u00a0'):x).join(' + ');};
+  return {sigla,fasi,km,min,q,gara,kmW,qW,lgW,gW,meta,passo,conRitmi:Object.keys(conta).length>0,md,tot:kmW.reduce((a,b)=>a+b,0),ha:W.some(w=>corse(w).length)};
 }
 function pdfCompattoHTML(p,fio){
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3865,7 +3881,7 @@ function pdfCompattoHTML(p,fio){
   const spec=[];W.forEach((w,i)=>sessOf(w).filter(speciale).forEach(s=>spec.push([i,s])));
   const testTxt=s=>s.type==='corsa'?(s.corsaFasi||[]).filter(f=>/Z[345]/.test(f.zona||'')).map(f=>esc(f.note||stCorsaTesto(f))).join('; '):Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0)).filter(e=>!/^Prevenzione/.test(e.cue||'')).map(e=>esc(e.name)+(e.cue?' <i>('+esc(e.cue)+')</i>':'')).join('; ');
   const testH=spec.length?'<div class="c-sec"><h3>Test e controlli</h3>'+spec.map(([i,s])=>'<div class="c-test"><b>Sett. '+(i+1)+(s.dayOfWeek!=null?' '+GG[s.dayOfWeek]:'')+' &#183; '+esc(s.name)+'</b><span>'+testTxt(s)+'</span></div>').join('')+'</div>':'';
-  const leg='<div class="c-read"><b>Come si legge</b> '+(forza?'<span><i>4x8</i> serie per ripetizioni</span><span><i>@75%</i> del massimale</span><span><i>RPE 8</i> fatica da 1 a 10, a 8 restano 2 ripetizioni</span><span><i class="cb">arancio</i> quello che cambia rispetto alla settimana prima</span>':'')+(C.ha?'<span><i>Z1-Z5</i> zone di corsa: Z2 facile, Z3 medio, Z4 soglia, Z5 veloce</span><span>km e tempo stimati, recuperi compresi</span>':'')+'<span>in grigio le settimane di scarico e taper</span>'+(kgAid&&W.some(w=>Object.values(w.sessions||{}).some(s=>Object.values(s.exercises||{}).some(e=>kgOf(e))))?'<span><i>kg</i> calcolati sui massimali di '+esc((athletes[kgAid]||{}).name||'')+'</span>':'')+'</div>';
+  const leg='<div class="c-read"><b>Come si legge</b> '+(forza?'<span><i>4x8</i> serie per ripetizioni</span><span><i>@75%</i> del massimale</span><span><i>RPE 8</i> fatica da 1 a 10, a 8 restano 2 ripetizioni</span><span><i class="cb">arancio</i> quello che cambia rispetto alla settimana prima</span>':'')+(C.ha?'<span><i>E</i> facile <i>M</i> medio <i>T</i> soglia <i>I</i> intervalli <i>R</i> ripetute brevi <i>RG</i> passo gara; tra parentesi il recupero</span><span>km e tempo stimati, recuperi compresi</span>':'')+'<span>in grigio le settimane di scarico e taper</span>'+(kgAid&&W.some(w=>Object.values(w.sessions||{}).some(s=>Object.values(s.exercises||{}).some(e=>kgOf(e))))?'<span><i>kg</i> calcolati sui massimali di '+esc((athletes[kgAid]||{}).name||'')+'</span>':'')+'</div>';
   // celle
   const doseTxt=e=>e?[e.sets,e.reps,e.pct,e.rpe].join('|'):'';
   const dose=e=>{if(!e)return '<span class="na">-</span>';const r=[e.sets&&e.reps?esc(e.sets)+'x'+esc(String(e.reps).replace(' per lato','/lato')):esc(e.reps||e.sets||'')];if(e.pct){const kg=kgOf(e);r.push('<b>'+esc(String(e.pct).replace('.',','))+'%</b>'+(kg?'<u>'+kg+'</u>':''));}if(e.rpe)r.push('<em>RPE '+esc(e.rpe)+'</em>');return r.join(' ');};
@@ -3901,7 +3917,8 @@ function pdfCompattoHTML(p,fio){
     const gc=[0,1,2,3,4,5,6].filter(g=>W.some(w=>sessOf(w).some(s=>s.type==='corsa'&&+s.dayOfWeek===g)));
     const zc=x=>x?'<i class="z z'+x[1]+'">'+x+'</i>':'';
     const cell=s=>{const f=C.fasi(s),k=f.filter(x=>x.k),g=C.gara(s),mostra=g?f:(k.length?k:f.filter(x=>!x.b));
-      return '<div class="c-r'+(g?' gara':k.length?' q':/lung/i.test(s.name||'')?' l':'')+'"><b>'+esc(s.name)+'</b>'+mostra.slice(0,3).map(x=>'<span>'+zc(x.z)+esc(x.tx)+'</span>').join('')+(C.meta(s)?'<em>'+esc(C.meta(s))+'</em>':'')+'</div>';};
+      const sg=g?'':C.sigla(s);
+      return '<div class="c-r'+(g?' gara':k.length?' q':/lung/i.test(s.name||'')?' l':'')+'"><b>'+esc(s.name)+'</b>'+(sg?'<span>'+esc(sg)+'</span>':mostra.slice(0,3).map(x=>'<span>'+zc(x.z)+esc(x.tx)+'</span>').join(''))+(C.meta(s)?'<em>'+esc(C.meta(s))+'</em>':'')+'</div>';};
     const mx=Math.max(1,...C.kmW);
     corsaH='<div class="c-sec c-corsa"><h3>La corsa, settimana per settimana</h3><table class="c-t c-run"><colgroup><col style="width:9%">'+gc.map(()=>'<col>').join('')+'<col style="width:10%"></colgroup><thead><tr><th>Sett.</th>'+gc.map(g=>'<th>'+GG[g]+'</th>').join('')+'<th class="c-km">Km</th></tr></thead><tbody>'
       +W.map((w,i)=>'<tr class="'+(tipoW(w)==='scarico'||tipoW(w)==='taper'?'t-sc':'')+'"><td class="c-ex">S'+(i+1)+'<i>'+esc(dW(i))+'</i>'+(tipoW(w)?'<i>'+tipoW(w)+'</i>':'')+'</td>'+gc.map(g=>{const l=sessOf(w).filter(s=>s.type==='corsa'&&+s.dayOfWeek===g);return '<td>'+(l.length?l.map(cell).join(''):'<span class="na">riposo</span>')+'</td>';}).join('')
@@ -4012,12 +4029,13 @@ function pdfSettimanaHTML(p,fio){
   const corpoSess=s=>{
     if(s.type==='corsa'){
       const f=C.fasi(s),g=C.gara(s);
-      return '<ol class="r">'+f.map(x=>'<li'+(x.k||g?' class="k"':'')+'>'+(x.z?'<i class="z z'+x.z[1]+'">'+x.z+'</i>':'')+(x.b?'<u>'+x.b+'</u> ':'')+esc(x.tx)+(x.n&&x.n.length<60?'<small>'+esc(x.n)+'</small>':'')+'</li>').join('')+'</ol>'+(C.meta(s)?'<p class="m">'+esc(C.meta(s))+'</p>':'');}
+      const sg=g?'':C.sigla(s),nk=f.filter(x=>x.k&&x.n&&x.n.length<70).map(x=>x.n);
+      return (sg?'<p class="sg">'+esc(sg)+'</p>'+(nk.length?'<p class="t tn">'+esc(nk.join('; '))+'</p>':''):'<ol class="r">'+f.map(x=>'<li'+(x.k||g?' class="k"':'')+'>'+(x.z?'<i class="z z'+x.z[1]+'">'+x.z+'</i>':'')+esc(x.tx)+'</li>').join('')+'</ol>')+(C.meta(s)?'<p class="m">'+esc(C.meta(s))+'</p>':'');}
     if(s.type==='conditioning')return '<p class="t">'+esc((s.duration?s.duration+': ':'')+String(s.condContent||'').replace(/\n/g,'; '))+'</p>';
-    if(s.type==='match'||s.type==='squadra')return s.notes?'<p class="t g">'+esc(s.notes)+'</p>':'';
+    if(s.type==='match'||s.type==='squadra')return s.notes?'<p class="t tn">'+esc(s.notes)+'</p>':'';
     const ex=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
     const prev=ex.filter(e=>/^Prevenzione/.test(e.cue||'')),lav=ex.filter(e=>!/^Prevenzione/.test(e.cue||''));
-    return '<ul class="x">'+lav.map(e=>'<li><b>'+esc(e.name)+'</b><span>'+esc(dose(e))+'</span></li>').join('')+'</ul>'+(prev.length?'<p class="t g">Prevenzione: '+esc(prev.map(e=>e.name).join(', '))+'</p>':'');
+    return '<ul class="x">'+lav.map(e=>'<li><b>'+esc(e.name)+'</b><span>'+esc(dose(e))+'</span></li>').join('')+'</ul>'+(prev.length?'<p class="t tn">Prevenzione: '+esc(prev.map(e=>e.name).join(', '))+'</p>':'');
   };
   const pag=W.map((w,i)=>{
     const ss=sessOf(w),perG=GG.map(()=>[]),senza=[];ss.forEach(s=>(s.dayOfWeek!=null&&s.dayOfWeek!==''?perG[+s.dayOfWeek]:senza).push(s));
@@ -4064,14 +4082,15 @@ ol.r li small{display:block;font-weight:400;color:#7B7480;font-size:7px}
 ol.r u{text-decoration:none;color:#7B7480}
 .z{display:inline-block;min-width:15px;text-align:center;font:700 6.5px/1.5 Inter,sans-serif;border-radius:2px;margin-right:3px;font-style:normal;vertical-align:.5px}
 .z1,.z2{background:#EEF1F4;color:#3E4A57}.z3{background:#E8F3EC;color:#1D6B3F}.z4{background:#FFF0E3;color:#A44A12}.z5{background:#FDE7E7;color:#A42323}
+.sg{font-size:8.6px;font-weight:600;line-height:1.35;color:#17151A}
 .m{margin-top:2px;font-weight:700;color:#5737B8;font-size:7.6px;font-variant-numeric:tabular-nums}
 ul.x{list-style:none}ul.x li{display:flex;justify-content:space-between;gap:4px;padding:1.5px 0;border-bottom:1px dotted #E2DEE4;font-size:7.6px}ul.x li:last-child{border-bottom:0}
 ul.x b{font-weight:600}ul.x span{white-space:nowrap;color:#4E4853;font-variant-numeric:tabular-nums}
-.t{font-size:7.6px;color:#2C2830}.t.g{color:#7B7480}
+.t{font-size:7.6px;color:#2C2830}.t.tn{color:#7B7480}
 .sz{font-size:7.5px;color:#4E4853;margin-top:3px}
 .ft{display:flex;justify-content:space-between;margin-top:4px;padding-top:4px;border-top:1px solid #E7E3E9;font-size:7px;color:#7B7480}`;
   const top='<div class="top"><div><h1>'+esc(p.name||'Programma')+'</h1><p>'+(athl.length?esc(athl.join(', '))+' &#183; ':'')+W.length+' settimane'+(ini?' dal '+esc(stFmtD(ini)):'')+(C.tot?' &#183; '+Math.round(C.tot)+' km di corsa in tutto':'')+'</p></div>'+pdfMarchio(fio)+'</div>';
-  const leg=C.ha?'<div class="legend"><span><b>Z1-Z2</b> facile, si parla</span><span><b>Z3</b> medio, passo maratona</span><span><b>Z4</b> soglia</span><span><b>Z5</b> veloce</span><span>in grassetto la parte di lavoro</span><span>km e tempo stimati per ogni corsa, recuperi compresi</span></div>':'';
+  const leg=C.ha?'<div class="legend"><span><b>E</b> facile, si parla</span><span><b>M</b> medio</span><span><b>T</b> soglia</span><span><b>I</b> intervalli</span><span><b>R</b> ripetute brevi</span><span><b>RG</b> passo gara</span><span>tra parentesi il recupero: 6x1km I (500m E)</span><span>km e tempo stimati per ogni corsa, recuperi compresi</span></div>':'';
   const piede='<div class="ft"><span>'+(fio?'Fiorentina Primavera U19W':'RS Coaching &#183; Raoul Simon')+'</span><span>RPE: fatica da 1 a 10</span><span>'+esc(p.name||'')+'</span></div>';
   return '<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>'+esc(p.name)+' - settimane</title>'+PDF_FONTS+'<style>'+css+'</style></head><body>'+top+leg+pag+piede+'</body></html>';
 }
@@ -4092,6 +4111,8 @@ function pdfTipoCorsa(s){
   if(pzEGara(s))return 'gara';
   const f=(s.corsaFasi||[]).filter(Boolean),n=String(s.name||'');
   const lav=f.filter(x=>pzFaseQual(x)&&!/Riscaldamento|Defaticamento|Attivazione|Allunghi/.test(x.tipo||''));
+  if(/ripetut|interval|vo2/i.test(n))return 'int';
+  if(/soglia|tempo run|threshold/i.test(n))return 'sog';
   if(/lung|long/i.test(n)||f.some(x=>/Long Run/i.test(x.tipo||'')))return 'lun';
   if(lav.some(x=>/Z5/.test(x.zona||'')||/Ripetute|Interval|VO2|Fartlek|Collinare|salit/i.test(x.tipo||''))||/ripetut|interval|vo2|fartlek|salit/i.test(n))return 'int';
   if(lav.some(x=>/Z4/.test(x.zona||'')||/Soglia|Tempo/i.test(x.tipo||''))||/soglia|tempo run/i.test(n))return 'sog';
@@ -4122,13 +4143,14 @@ function pdfCalendarioHTML(p,fio){
   const maxKm=Math.max(1,...C.kmW);
   const lato=(pieni,b0,n)=>'<aside class="la">'+ritmi(pieni)
     +'<h3>Km per settimana</h3><table class="km">'+W.map((w,i)=>'<tr class="'+(i>=b0&&i<b0+n?'on':'')+'"><td>S'+(i+1)+'</td><td class="b"><i style="width:'+Math.round(C.kmW[i]/maxKm*100)+'%"></i></td><td class="v">'+(C.kmW[i]?pzKmTxt(Math.round(C.kmW[i])):'-')+(C.gW[i]?'+G':'')+'</td></tr>').join('')+'</table><p class="nt">in tutto <b>'+Math.round(C.tot)+' km</b>'+(C.gW.some(Boolean)?' piu\' la gara':'')+'</p>'
-    +'<h3>Colori</h3><p class="nt" style="margin:0 0 1.5mm">le caselle dicono la zona: il passo e\' quello qui sopra</p><div class="leg">'+['fac','med','sog','int','lun','gara'].map(t=>'<span><i class="sw t-'+t+'"></i>'+PDF_TIPO_CORSA[t]+'</span>').join('')+'</div></aside>';
+    +'<h3>Sigle</h3><p class="sig"><b>E</b> facile &#183; <b>M</b> medio &#183; <b>T</b> soglia &#183; <b>I</b> intervalli &#183; <b>R</b> ripetute brevi &#183; <b>RG</b> passo gara<br>6x1km I (500m E): 6 ripetute da 1 km a intervalli, recupero 500 m facile. Il passo di ogni sigla e\' quello qui sopra.</p><h3>Colori</h3><div class="leg">'+['fac','med','sog','int','lun','gara'].map(t=>'<span><i class="sw t-'+t+'"></i>'+PDF_TIPO_CORSA[t]+'</span>').join('')+'</div></aside>';
   const cella=(s)=>{
     const t=pdfTipoCorsa(s);
     if(t==='gara')return '<div class="s t-gara"><b>'+esc(String(s.name||'Gara').replace(/^gara\s*:?\s*/i,'')||'Gara')+'</b></div>';
     if(t==='x')return '<div class="s t-x"><em>'+esc(({pesi:'Forza',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',squadra:'Squadra',match:'Partita'})[s.type]||'Seduta')+'</em><b>'+esc(s.name)+'</b></div>';
     const f=C.fasi(s),k=f.filter(x=>x.k),mostra=k.length?k:f.filter(x=>!x.b);
-    return '<div class="s t-'+t+'"><em>'+PDF_TIPO_CORSA[t]+'</em><b>'+esc(s.name)+'</b>'+mostra.slice(0,3).map(x=>'<span>'+(x.z?'<u>'+x.z+'</u>':'')+esc(String(x.tx).replace(/\s*@\s*[\d:.,]+(?:\s*-\s*[\d:.,]+)?/g,''))+'</span>').join('')+(C.meta(s)?'<i>'+esc(C.meta(s))+'</i>':'')+'</div>';};
+    const sg=C.sigla(s);
+    return '<div class="s t-'+t+'"><em>'+PDF_TIPO_CORSA[t]+'</em><b>'+esc(s.name)+'</b>'+(sg?'<span class="sg">'+esc(sg)+'</span>':mostra.slice(0,3).map(x=>'<span>'+esc(x.tx)+'</span>').join(''))+(C.meta(s)?'<i>'+esc(C.meta(s))+'</i>':'')+'</div>';};
   let fogli='';
   for(let b0=0,f=0;b0<W.length;b0+=4,f++){
     const B=W.slice(b0,b0+4);
@@ -4162,7 +4184,7 @@ ${PDF_RSB_CSS}
 .s{border-radius:1.3mm;padding:1.4mm 1.7mm;display:flex;flex-direction:column;gap:.4mm}
 .s em{font:700 7.5px/1.1 Inter,sans-serif;font-style:normal;letter-spacing:.3px;text-transform:uppercase}
 .s b{font-size:10.5px;line-height:1.15;color:#17151A}
-.s span{font-size:9px;line-height:1.25;color:#2C2830}.s span u{text-decoration:none;font-weight:700;margin-right:1mm}
+.s span{font-size:9px;line-height:1.25;color:#2C2830}.s span.sg{font-size:9.5px;font-weight:600;color:#17151A}.s span u{text-decoration:none;font-weight:700;margin-right:1mm}
 .s i{font-style:normal;font-weight:700;font-size:9.5px;font-variant-numeric:tabular-nums;margin-top:.3mm}
 .t-fac{background:#E3F3E8}.t-fac em,.t-fac i{color:#17703F}
 .t-med{background:#DDF1EF}.t-med em,.t-med i{color:#0F6E68}
@@ -4181,6 +4203,7 @@ ${PDF_RSB_CSS}
 .ln{display:inline-block;width:17mm;border-bottom:.3mm solid #8E8692;height:5mm}
 .km td{padding:.7mm 0;font-size:9px;border-bottom:.2mm solid #EEEAF0}.km td.b{width:52%}.km td.b i{display:block;height:2mm;border-radius:1mm;background:#CFC6E8}.km tr.on td.b i{background:#6D28D9}.km tr.on td{font-weight:700}.km td.v{text-align:right;font-variant-numeric:tabular-nums}
 .nt{font-size:8px;color:#6A6370;margin-top:1mm}.nt b{color:#17151A}
+.sig{font-size:8.5px;line-height:1.45;color:#2C2830}.sig b{color:#17151A}
 .leg{display:grid;grid-template-columns:1fr 1fr;gap:1.4mm 2mm;font-size:9px}
 .f{display:flex;justify-content:space-between;gap:4mm;margin-top:2mm;padding-top:1.5mm;border-top:.25mm solid #E2DDE5;font-size:8px;color:#6A6370}`;
   const fonts=PDF_FONTS.replace('family=Bebas+Neue&','family=Bebas+Neue&family=Montserrat:wght@500&');
