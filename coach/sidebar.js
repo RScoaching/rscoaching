@@ -1307,3 +1307,94 @@ window.RSPrehab = (function(){
   }
   return {CAT,TIPI,bozza,bozzaDi,schede,chiave,nomeBase,minuti,testo,daTesto,tipoSeduta,carta,zoneDi};
 })();
+
+/* RSMuscoli: di ogni esercizio il gruppo muscolare (con i secondari a mezza serie), l'attrezzo,
+   lo schema di movimento e se e' monopodalico; colori per gruppo (petto rosso, gambe blu,
+   schiena verde, come i fogli di carta), serie a settimana per gruppo, esercizi simili per
+   Sostituisci e una scala per Progredisci / Regredisci. Il nome basta: italiano o inglese. */
+window.RSMuscoli=(function(){
+  const GR={
+    petto:{n:'Petto',c:'#F87171'},schiena:{n:'Schiena',c:'#4ADE80'},spalle:{n:'Spalle',c:'#FBBF24'},braccia:{n:'Braccia',c:'#F472B6'},
+    gambe:{n:'Quadricipiti',c:'#60A5FA'},glutei:{n:'Glutei',c:'#A78BFA'},femorali:{n:'Femorali',c:'#2DD4BF'},polpacci:{n:'Polpacci',c:'#67E8F9'},
+    core:{n:'Core',c:'#A8A29E'},esplosivo:{n:'Esplosivo',c:'#FB923C'}
+  };
+  const ORD=['petto','schiena','spalle','braccia','gambe','glutei','femorali','polpacci','core','esplosivo'];
+  // [regola sul nome, gruppo, secondari, schema]; la prima che combacia vince
+  const R=[
+    [/clean|snatch|jerk|girata|strappo|slancio|swing|med ?ball|lancio|slam|throw|toss/,'esplosivo',{},'olimpico'],
+    [/jump|salt|hop|bound|balz|pogo|pliom|drop|hurdle|ostacol|skip|corda/,'esplosivo',{},'pliometria'],
+    [/copenhagen|adduct|addutt/,'gambe',{core:.5},'isolamento'],
+    [/abduct|abdutt|band walk|lateral walk|clam|monster walk/,'glutei',{},'isolamento'],
+    [/heel raise|calf|polpacc|soleo|tibial/,'polpacci',{},'isolamento'],
+    [/hip t(h)?rust|glute bridge|bridge|ponte|kick ?back|kick rear|slancio dietro|pull through/,'glutei',{femorali:.5},'hinge'],
+    [/nordic|hamstring|leg curl|curl femorali|ghr|glute ham/,'femorali',{},'hinge'],
+    [/back extension|hyperext|iperest|reverse hyper|good morning/,'femorali',{glutei:.5,schiena:.5},'hinge'],
+    [/\brdl\b|romanian|rumen|stiff|single leg deadlift|stacc.*gamba/,'femorali',{glutei:.5},'hinge'],
+    [/deadlift|stacc|trap bar squat/,'glutei',{femorali:.5,gambe:.5,schiena:.5},'hinge'],
+    [/leg extension|estension.*gamb|wall sit|sissy|spanish/,'gambe',{},'isolamento'],
+    [/split|bulgar|rfess|lunge|affond|step ?up|step down|pistol|single leg (box )?squat|kickstand|skater/,'gambe',{glutei:.5},'affondo'],
+    [/squat|leg press|pressa|hack|pendulum|belt squat/,'gambe',{glutei:.5},'squat'],
+    [/pull ?-?over|braccia tese|straight arm/,'schiena',{},'tirata_vert'],
+    [/pull ?-?up|\bchin|trazion|lat ?machine|pulldown|lat pull|iliac/,'schiena',{braccia:.5},'tirata_vert'],
+    [/face pull|rear delt|reverse fly|posterior|alzate posteriori|croci inverse|\bt\b \(palms|banded t/,'spalle',{schiena:.5},'isolamento'],
+    [/row|rematore|pulley|low row|t-bar|inverted|australian|gorilla/,'schiena',{braccia:.5},'tirata_orizz'],
+    [/shrug|scrollat/,'schiena',{},'isolamento'],
+    [/lateral raise|alzate laterali|alzate frontali|alzate anteriori|front raise|scaption|\by\b su panca|alzate/,'spalle',{},'isolamento'],
+    [/plank|dead ?bug|pallof|crunch|core|addomin|bird ?dog|rollout|ab wheel|carry|farmer|side bend|hollow|leg raise|russian|twist|landmine rotation|anti-?rot|v-?up|cervical|cervic|barchetta|superman/,'core',{},'core'],
+    [/external rotation|internal rotation|\ber\b|\bir\b|rotation|rotazion|cuffia|shoulder|spall/,'spalle',{},'isolamento'],
+    [/military|overhead press|strict press|shoulder press|lento|arnold|push press|landmine press|handstand|seated dumbbell press|sopra la testa(?!.*corda)/,'spalle',{braccia:.5},'spinta_vert'],
+    [/curl|bicip|hammer|martello/,'braccia',{},'isolamento'],
+    [/tricep|tricip|pushdown|french|skull|kick ?back|estension.*cavo|distensioni sopra la testa/,'braccia',{},'isolamento'],
+    [/fly|croci|pec deck|pectoral/,'petto',{spalle:.5},'isolamento'],
+    [/wrist|polso|forearm|avambracc|dead hang|radial|pronation|supination/,'braccia',{},'isolamento'],
+    [/dip/,'petto',{braccia:.5,spalle:.5},'spinta_orizz'],
+    [/bench|panca|chest press|push ?-?up|piegament|floor press|press/,'petto',{braccia:.5,spalle:.5},'spinta_orizz'],
+  ];
+  const ATT=[['trap bar',/trap bar|esagonale/],['multipower',/smith|multipower/],['cavi',/cable|cavo|cavi|rope|corda|pulley|pushdown|face pull|lat ?machine|pulldown|low row|iliac/],
+    ['manubri',/dumbbell|manubri|manubrio|\bdb\b|goblet|arnold|concentration|hammer|martello|spider/],['kettlebell',/kettlebell|\bkb\b/],
+    ['bilanciere',/barbell|bilanciere|\bbb\b|ez\b|zercher|good morning|back squat|front squat|high bar|low bar|panca piana|military press|strict press|push press|rematore bilanciere|stacco da terra|hip thrust bilanciere|clean|snatch|jerk|t-bar|landmine|^(?!.*(single|singol|\bsl\b)).*(deadlift|\brdl\b|romanian)/],
+    ['macchina',/machine|macchina|leg press|pressa|pendulum|hack|chest press|pec deck|pectoral|leg extension|leg curl|seated hamstring|abduction|adduction|hip abduction|seated row|chest supported machine|assisted/],
+    ['elastico',/band|elastic|banded/],['corpo libero',/bodyweight|corpo libero|push ?-?up|pull ?-?up|chin ?-?up|trazioni|dip|plank|dead bug|bird dog|nordic|bridge|ponte|inverted|australian|pistol|wall sit|copenhagen|step ?up|lunge|affondi|split squat$|bulgarian split squat$|squat bulgaro$|dead hang|handstand|pogo|jump|hop|salto|bound|balz/],
+    ['palla medica',/med ?ball/],['trx',/trx/]];
+  const MONO=/single|one arm|singol|\bsl\b|unilater|split|bulgar|rfess|lunge|affond|step ?up|step down|pistol|kickstand|un braccio|una gamba|monopod|alternat|copenhagen|side plank|lateral lunge|skater|landmine press/;
+  const cache={};
+  const norm=n=>String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  function info(nome){
+    const n=norm(nome);if(!n)return null;if(cache[n])return cache[n];
+    const r=R.find(x=>x[0].test(n));
+    const at=(ATT.find(a=>a[1].test(n))||[''])[0];
+    const o=r?{g:r[1],s:r[2],sc:r[3]}:{g:'',s:{},sc:'altro'};
+    o.att=at;o.mono=MONO.test(n)&&!/double leg|bilater|due gambe/.test(n);o.n=nome;
+    // livello per la scala: dall'attrezzo, con i ritocchi (box e assistito piu' facili, deficit e fermo piu' duri)
+    const base={'elastico':1,'trx':1.5,'corpo libero':/pull ?-?up|chin|trazion|dip|nordic|handstand|pistol/.test(n)?4:1.5,'kettlebell':2,'macchina':2,'cavi':2.2,'multipower':2.6,'manubri':3,'trap bar':3.5,'bilanciere':4,'palla medica':2}[at]||2.5;
+    o.liv=o.g==='esplosivo'?base:base+(/box|assist|supported|hand supported|incline push|hands elevated|band|iso/.test(n)?-0.7:0)+(/deficit|pause|fermo|tempo|ecc|weighted|zavorr|front|zercher|overhead/.test(n)?0.6:0)+(o.mono&&/gambe|glutei|femorali/.test(o.g)?0.8:0);
+    cache[n]=o;return o;
+  }
+  // serie per gruppo: il principale conta la serie intera, i secondari mezza; la prevenzione non conta
+  function serie(esercizi){
+    const t={};(esercizi||[]).forEach(e=>{if(!e||/^Prevenzione/.test(e.cue||''))return;const x=info(e.name);if(!x||!x.g)return;const k=parseFloat(String(e.sets||'').replace(',','.'))||0;if(!k)return;
+      t[x.g]=(t[x.g]||0)+k;Object.entries(x.s||{}).forEach(([g,f])=>{t[g]=(t[g]||0)+k*f;});});
+    return t;
+  }
+  // fasce delle serie a settimana per gruppo (Schoenfeld 2017, Pelland 2024): ipertrofia 10-20,
+  // forza e mantenimento meno; sotto 4 si mantiene e basta
+  function fascia(ob){return /estetica|ipertrof|pesi/.test(ob||'')?[10,20]:/forza/.test(ob||'')?[6,15]:[4,12];}
+  // parole del movimento, senza attrezzo: "Smith Machine RFESS" e "RFESS" sono lo stesso esercizio
+  const VUOTE=/^(dumbbell|dumbbells|barbell|smith|machine|cable|cavo|cavi|manubri|manubrio|bilanciere|multipower|kettlebell|kb|db|bb|band|banded|elastico|con|su|da|di|the|with|alla|al|in|e|a|weighted|zavorrato|seated|seduto|standing)$/;
+  const parole=n=>new Set(norm(n).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w&&!VUOTE.test(w)));
+  const somi=(a,b)=>{const A=parole(a),B=parole(b);let c=0;A.forEach(w=>{if(B.has(w))c++;});return c/Math.max(1,Math.min(A.size,B.size));};
+  // simili: stesso schema e stesso gruppo; prima lo stesso movimento con un altro attrezzo, poi i piu' vicini di difficolta'
+  function simili(nome,lista){
+    const a=info(nome);if(!a||!a.g)return [];
+    const ns=[...new Set((lista||[]).filter(Boolean))].filter(x=>norm(x)!==norm(nome));
+    return ns.map(x=>({x,i:info(x),k:somi(nome,x)})).filter(o=>o.i&&o.i.g===a.g&&o.i.sc===a.sc).sort((p,q)=>q.k-p.k||(p.i.mono===a.mono?0:1)-(q.i.mono===a.mono?0:1)||Math.abs(p.i.liv-a.liv)-Math.abs(q.i.liv-a.liv)).map(o=>o.x);
+  }
+  // un gradino piu' duro (d=1) o piu' facile (d=-1) nello stesso schema e gruppo, il piu' vicino come movimento
+  function gradino(nome,lista,d){
+    const a=info(nome);if(!a||!a.g)return null;
+    const c=simili(nome,lista).map(x=>({x,i:info(x),k:somi(nome,x)})).filter(o=>d>0?o.i.liv>a.liv+0.05:o.i.liv<a.liv-0.05)
+      .sort((p,q)=>(q.i.mono===a.mono)-(p.i.mono===a.mono)||(q.i.att?1:0)-(p.i.att?1:0)||Math.round((q.k-p.k)*2)-0||(d>0?p.i.liv-q.i.liv:q.i.liv-p.i.liv));
+    return (c[0]||{}).x||null;
+  }
+  return {GR,ORD,info,serie,fascia,simili,gradino,norm};
+})();
