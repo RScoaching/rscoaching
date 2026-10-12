@@ -1898,7 +1898,21 @@ function gmPianIso(iso){
       if(!x||x.dayOfWeek==null)return;const d=O.giorno(p,wi,x.dayOfWeek);if(d&&O.iso(d)===iso)out.push({pid,wi,sid,tipo:x.type,nome:x.name||'Seduta',s:x});}));});
   return out;
 }
+
+/* Corse verso Garmin Connect: per chi ha l'orologio Garmin collegato si prepara la coda
+   delle corse dei prossimi 21 giorni (garmin_allenamenti/{aid}); lo script Garmin sul Mac
+   le mette nel calendario di Garmin Connect alla sincronizzazione. Si scrive solo se cambia. */
+let gmCodaT=null;const gmCodaFirma={};
+function gmCodaFirma0(items){return Object.entries(items||{}).map(([k,v])=>k+':'+(v&&v.hash)).sort().join('|');}
+async function gmCodaScrivi(aid,progs,ritmi){
+  const O=window.RSOrologio;if(!O||!O.coda||!aid)return;
+  const items=O.coda(aid,progs,ritmi),firma=gmCodaFirma0(items);if(gmCodaFirma[aid]===firma)return;
+  try{const ora=(await get(ref(db,'garmin_allenamenti/'+aid+'/items'))).val()||{};
+    if(gmCodaFirma0(ora)!==firma)await set(ref(db,'garmin_allenamenti/'+aid),{items,ts:Date.now()});
+    gmCodaFirma[aid]=firma;}catch(e){console.warn('coda Garmin',e);}
+}
 function gmLogs(){
+  if(ST.gd&&ST.gd.profilo&&ST.gd.profilo.garmin&&ST.progs){clearTimeout(gmCodaT);gmCodaT=setTimeout(()=>gmCodaScrivi(aid,ST.progs,(window._ath||{}).ritmi),2500);}
   const v=ST.gd&&window.RSGarmin?window.RSGarmin.fondi(ST.logsRaw||{},ST.gd,gmPianIso):(ST.logsRaw||{});
   const raw=ST.logsRaw||{};
   ST.logs=Object.entries(v).filter(([,l])=>l&&l.ts).map(([k,l])=>{if(raw[k]&&!l.gm){try{Object.defineProperty(l,'_k',{value:k,configurable:true});}catch(e){}}return l;}).sort((a,b)=>b.ts-a.ts);

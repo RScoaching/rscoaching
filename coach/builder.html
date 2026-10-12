@@ -1834,7 +1834,7 @@ async function init(){
   if(_qProg&&programs[_qProg])setTimeout(()=>selectProg(_qProg),0);
   else if(_lastProg&&programs[_lastProg])setTimeout(()=>selectProg(_lastProg),0);
   if(_qStudio!=null)setTimeout(()=>openStudio(_qStudio&&athletes[_qStudio]?_qStudio:undefined),50);
-  onValue(ref(db,'programs'),s=>{programs=s.val()||{};renderProgList();if(!currentProgId)return;
+  onValue(ref(db,'programs'),s=>{programs=s.val()||{};renderProgList();pzCodaGarmin();if(!currentProgId)return;
     pzLinkSync();pzSelPulisci();
     // si aspetta solo se si sta scrivendo in una cella; se no si ridisegna
     // subito e il cursore torna nella stessa cella
@@ -1909,6 +1909,24 @@ function renderProgList(){
 }
 
 // SELECT PROGRAM
+
+/* Corse verso Garmin Connect: per chi ha l'orologio Garmin collegato si prepara la coda
+   delle corse dei prossimi 21 giorni (garmin_allenamenti/{aid}); lo script Garmin sul Mac
+   le mette nel calendario di Garmin Connect alla sincronizzazione. Si scrive solo se cambia. */
+let gmCodaT=null;const gmCodaFirma={};
+function gmCodaFirma0(items){return Object.entries(items||{}).map(([k,v])=>k+':'+(v&&v.hash)).sort().join('|');}
+async function gmCodaScrivi(aid,progs,ritmi){
+  const O=window.RSOrologio;if(!O||!O.coda||!aid)return;
+  const items=O.coda(aid,progs,ritmi),firma=gmCodaFirma0(items);if(gmCodaFirma[aid]===firma)return;
+  try{const ora=(await get(ref(db,'garmin_allenamenti/'+aid+'/items'))).val()||{};
+    if(gmCodaFirma0(ora)!==firma)await set(ref(db,'garmin_allenamenti/'+aid),{items,ts:Date.now()});
+    gmCodaFirma[aid]=firma;}catch(e){console.warn('coda Garmin',e);}
+}
+const pzHaGarmin={};
+function pzCodaGarmin(){clearTimeout(gmCodaT);gmCodaT=setTimeout(async()=>{const p=programs[currentProgId];if(!p)return;
+  for(const aid of Object.keys(p.assignedTo||{}).filter(k=>p.assignedTo[k])){
+    if(pzHaGarmin[aid]===undefined){try{pzHaGarmin[aid]=!!(await get(ref(db,'garmin_data/'+aid+'/profilo/garmin'))).val();}catch(e){pzHaGarmin[aid]=false;}}
+    if(pzHaGarmin[aid])gmCodaScrivi(aid,programs,athletes[aid]&&athletes[aid].ritmi);}},4000);}
 window.lpTog=function(f){const lp=document.getElementById('left-panel');if(!lp)return;const c=f!=null?f:!lp.classList.contains('chiuso');lp.classList.toggle('chiuso',c);document.getElementById('lp-tog')?.classList.toggle('chiuso',c);try{localStorage.setItem('rsc_lp_chiuso',c?'1':'');}catch(e){}};
 try{if(localStorage.getItem('rsc_lp_chiuso')==='1')setTimeout(()=>lpTog(true),0);}catch(e){}
 window.selectProg=function(id){

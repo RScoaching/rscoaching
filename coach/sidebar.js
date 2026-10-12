@@ -677,7 +677,27 @@ window.RSOrologio = (function(){
     const q=giri.filter(g=>g.intens==='active'&&g.esito);
     return {blocchi:B,giri,centrati:q.length?{ok:q.filter(g=>g.esito==='ok').length,n:q.length}:null};
   }
-  return {durata,passi,inFila,stima,righe,durTxt,tgTxt,fitWorkout,icu,jsonPassi,zip,scarica,nomeFile,giorno,iso,crc16,leggiFit,leggiGpx,leggiFile,confronta,blocchi,confrontaGiri};
+  /* Coda per Garmin Connect: le corse dei programmi di un atleta nei prossimi giorni, con i
+     passi gia' calcolati come per il file .FIT (ritmi personali solo nei programmi di gruppo,
+     come nell'app). Lo script Garmin sul Mac la legge e mette gli allenamenti in calendario. */
+  function codaHash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36);}
+  function coda(aid,progs,Ra,giorni){
+    const RR=window.RSRitmi,oggi=new Date();oggi.setHours(0,0,0,0);const fine=oggi.getTime()+(giorni||21)*864e5,items={};
+    Object.entries(progs||{}).forEach(([pid,p])=>{
+      if(!p||p.archived||!p.assignedTo||!p.assignedTo[aid])return;
+      const gruppo=Object.keys(p.assignedTo).filter(k=>p.assignedTo[k]).length>1,R=gruppo&&RR?RR.conFissi(p,Ra):null;
+      Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).forEach(([wid,w],wi)=>Object.entries(w&&w.sessions||{}).forEach(([sid,x])=>{
+        if(!x||x.type!=='corsa'||x.dayOfWeek==null||!x.corsaFasi||!Object.keys(x.corsaFasi).length)return;
+        const d=giorno(p,wi,x.dayOfWeek);if(!d||d.getTime()<oggi.getTime()||d.getTime()>fine)return;
+        const P=passi(x,R);if(!P.length)return;const st=stima(P);
+        const it={data:iso(d),nome:'RS '+String(x.name||'Corsa').slice(0,60),passi:jsonPassi(P),km:st.km||0,min:st.min||0,nota:String(p.name||'').slice(0,60)};
+        it.hash=codaHash(JSON.stringify([it.data,it.nome,it.passi]));
+        items[(pid+'_'+wid+'_'+sid).replace(/[.#$\[\]\/]/g,'_')]=JSON.parse(JSON.stringify(it));
+      }));
+    });
+    return items;
+  }
+  return {coda,codaHash,durata,passi,inFila,stima,righe,durTxt,tgTxt,fitWorkout,icu,jsonPassi,zip,scarica,nomeFile,giorno,iso,crc16,leggiFit,leggiGpx,leggiFile,confronta,blocchi,confrontaGiri};
 })();
 
 // ── DATI DELL'OROLOGIO (garmin_data) DENTRO L'APP ──────────────────────
