@@ -2464,7 +2464,8 @@ function renderE1rm(){
   const per={};
   ST.logs.slice().sort((a,b)=>a.ts-b.ts).forEach(l=>{
     Object.entries(l.exerciseData||{}).forEach(([nome,serie])=>{
-      let best=0;(Array.isArray(serie)?serie:Object.values(serie||{})).forEach(x=>{const kg=+x.kg,r=parseInt(x.reps)||0;if(kg>0&&r>0&&r<=10){const e=r===1?kg:kg*(1+r/30);if(e>best)best=e;}});
+      // stessa stima del preparatore e della seduta: Epley con le ripetizioni rimaste dall'RPE (RPE 8 = 2)
+      let best=0;(Array.isArray(serie)?serie:Object.values(serie||{})).forEach(x=>{const kg=+String(x.kg||'').replace(',','.'),r=parseInt(x.reps)||0,rpe=+x.rpe||0;if(kg>0&&r>0&&r<=12){const rir=rpe?Math.max(0,Math.min(4,10-rpe)):0;const e=kg*(1+(r+rir)/30);if(e>best)best=e;}});
       if(best>0)(per[nome]=per[nome]||[]).push({ts:l.ts,v:Math.round(best*2)/2});
     });
   });
@@ -2476,7 +2477,7 @@ function renderE1rm(){
     const sp=`<svg class="pt7-sp" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="${V.map((v,i)=>`${(i/(V.length-1)*100).toFixed(1)},${(26-(v-mn)/r*22).toFixed(1)}`).join(' ')}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
     const dd=new Date(H[0].ts);
     return `<div class="pt7-r"><div class="pt7-n"><b>${escH(n)}</b><span>${H.length} sedute${d?` &middot; <em class="pt7-d ${d>0?'su':'giu'}">${d>0?'+':''}${nfIt(d,1)} kg dal ${dd.getDate()}/${dd.getMonth()+1}</em>`:''}</span></div>${sp}<div class="pt7-v">${nfIt(last,1)}<small>kg</small></div></div>`;
-  }).join('')+'</div><p class="pf-cap" style="margin:6px 18px 14px">Stima dalla serie migliore di ogni seduta (formula di Epley). Non sostituisce un massimale provato.</p>';
+  }).join('')+'</div><p class="pf-cap" style="margin:6px 18px 14px">Stima dalla serie migliore di ogni seduta (Epley, con le ripetizioni che restavano dall\'RPE). Su questa stima l\'app calcola i carichi delle percentuali. Non sostituisce un massimale provato.</p>';
 }
 
 // ── PROFILO: numeri e test

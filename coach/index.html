@@ -2109,6 +2109,10 @@ function athStats(aid){
   // RPE che sale tre sedute di fila e arriva alto
   const r3=rpeS.slice(0,3).map(s=>s.rpe);
   if(r3.length===3&&r3[0]>r3[1]&&r3[1]>r3[2]&&r3[0]>=7)add('RPE in salita','p-warn','RPE '+r3.slice().reverse().join(', ')+' nelle ultime 3 sedute',2);
+  // forza: serie che arrivano piu' dure dello scritto, o serie lasciate indietro (ultime 2 settimane)
+  {const fr=fzRispetto(aid,14);
+    if(fr.nR>=6&&fr.dR>=1.3)add('Pesi piu\' duri','p-warn','RPE '+f1(fr.dR)+' sopra quello scritto nelle ultime 2 settimane ('+fr.nR+' serie): carichi un passo giu\' o piu\' recupero',2);
+    if(fr.pian>=12&&fr.ader<70)add('Serie mancate','p-warn','nella forza '+fr.fatte+' serie fatte su '+fr.pian+' scritte nelle ultime 2 settimane',1);}
   // chi faceva check-in e ha smesso
   const dCi=ggDa(lastCi);
   if(aCi.length>=3&&dCi!=null&&dCi>=4)add('Check-in fermo','p-warn','ultimo check-in '+ggFa(lastCi),1);
@@ -3714,6 +3718,15 @@ function gmIntensita(aid){
    secondari a mezza serie) e tonnellaggio, equilibri spinta/tirata e quadricipiti/femorali,
    quanto l'atleta rispetta il programma (serie fatte e RPE contro quello scritto). */
 let fzN=12;
+// rispetto del programma nella forza negli ultimi n giorni: serie fatte su scritte, RPE fatto meno scritto
+function fzRispetto(aid,giorni){
+  const ora=Date.now();let pian=0,fatte=0;const dR=[];
+  Object.values(sessionLogsRaw[aid]||{}).forEach(l=>{if(!l||l.ts<ora-giorni*864e5||!l.exerciseData||!l.progId)return;const p=programs[l.progId];if(!p)return;
+    const w=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0))[+l.weekIdx];const s=w&&w[1].sessions&&w[1].sessions[l.sessId];if(!s)return;
+    Object.values(s.exercises||{}).forEach(e=>{if(!e||!e.name||/^Prevenzione/.test(e.cue||''))return;const st=parseInt(e.sets)||0;const d=l.exerciseData[e.name];if(!st)return;pian+=st;fatte+=Array.isArray(d)?Math.min(st,d.length):0;
+      const rt=parseFloat(String(e.rpe||'').split('-').pop().replace(',','.'));if(Array.isArray(d)&&rt)d.forEach(x=>{if(+x.rpe)dR.push(+x.rpe-rt);});});});
+  return {pian,fatte,ader:pian?Math.round(fatte/pian*100):null,dR:dR.length?dR.reduce((a,b)=>a+b,0)/dR.length:null,nR:dR.length};
+}
 function fzSerie(aid){
   const out=[];
   Object.values(sessionLogsRaw[aid]||{}).forEach(l=>{if(!l||!l.ts||!l.exerciseData)return;
