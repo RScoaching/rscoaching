@@ -3151,6 +3151,7 @@ window.copyProgram=async function(){
 
   const newRef=await push(ref(db,'programs'),copy);
   closeModal();
+  await pzArchiviaVecchi(targetId,newRef.key,copy);
   showToast(`"${newName}" copiato!`);
   // Optionally navigate to the new copy
   setTimeout(()=>selectProg(newRef.key),400);
@@ -3454,10 +3455,40 @@ window.setInizioProg=async function(iso){
   const el=document.getElementById('as-inizio-info');if(el)el.innerHTML=bInizioInfo(Object.assign({},programs[currentProgId],{startDate:v}));
   showToast(v?'Inizio: '+v:'Data di inizio tolta');
 };
+// nuovo programma a un atleta: il vecchio ancora in corso va in archivio (se e' di gruppo si toglie solo l'atleta)
+// e le settimane del Planner che si sovrappongono passano in athlete_plans_archivio, cosi' l'app non le ripesca
+async function pzArchiviaVecchi(aid,pidNuovo,pNuovo){
+  try{
+    const oggi=new Date();oggi.setHours(0,0,0,0);
+    const lun=x=>{const y=new Date(x);y.setHours(0,0,0,0);y.setDate(y.getDate()-((y.getDay()+6)%7));return y;};
+    const finito=p=>{const d=stDate(p&&p.startDate);if(!d)return false;const f=lun(d);f.setDate(f.getDate()+Object.keys(p.weeks||{}).length*7);return f<=oggi;};
+    const vecchi=Object.keys(programs).filter(k=>k!==pidNuovo&&programs[k]&&programs[k].assignedTo&&programs[k].assignedTo[aid]&&!programs[k].archived&&!finito(programs[k]));
+    const dN=stDate(pNuovo&&pNuovo.startDate),da=lun(dN||oggi),iso=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'),daIso=iso(da);
+    let piani={};try{piani=(await get(ref(db,'athlete_plans/'+aid))).val()||{};}catch(e){}
+    const wks=Object.keys(piani).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w)&&w>=daIso);
+    if(!vecchi.length&&!wks.length)return;
+    const nome=(athletes[aid]||{}).name||'L\'atleta';
+    let ok=true;
+    if(vecchi.length)ok=confirm(nome+' ha gia\' in corso: '+vecchi.map(k=>'"'+(programs[k].name||'')+'"').join(', ')+'.\n'+(vecchi.length>1?'Archiviarli':'Archiviarlo')+' e usare solo il nuovo?\n(Annulla se deve seguirli insieme, per esempio un ibrido.)');
+    const up={},inv={},ts=Date.now(),motivo='nuovo programma: '+((pNuovo&&pNuovo.name)||'');
+    if(ok)vecchi.forEach(k=>{
+      const soli=Object.keys(programs[k].assignedTo).filter(x=>programs[k].assignedTo[x]).length<=1;
+      if(soli){up['programs/'+k+'/archived']=true;inv['programs/'+k+'/archived']=programs[k].archived||null;}
+      else{up['programs/'+k+'/assignedTo/'+aid]=null;inv['programs/'+k+'/assignedTo/'+aid]=true;}
+    });
+    wks.forEach(w=>{up['athlete_plans_archivio/'+aid+'/'+w]=Object.assign({},piani[w],{archiviatoIl:ts,motivo});up['athlete_plans/'+aid+'/'+w]=null;inv['athlete_plans/'+aid+'/'+w]=piani[w];inv['athlete_plans_archivio/'+aid+'/'+w]=null;});
+    if(!Object.keys(up).length)return;
+    await update(ref(db),up);
+    pzUndo.push({multi:inv});if(pzUndo.length>40)pzUndo.shift();
+    const n=ok?vecchi.length:0;
+    showToast((n?n+(n===1?' programma archiviato':' programmi archiviati'):'')+(n&&wks.length?', ':'')+(wks.length?wks.length+' sett. Planner in archivio':'')+' (Ctrl+Z annulla)');
+  }catch(e){console.error(e);}
+}
+window.pzArchiviaVecchi=pzArchiviaVecchi;
 window.toggleAssign=async function(athId,progId){
   const assigned=programs[progId]?.assignedTo||{};
   if(assigned[athId]){await remove(ref(db,`programs/${progId}/assignedTo/${athId}`));}
-  else{await set(ref(db,`programs/${progId}/assignedTo/${athId}`),true);}
+  else{await set(ref(db,`programs/${progId}/assignedTo/${athId}`),true);await pzArchiviaVecchi(athId,progId,programs[progId]);}
   const chip=document.getElementById('ach-'+athId);
   if(chip)chip.classList.toggle('sel');
 };
@@ -7083,6 +7114,7 @@ window.creaDaStudio=async function(){
       createdAt:Date.now(),startDate:I.inizio,assignedTo:{[aid]:true},weeks:B.weeks,intake:scheda,origine:'studio',ritmi:ritP,prehab});
     await set(ref(db,'athlete_intake/'+aid),scheda);
     closeStudio();
+    await pzArchiviaVecchi(aid,r.key,{name:nome,startDate:I.inizio,weeks:B.weeks});
     showToast('Programma creato: '+P.N+' settimane');
     setTimeout(()=>selectProg(r.key),300);
   }catch(e){console.error(e);showToast('Errore nel salvataggio');}
