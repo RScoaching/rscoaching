@@ -2166,7 +2166,12 @@ if(!aid){
 
     // ── CHAT LISTENER
     onValue(ref(db,`chat/${aid}/messages`),msgSnap=>{
-      window._chatMsgs=Object.entries(msgSnap.val()||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>a.ts-b.ts);
+      // i messaggi programmati dal preparatore compaiono solo dall'ora scelta
+      const tutti=Object.entries(msgSnap.val()||{}).map(([k,v])=>({...v,_key:k})),ora=Date.now();
+      window._chatMsgs=tutti.filter(m=>!m.inviaDopo||m.inviaDopo<=ora).sort((a,b)=>a.ts-b.ts);
+      const pross=tutti.filter(m=>m.inviaDopo>ora).map(m=>m.inviaDopo).sort((a,b)=>a-b)[0];
+      clearTimeout(window._chatProgT);if(pross&&pross-ora<864e5*2)window._chatProgT=setTimeout(()=>{window._chatRiapri&&window._chatRiapri();},pross-ora+500);
+      window._chatRiapri=()=>{get(ref(db,`chat/${aid}/messages`)).then(x=>{const t=Object.entries(x.val()||{}).map(([k,v])=>({...v,_key:k})),o=Date.now();window._chatMsgs=t.filter(m=>!m.inviaDopo||m.inviaDopo<=o).sort((a,b)=>a.ts-b.ts);const u=window._chatMsgs.filter(m=>m.from==='coach'&&!m.read).length,bd=document.getElementById('chat-badge');if(bd){bd.textContent=u>9?'9+':String(u);bd.style.display=u?'flex':'none';}if(document.getElementById('page-chat')?.style.display!=='none')renderChat();});};
       const unread=window._chatMsgs.filter(m=>m.from==='coach'&&!m.read).length;
       const badge=document.getElementById('chat-badge');
       if(badge){
