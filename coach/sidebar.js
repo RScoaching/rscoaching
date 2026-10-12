@@ -440,9 +440,17 @@ window.RSOrologio = (function(){
   }
   function passoDi(f,campo,R){const r=RR();return r&&f.rit&&f.rit!=='RG'&&R?r.passoFase(f,R,campo):(f[campo]||'');}
   function fcDi(f,R){const z=(/Z[1-5]/.exec(f.zona||'')||[])[0];if(!z||!R||!R.fcSoglia)return null;const fc=+R.fcSoglia,P={Z1:[0.70,0.85],Z2:[0.85,0.89],Z3:[0.90,0.94],Z4:[0.95,1.0],Z5:[1.0,1.06]}[z];return [Math.round(fc*P[0]),Math.round(fc*P[1])];}
-  function target(f,campo,R){
+  /* Bersagli sull'orologio: le parti facili (fondo lento, lungo facile, riscaldamento,
+     defaticamento, ritmo E) non hanno passo ne' FC; i passi di lavoro hanno sempre una fascia
+     di 20" sopra e 20" sotto il passo indicato (passo gara 5:30 -> 5:10-5:50): il passo giusto
+     resta nella nota, la fascia evita che l'orologio suoni a ogni oscillazione. */
+  const FACILE_OR=/fondo lento|long run|lungo|rigener|riscald|defatic|attivaz|corsa facile|easy|recupero|camminat/i;
+  function facileOr(f){return f&&(FACILE_OR.test(f.tipo||'')||f.rit==='E'||/^Z[12]$/.test(f.zona||'')&&!/passo gara|soglia|ripet|interv|progress|fartlek/i.test(f.tipo||''));}
+  function target(f,campo,R,preciso){
+    if(preciso){const fp=fascia(passoDi(f,campo,R));if(fp)return {tipo:'pace',lo:fp[0],hi:fp[1]};const h=fcDi(f,R);return h?{tipo:'hr',lo:h[0],hi:h[1]}:null;}
+    if(facileOr(f))return null;
     const fa=fascia(passoDi(f,campo,R));
-    if(fa)return {tipo:'pace',lo:fa[0],hi:fa[1]};
+    if(fa){const c=(fa[0]+fa[1])/2;return {tipo:'pace',lo:c+20,hi:c-20,centro:c};}
     const hr=fcDi(f,R);return hr?{tipo:'hr',lo:hr[0],hi:hr[1]}:null;
   }
   function intens(tipo){const t=String(tipo||'').toLowerCase();return /riscald|attivaz/.test(t)?'warmup':/defatic/.test(t)?'cooldown':'active';}
@@ -455,19 +463,23 @@ window.RSOrologio = (function(){
     return {kind:'step',nome:'Recupero',note:nome,intens:fermo?'rest':'recovery',dur:d||{tipo:'open'},target:null};
   }
   // ── da una seduta ai passi
-  function passi(s,R){
+  // preciso: il passo esatto del programma (per il confronto con la corsa fatta), senza fasce ne' parti facili scoperte
+  // passo previsto, solo per stimare km e minuti (anche dove sull'orologio non c'e' bersaglio)
+  function pStima(f,campo,R){const fp=fascia(passoDi(f,campo,R));return fp?(fp[0]+fp[1])/2:null;}
+  function passi(s,R,preciso){
     const out=[];const arr=Array.isArray(s&&s.corsaFasi)?s.corsaFasi:Object.values(s&&s.corsaFasi||{});
     arr.forEach(f=>{
       if(!f)return;
       const nome=String(f.tipo||'Corsa').slice(0,30),note=[f.zona,f.note].filter(Boolean).join(' - ');
       const intv=f.reps||f.repDist||f.repPace;
       if(!intv){
-        out.push({kind:'step',nome,note,intens:intens(f.tipo),dur:durata(f.dist)||{tipo:'open'},target:target(f,'pace',R)});
+        // sull'orologio le parti facili si chiamano solo Easy, senza passo ne' FC
+        out.push({kind:'step',nome:!preciso&&facileOr(f)?'Easy':nome,note:!preciso&&facileOr(f)?'':note,intens:intens(f.tipo),dur:durata(f.dist)||{tipo:'open'},target:target(f,'pace',R,preciso),ps:pStima(f,'pace',R)});
         return;
       }
       const n=Math.max(1,parseInt(f.reps,10)||1),ser=Math.max(1,parseInt(f.serie,10)||1);
-      const tg=target(f,'repPace',R),rec=recupero(f),pz=pezzi(f.repDist);
-      const lavoro=pz?pz.map((d,i)=>({kind:'step',nome:nome+' '+(i+1),note,intens:'active',dur:d,target:tg})):[{kind:'step',nome,note,intens:'active',dur:durata(f.repDist)||{tipo:'open'},target:tg}];
+      const tg=target(f,'repPace',R,preciso),ps=pStima(f,'repPace',R),rec=recupero(f),pz=pezzi(f.repDist);
+      const lavoro=pz?pz.map((d,i)=>({kind:'step',nome:nome+' '+(i+1),note,intens:'active',dur:d,target:tg,ps})):[{kind:'step',nome,note,intens:'active',dur:durata(f.repDist)||{tipo:'open'},target:tg,ps}];
       const blocco=[];lavoro.forEach((x,i)=>{blocco.push(x);if(rec&&(pz?i<lavoro.length-1||n>1:true))blocco.push(Object.assign({},rec));});
       for(let k=0;k<ser;k++){
         if(n>1)out.push({kind:'repeat',n,steps:blocco.map(x=>Object.assign({},x))});
@@ -481,7 +493,7 @@ window.RSOrologio = (function(){
   function inFila(P){const o=[];P.forEach(x=>{if(x.kind==='repeat'){for(let i=0;i<x.n;i++)x.steps.forEach(y=>o.push(y));}else o.push(x);});return o;}
   // stima di km e minuti: a tempo col passo del bersaglio (o 6:00), a distanza idem
   function stima(P){
-    let m=0,s=0;inFila(P).forEach(x=>{const pc=x.target&&x.target.tipo==='pace'?(x.target.lo+x.target.hi)/2:(x.intens==='rest'?900:x.intens==='recovery'?420:360);
+    let m=0,s=0;inFila(P).forEach(x=>{const pc=x.ps?x.ps:x.target&&x.target.tipo==='pace'?(x.target.lo+x.target.hi)/2:(x.intens==='rest'?900:x.intens==='recovery'?420:360);
       if(x.dur.tipo==='dist'){m+=x.dur.m;s+=x.dur.m/1000*pc;}else if(x.dur.tipo==='time'){s+=x.dur.s;if(x.intens!=='rest')m+=x.dur.s/pc*1000;}});
     return {km:Math.round(m/100)/10,min:Math.round(s/60)};
   }
@@ -641,7 +653,7 @@ window.RSOrologio = (function(){
   }
   // ── confronto fra seduta in programma e attivita' fatta
   function confronta(s,att,R){
-    const P=passi(s,R),pr=stima(P),fila=inFila(P);
+    const P=passi(s,R,true),pr=stima(P),fila=inFila(P);
     const out={prev:pr,fatto:{km:att.km,min:att.sec?Math.round(att.sec/60):null,passo:att.km&&att.sec?att.sec/att.km:null,fc:att.fc},giri:[]};
     // giri dell'orologio con il passo del workout (lap a ogni passo): si mettono accanto ai bersagli
     const L=(att.laps||[]).filter(l=>l.s>0);
@@ -669,7 +681,7 @@ window.RSOrologio = (function(){
   // confronto fra le fasi in programma e i blocchi corsi: si accoppiano in ordine quando sono tanti quanti
   function confrontaGiri(s,laps,R){
     const B=blocchi(laps);if(!B.length)return null;
-    const fila=inFila(passi(s,R)).filter(x=>x.dur.tipo!=='open'||x.intens==='active');
+    const fila=inFila(passi(s,R,true)).filter(x=>x.dur.tipo!=='open'||x.intens==='active');
     if(B.length!==fila.length)return {blocchi:B,giri:[],centrati:null};
     const giri=B.map((b,i)=>{const x=fila[i],t=x.target;let e='';
       if(t&&t.tipo==='pace')e=b.passo>t.lo+3?'lento':b.passo<t.hi-3?'veloce':'ok';
