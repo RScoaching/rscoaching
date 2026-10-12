@@ -3855,6 +3855,30 @@ function renderDetLoad(aid,aSess){
    oltre +20 fresco, da +5 a +20 transizione, da -10 a +5 neutra, da -30 a -10 allenamento
    ottimale, sotto -30 rischio alto. La data della gara del programma e' segnata. */
 let gmFormaN=180;
+/* Carico previsto dal programma assegnato, come il grafico di TrainingPeaks: ogni seduta
+   futura ha un carico stimato (corsa: minuti per intensita' al quadrato rispetto alla
+   soglia, tarato sulle corse gia' fatte con il carico di intervals.icu; forza e altro:
+   carico al minuto delle sue attivita' passate). Da li' Fitness (42 giorni) e Fatica
+   (7 giorni) vanno avanti giorno per giorno. Le sedute facoltative non contano. */
+function gmCaricoPrev(aid){
+  const O=window.RSOrologio,T=+(((athletes[aid]||{}).ritmi||{}).T)||null,med=a=>{a=a.filter(x=>isFinite(x)&&x>0).sort((x,y)=>x-y);return a.length?a[Math.floor(a.length/2)]:null;};
+  const logs=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts&&+l.gmLoad>0);
+  const stimaCorsa=(sec,passo)=>{const IF=T&&passo?Math.min(1.15,T/passo):0.8;return sec/3600*IF*IF*100;};
+  const kC=med(logs.filter(l=>l.corsa&&+l.corsa.sec>0).map(l=>+l.gmLoad/stimaCorsa(+l.corsa.sec,+l.corsa.passo||null)))||1;
+  const kAlt=med(logs.filter(l=>!l.corsa&&+l.duration>0).map(l=>+l.gmLoad/+l.duration))||0.55;
+  const k=Math.max(0.6,Math.min(1.6,kC));
+  return function(d){
+    let L=0;dPreviste(aid,d).forEach(({x})=>{
+      if(!x||x.opz)return;
+      if(x.type==='corsa'&&O&&x.corsaFasi){let tot=0;try{O.inFila(O.passi(x,null)).forEach(y=>{
+          const sec=y.dur.tipo==='time'?y.dur.s:y.dur.tipo==='dist'?y.dur.m/1000*(y.ps||360):0;if(!sec||y.intens==='rest')return;
+          const IF=y.ps&&T?Math.min(1.15,T/y.ps):y.intens==='active'?0.85:0.65;tot+=sec/3600*IF*IF*100;});}catch(e){}
+        L+=(tot||45/60*0.64*100)*k;}
+      else{const m=parseInt(x.duration)||parseInt(x.durata)||60;L+=m*kAlt;}
+    });
+    return L;
+  };
+}
 window.gmFormaVai=function(aid,n){gmFormaN=n;const el=document.getElementById('det-load');if(el)el.innerHTML=renderDetLoad(aid,Object.values(sessions[aid]||{}).sort((a,b)=>b.ts-a.ts));};
 function gmForma(aid){
   const gd=garminData[aid];if(!gd||!gd.days)return '';
@@ -3864,8 +3888,17 @@ function gmForma(aid){
   // gara del programma in corso (intake), se cade nella finestra o poco dopo
   const pr=dProgAtleta(aid)[0],I=pr&&pr[1].intake||{},gm=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(I.garaData||''),gara=gm?new Date(+gm[3],+gm[2]-1,+gm[1],12).getTime():null;
   // l'asse arriva fino alla gara (se e' entro 120 giorni): si vede quanto manca
-  if(gara&&gara>oggi.getTime()&&gara-oggi.getTime()<=120*864e5){for(let t=oggi.getTime()+864e5;t<=gara;t+=864e5)G.push({t,ctl:null,atl:null,fut:true});}
+  // davanti: fino alla gara (entro 120 giorni) o 4 settimane, con il carico previsto dal programma
+  const fineP=gara&&gara>oggi.getTime()&&gara-oggi.getTime()<=120*864e5?gara:(pr?oggi.getTime()+28*864e5:0);
+  for(let t=oggi.getTime()+864e5;t<=fineP;t+=864e5)G.push({t,ctl:null,atl:null,fut:true});
   const ult=con[con.length-1],forma=Math.round(ult.ctl-(ult.atl||0));
+  let prev=null;
+  if(fineP){const Lp=gmCaricoPrev(aid);let c=ult.ctl,a=ult.atl||0;const i0=G.indexOf(ult);
+    G.forEach((g,i)=>{if(i<i0)return;if(i===i0){g.pc=c;g.pa=a;return;}
+      const fatto=g.fut?0:Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts&&isoDay(l.ts)===isoDay(g.t)).reduce((t,l)=>t+(+l.gmLoad||0),0);
+      const L=g.fut?Lp(new Date(g.t)):fatto;c+=(L-c)/42;a+=(L-a)/7;g.pc=Math.round(c*10)/10;g.pa=Math.round(a*10)/10;});
+    const fin=G[G.length-1],gG=gara?G.find(x=>isoDay(x.t)===isoDay(gara)):null,rif=gG||fin;
+    prev={ctl:Math.round(rif.pc),forma:Math.round(rif.pc-rif.pa),quando:gG?'il giorno della gara':'tra 4 settimane',max:Math.round(Math.max(...G.filter(x=>x.fut).map(x=>x.pa-x.pc)))};}
   const fascia=f=>f>20?['fresco','#38BDF8']:f>5?['transizione','#94A3B8']:f>-10?['neutra','#A3A3A3']:f>-30?['allenamento ottimale','#22C55E']:['rischio alto','#F43F5E'];
   const [fn,fcol]=fascia(forma),giorniGara=gara?Math.round((gara-oggi.getTime())/864e5):null;
   setTimeout(()=>{
@@ -3881,14 +3914,16 @@ function gmForma(aid){
     cv._chart=new Chart(cv,{data:{labels:lab,datasets:[
       {type:'line',label:'Fitness (CTL)',data:G.map(g=>g.ctl),borderColor:'#38BDF8',backgroundColor:'rgba(56,189,248,.12)',fill:true,borderWidth:2,pointRadius:0,tension:.25,spanGaps:true,yAxisID:'y'},
       {type:'line',label:'Fatica (ATL)',data:G.map(g=>g.atl),borderColor:'#A78BFA',borderWidth:1.5,pointRadius:0,tension:.25,spanGaps:true,yAxisID:'y'},
-      {type:'line',label:'Forma',data:tsb,borderColor:'#F4F1EC',borderWidth:1.5,pointRadius:0,tension:.25,spanGaps:true,yAxisID:'y1',segment:{borderColor:c=>{const v=c.p1.parsed.y;return fascia(v)[1];}}}]},
+      {type:'line',label:'Forma',data:tsb,borderColor:'#F4F1EC',borderWidth:1.5,pointRadius:0,tension:.25,spanGaps:true,yAxisID:'y1',segment:{borderColor:c=>{const v=c.p1.parsed.y;return fascia(v)[1];}}}]
+      .concat(prev?[{type:'line',label:'Fitness prevista',data:G.map(g=>g.pc!=null&&(g.fut||g===ult)?g.pc:null),borderColor:'#38BDF8',borderDash:[5,4],borderWidth:1.5,pointRadius:0,tension:.25,yAxisID:'y'},
+        {type:'line',label:'Forma prevista',data:G.map(g=>g.pc!=null&&(g.fut||g===ult)?Math.round(g.pc-g.pa):null),borderColor:'rgba(244,241,236,.7)',borderDash:[5,4],borderWidth:1.2,pointRadius:0,tension:.25,yAxisID:'y1'}]:[])},
       options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#8E8678',font:{size:10},boxWidth:12}}},
         scales:{x:{ticks:{color:'#8E8678',font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:10},grid:{display:false}},
           y:{position:'left',ticks:{color:'#8E8678',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'},title:{display:true,text:'CTL e ATL',color:'#8E8678',font:{size:9}}},
           y1:{position:'right',suggestedMin:-40,suggestedMax:25,ticks:{color:'#8E8678',font:{size:9}},grid:{display:false},title:{display:true,text:'forma',color:'#8E8678',font:{size:9}}}}},plugins:[fasce]});
   },90);
   return `<div class="tdet-h" style="margin-top:6px">Forma e fatica</div>
-    <div class="gm-fo-n"><span><i>Fitness</i><b style="color:#38BDF8">${Math.round(ult.ctl)}</b></span><span><i>Fatica</i><b style="color:#A78BFA">${Math.round(ult.atl||0)}</b></span><span><i>Forma</i><b style="color:${fcol}">${forma>0?'+':''}${forma}</b><em>${fn}</em></span>${giorniGara!=null&&giorniGara>=0?`<span><i>Gara</i><b>tra ${giorniGara} giorni</b><em>${giorniGara<=14?'nel taper la forma deve salire verso +5 / +15':'ora conta far crescere la fitness'}</em></span>`:''}</div>
+    <div class="gm-fo-n"><span><i>Fitness</i><b style="color:#38BDF8">${Math.round(ult.ctl)}</b></span><span><i>Fatica</i><b style="color:#A78BFA">${Math.round(ult.atl||0)}</b></span><span><i>Forma</i><b style="color:${fcol}">${forma>0?'+':''}${forma}</b><em>${fn}</em></span>${giorniGara!=null&&giorniGara>=0?`<span><i>Gara</i><b>tra ${giorniGara} giorni</b><em>${giorniGara<=14?'nel taper la forma deve salire verso +5 / +15':'ora conta far crescere la fitness'}</em></span>`:''}${prev?`<span title="Stima dal programma assegnato: corse dal passo rispetto alla soglia, tarate sulle sue uscite; forza dal carico al minuto delle sue attivita'"><i>Con il programma</i><b style="color:${fascia(prev.forma)[1]}">${prev.forma>0?'+':''}${prev.forma}</b><em>forma ${prev.quando}, fitness ${prev.ctl}${prev.max>30?'; attenzione: fatica oltre la fitness di '+prev.max+' in qualche giorno':''}</em></span>`:''}</div>
     <div class="ld-chart gm-rec"><canvas id="gf-${aid}"></canvas></div>`;
 }
 /* Corsa nel tempo, come le pagine di intervals.icu: ogni settimana il tempo di corsa diviso per
