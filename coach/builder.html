@@ -207,6 +207,7 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pzpv-tutte{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);margin:4px 0 10px;cursor:pointer}
 .pz-t.solo-add thead{display:none}.pz-t.solo-add .pz-q::placeholder{opacity:.6}
 .pz-pt td.grv{font-variant-numeric:tabular-nums;font-weight:600}.pz-pt td.grv.basso{color:#FDBA74}.pz-pt td.grv.alto{color:#FCA5A5}.pz-pt td.grv.ok{color:#86EFAC}.pz-pt tr.gr1 td{border-top:1px solid rgba(255,255,255,.12)}.pz-pt tr.gr td.nm i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);font-weight:500}
+.pz-prall{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:9px 12px;border:1px solid var(--border2);border-radius:12px;background:rgba(255,106,46,.05);font-size:12px;color:var(--text)}.pz-prall b{color:var(--white);font-weight:600}.pz-prall span{color:var(--muted);font-size:11px}.pz-prall select{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:7px;color:var(--white);font:500 12px Inter,sans-serif;padding:5px 8px}.pz-prall select option{background:#121111}
 .pz-prsel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--white);font:500 11.5px Inter,sans-serif;padding:4px 6px;max-width:170px}.pz-prsel option{background:#121111}
 .pz-opzt{display:inline-block;font:600 10px Inter,sans-serif;font-style:normal;color:#C4B5FD;border:1px dashed rgba(196,181,253,.5);border-radius:999px;padding:0 7px;margin-left:6px;vertical-align:1px}
 .pz-opzh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border-radius:10px;border:1px dashed rgba(196,181,253,.35);font-size:12px;color:var(--text)}.pz-opzh.ok{color:var(--muted)}.pz-opzh .pz-b{margin-left:auto}
@@ -8651,6 +8652,73 @@ function pzSpark(vals){
   const d=pts.filter(Boolean).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
   return `<svg class="pz-spark" width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><path d="${d}" fill="none" stroke="#A78BFA" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>${pts.filter(Boolean).slice(-1).map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="2.2" fill="#A78BFA"/>`).join('')}</svg>`;
 }
+/* ── PROGRESSIONE IN UN COLPO ──────────────────────────────────────────
+   Invece di un esercizio alla volta: tutta la seduta o tutto il programma. In automatico ogni
+   esercizio prende il modello giusto: le alzate fondamentali (bilanciere e trap bar: squat,
+   stacchi, spinte, rematore) salgono di intensita' e scendono di ripetizioni dentro il blocco,
+   anche con piu' serie (onde: 4x8 70% -> 4x6 75% -> 5x5 80% -> 5x3 85% per la forza), e il
+   blocco dopo riparte un passo piu' su; i complementari vanno in doppia progressione col range
+   fisso (l'app dice all'atleta quando salire di carico e quando di ripetizioni); core e
+   prevenzione restano come sono. Lo scarico alleggerisce da solo. Si parte da come l'esercizio e'
+   scritto la prima volta che compare. */
+const PZ_ONDE={
+  forza:[[4,'6',75],[5,'5',80],[5,'3',85],[6,'2',87.5]],
+  ipertrofia:[[3,'10',67.5],[4,'8',70],[4,'8',72.5],[4,'6',75]],
+  mantenimento:[[3,'5',75],[3,'4',80],[3,'3',82.5],[2,'3',85]]
+};
+function pzStileProg(){const o=pzObiettivo();return /forza/.test(o)?'forza':/gara|corsa|ibrido|sport|mantenim/.test(o)?'mantenimento':'ipertrofia';}
+function pzFondamentale(nome){
+  const x=window.RSMuscoli?RSMuscoli.info(nome):null;
+  if(stPctOk(nome))return true;
+  return !!x&&['bilanciere','trap bar'].includes(x.att)&&['squat','hinge','spinta_orizz','spinta_vert','tirata_orizz'].includes(x.sc)&&!x.mono;
+}
+const PZ_PRALL=[['auto','Automatica: fondamentali a onde, complementari in doppia'],['pct','Carico +2,5% a settimana'],['rpe','RPE +0,5 a settimana'],['doppia','Doppia progressione per tutti'],['serie','+1 serie ogni 2 settimane']];
+function pzProgAll(chiavi,modo){
+  const W=pzWeeks(),up={},st=pzStileProg(),onde=PZ_ONDE[st];let n=0;
+  chiavi.forEach(k=>{
+    const righe=Math.max(0,...W.map(([,w])=>{const s=pzSlotSess(w,k);return s?pzExs(s[1]).length:0;}));
+    for(let r=0;r<righe;r++){
+      let base=null,kk=0,ka=0,bl=0;
+      W.forEach(([wid,w])=>{
+        const s=pzSlotSess(w,k);const ex=s&&pzExs(s[1])[r];if(!ex)return;
+        const e=ex[1],dl=pzIsDl(w);
+        if(dl){if(base)bl++;kk=0;}
+        if(/^Prevenzione/.test(e.cue||'')||/^Test|^Controllo/.test(s[1].name||''))return;
+        // un altro esercizio in quella riga: si riparte da lui
+        if(base&&base.name!==e.name)base=null;
+        if(base==null){base=e;if(modo!=='auto'||!pzFondamentale(e.name)){kk++;ka++;return;}}
+        let v=null;const per=/per lato/.test(String(base.reps||''))?' per lato':'';
+        const fond=modo==='auto'&&pzFondamentale(e.name),core=window.RSMuscoli&&/core|pliometria|olimpico/.test(RSMuscoli.info(e.name).sc);
+        if(modo==='auto'&&core){kk+=dl?0:1;return;}
+        if(dl)v=fond?{sets:'3',reps:'5',pct:stPctOk(e.name)?pzNumFmt(60+2.5*bl):null,rpe:stPctOk(e.name)?null:'6'}:pzAvEx(Object.assign({},e,{sets:base.sets,reps:base.reps,rpe:base.rpe||null,pct:base.pct||null}),0,'uguale',true);
+        else if(fond){const o=onde[Math.min(kk,onde.length-1)];const pc=o[2]+2.5*bl;
+          v={sets:String(o[0]),reps:o[1]+per,pct:stPctOk(e.name)?pzNumFmt(Math.min(92.5,pc)):null,rpe:stPctOk(e.name)?null:stPctRpe(pc),rest:pc>=80?'3\'':'2\'30"',prog:null};
+          if(kk===0&&pc>=75)v.cue=[String(e.cue||'').replace(/,?\s*Avvicinamento[^,]*/,''),'Avvicinamento: 5 al 50%, 3 al 70%'].filter(Boolean).join(', ');}
+        else{
+          const m=modo==='auto'?'doppia':modo,p=parseFloat(String(base.pct||'').replace(',','.'));
+          v={sets:base.sets||null,reps:base.reps||'',rpe:base.rpe||null,rest:base.rest||null,pct:base.pct||null,prog:m==='doppia'?'doppia':null};
+          if(m==='pct'&&isFinite(p))v.pct=pzNumFmt(Math.min(95,pzR25(p+2.5*ka)));
+          if(m==='rpe')v.rpe=pzSposta(base.rpe||'7',0.5*ka,9.5);
+          if(m==='serie'||(modo==='auto'&&st==='ipertrofia'&&kk>=2))v.sets=String(Math.min((+base.sets||3)+3,(+base.sets||3)+(m==='serie'?Math.floor(ka/2):1)));
+        }
+        if(!dl){kk++;ka++;}
+        const nuovo=Object.assign({},e,v);Object.keys(nuovo).forEach(x=>{if(nuovo[x]==null)delete nuovo[x];});
+        up[pzBase(wid,s[0])+'/exercises/'+ex[0]]=nuovo;n++;
+      });
+    }
+  });
+  return {up,n};
+}
+window.pzProgAllApplica=async function(tutto){
+  const modo=(document.getElementById('pz-prall-m')||{}).value||'auto';
+  const SL=pzSlots().filter(x=>x.tipo!=='corsa');
+  const chiavi=tutto?SL.map(x=>x.k):[pzSlotK];
+  const {up,n}=pzProgAll(chiavi,modo);
+  if(!n){showToast('Niente da portare avanti: servono almeno due settimane con la seduta');return;}
+  pzUndo.push({multi:pzPrima(up)});if(pzUndo.length>40)pzUndo.shift();
+  await update(ref(db),up);
+  showToast((tutto?'Tutte le sedute di forza':'Seduta')+': progressione '+(PZ_PRALL.find(x=>x[0]===modo)||['',''])[1].split(':')[0].toLowerCase()+' su '+n+' righe (stile '+pzStileProg()+'). Ctrl+Z annulla');
+};
 function pzProgressione(){
   const W=pzWeeks();if(!W.length)return '';
   const SL=pzSlots();if(!SL.length)return '';
@@ -8660,6 +8728,9 @@ function pzProgressione(){
   const sl=SL.find(x=>x.k===pzSlotK);
   if(pzSlotK==='__corsa'||(sl&&sl.tipo==='corsa'))return h+pzProgCorsa(W,pzSlotK);
   const righe=Math.max(0,...W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);return s?pzExs(s[1]).length:0;}));
+  h+=`<div class="pz-prall"><b>Progressione in un colpo</b><select id="pz-prall-m" aria-label="Modello di progressione">${PZ_PRALL.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>
+    <button type="button" class="pz-b" onclick="pzProgAllApplica(false)">Questa seduta</button><button type="button" class="btn btn-orange btn-sm" onclick="pzProgAllApplica(true)">Tutte le sedute di forza</button>
+    <span>stile ${stEsc(pzStileProg())} dall'obiettivo; parte da come e' scritta la prima settimana</span></div>`;
   h+=`<div class="pz-pwrap"><table class="pz-pt"><thead><tr><th class="nm">Esercizio</th><th class="an">Andamento</th>${W.map(([wid,w],i)=>`<th class="${pzIsDl(w)?'dl':''}${i===currentWeekIdx?' cur':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}<th></th></tr></thead><tbody>`;
   for(let r=0;r<righe;r++){
     let nome='',prec=null;const serie=[];
