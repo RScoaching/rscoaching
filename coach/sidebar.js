@@ -73,8 +73,8 @@ window.SIDEBAR_HTML = `
     <a class="nav-item" aria-label="Questionari" href="./index.html?goto=questionari" data-page="questionari">
       <span class="nav-icon">${window.rsIcon('questionari')}</span><span class="nav-lbl-text">Questionari</span>
     </a>
-    <a class="nav-item" aria-label="Analytics" href="./index.html?goto=analytics" data-page="analytics">
-      <span class="nav-icon">${window.rsIcon('analytics')}</span><span class="nav-lbl-text">Analytics</span>
+    <a class="nav-item" aria-label="Analisi" href="./index.html?goto=analytics" data-page="analytics">
+      <span class="nav-icon">${window.rsIcon('analytics')}</span><span class="nav-lbl-text">Analisi</span>
     </a>
     <div class="nav-lbl">Programmazione</div>
     <a class="nav-item" aria-label="Program Builder" href="./builder.html" data-page="builder">
@@ -1648,7 +1648,47 @@ window.RSVideo=(function(){
   function spunti(nome){const M=window.RSMuscoli,i=M?M.info(nome||''):{},sc=i&&i.sc||'',n=String(nome||'').toLowerCase();
     const k=/corsa|run|sprint|andatura/.test(n)?'corsa':/squat|affondo|lunge|split|leg press|step/.test(n)||sc==='squat'||sc==='unilat'?'squat':/stacco|deadlift|rdl|hip thrust|good morning|swing/.test(n)||sc==='hinge'?'hinge':/panca|press|bench|push|dip|military/.test(n)||/spinta/.test(sc)?'spinta':/row|rematore|pull|traz|chin|lat/.test(n)||/tirata/.test(sc)?'tirata':'generale';
     return SPUNTI[k].concat(k==='generale'?[]:SPUNTI.generale.slice(0,3));}
-  return {MAX_SEC,comprimi,inBase64,aPezzi,daPezzi,fotogramma,tempo,spunti,tipoRec};
+  // disegni sul fotogramma: coordinate da 0 a 1, W e H in pixel della tela
+  function disegna(g,W,H,forme,sp){
+    const P=p=>[p[0]*W,p[1]*H];g.lineCap='round';g.lineJoin='round';
+    const testo=(t,x,y,c)=>{g.font=`700 ${Math.round(sp*5.5)}px Inter,sans-serif`;const w=g.measureText(t).width;g.lineWidth=sp*1.5;g.strokeStyle='rgba(0,0,0,.8)';g.strokeText(t,x-w/2,y);g.fillStyle=c;g.fillText(t,x-w/2,y);};
+    (forme||[]).forEach(f=>{if(!f)return;g.strokeStyle=f.c||'#FF6A2E';g.fillStyle=f.c||'#FF6A2E';g.lineWidth=sp;g.setLineDash([]);
+      if(f.k==='linea'||f.k==='freccia'||f.k==='scala'){const [x1,y1]=P(f.a),[x2,y2]=P(f.b);if(f.k==='scala'){g.strokeStyle='#FACC15';g.setLineDash([sp*3,sp*2]);}g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();g.setLineDash([]);
+        if(f.k==='freccia'){const an=Math.atan2(y2-y1,x2-x1),L=sp*5;g.beginPath();g.moveTo(x2,y2);g.lineTo(x2-L*Math.cos(an-0.45),y2-L*Math.sin(an-0.45));g.lineTo(x2-L*Math.cos(an+0.45),y2-L*Math.sin(an+0.45));g.closePath();g.fill();}
+        if(f.k==='scala')testo((f.cm||45)+' cm',(x1+x2)/2,(y1+y2)/2-sp*3,'#FACC15');}
+      else if(f.k==='cerchio'){const [x1,y1]=P(f.a),[x2,y2]=P(f.b);g.beginPath();g.arc(x1,y1,Math.hypot(x2-x1,y2-y1),0,Math.PI*2);g.stroke();}
+      else if(f.k==='angolo'){const pts=(f.p||[]).map(P);if(!pts.length)return;g.beginPath();g.moveTo(pts[0][0],pts[0][1]);pts.slice(1).forEach(q=>g.lineTo(q[0],q[1]));g.stroke();
+        pts.forEach(q=>{g.beginPath();g.arc(q[0],q[1],sp*1.3,0,Math.PI*2);g.fill();});
+        if(pts.length===3){const a1=Math.atan2(pts[0][1]-pts[1][1],pts[0][0]-pts[1][0]),a2=Math.atan2(pts[2][1]-pts[1][1],pts[2][0]-pts[1][0]);let d=Math.abs(a1-a2)*180/Math.PI;if(d>180)d=360-d;
+          const R=sp*9;let s0=a1,s1=a2;if(((a2-a1+2*Math.PI)%(2*Math.PI))>Math.PI){s0=a2;s1=a1;}g.beginPath();g.arc(pts[1][0],pts[1][1],R,s0,s1);g.stroke();
+          let mid=Math.atan2(Math.sin(a1)+Math.sin(a2),Math.cos(a1)+Math.cos(a2));testo(Math.round(d)+'°',pts[1][0]+Math.cos(mid)*R*2.1,pts[1][1]+Math.sin(mid)*R*2.1+sp*2,f.c||'#FF6A2E');}}
+      else if(f.k==='percorso'){const pts=(f.p||[]).map(q=>P(Array.isArray(q)?q:[q.x,q.y]));if(!pts.length)return;
+        // linea del percorso: rossa in discesa, verde in salita; verticale di riferimento dal primo punto
+        g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=Math.max(1,sp/2);g.setLineDash([sp*2,sp*2]);g.beginPath();g.moveTo(pts[0][0],0);g.lineTo(pts[0][0],H);g.stroke();g.setLineDash([]);
+        g.lineWidth=sp;for(let i=1;i<pts.length;i++){g.strokeStyle=pts[i][1]>pts[i-1][1]?'#F87171':'#4ADE80';g.beginPath();g.moveTo(pts[i-1][0],pts[i-1][1]);g.lineTo(pts[i][0],pts[i][1]);g.stroke();}
+        g.fillStyle='#fff';pts.forEach(q=>{g.beginPath();g.arc(q[0],q[1],sp*0.9,0,Math.PI*2);g.fill();});}
+      else if(f.k==='griglia'){g.strokeStyle='rgba(255,255,255,.28)';g.lineWidth=Math.max(1,sp/2.5);[1/3,1/2,2/3].forEach(x=>{g.beginPath();g.moveTo(W*x,0);g.lineTo(W*x,H);g.stroke();});[1/4,1/2,3/4].forEach(y=>{g.beginPath();g.moveTo(0,H*y);g.lineTo(W,H*y);g.stroke();});}
+    });
+  }
+  // percorso del bilanciere: escursione, deviazione, tempi e velocita' (con la scala in cm)
+  function percorso(pts,vw,vh,scala){
+    if(!pts||pts.length<3)return null;
+    const mPx=scala&&scala.px?(scala.cm/100)/scala.px:null;
+    const Y=pts.map(q=>q.y*vh),X=pts.map(q=>q.x*vw);
+    let iBasso=0;Y.forEach((y,i)=>{if(y>Y[iBasso])iBasso=i;});
+    const esc=Math.max(...Y)-Math.min(...Y),dev=Math.max(...X)-Math.min(...X);
+    const tGiu=pts[iBasso].t-pts[0].t,tSu=pts[pts.length-1].t-pts[iBasso].t;
+    // salita: dal punto piu' basso al piu' alto dopo
+    let iAlto=iBasso;for(let i=iBasso;i<pts.length;i++)if(Y[i]<Y[iAlto])iAlto=i;
+    const su=Y[iBasso]-Y[iAlto],tsu=pts[iAlto].t-pts[iBasso].t;
+    let picco=0;for(let i=iBasso+1;i<=iAlto;i++){const dt=pts[i].t-pts[i-1].t;if(dt>0)picco=Math.max(picco,(Y[i-1]-Y[i])/dt);}
+    const out={n:pts.length,tGiu,tSu:tsu>0?tsu:tSu,escPct:Math.round(esc/vh*100),devPct:Math.round(dev/vw*100)};
+    if(mPx){out.escCm=Math.round(esc*mPx*100);out.devCm=Math.round(dev*mPx*100);if(tsu>0){out.vMedia=Math.round(su*mPx/tsu*100)/100;out.vPicco=Math.round(picco*mPx*100)/100;}}
+    return out;
+  }
+  function percorsoTxt(s){if(!s)return '';const f=x=>String(x).replace('.',',');const t=x=>f(Math.round(x*10)/10)+' s';
+    return 'Percorso del bilanciere: '+(s.escCm!=null?'escursione '+s.escCm+' cm, deviazione orizzontale '+s.devCm+' cm':'escursione '+s.escPct+'% dell\'altezza del video, deviazione '+s.devPct+'%')+', discesa '+t(s.tGiu)+', salita '+t(s.tSu)+(s.vMedia!=null?', velocita\' media in salita '+f(s.vMedia)+' m/s (picco '+f(s.vPicco)+')':'')+'.';}
+  return {MAX_SEC,comprimi,inBase64,aPezzi,daPezzi,fotogramma,tempo,spunti,tipoRec,disegna,percorso,percorsoTxt};
 })();
 
 /* Logo RS Coaching (provvisorio, dato dall'utente il 12/10): la sigla RS su fondo trasparente,

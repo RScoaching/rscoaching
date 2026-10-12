@@ -1459,7 +1459,9 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .vd-file span{position:relative}
 .vd-bar{height:6px;border-radius:3px;background:rgba(255,214,196,.08);overflow:hidden}.vd-bar i{display:block;height:100%;background:var(--primary);transition:width .2s linear}
 .vd-play{position:relative;background:#000;border-radius:14px;overflow:hidden}
-.vd-play video{width:100%;max-height:62vh;display:block;background:#000}
+.vd-play{display:flex;justify-content:center}.vd-play video{max-width:100%;max-height:62vh;display:block;background:#000}
+.vd-play canvas{position:absolute;pointer-events:none}
+.vd-cap{position:absolute;left:10px;right:10px;bottom:46px;text-align:center;pointer-events:none}.vd-cap span{display:inline-block;background:rgba(0,0,0,.72);color:#fff;font:600 14px/1.4 Inter,sans-serif;padding:7px 12px;border-radius:10px;max-width:100%}
 .vd-load{padding:60px 0;text-align:center;color:var(--mut8);font-size:13px}
 .vd-es{display:inline-flex;font:600 12px Inter,sans-serif;padding:5px 10px;border-radius:999px;background:rgba(255,214,196,.08);color:var(--ink8)}
 .vd-es.ok{background:rgba(74,222,128,.14);color:#4ADE80}.vd-es.no{background:rgba(251,191,36,.14);color:#FBBF24}
@@ -2669,7 +2671,13 @@ window.vdVedi=async vid=>{
     <div>${C.map(c=>`<div class="vd-n"><button type="button" onclick="vdVai(${+c.t||0})">${RV.tempo(c.t)}</button><p>${escH(c.testo||'')}</p>${c.foto?`<img src="${c.foto}" alt="Fotogramma corretto" onclick="phFoto(this.src)">`:''}</div>`).join('')}</div>
   </div>`;
   try{const s=(await get(ref(db,`video_dati/${aid}/${vid}`))).val()||{};const arr=Object.keys(s).sort((a,b)=>+a-+b).map(k=>s[k]);
-    const url=URL.createObjectURL(RV.daPezzi(arr,m.mime));VD.url=url;const box=document.getElementById('vd-play');if(box)box.innerHTML=`<video id="vd-v" src="${url}" controls playsinline loop></video>`;}
+    const url=URL.createObjectURL(RV.daPezzi(arr,m.mime));VD.url=url;const box=document.getElementById('vd-play');if(box){box.innerHTML=`<video id="vd-v" src="${url}" controls playsinline loop></video><canvas id="vd-c"></canvas><div class="vd-cap" id="vd-cap"></div>`;
+      // le note del preparatore compaiono sul video nel loro momento, con i disegni
+      const v=document.getElementById('vd-v'),c=document.getElementById('vd-c'),cap=document.getElementById('vd-cap');VD.C=C;
+      const misura=()=>{const r=v.getBoundingClientRect(),b=box.getBoundingClientRect(),d=window.devicePixelRatio||1;Object.assign(c.style,{left:(r.left-b.left)+'px',top:(r.top-b.top)+'px',width:r.width+'px',height:r.height+'px'});c.width=Math.round(r.width*d);c.height=Math.round(r.height*d);};
+      const disegna=()=>{if(!VD||!c.width)return;const t=v.currentTime,n=C.filter(x=>t>=(+x.t||0)-0.1&&t<=(+x.t||0)+(v.paused?0.25:1.6)).pop(),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);
+        if(n&&n.forme)RV.disegna(g,c.width,c.height,n.forme,3*(window.devicePixelRatio||1));cap.innerHTML=n&&n.testo?`<span>${escH(n.testo)}</span>`:'';};
+      v.addEventListener('loadedmetadata',()=>{misura();disegna();});v.addEventListener('timeupdate',disegna);v.addEventListener('seeked',disegna);window.addEventListener('resize',()=>{misura();disegna();});}}
   catch(e){const box=document.getElementById('vd-play');if(box)box.innerHTML='<div class="vd-load">Video non disponibile</div>';}
 };
 window.vdVai=t=>{const v=document.getElementById('vd-v');if(!v)return;v.pause();v.currentTime=t;v.scrollIntoView({block:'center',behavior:'smooth'});};
