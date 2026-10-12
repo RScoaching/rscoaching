@@ -1396,5 +1396,63 @@ window.RSMuscoli=(function(){
       .sort((p,q)=>(q.i.mono===a.mono)-(p.i.mono===a.mono)||(q.i.att?1:0)-(p.i.att?1:0)||Math.round((q.k-p.k)*2)-0||(d>0?p.i.liv-q.i.liv:q.i.liv-p.i.liv));
     return (c[0]||{}).x||null;
   }
-  return {GR,ORD,info,serie,fascia,simili,gradino,norm};
+  // scrivere per intenzione: "gluteo pesante", "quad mono", "esplosivo gambe", "petto manubri",
+  // "femorali eccentrico". Torna l'esercizio con una dose che segue l'intenzione, o null.
+  const INT=[
+    [/glute[oi]? ?medi|abdutt|gluteo laterale/,'Hip Abduction Machine','iso'],
+    [/glute|gluteo|glutei/,'Barbell Hip Thrust','gl'],
+    [/femoral|ischio|hamstring|posterior/,'Barbell RDL','hg'],
+    [/quad|quadricip|gambe|squat/,'High Bar Back Squat','sq'],
+    [/polpacc|soleo|calf/,'Single Leg Heel Raise','iso'],
+    [/tibial/,'Tibialis Raise','iso'],
+    [/addutt|adductor|inguin/,'Copenhagen Plank','iso'],
+    [/petto|pettoral|chest|panca/,'Barbell Bench Press','pu'],
+    [/dorso|schiena|dorsal|lat\b|tirata vert/,'Pull Up','pl'],
+    [/rematore|tirata orizz|row/,'Chest Supported Dumbbell Row','pl'],
+    [/deltoide laterale|laterali|spalla laterale/,'Dumbbell Lateral Raise','iso'],
+    [/deltoide posteriore|posteriori|rear/,'Rope Face Pull (ER)','iso'],
+    [/spall|shoulder|deltoid/,'Seated Dumbbell Press','pu'],
+    [/bicip|curl/,'Dumbbell Curl','iso'],
+    [/tricip/,'Rope Cable Tricep Pushdown','iso'],
+    [/core|addom|anti ?rot/,'Pallof Press','core']
+  ];
+  const ESPL=[[/alta|petto|spinta|upper|braccia/,'Med Ball Chest Pass','4','5'],[/tirata|schiena/,'Med Ball Overhead Slam','4','5'],[/orizz|lungo|broad/,'Broad Jump','4','3'],[/reattiv|pogo|caviglia|polpacc/,'Pogo Hop','3','10'],[/mono|una gamba|single/,'Single Leg Box Jump','3','3 per lato'],[/./,'Countermovement Jump','4','4']];
+  function intento(testo,lista,ob){
+    const t=norm(testo);if(!t||t.split(/\s+/).length>7)return null;
+    const L=lista||[];
+    // un nome vero non e' un'intenzione
+    if(L.some(x=>norm(x)===t))return null;
+    // solo se si scrive un'intenzione: un modo (pesante, mono, esplosivo...) o solo il muscolo;
+    // "Back squat con fermo" resta un nome scritto a mano
+    const MOD=/pesant|legger|volume|pump|mono|monopod|una gamba|un braccio|unilater|esplosiv|potenz|funzional|eccentric|contrasto|massimal/;
+    const SOLO=/^(glute[oi]|glutei medi|gluteo medio|quad|quadricipit[ei]|gambe|femorali|ischio\w*|petto|schiena|dorso|dorsali|spalle|spalla|deltoid[ei]( laterale| posteriore)?|bicipiti|tricipiti|polpacci|soleo|addominali|core|adduttori|tibiale|rematore)( (manubri|bilanciere|multipower|cavi|macchina|kettlebell|elastico|corpo libero))?$/;
+    if(!MOD.test(t)&&!SOLO.test(t))return null;
+    const pes=/pesant|heavy|forza|massimal/.test(t),legg=/legger|volume|pump|ipertrof/.test(t),mono=/mono|monopod|una gamba|un braccio|unilater|single/.test(t),ecc=/eccentric|discesa lenta/.test(t);
+    const att=(['manubri','bilanciere','multipower','cavi','macchina','kettlebell','elastico','corpo libero'].find(a=>t.includes(a)))||(/smith/.test(t)?'multipower':/dumbbell/.test(t)?'manubri':'');
+    if(/esplosiv|potenz|salt|jump|pliom|contrasto/.test(t)){const e=ESPL.find(x=>x[0].test(t));return {name:e[1],sets:e[2],reps:e[3],rest:'2\'',cue:'massima velocita\', recupero pieno'};}
+    const r=INT.find(x=>x[0].test(t));if(!r)return null;
+    let name=r[1];
+    const fun=/corsa|run|funzional/.test(t);
+    if(r[2]==='sq'&&(mono||fun))name='Bulgarian Split Squat';
+    else if(r[2]==='gl'&&mono)name='Single Leg Hip Thrust';
+    else if(r[2]==='hg'&&ecc)name='Nordic Hamstring Curl';
+    else if(r[2]==='hg'&&mono)name='Single Leg RDL';
+    // l'attrezzo chiesto: lo stesso movimento con quell'attrezzo, se c'e'
+    const vuoleMono=mono||info(name).mono,ok=x=>(!att||info(x).att===att)&&(!vuoleMono||info(x).mono);
+    if(!ok(name)){const v=simili(name,L).find(ok)||(att?null:simili(name,L).find(x=>info(x).mono));if(v)name=v;}
+    const nota=att&&info(name).att!==att?'con '+att:'';
+    const x=info(name),per=x.mono?' per lato':'';
+    let d;
+    if(r[2]==='iso')d={sets:'3',reps:(legg?'15-20':'12-15')+per,rpe:'8'};
+    else if(r[2]==='core')d={sets:'3',reps:'8-10'+per};
+    else if(pes)d={sets:'4',reps:(x.mono?'5-6':'4-6')+per,pct:x.mono?null:'82,5',rpe:x.mono?'8':null,rest:'2\'30"'};
+    else if(legg)d={sets:'3',reps:'10-12'+per,rpe:'8',rest:'90"'};
+    else if(fun)d={sets:'3',reps:'6-8'+per,rpe:'8',rest:'2\''};
+    else d={sets:'3',reps:(/forza/.test(ob||'')?'5-6':'8-10')+per,rpe:'8',rest:'2\''};
+    if(ecc)Object.assign(d,{reps:'4-6'+per,cue:'eccentrica lenta 3-4"'});
+    if(nota)d.cue=(d.cue?d.cue+', ':'')+nota;
+    Object.keys(d).forEach(k=>{if(d[k]==null)delete d[k];});
+    return Object.assign({name},d);
+  }
+  return {GR,ORD,info,serie,fascia,simili,gradino,norm,intento};
 })();
