@@ -7722,7 +7722,7 @@ function pzGriglia(wid,w){
       h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}" data-w="${wid}" data-s="${sid}"><td class="n"><div class="pz-ncell"><span class="pz-grip" draggable="true" data-w="${wid}" data-s="${sid}" data-e="${eid}" title="Trascina per spostare (o Alt + frecce)" aria-hidden="true">&#8942;&#8942;</span><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"><span class="pz-mv"><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',-1)" aria-label="Sposta su"${i?'':' disabled'}>&#9650;</button><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',1)" aria-label="Sposta giu'"${i<exs.length-1?'':' disabled'}>&#9660;</button></span></div></td><td class="nmc"><div class="pz-nmw">${mg?`<span class="pz-gchip" style="--g:${mg.c}" title="${stEsc(mg.n)}${Object.keys(mi.s||{}).length?' (mezza serie: '+Object.keys(mi.s).map(k=>RSMuscoli.GR[k].n.toLowerCase()).join(', ')+')':''}${mi.att?' &#183; '+mi.att:''}">${stEsc(mg.n.slice(0,3))}</span>`:'<span class="pz-gchip vuoto"></span>'}<input class="pz-c nm" value="${stEsc(e.name==null?'':e.name)}" data-pz="ex" data-f="name" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" list="pz-exlist" aria-label="name"></div></td>${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}${conF?`<td class="fa">${pzFatto(e,log)}</td>`:''}
         <td class="x"><button type="button" class="pz-x pz-xm" onclick="pzExMenu(event,'${wid}','${sid}','${eid}')" aria-label="Azioni dell'esercizio" title="Sostituisci, progredisci, RPE, elimina" tabindex="-1">&#8943;</button></td></tr>`;
     });
-    h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Scrivi e Invio: A1 Squat 4x6 @75% r2' - spinta dal pavimento. Si possono incollare piu' righe, anche da Excel"><button type="button" class="pz-b pz-libb" onclick="pzLibApri('${wid}','${sid}')" title="Cerca con i filtri: gruppo, attrezzo, movimento">Libreria</button></td></tr></tbody></table></div>`;
+    h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Esercizio o intenzione, poi Invio: A1 Squat 4x6 @75% r2', oppure schiena orizzontale, petto inclinato, gambe mono, accessori polpacci"><button type="button" class="pz-b pz-libb" onclick="pzLibApri('${wid}','${sid}')" title="Cerca con i filtri: gruppo, attrezzo, movimento">Libreria</button></td></tr></tbody></table></div>`;
   });
   h+=`<div class="pz-addsess">Aggiungi seduta: ${Object.entries(SESS_TYPES).filter(([k])=>pzTipoOk(k)).map(([k,v])=>`<button type="button" class="pz-b" onclick="pzAddSess('${wid}','${k}')">${stEsc(v.label)}</button>`).join('')}<button type="button" class="pz-b" onclick="pzPalette('modello ')">Da modello</button></div></div>`;
   return h;
@@ -8362,8 +8362,11 @@ window.pzPrevSess=async function(wid,sid){
   showToast('Prevenzione: '+(b.att.length+b.rin.length)+' esercizi ('+ST_PREV_LBL[b.cat].toLowerCase()+')');
 };
 async function pzQuick(el){
-  const righe=String(el.value||'').split(/\r?\n/).filter(x=>x.trim());
-  if(righe.length>1){await pzBulk(el.dataset.w,el.dataset.s,righe);el.value='';return;}
+  let righe=String(el.value||'').split(/\r?\n/).filter(x=>x.trim());
+  // piu' intenzioni in una riga: "schiena orizzontale, petto inclinato, accessori polpacci"
+  if(righe.length===1&&/[,;+]/.test(righe[0])&&window.RSMuscoli){const pz=righe[0].split(/\s*[,;+]\s*/).filter(Boolean);
+    if(pz.length>1&&pz.every(x=>RSMuscoli.intento(pzParse(x,true).name||x,pzNomiForza(),pzObiettivo())))righe=pz;}
+  if(righe.length>1){el.value='';await pzBulk(el.dataset.w,el.dataset.s,righe);return;}
   const o=pzParse(el.value,true);
   if(!o.name){showToast('Scrivi almeno il nome dell\'esercizio');return;}
   // per intenzione: "gluteo pesante", "quad mono", "esplosivo gambe" diventano un esercizio con la sua dose
@@ -8399,6 +8402,8 @@ async function pzBulk(wid,sid,righe){
   const cx={};
   righe.forEach(line=>{
     const o=pzRigaTab(line);if(!o.name||/^(esercizio|nome|exercise)$/i.test(o.name))return;
+    const it=window.RSMuscoli&&RSMuscoli.intento(o.name,pzNomiForza(),pzObiettivo());
+    if(it){Object.keys(o).forEach(k=>{if(k!=='name'&&o[k]!=null&&o[k]!=='')it[k]=o[k];});Object.assign(o,it);}
     const e=Object.assign({sets:3,reps:''},o,{order:n++});
     Object.keys(e).forEach(k=>{if(e[k]===''&&k!=='reps')delete e[k];});
     if(e.complexLabel){const L=e.complexLabel.charAt(0);e.complexGroup=cx[L]||(cx[L]=pzGruppoCx(s,e.complexLabel));}
@@ -9323,6 +9328,10 @@ async function pzSalvaCella(el){
     v=v.toUpperCase();
     await pzUpdate(pzBase(wid,sid)+'/exercises/'+eid,{complexLabel:v||null,complexGroup:v?pzGruppoCx(s,v):null},prima);return;
   }
+  // un'intenzione scritta nel nome ("schiena orizzontale") diventa l'esercizio; la dose scritta resta
+  if(f==='name'&&v&&window.RSMuscoli){const it=RSMuscoli.intento(v,pzNomiForza(),pzObiettivo());
+    if(it){const nuovo={name:it.name};['sets','reps','pct','rpe','rest','cue'].forEach(k=>{if(it[k]!=null&&(prima[k]==null||prima[k]===''||k==='reps'&&!prima.reps))nuovo[k]=it[k];});
+      el.value=el.defaultValue=it.name;await pzUpdate(pzBase(wid,sid)+'/exercises/'+eid,nuovo,prima);showToast(v+': '+it.name);return;}}
   if(f==='sets')v=v?(+v||v):null;else if(!v)v=null;
   await pzUpdate(pzBase(wid,sid)+'/exercises/'+eid,{[f]:v},prima);
 }

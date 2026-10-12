@@ -1337,7 +1337,7 @@ window.RSMuscoli=(function(){
     [/shrug|scrollat/,'schiena',{},'isolamento'],
     [/lateral raise|alzate laterali|alzate frontali|alzate anteriori|front raise|scaption|\by\b su panca|alzate/,'spalle',{},'isolamento'],
     [/plank|dead ?bug|pallof|crunch|core|addomin|bird ?dog|rollout|ab wheel|carry|farmer|side bend|hollow|leg raise|russian|twist|landmine rotation|anti-?rot|v-?up|cervical|cervic|barchetta|superman/,'core',{},'core'],
-    [/external rotation|internal rotation|\ber\b|\bir\b|rotation|rotazion|cuffia|shoulder|spall/,'spalle',{},'isolamento'],
+    [/external rotation|internal rotation|\ber\b|\bir\b|rotation|rotazion|cuffia|shoulder(?! press)|spall(?!.*press)/,'spalle',{},'isolamento'],
     [/military|overhead press|strict press|shoulder press|lento|arnold|push press|landmine press|handstand|seated dumbbell press|sopra la testa(?!.*corda)/,'spalle',{braccia:.5},'spinta_vert'],
     [/curl|bicip|hammer|martello/,'braccia',{},'isolamento'],
     [/tricep|tricip|pushdown|french|skull|kick ?back|estension.*cavo|distensioni sopra la testa/,'braccia',{},'isolamento'],
@@ -1392,61 +1392,121 @@ window.RSMuscoli=(function(){
       .sort((p,q)=>(q.i.mono===a.mono)-(p.i.mono===a.mono)||(q.i.att?1:0)-(p.i.att?1:0)||Math.round((q.k-p.k)*2)-0||(d>0?p.i.liv-q.i.liv:q.i.liv-p.i.liv));
     return (c[0]||{}).x||null;
   }
-  // scrivere per intenzione: "gluteo pesante", "quad mono", "esplosivo gambe", "petto manubri",
-  // "femorali eccentrico". Torna l'esercizio con una dose che segue l'intenzione, o null.
-  const INT=[
-    [/glute[oi]? ?medi|abdutt|gluteo laterale/,'Hip Abduction Machine','iso'],
-    [/glute|gluteo|glutei/,'Barbell Hip Thrust','gl'],
-    [/femoral|ischio|hamstring|posterior/,'Barbell RDL','hg'],
-    [/quad|quadricip|gambe|squat/,'High Bar Back Squat','sq'],
-    [/polpacc|soleo|calf/,'Single Leg Heel Raise','iso'],
-    [/tibial/,'Tibialis Raise','iso'],
-    [/addutt|adductor|inguin/,'Copenhagen Plank','iso'],
-    [/petto|pettoral|chest|panca/,'Barbell Bench Press','pu'],
-    [/dorso|schiena|dorsal|lat\b|tirata vert/,'Pull Up','pl'],
-    [/rematore|tirata orizz|row/,'Chest Supported Dumbbell Row','pl'],
-    [/deltoide laterale|laterali|spalla laterale/,'Dumbbell Lateral Raise','iso'],
-    [/deltoide posteriore|posteriori|rear/,'Rope Face Pull (ER)','iso'],
-    [/spall|shoulder|deltoid/,'Seated Dumbbell Press','pu'],
-    [/bicip|curl/,'Dumbbell Curl','iso'],
-    [/tricip/,'Rope Cable Tricep Pushdown','iso'],
-    [/core|addom|anti ?rot/,'Pallof Press','core']
-  ];
-  const ESPL=[[/alta|petto|spinta|upper|braccia/,'Med Ball Chest Pass','4','5'],[/tirata|schiena/,'Med Ball Overhead Slam','4','5'],[/orizz|lungo|broad/,'Broad Jump','4','3'],[/reattiv|pogo|caviglia|polpacc/,'Pogo Hop','3','10'],[/mono|una gamba|single/,'Single Leg Box Jump','3','3 per lato'],[/./,'Countermovement Jump','4','4']];
+  /* scrivere per intenzione, come si parla in sala: "schiena tirata orizzontale", "petto inclinato",
+     "gambe mono", "gambe macchina", "accessori polpacci", "flessori mono", "gluteo pesante",
+     "spalle laterali cavi", "esplosivo gambe". Ogni parola deve far parte del vocabolario: se ce n'e'
+     una sconosciuta ("Back squat con fermo") e' un nome scritto a mano e resta com'e'. */
+  const V_GR=[[/^(schiena|dorso|dorsali|dorsale|lat|tirata|tirate)$/,'schiena'],[/^(petto|pettorali|pettorale|panca)$/,'petto'],[/^(gambe|gamba|quad|quadricipiti|quadricipite|quadri)$/,'gambe'],
+    [/^(glutei|gluteo|glute|gluteus)$/,'glutei'],[/^(flessori|flessore|femorali|femorale|ischio|ischiocrurali|hamstring|posteriori)$/,'femorali'],[/^(polpacci|polpaccio|soleo|calf|gastrocnemio)$/,'polpacci'],
+    [/^(spalle|spalla|deltoidi|deltoide|deltoids)$/,'spalle'],[/^(braccia|braccio)$/,'braccia'],[/^(bicipiti|bicipite|bicipite)$/,'bicipiti'],[/^(tricipiti|tricipite)$/,'tricipiti'],
+    [/^(core|addome|addominali|addominale|abs)$/,'core'],[/^(adduttori|adduttore|inguine)$/,'adduttori'],[/^(abduttori|abduttore|medio|medi)$/,'abduttori'],[/^(tibiale|tibiali)$/,'tibiale'],[/^(avambracci|avambraccio|presa|grip)$/,'avambracci']];
+  const V_SC=[[/^(orizzontale|orizzontali|rematore|rematori|row)$/,'orizz'],[/^(verticale|verticali|trazioni|trazione|pulldown)$/,'vert'],[/^(inclinato|inclinata|inclinate|alta|alto|incline)$/,'incl'],
+    [/^(declinato|declinata|bassa|basso)$/,'decl'],[/^(piana|piano|piatta)$/,'piana'],[/^(laterali|laterale|alzate)$/,'lat'],[/^(posteriore|rear)$/,'post'],[/^(frontale|frontali|anteriore|anteriori)$/,'front'],
+    [/^(spinta|press|distensioni)$/,'spinta'],[/^(squat|accosciata)$/,'squat'],[/^(stacco|stacchi|hinge|anca)$/,'hinge'],[/^(affondi|affondo|split|bulgaro|bulgarian|lunge)$/,'affondo'],[/^(estensioni|estensione|extension)$/,'ext'],
+    [/^(curl)$/,'curl'],[/^(croci|fly|aperture)$/,'fly'],[/^(antirotazione|rotazione|anti)$/,'antirot'],[/^(plank)$/,'plank']];
+  const V_ATT=[[/^(macchina|macchinario|machine|guidato|guidata)$/,'macchina'],[/^(cavi|cavo|cable|corda)$/,'cavi'],[/^(manubri|manubrio|dumbbell|db)$/,'manubri'],[/^(bilanciere|barbell|bb)$/,'bilanciere'],
+    [/^(multipower|smith)$/,'multipower'],[/^(kettlebell|kb)$/,'kettlebell'],[/^(elastico|elastici|band)$/,'elastico'],[/^(trap|esagonale)$/,'trap bar'],[/^(libero|bodyweight)$/,'corpo libero']];
+  const V_MOD=/^(mono|monopodalico|monopodalica|unilaterale|singolo|singola|single|pesante|pesanti|heavy|forza|leggero|leggera|volume|pump|accessori|accessorio|complementare|complementari|isolamento|esplosivo|esplosiva|esplosivi|potenza|salti|isometrico|isometrica|iso|eccentrico|eccentrica|funzionale|corsa|runner|meno|invasivo|invasiva|seduto|seduta|in|piedi|corpo|bar|per|di|con|da|la|il|lo|le|i|gli|e|a|al|alla|su|una|un|gamba|braccio|presa|stretta|larga|neutra|inversa|neutro)$/;
+  // gli esercizi di riferimento, nell'ordine in cui li scegliamo se tutto il resto e' pari
+  const BASE={
+    'schiena|orizz':['Chest Supported Dumbbell Row','Seated Row (Narrow Grip)','Barbell Bent Over Row','DB Row','Chest Supported Machine Row','Low Row'],
+    'schiena|vert':['Pull Up','Lat Pulldown','Chin Up','Close Grip Lat Pulldown','Assisted Pull Up (Machine)','Half Kneeling Single Arm Lat Pulldown'],
+    'schiena|':['Pull Up','Chest Supported Dumbbell Row','Lat Pulldown','Seated Row (Narrow Grip)'],
+    'petto|incl':['Incline Dumbbell Bench Press','Incline Barbell Bench Press','Incline Chest Press Machine','Smith Machine Incline Press'],
+    'petto|decl':['Panca Declinata Multipower','Dip Petto Avanti','Weighted Dip'],
+    'petto|fly':['Chest Fly Machine','Croci Cavi Alti','Dumbbell Neutral Grip Fly','Pec Deck'],
+    'petto|':['Barbell Bench Press','Dumbbell Bench Press','Machine Chest Press','Push Up'],
+    'gambe|squat':['High Bar Back Squat','Barbell Front Squat','Hack Squat','Leg Press','Dumbbell Goblet Squat'],
+    'gambe|affondo':['Bulgarian Split Squat','Dumbbell Split Squat','Reverse Lunge','Step Up','Smith Machine Split Squat'],
+    'gambe|ext':['Leg Extension Machine','Single Leg Extension'],
+    'gambe|':['High Bar Back Squat','Leg Press','Bulgarian Split Squat','Hack Squat','Leg Extension Machine'],
+    'femorali|hinge':['Barbell RDL','Dumbbell RDL','Single Leg RDL','Good Morning'],
+    'femorali|curl':['Seated Hamstring Curl Machine','Single Leg Seated Hamstring Curl','Prone Hamstring Curl','Nordic Hamstring Curl','Hamstring Curl Sliders Eccentric'],
+    'femorali|':['Barbell RDL','Seated Hamstring Curl Machine','Nordic Hamstring Curl','Single Leg RDL'],
+    'glutei|':['Barbell Hip Thrust','Smith Machine Hip Thrust','Single Leg Hip Thrust','Hip Abduction Machine','Glute Bridge'],
+    'polpacci|':['Single Leg Heel Raise','Seated Heel Raise','Smith Machine Deficit Heel Raise','Leg Press Heel Raise','Heel Raise'],
+    'spalle|lat':['Dumbbell Lateral Raise','Alzate Laterali Cavi','Lateral Raise Band (90°)'],
+    'spalle|post':['Rope Face Pull (ER)','Chest Supported Rear Delt Fly','Alzate Posteriori Cavi'],
+    'spalle|front':['Dumbbell Front Raise'],
+    'spalle|':['Seated Dumbbell Press','Strict Press','Shoulder Press Machine','Landmine Press'],
+    'bicipiti|':['Dumbbell Curl','Cable Curl','Hammer Curl','Barbell Curl','Incline Bicep Curl'],
+    'tricipiti|':['Rope Cable Tricep Pushdown','Overhead Cable Tricep Extension','Dumbbell Skull Crusher','Dip su Panca'],
+    'braccia|':['Dumbbell Curl','Rope Cable Tricep Pushdown'],
+    'core|antirot':['Pallof Press','Dead Bug','Bird dog'],
+    'core|plank':['Plank','Side Plank'],
+    'core|':['Pallof Press','Dead Bug','Side Plank','Rollout Ab Wheel'],
+    'adduttori|':['Copenhagen Plank','Hip Adduction Machine','Short Copenhagen Plank'],
+    'abduttori|':['Hip Abduction Machine','Lateral Band Walk','Side Plank'],
+    'tibiale|':['Tibialis Raise'],
+    'avambracci|':['Dead Hang','Weighted Wrist Flexion','Farmer Carry']
+  };
+  const ESPL=[[/alta|petto|spinta|braccia|spalle/,'Med Ball Chest Pass','4','5'],[/tirata|schiena/,'Med Ball Overhead Slam','4','5'],[/orizz|lungo|broad|hinge|anca/,'Broad Jump','4','3'],[/reattiv|pogo|caviglia|polpacc/,'Pogo Hop','3','10'],[/mono|una gamba|single/,'Single Leg Box Jump','3','3 per lato'],[/./,'Countermovement Jump','4','4']];
   function intento(testo,lista,ob){
-    const t=norm(testo);if(!t||t.split(/\s+/).length>7)return null;
+    const t=norm(testo);if(!t)return null;
     const L=lista||[];
-    // un nome vero non e' un'intenzione
     if(L.some(x=>norm(x)===t))return null;
-    // solo se si scrive un'intenzione: un modo (pesante, mono, esplosivo...) o solo il muscolo;
-    // "Back squat con fermo" resta un nome scritto a mano
-    const MOD=/pesant|legger|volume|pump|mono|monopod|una gamba|un braccio|unilater|esplosiv|potenz|funzional|eccentric|contrasto|massimal/;
-    const SOLO=/^(glute[oi]|glutei medi|gluteo medio|quad|quadricipit[ei]|gambe|femorali|ischio\w*|petto|schiena|dorso|dorsali|spalle|spalla|deltoid[ei]( laterale| posteriore)?|bicipiti|tricipiti|polpacci|soleo|addominali|core|adduttori|tibiale|rematore)( (manubri|bilanciere|multipower|cavi|macchina|kettlebell|elastico|corpo libero))?$/;
-    if(!MOD.test(t)&&!SOLO.test(t))return null;
-    const pes=/pesant|heavy|forza|massimal/.test(t),legg=/legger|volume|pump|ipertrof/.test(t),mono=/mono|monopod|una gamba|un braccio|unilater|single/.test(t),ecc=/eccentric|discesa lenta/.test(t);
-    const att=(['manubri','bilanciere','multipower','cavi','macchina','kettlebell','elastico','corpo libero'].find(a=>t.includes(a)))||(/smith/.test(t)?'multipower':/dumbbell/.test(t)?'manubri':'');
-    if(/esplosiv|potenz|salt|jump|pliom|contrasto/.test(t)){const e=ESPL.find(x=>x[0].test(t));return {name:e[1],sets:e[2],reps:e[3],rest:'2\'',cue:'massima velocita\', recupero pieno'};}
-    const r=INT.find(x=>x[0].test(t));if(!r)return null;
-    let name=r[1];
-    const fun=/corsa|run|funzional/.test(t);
-    if(r[2]==='sq'&&(mono||fun))name='Bulgarian Split Squat';
-    else if(r[2]==='gl'&&mono)name='Single Leg Hip Thrust';
-    else if(r[2]==='hg'&&ecc)name='Nordic Hamstring Curl';
-    else if(r[2]==='hg'&&mono)name='Single Leg RDL';
-    // l'attrezzo chiesto: lo stesso movimento con quell'attrezzo, se c'e'
-    const vuoleMono=mono||info(name).mono,ok=x=>(!att||info(x).att===att)&&(!vuoleMono||info(x).mono);
-    if(!ok(name)){const v=simili(name,L).find(ok)||(att?null:simili(name,L).find(x=>info(x).mono));if(v)name=v;}
-    const nota=att&&info(name).att!==att?'con '+att:'';
-    const x=info(name),per=x.mono?' per lato':'';
+    const w=t.replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);if(!w.length||w.length>8)return null;
+    let g='',sc='',att='',ignoti=0;const has=r=>w.some(x=>r.test(x));
+    w.forEach(x=>{const a=V_GR.find(([r])=>r.test(x)),b=V_SC.find(([r])=>r.test(x)),c=V_ATT.find(([r])=>r.test(x));
+      if(a){if(!g||g==='schiena'&&a[1]!=='schiena'||a[1]==='abduttori')g=a[1];}else if(b){if(!sc)sc=b[1];}else if(c){att=c[1];}else if(!V_MOD.test(x)&&!/^\d+$/.test(x))ignoti++;});
+    if(ignoti)return null;
+    const mono=has(/^(mono|monopodalic[oa]|unilaterale|singol[oa]|single)$/)||/una gamba|un braccio/.test(t),pes=has(/^(pesant[ei]|heavy|forza)$/),legg=has(/^(legger[oa]|volume|pump)$/);
+    const acc=has(/^(accessori|accessorio|complementar[ei]|isolamento)$/),iso=has(/^(isometric[oa]|iso)$/),ecc=has(/^eccentric[oa]$/),fun=has(/^(funzionale|corsa|runner)$/),soft=has(/^(meno|invasiv[oa])$/);
+    if(has(/^(esplosiv[oa]|esplosivi|potenza|salti)$/)){const e=ESPL.find(x=>x[0].test(t));return {name:e[1],sets:e[2],reps:e[3],rest:'2\'',cue:'massima velocita\', recupero pieno'};}
+    if(!g){if(sc==='orizz'||sc==='vert')g='schiena';else if(sc==='squat'||sc==='affondo'||sc==='ext')g='gambe';else if(sc==='hinge')g='femorali';else return null;}
+    if(g==='schiena'&&!sc&&has(/^tirat[ae]$/))sc='';
+    if(g==='femorali'&&!sc)sc=acc?'curl':'';
+    if(g==='gambe'&&!sc&&(mono||fun))sc='affondo';
+    if(g==='gambe'&&!sc&&acc)sc='ext';
+    if(g==='petto'&&sc==='spinta')sc='';
+    // dalla lista: stesso gruppo, poi i filtri uno alla volta finche' resta qualcosa
+    const GRI={bicipiti:'braccia',tricipiti:'braccia',adduttori:'gambe',abduttori:'glutei',tibiale:'polpacci',avambracci:'braccia'}[g]||g;
+    let C=[...new Set(L)].map(n=>({n,i:info(n)})).filter(o=>o.i&&o.i.g===GRI);
+    const filtra=f=>{const r=C.filter(f);if(r.length)C=r;};
+    const nm=o=>norm(o.n);
+    if(g==='bicipiti')filtra(o=>/curl|bicip|hammer|martello/.test(nm(o)));
+    if(g==='tricipiti')filtra(o=>/tricip|pushdown|french|skull|dip|extension|estension/.test(nm(o)));
+    if(g==='adduttori')filtra(o=>/copenhagen|adduct|addutt/.test(nm(o)));
+    if(g==='abduttori')filtra(o=>/abduct|abdutt|band walk|lateral walk|clam/.test(nm(o)));
+    if(g==='avambracci')filtra(o=>/wrist|polso|hang|carry|grip|avambr/.test(nm(o)));
+    const SCH={orizz:'tirata_orizz',vert:g==='spalle'?'spinta_vert':'tirata_vert',squat:'squat',affondo:'affondo',hinge:'hinge'}[sc];
+    if(SCH)filtra(o=>o.i.sc===SCH);
+    if(sc==='incl')filtra(o=>/inclin|incline/.test(nm(o))&&!/fly|croci/.test(nm(o)));
+    if(sc==='decl')filtra(o=>/declin|dip/.test(nm(o)));
+    if(sc==='piana')filtra(o=>!/inclin|incline|declin/.test(nm(o))&&o.i.sc==='spinta_orizz');
+    if(sc==='fly')filtra(o=>/fly|croci|pec deck|pectoral/.test(nm(o)));
+    if(sc==='lat')filtra(o=>/lateral|laterali|scaption/.test(nm(o)));
+    if(sc==='post')filtra(o=>/face pull|rear|reverse fly|posterior/.test(nm(o)));
+    if(sc==='front')filtra(o=>/front raise|frontal|anterior/.test(nm(o)));
+    if(sc==='ext')filtra(o=>/extension|estension/.test(nm(o)));
+    if(sc==='curl')filtra(o=>/curl/.test(nm(o)));
+    if(sc==='antirot')filtra(o=>/pallof|dead ?bug|bird|anti/.test(nm(o)));
+    if(sc==='plank')filtra(o=>/plank/.test(nm(o)));
+    if(acc&&!sc)filtra(o=>o.i.sc==='isolamento'||o.i.att==='macchina'||o.i.att==='cavi');
+    if(iso)filtra(o=>/isometric|iso\b|wall sit|plank|hold/.test(nm(o)));
+    if(ecc)filtra(o=>/nordic|eccentric|ecc\b/.test(nm(o)));
+    if(att)filtra(o=>o.i.att===att||(att==='macchina'&&o.i.att==='cavi'));
+    else if(soft)filtra(o=>['macchina','cavi','manubri','multipower','corpo libero','elastico'].includes(o.i.att));
+    const sed=has(/^sedut[oa]$/);if(sed)filtra(o=>/seated|sedut/.test(nm(o)));
+    if(mono)filtra(o=>o.i.mono);else if(!['polpacci','adduttori','abduttori','core'].includes(g))filtra(o=>!o.i.mono);
+    // classifica: prima i riferimenti della scheda, poi il livello giusto per l'intenzione
+    const pref=BASE[g+'|'+sc]||BASE[g+'|']||[],pi=n=>{const k=pref.findIndex(x=>norm(x)===norm(n));return k<0?99:k;};
+    const voluto=pes?4:legg||acc?2.2:soft?2.4:3;
+    C.sort((a,b)=>pi(a.n)-pi(b.n)||Math.abs(a.i.liv-voluto)-Math.abs(b.i.liv-voluto)||a.n.length-b.n.length);
+    if(!C.length)return null;
+    const name=C[0].n,x=info(name),per=x.mono?' per lato':'';
+    const isol=acc||x.sc==='isolamento'||['polpacci','bicipiti','tricipiti','braccia','abduttori','avambracci'].includes(g)||sc==='lat'||sc==='post'||sc==='fly'||sc==='ext'||sc==='curl';
     let d;
-    if(r[2]==='iso')d={sets:'3',reps:(legg?'15-20':'12-15')+per,rpe:'8'};
-    else if(r[2]==='core')d={sets:'3',reps:'8-10'+per};
-    else if(pes)d={sets:'4',reps:(x.mono?'5-6':'4-6')+per,pct:x.mono?null:'82,5',rpe:x.mono?'8':null,rest:'2\'30"'};
+    if(iso)d={sets:'3',reps:'30-45"'+per,rest:'60"',cue:'isometria: spingi forte e tieni'};
+    else if(/copenhagen|plank|wall sit/.test(norm(name)))d={sets:'3',reps:'20-30"'+per,rest:'60"'};
+    else if(g==='core'||x.sc==='core')d={sets:'3',reps:/plank/.test(norm(name))?'30-45"'+per:'8-10'+per,rest:'60"'};
+    else if(ecc)d={sets:'3',reps:'4-6'+per,rest:'2\'',cue:'eccentrica lenta 3-4"'};
+    else if(isol)d={sets:'3',reps:(legg||g==='polpacci'?'12-15':'10-12')+per,rpe:'8',rest:'60-75"'};
+    else if(pes)d={sets:'4',reps:(x.mono?'5-6':'4-6')+per,pct:x.mono||x.att!=='bilanciere'?null:'82,5',rpe:x.mono||x.att!=='bilanciere'?'8':null,rest:'2\'30"'};
     else if(legg)d={sets:'3',reps:'10-12'+per,rpe:'8',rest:'90"'};
     else if(fun)d={sets:'3',reps:'6-8'+per,rpe:'8',rest:'2\''};
     else d={sets:'3',reps:(/forza/.test(ob||'')?'5-6':'8-10')+per,rpe:'8',rest:'2\''};
-    if(ecc)Object.assign(d,{reps:'4-6'+per,cue:'eccentrica lenta 3-4"'});
-    if(nota)d.cue=(d.cue?d.cue+', ':'')+nota;
+    if(att&&x.att!==att)d.cue=(d.cue?d.cue+', ':'')+'con '+att;
     Object.keys(d).forEach(k=>{if(d[k]==null)delete d[k];});
     return Object.assign({name},d);
   }
