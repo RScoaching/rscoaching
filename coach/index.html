@@ -527,6 +527,11 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 .inj-act{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px;}
 .hl-add{margin-top:6px;}
 .ob-l{display:flex;flex-direction:column}
+.onb-sch{margin-bottom:14px}.onb-sch.nuova{border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.05)}
+.onb-dl{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;margin:0 0 12px;font-size:12.5px}
+.onb-dl dt{color:var(--muted)}.onb-dl dd{margin:0;color:var(--white);max-width:70ch}
+.onb-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media(max-width:640px){.onb-dl{grid-template-columns:1fr}.onb-dl dd{margin-bottom:6px}}
 .ob-i{padding:11px 0;border-top:1px solid var(--line)}
 .ob-i:first-child{border-top:0;padding-top:2px}
 .ob-i-t{display:flex;align-items:baseline;gap:8px}
@@ -1751,6 +1756,7 @@ onValue(ref(db,'body_log'),s=>{bodyLog=s.val()||{};refreshOverview();});
 onValue(ref(db,'injuries'),s=>{injuries=s.val()||{};refreshHealth();renderAthletes();});
 onValue(ref(db,'coach_notes'),s=>{coachNotes=s.val()||{};refreshHealth();});
 onValue(ref(db,'habits'),s=>{habitsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
+onValue(ref(db,'onboarding'),s=>{onbData=s.val()||{};refreshObiettivi();renderDashboard();renderAthletes();},()=>{});
 onValue(ref(db,'goals'),s=>{goalsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
 onValue(ref(db,'exercise_db'),s=>{exercises=s.val()||{};renderDB();}); // custom overrides only
 onValue(ref(db,'checkins'),s=>{checkins=s.val()||{};renderAll();});
@@ -2192,6 +2198,11 @@ function athStats(aid){
   }
   if(avgFat!=null&&avgFat>7)add('Fatica '+f1(avgFat),'p-red','media degli ultimi '+ci3.length+' check-in, su 10',3);
   if(avgMot!=null&&avgMot<4)add('Motivazione '+f1(avgMot),'p-warn','media degli ultimi '+ci3.length+' check-in, su 10',1);
+  // scheda d'ingresso nuova, obiettivi vicini alla scadenza, abitudini lasciate andare
+  if(onbData[aid]&&!onbData[aid].letto)add('Scheda nuova','p-purple','ha compilato la scheda d\'ingresso '+ggFa(onbData[aid].ts)+': aprila in Obiettivi',2);
+  {const n=obInScadenza(aid);if(n)add(n===1?'Obiettivo in scadenza':n+' obiettivi in scadenza','p-warn','entro 14 giorni e non ancora raggiunti',1);}
+  {const O=window.RSObiettivi,H=habitsData[aid];if(O&&H&&H.defs){const ferme=O.attive(H.defs).filter(([id,d])=>(d.ts||0)<now-7*864e5&&O.storico(d,id,H.log||{},garminData[aid],7).pct<30).map(([,d])=>d.nome);
+    if(ferme.length)add('Abitudini ferme','p-warn',ferme.join(', ')+': meno di 2 giorni su 7',1);}}
   const go=gmOggi(aid);
   // dati dell'orologio fermi: la sincronizzazione sul Mac non e' passata (token scaduti, Mac spento, atleta scollegato)
   const gl=garminData[aid]&&+garminData[aid].lastSync;
@@ -2522,11 +2533,35 @@ function renderDetObiettivi(aid){
       <div class="grid2"><div class="field"><label>Tipo</label><select id="abn-tipo"><option value="si">Si' o no</option><option value="num">Numero da raggiungere</option></select></div>
       <div class="field"><label>Obiettivo e unita' (se numero)</label><input id="abn-tg" placeholder="30 minuti"></div></div>
       <button type="button" class="btn btn-orange btn-sm" onclick="abSalva('${aid}')">Aggiungi abitudine</button></div></details>`;
-  return `<div class="hl-grid">
+  return `${onbScheda(aid)}<div class="hl-grid">
     <section class="hl-sec"><div class="hl-h"><span>Obiettivi</span><i>${G.length} attivi${fatti?' &#183; '+fatti+' archiviati':''}</i></div>${obi}${form}</section>
     <section class="hl-sec"><div class="hl-h"><span>Abitudini</span><i>spuntate dall'atleta ogni giorno</i></div><div class="ab-pre">${pre}</div>${abi}${formAb}</section>
   </div>`;
 }
+// scheda d'ingresso compilata dall'atleta nell'app: riepilogo e via al Programma guidato
+const ONB_T={obiettivo:{salute:'Salute e forma',estetica:'Migliorare il fisico',forza:'Piu\' forza',gara:'Gara di corsa',ibrido:'Corsa e pesi',sport:'Prestazione nello sport',rientro:'Rientro da infortunio'},
+  livello:{zero:'Da zero',princ:'Meno di 6 mesi',inter:'6 mesi - 2 anni',avanz:'Oltre 2 anni'},materiale:{palestra:'Palestra',casa:'Casa',nessuno:'Senza attrezzi'},
+  dist:{5:'5 km',10:'10 km',21:'Mezza',42:'Maratona'},inf:{caviglia:'Caviglia',achille:'Achille o polpaccio',piede:'Fascite plantare',lca:'Crociato',rotulea:'Ginocchio anteriore',ginocchio:'Menisco o ginocchio',hamstring:'Flessori',quadricipite:'Quadricipite',adduttori:'Adduttori o pubalgia',anca:'Anca',bandelletta:'Bandelletta',tibiale:'Periostite tibiale',lombalgia:'Mal di schiena',ernia:'Ernia discale',spalle:'Spalla'}};
+function onbScheda(aid){
+  const o=onbData[aid];if(!o||!o.risposte)return '';
+  const r=o.risposte,GG=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'],T=ONB_T;
+  const ob=(T.obiettivo[r.obiettivo]||'')+((r.obiettivo==='gara'||r.obiettivo==='ibrido')&&r.garaDist?', '+T.dist[r.garaDist]+(r.garaTempo?' in '+r.garaTempo:'')+(r.garaData?' il '+r.garaData.split('-').reverse().join('/'):''):r.obiettivo==='forza'?', '+r.liftObj+(r.liftDa?' (oggi '+r.liftDa+' kg)':''):r.obiettivo==='sport'?', '+(r.sport==='altro'?r.sportNome||'altro sport':'calcio'):r.obiettivo==='rientro'?', '+(T.inf[r.rtpInf]||'')+(r.rtpSett?' da '+r.rtpSett+' settimane':'')+(r.rtpOp==='si'?', operato':''):'');
+  const inf=Object.entries(r.infortuni||{}).map(([z,v])=>(T.inf[z]||z)+(v==='rec'?' (fa male adesso)':'')).join(', ');
+  const righe=[['Obiettivo',ob],['Esperienza',T.livello[r.livello]],['Oggi',r.giaAllena==='si'?'si allena '+(r.sedAttuali||'?')+' volte a settimana'+((r.cosaFa||[]).length?' ('+r.cosaFa.join(', ')+')':''):'non si allena'+(r.fermo?', fermo da '+(r.fermo==='3+'?'oltre 3 mesi':'1-3 mesi'):'')],
+    r.kmSett||r.t5||r.t10?['Corsa',[r.kmSett&&r.kmSett+' km a settimana',r.lungo&&'lungo '+r.lungo+' km',r.t5&&'5 km in '+r.t5,r.t10&&'10 km in '+r.t10].filter(Boolean).join(', ')]:null,
+    ['Infortuni',inf||'nessuno'],r.dolori?['Dolori',r.dolori]:null,(r.problemi||[]).length?['Condizioni',r.problemi.map(x=>({over50:'oltre 50 anni',postparto:'post parto',sovrappeso:'perdere peso'})[x]||x).join(', ')]:null,
+    ['Giorni',(r.giorni||[]).map((x,i)=>x?GG[i]:'').filter(Boolean).join(', ')+', '+(r.minuti||60)+' min'],['Materiale',(T.materiale[r.materiale]||'')+((r.attrezzi||[]).length?': '+r.attrezzi.join(', '):'')],
+    (r.punti||[]).length?['Da migliorare',r.punti.join(', ')]:null,r.note?['Note',r.note]:null].filter(Boolean);
+  return `<section class="hl-sec onb-sch${o.letto?'':' nuova'}"><div class="hl-h"><span>Scheda d'ingresso</span><i>compilata dall'atleta ${new Date(o.ts).toLocaleDateString('it-IT')}${o.letto?'':' &#183; nuova'}</i></div>
+    <dl class="onb-dl">${righe.map(([a,b])=>`<dt>${a}</dt><dd>${athEsc(b||'-')}</dd>`).join('')}</dl>
+    <div class="onb-act"><a class="btn btn-orange btn-sm" href="./builder.html?studio=${encodeURIComponent(aid)}">Crea il programma guidato da qui</a>${o.letto?'':`<button type="button" class="btn btn-ghost btn-sm" onclick="onbLetto('${aid}')">Segna come letta</button>`}</div>
+    <p class="ld-nota">Le risposte sono gia' nella scheda del Programma guidato: si apre compilata.</p></section>`;
+}
+window.onbLetto=async function(aid){await update(ref(db,`onboarding/${aid}`),{letto:true});};
+window.obChiediScheda=async function(aid){
+  await update(ref(db,`athletes/${aid}`),{chiediScheda:Date.now()});
+  showToast('Fatto: la scheda si apre al prossimo accesso all\'app');
+};
 const OB_TL={forza:'Massimale da raggiungere (kg)',corsa:'Tempo da fare (es. 45:00 o 1:39:00)',peso:'Peso da raggiungere (kg)',km:'Km a settimana',libero:'Valore da raggiungere'};
 window.obTipo=function(){const t=document.getElementById('obn-tipo').value;document.querySelectorAll('[data-ob]').forEach(e=>{e.hidden=e.dataset.ob!==t;});document.getElementById('obn-tl').textContent=OB_TL[t];
   const tit=document.getElementById('obn-tit');if(tit)tit.placeholder={forza:'Squat a 120 kg',corsa:'10 km sotto i 45 minuti',peso:'Arrivare a 72 kg',km:'40 km a settimana',libero:'10 trazioni'}[t];};
@@ -2742,6 +2777,7 @@ window.openAthlete=function(aid,silent){
         <details class="det-more"><summary class="btn btn-outline btn-sm" aria-label="Altre azioni">&#8943;</summary>
           <div class="det-menu" onclick="this.parentNode.open=false">
             <a href="./builder.html?studio=${encodeURIComponent(aid)}">Programma guidato</a>
+            <button type="button" onclick="obChiediScheda('${aid}')">Chiedi la scheda d'ingresso</button>
             <button type="button" onclick="athReport('${aid}')">Report PDF</button>
             <button type="button" onclick="athConfronto('${aid}')">Confronta con un altro atleta</button>
             <button type="button" onclick="openModal('athlete','${aid}')">Modifica i dati</button>
@@ -2754,7 +2790,7 @@ window.openAthlete=function(aid,silent){
       <div class="tab active" data-t="calendario" onclick="detTab('calendario',this)">Calendario</div>
       <div class="tab" data-t="allenamenti" onclick="detTab('allenamenti',this)">Allenamenti</div>
       <div class="tab" data-t="questionari" onclick="detTab('questionari',this)">Questionari</div>
-      <div class="tab" data-t="obiettivi" onclick="detTab('obiettivi',this)">Obiettivi${obInScadenza(aid)?' <span class="tab-n">'+obInScadenza(aid)+'</span>':''}</div>
+      <div class="tab" data-t="obiettivi" onclick="detTab('obiettivi',this)">Obiettivi${onbData[aid]&&!onbData[aid].letto?' <span class="tab-n">scheda</span>':''}${obInScadenza(aid)?' <span class="tab-n">'+obInScadenza(aid)+'</span>':''}</div>
       <div class="tab" data-t="profilo" onclick="detTab('profilo',this)">Profilo${injAttivi(aid).length?' <span class="tab-n">'+injAttivi(aid).length+'</span>':''}</div>
       <div class="tab" data-t="chat" id="tab-chat-${aid}" onclick="detTab('chat',this)">Chat${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length>0?` <span style="background:var(--primary);color:#000;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:8px;">${Object.values(chatData[aid]?.messages||{}).filter(m=>m.from==='athlete'&&!m.read).length}</span>`:''}</div>
     </div>
@@ -2895,7 +2931,7 @@ function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:
    per chilo di peso) e per accorgersi di un calo o di un aumento. Per questo non
    e' un campo solo ma un registro, `body_log/{aid}`, e vale l'ultima pesata.
    L'altezza cambia poco e sta nella scheda atleta (`alt`, in cm). */
-let bodyLog={},habitsData={},goalsData={};
+let bodyLog={},habitsData={},goalsData={},onbData={};
 function athEta(dob){
   const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(dob||'').trim());
   if(!m)return null;
