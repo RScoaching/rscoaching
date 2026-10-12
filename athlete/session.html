@@ -1513,7 +1513,8 @@ function buildFromSession(s){
     exs=[{_type:'cond',name:s.name||s.condType||'Conditioning',condType:s.condType,duration:s.duration,condContent:s.condContent}];
     return;
   }
-  const raw=Object.entries(s.exercises||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).map(([,e])=>e);
+  // la prevenzione e' la scheda a parte (tasto Prevenzione nell'app): qui solo l'allenamento
+  const raw=Object.entries(s.exercises||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).map(([,e])=>e).filter(e=>!(window.RSPrehab&&/^Prevenzione/.test(e&&e.cue||'')));
   if(!raw.length){exs=[{_type:'nota',name:s.name||'Seduta',note:s.notes||''}];return;}
   buildFromArray(s.type,raw);
 }
@@ -1570,12 +1571,24 @@ function calcProg(ex){
   const f=v=>String(v).replace('.',',');
   const prima=`Ultima volta ${h.length} ${h.length===1?'serie':'serie'} a ${f(top)} kg${reps.length?' ('+reps.join(', ')+' ripetizioni'+(rpeMax?', RPE fino a '+f(rpeMax):'')+')':''}`;
   if(!rr||!reps.length)return {kg:top,su:false,titolo:'Riparti da '+f(top)+' kg',txt:prima+'.'};
-  if(reps.length>=h.length&&reps.every(r=>r>=rr[1])&&(rpeMax==null||rpeMax<=8)){
-    const k=Math.round((top+passoKg(ex.name,top))*2)/2;
-    return {kg:k,su:true,titolo:'Oggi '+f(k)+' kg',txt:prima+': tutte chiuse, si sale di '+f(k-top)+' kg.'};
+  /* Doppia progressione con l'RPE: si sale di carico quando tutte le serie arrivano in cima al
+     range senza arrivare al limite; se erano al limite si tiene il carico; se si e' rimasti sotto
+     il range al limite, si scende un poco. Altrimenti una ripetizione in piu' per serie, fino
+     alla cima del range: 100 kg x 6 su 6-8 -> oggi 7. */
+  const rpeT=parseFloat(String(ex.rpe||'').split('-').pop().replace(',','.'))||8.5;
+  const nS=parseInt(ex.sets)||reps.length;
+  if(reps.length>=h.length&&reps.every(r=>r>=rr[1])){
+    if(rpeMax!=null&&rpeMax>=9.5)return {kg:top,su:false,reps:Array(nS).fill(rr[1]),titolo:'Oggi ancora '+f(top)+' kg',txt:prima+': tutte chiuse ma al limite. Stesse ripetizioni con piu\' margine, poi si sale.'};
+    const doppio=rpeMax!=null&&rpeMax<=Math.min(7,rpeT-1.5);
+    const k=Math.round((top+passoKg(ex.name,top)*(doppio?2:1))*2)/2;
+    return {kg:k,su:true,reps:Array(nS).fill(rr[0]),titolo:'Oggi '+f(k)+' kg x '+rr[0],txt:prima+': tutte chiuse'+(doppio?' e con margine':'')+', si sale di '+f(k-top)+' kg e si riparte da '+rr[0]+' ripetizioni.'};
   }
-  if(reps.some(r=>r<rr[0]))return {kg:top,su:false,titolo:'Oggi ancora '+f(top)+' kg',txt:prima+': qualche serie e\' rimasta sotto, prima chiudile tutte.'};
-  return {kg:top,su:false,titolo:'Oggi ancora '+f(top)+' kg',txt:prima+': aggiungi una ripetizione dove riesci, poi si sale.'};
+  if(rpeMax!=null&&rpeMax>=9.5&&reps.filter(r=>r<rr[0]).length>=Math.ceil(reps.length/2)){
+    const k=Math.max(0,Math.round((top*0.95)*2)/2);
+    return {kg:k,su:false,reps:Array(nS).fill(rr[0]),titolo:'Oggi '+f(k)+' kg',txt:prima+': sotto il range e al limite, si scende del 5% e si ricostruisce.'};
+  }
+  const obi=Array.from({length:nS},(_,i)=>Math.max(rr[0],Math.min(rr[1],(reps[i]!=null?reps[i]:reps[reps.length-1])+1)));
+  return {kg:top,su:false,reps:obi,titolo:'Oggi '+f(top)+' kg: '+obi.join(', '),txt:prima+': una ripetizione in piu\' per serie, fino a '+rr[1]+'; quando le chiudi tutte si sale.'};
 }
 
 function initSets(){
@@ -1592,7 +1605,8 @@ function initSets(){
         const h=hist[s]||{};
         // con la progressione ogni serie parte dal carico di oggi, non da quello di allora
         const prevK=pr?String(pr.kg):(h.kg!=null&&h.kg!==''?String(h.kg):'');
-        const prevR=h.reps!=null?String(h.reps):''; // actual reps from last session
+        // le ripetizioni da cercare oggi (doppia progressione), se no quelle dell'ultima volta
+        const prevR=pr&&pr.reps&&pr.reps[s]!=null?String(pr.reps[s]):h.reps!=null?String(h.reps):'';
         setData[i][s]={kg:prevK,suggested:!!prevK,prevReps:prevR,reps:null,rpe:null,done:false};
       }
     } else if(ex._type==='complex'){

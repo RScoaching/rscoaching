@@ -1468,6 +1468,15 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 .rt7-att{font-size:11px;color:#FF9A6B;margin-left:6px;font-style:normal}
 .prof-tabs{scrollbar-width:none}.prof-tabs::-webkit-scrollbar{display:none}.prof-tabs .prof-tab{flex:0 0 auto!important;padding:10px 12px!important} 
 .sv-sheet{max-height:88vh;display:flex;flex-direction:column}.sv-body{overflow-y:auto;padding:0 6px 18px;-webkit-overflow-scrolling:touch}.sv-body .sess-card{margin:0 8px}.sv-x{position:absolute;top:10px;right:14px;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,214,196,.06);color:var(--text);font-size:20px;cursor:pointer}
+.ph-btn{display:flex;align-items:center;gap:10px;width:calc(100% - 32px);margin:4px 16px 12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(139,92,246,.35);background:rgba(139,92,246,.10);color:var(--white);font:inherit;cursor:pointer;text-align:left}
+.ph-btn b{font:600 14px Inter,sans-serif}.ph-btn i{margin-left:auto;font-style:normal;font-size:12px;color:#C4B5FD}.ph-ic{display:inline-flex;color:#C4B5FD}.ph-ic:empty{display:none}
+.ph-sheet{padding:0 10px 10px}.ph-h small{font-size:11px;font-weight:600;color:#C4B5FD;letter-spacing:.3px}.ph-h h3{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.5px;color:var(--white);margin:2px 0}.ph-h p{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.ph-r{display:grid;grid-template-columns:72px 1fr 22px;gap:12px;align-items:center;padding:10px 6px;border-bottom:1px solid rgba(255,214,196,.07);cursor:pointer}
+.ph-r img,.ph-r>i{width:72px;height:54px;object-fit:cover;border-radius:9px;background:rgba(255,214,196,.05);display:block}
+.ph-r b{display:block;font:600 14px Inter,sans-serif;color:var(--white)}.ph-r span{display:block;font-size:13px;font-weight:700;color:#FF9A6B;margin-top:1px}.ph-r em{display:block;font-style:normal;font-size:12px;color:var(--muted);line-height:1.35;margin-top:2px}
+.ph-r u{display:flex;width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,214,196,.2);align-items:center;justify-content:center;color:transparent;text-decoration:none}.ph-r u svg{width:13px;height:13px}
+.ph-r.ok{opacity:.55}.ph-r.ok u{background:#8B5CF6;border-color:#8B5CF6;color:#fff}.ph-r.in{background:rgba(139,92,246,.06);border-radius:10px}
+.ph-fin{font-size:12.5px;color:var(--muted);margin:12px 6px 4px}
 .sv-fut{margin:10px 16px 4px;font-size:12.5px;color:var(--muted)}
 .f7-del{display:block;margin:12px auto 2px;background:none;border:0;color:#FB7185;font:600 12.5px Inter,sans-serif;cursor:pointer;padding:8px}
 .pf-clic{cursor:pointer}.pf-clic .pf-n::after{content:' \203A';color:var(--orange,#FF6A2E);font-weight:700}.pf-clic:active{opacity:.7}
@@ -2853,7 +2862,17 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   }
 
   window._sessionCard=(...a)=>sessionCard(...a);
+  // la prevenzione e' una scheda a parte: tasto in testa alla seduta, gli esercizi di prevenzione
+  // vecchi (dentro la seduta) non si ripetono
   function sessionCard(type,title,note,exercises,extra,progId,weekIdx,sessId,progName,corsaFasi){
+    const ph=progId&&window.RSPrehab?window.RSPrehab.carta((ST.progs||{})[progId],weekIdx,sessId):null;
+    const exs=ph?(exercises||[]).filter(e=>!/^Prevenzione/.test(e&&e.cue||'')):exercises;
+    let h=sessionCard0(type,title,note,exs,extra,progId,weekIdx,sessId,progName,corsaFasi);
+    if(ph){const b=`<button type="button" class="ph-btn" onclick="apriPrehab('${progId}',${+weekIdx},'${sessId}')"><span class="ph-ic">${_ri('recupero')}</span><b>Prevenzione</b><i>${ph.es.length} esercizi &#183; ~${window.RSPrehab.minuti(ph)}'</i></button>`;
+      const k=h.indexOf('<div class="sess-action">');h=k>=0?h.slice(0,k)+b+h.slice(k):h.replace(/<\/div>\s*$/,b+'</div>');}
+    return h;
+  }
+  function sessionCard0(type,title,note,exercises,extra,progId,weekIdx,sessId,progName,corsaFasi){
     const color=SESS_COLORS[type]||'var(--text)';
     const label=SESS_LABELS[type]||type||'Sessione';
     const icon=TICONS[type]||_ri('sedute');
@@ -2912,7 +2931,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       _ritPid=progId||null;
       // la prevenzione del programma va prima della corsa: si vede sopra le fasi
       const prevC=(exercises||[]).filter(e=>/^Prevenzione/.test(e&&e.cue||''));
-      const runBody=nFasi?(prevC.length?'<div class="sess-mini-label" style="padding:10px 16px 0">Prima della corsa</div>'+exListHtml(prevC):'')+corsaHtml(corsaFasi):(exercises&&exercises.length?exListHtml(exercises):'');
+      const runBody=nFasi?(prevC.length&&!window.RSPrehab?'<div class="sess-mini-label" style="padding:10px 16px 0">Prima della corsa</div>'+exListHtml(prevC):'')+corsaHtml(corsaFasi):(exercises&&exercises.length?exListHtml(exercises):'');
       return `<div class="sess-card">
         <div class="sess-head">
           <div class="sess-type-tag" style="color:${color};">${icon} ${label}</div>
@@ -3088,6 +3107,19 @@ window.apriSeduta=(pid,wi,sid)=>{
 };
 window.apriLog=ts=>{const l=ST.logs.find(x=>x.ts===+ts);if(!l)return;svApri(sedutaFattaHtml(l,{icon:TICONS[l.type]||_ri('sedute'),label:SESS_LABELS[l.type]||'Allenamento',title:l.sessName||'Seduta',progName:'',link:''}));};
 function svApri(html){const b=document.getElementById('sv-body');if(!b)return;b.innerHTML=html;b.scrollTop=0;document.getElementById('sv-overlay').classList.add('open');document.getElementById('sv-sheet').classList.add('open');}
+// la scheda di prevenzione del giorno: rullo, esercizi con foto e dose, chiusura; si spunta
+window.apriPrehab=(pid,wi,sid)=>{
+  const PH=window.RSPrehab,p=(ST.progs||{})[pid],c=PH&&p?PH.carta(p,wi,sid):null;if(!c)return;
+  const s=orolSess(pid,wi,sid)||{},chiave='rs_ph_'+aid+'_'+isoLoc(new Date())+'_'+sid;
+  let fatti={};try{fatti=JSON.parse(localStorage.getItem(chiave)||'{}');}catch(e){}
+  const tit={corsa:'Prima della corsa',gambeA:'Prima della forza',gambeB:'Prima della forza',alta:'Prima della forza'}[c.tipo]||'Prevenzione';
+  const riga=(e,i,cls)=>!e?'':`<div class="ph-r${cls?' '+cls:''}${fatti[i]?' ok':''}" onclick="phSpunta('${chiave}','${i}',this)">
+      ${e.k?`<img src="../coach/prev/${escH(e.k)}.jpg" alt="" loading="lazy" onerror="this.replaceWith(document.createElement('i'))">`:'<i></i>'}
+      <div><b>${escH(e.n)}</b><span>${escH((e.s||1)+' x '+(e.r||''))}</span>${e.c?`<em>${escH(e.c)}</em>`:''}</div><u aria-hidden="true">${_ri('ok')}</u></div>`;
+  svApri(`<div class="ph-sheet"><div class="ph-h"><small>${escH(tit)}</small><h3>${escH(s.name||'Seduta')}</h3><p>${c.es.length} esercizi &#183; circa ${PH.minuti(c)} minuti. Tocca un esercizio quando l'hai fatto.</p></div>
+    ${riga(c.intro,'in','in')}${c.es.map((e,i)=>riga(e,i)).join('')}${c.fine?`<p class="ph-fin">${escH(c.fine)}</p>`:''}</div>`);
+};
+window.phSpunta=(k,i,el)=>{let f={};try{f=JSON.parse(localStorage.getItem(k)||'{}');}catch(e){}f[i]=!f[i];el.classList.toggle('ok',!!f[i]);try{localStorage.setItem(k,JSON.stringify(f));}catch(e){}};
 window.chiudiSeduta=()=>{document.getElementById('sv-overlay')?.classList.remove('open');document.getElementById('sv-sheet')?.classList.remove('open');};
 // le sedute registrate in un giorno della settimana, anche fuori programma
 function fattiGiornoHtml(i){

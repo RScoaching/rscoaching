@@ -1183,3 +1183,116 @@ window.RSTraccia = (function(){
   }
   return {mostra,carica,migliori,DMIG,DMNOME};
 })();
+
+// ── PREVENZIONE (PREHAB): LA SCHEDA DEL GIORNO ─────────────────────────
+/* Una scheda a parte, non dentro la seduta: prima di ogni corsa sempre la stessa, prima
+   della forza secondo la seduta (gambe A, gambe B, parte alta). 6-8 esercizi, 15-25 minuti:
+   rullo all'inizio, mobilita' e stretch, attivazione con isometrie, rinforzo mirato sulle
+   zone dell'atleta, chiusura dinamica (corsa) o mobilita' delle spalle (parte alta).
+   Le foto vengono dalla libreria della prevenzione (coach/prev/<k>.jpg).
+
+   Isometrie, come si dosano (le note degli esercizi seguono queste regole):
+   - lunghe sub-massimali: 30-45" x 3-5 a circa il 70% dello sforzo, 1-2' di recupero; calmano
+     il dolore del tendine e lo caricano senza irritarlo (Rio 2015 rotuleo; Achille, bandelletta).
+     Spanish squat, wall sit, isometria del polpaccio e del soleo, spinta su avampiede;
+   - di tenuta (yielding): si tiene una posizione o un carico 10-30", controllo e tendine
+     (Copenhagen, side plank, split squat fermo);
+   - finali: la tenuta 5-10" sull'ultima ripetizione (bridge, calf raise), attivazione;
+   - brevi massimali (overcoming): 3-5" di spinta massima contro un fermo x 4-6, 1' di
+     recupero; forza a un angolo senza fatica, utili in stagione e prima delle gare;
+   - pause dentro la ripetizione (2-3" in buca): forza nel punto debole del movimento. */
+window.RSPrehab = (function(){
+  // n nome, k foto della libreria (o null), s serie, r ripetizioni o tempo, c nota
+  const CAT={
+    rullo:{n:'Foam roller',k:'foam-roller-glutei',s:1,r:"5' in tutto",c:"30-40\" per gruppo: glutei, abduttori, tensore della fascia lata, quadricipiti, polpacci"},
+    rulloAlto:{n:'Foam roller dorsale',k:'estensione-toracica-con-foam-roller',s:1,r:"2'",c:'estensione toracica sul rullo, poi dorsali'},
+    mobGin:{n:'Mobilita\' ginocchio da supina',k:null,s:2,r:'8 per lato',c:'flessione ed estensione lente, senza forzare'},
+    n9090:{n:'90-90',k:'90-90',s:2,r:'8 per lato',c:'busto alto, cambio lato controllato'},
+    stretch:{n:'Stretch a scelta: pigeon, psoas o frog',k:'pigeon-stretch',s:1,r:'30-40" per lato',c:'quello che oggi senti piu\' rigido'},
+    bridge:{n:'Glute bridge',k:'glute-bridge',s:2,r:'8',c:'tenuta 10" sull\'ultima ripetizione (isometria finale), poi 1 serie da 8 su una gamba'},
+    lateral:{n:'Camminata laterale con miniband',k:'camminata-laterale-con-miniband',s:2,r:'10 passi per lato',c:'mezzo squat, ginocchia fuori'},
+    calf:{n:'Calf raise',k:'calf-raise',s:2,r:'10',c:'bipodalico con tenuta 10" sull\'ultima, poi 1 serie da 10 monopodalica per lato'},
+    dinam:{n:'Stretching dinamico',k:'half-kneel-quads-stretch',s:1,r:'8-10 per esercizio',c:'quadricipiti, femorali, slanci frontali e laterali'},
+    pogo:{n:'Pogo jump',k:'pogo-jump',s:2,r:'10 + 10 per gamba',c:'veloci e reattivi: bipodali, poi monopodali. Poi si parte'},
+    wallsit:{n:'Wall sit',k:'wall-sit',s:2,r:'30"',c:'isometria lunga dei quadricipiti, al 70% dello sforzo: protegge ginocchio e bandelletta'},
+    spanish:{n:'Spanish squat',k:'spanish-squat',s:4,r:'30-45"',c:'isometria lunga, 70% dello sforzo, 1\' di recupero: tendine rotuleo'},
+    calfIso:{n:'Isometria del polpaccio',k:'isometria-polpaccio-a-gamba-stesa-al-castello',s:3,r:'30-45"',c:'isometria lunga, sulle punte a meta\' altezza: Achille e polpaccio'},
+    soleoIso:{n:'Isometria del soleo (ginocchio piegato)',k:'isometria-polpaccio-a-gamba-flessa-al-castello',s:3,r:'30-45"',c:'isometria lunga a ginocchio flesso: soleo, che regge la corsa'},
+    soleoEcc:{n:'Eccentriche del soleo',k:'eccentriche-soleo-da-seduto-al-castello',s:3,r:'8 per lato',c:'discesa lenta in 4", risalita con due gambe'},
+    avampiede:{n:'Spinta isometrica su avampiede',k:'spinta-isometrica-su-avampiede',s:3,r:'30"',c:'isometria lunga sull\'avampiede, ginocchio leggermente piegato'},
+    caviglia:{n:'Dorsiflessione caviglia a muro',k:'dorsiflessione-caviglia-a-muro',s:2,r:'10 per lato',c:'ginocchio verso il muro, tallone a terra'},
+    tibiale:{n:'Tibialis raise',k:null,s:2,r:'15',c:'schiena al muro, punte su senza staccare i talloni: tibiale anteriore e periostite'},
+    copen:{n:'Copenhagen plank',k:'copenhagen-half-planks',s:2,r:'20" per lato',c:'isometria di tenuta degli adduttori; leva corta (ginocchio) se e\' la prima volta'},
+    deadbug:{n:'Dead bug',k:'dead-bug-elastico-gambe-alternate',s:2,r:'8 per lato',c:'schiena appoggiata, espira lungo'},
+    goblet:{n:'Goblet squat lento',k:null,s:2,r:'8',c:'3" in discesa e 2" fermo in basso: caviglia, anca e ginocchio insieme'},
+    slBridge:{n:'Single leg glute bridge',k:'single-leg-glute-bridge',s:2,r:'8 per lato',c:'tenuta 5" in alto sull\'ultima'},
+    nordic:{n:'Nordic hamstring con elastico',k:'nordic-hamstring-con-elastico',s:2,r:'5',c:'eccentrica lenta: flessori'},
+    tspine:{n:'Rotazione toracica in ginocchio',k:'half-kneeling-t-spine-rotation',s:2,r:'6 per lato',c:'segui la mano con lo sguardo'},
+    extrarot:{n:'Rotazione esterna con elastico',k:'rotazione-esterna-con-elastico',s:2,r:'12 per lato',c:'gomito al fianco, lento'},
+    pullApart:{n:'Band pull apart',k:null,s:2,r:'15',c:'scapole indietro e in basso'},
+    scapPush:{n:'Push up scapolari',k:null,s:2,r:'10',c:'braccia tese, solo le scapole'}
+  };
+  const ZONE_INF={bandelletta:['wallsit'],rotulea:['spanish'],ginocchio:['wallsit'],lca:['spanish'],lcm:['wallsit'],quadricipite:['wallsit'],
+    achille:['calfIso','soleoEcc'],polpaccio:['soleoIso'],caviglia:['caviglia'],piede:['avampiede'],tibiale:['tibiale'],adduttori:['copen'],
+    hamstring:['nordic'],hamprox:['slBridge'],glutei_t:['lateral'],anca:['n9090'],lombalgia:['deadbug'],core:['deadbug'],colonna:['deadbug'],spalle:['extrarot'],glutei:['slBridge']};
+  function zoneDi(p){const z=new Set();(p&&p.carenze||[]).forEach(x=>z.add(x));Object.keys(p&&p.infortuni||{}).forEach(x=>z.add(x));(p&&p.problemi||[]).forEach(x=>z.add(x));return [...z];}
+  function voce(id,extra){const e=CAT[id];return e?Object.assign({id,n:e.n,k:e.k,s:e.s,r:e.r,c:e.c},extra||{}):null;}
+  // le zone dell'atleta entrano al posto degli esercizi generici in coda, fino a 8 esercizi
+  function personalizza(base,zone,max,riserva){
+    const out=base.slice();const aggiunte=[];
+    // stessa famiglia (isometria del ginocchio, del polpaccio): una basta
+    const FAM=[['wallsit','spanish'],['calfIso','soleoIso','avampiede'],['bridge','slBridge']];
+    const gia=id=>out.includes(id)||aggiunte.includes(id)||FAM.some(f=>f.includes(id)&&f.some(x=>x!==id&&(out.includes(x)||aggiunte.includes(x))));
+    zone.forEach(z=>(ZONE_INF[z]||[]).forEach(id=>{if(!gia(id))aggiunte.push(id);}));
+    aggiunte.forEach(id=>{if(out.length>=max){const i=out.findIndex(x=>riserva.includes(x));if(i<0)return;out.splice(i,1);}out.splice(Math.max(0,out.length-(out.includes('pogo')?2:0)),0,id);});
+    return out;
+  }
+  // scheda tipo: corsa (sempre uguale), gambe A e B (il rinforzo vero diviso nei due giorni), parte alta
+  function bozza(tipo,profilo){
+    const zone=zoneDi(profilo);let ids,intro,fine;
+    if(tipo==='corsa'){ids=personalizza(['mobGin','n9090','stretch','bridge','lateral','calf','dinam','pogo'],zone,8,['lateral','stretch','mobGin']);intro='rullo';fine='Poi si parte: i primi 10 minuti facili.';}
+    else if(tipo==='gambeB'){ids=personalizza(['caviglia','stretch','slBridge','soleoEcc','tibiale','copen','deadbug'],zone,8,['deadbug','tibiale']);intro='rullo';fine='Poi le serie di avvicinamento del primo esercizio.';}
+    else if(tipo==='alta'){ids=personalizza(['tspine','extrarot','pullApart','scapPush','deadbug'],zone.filter(z=>['spalle','core','colonna','lombalgia'].includes(z)),7,['scapPush']);intro='rulloAlto';fine='Poi le serie di avvicinamento del primo esercizio.';}
+    else{ids=personalizza(['caviglia','n9090','bridge','spanish','avampiede','goblet','deadbug'],zone,8,['deadbug','goblet']);intro='rullo';fine='Poi le serie di avvicinamento del primo esercizio.';}
+    return {tipo,intro:voce(intro),es:ids.map(id=>voce(id)).filter(Boolean),fine};
+  }
+  const TIPI=[['corsa','Prima della corsa'],['gambeA','Prima della forza: gambe A'],['gambeB','Prima della forza: gambe B'],['alta','Prima della forza: parte alta']];
+  // minuti: circa 40" a serie (o il tempo scritto) piu' i cambi; il rullo conta i suoi
+  function minuti(card){
+    const sec=e=>{const r=String(e.r||'');const t=/(\d+)\s*'/.exec(r);if(t)return +t[1]*60;const s=/(\d+)(?:-(\d+))?\s*"/.exec(r);const lato=/per lato/.test(r)?2:1;
+      const base=s?(+(s[2]||s[1])):35;return ((+e.s||1)*base*lato)+((+e.s||1)*20);};
+    const tot=(card.intro?sec(card.intro):0)+(card.es||[]).reduce((t,e)=>t+sec(e),0);
+    return Math.max(5,Math.round(tot/60));
+  }
+  // da e a testo: "Glute bridge 2x8 - tenuta 10" sull'ultima"
+  function testo(card){return (card.es||[]).map(e=>e.n+' '+(e.s||1)+'x'+(e.r||'')+(e.c?' - '+e.c:'')).join('\n');}
+  function daTesto(txt){
+    return String(txt||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(r=>{
+      let nota='';const d=/\s[-\u2013]\s(.+)$/.exec(r);if(d){nota=d[1].trim();r=r.slice(0,d.index);}
+      const m=/^(.*?)\s+(\d+)\s*[x×]\s*(.+)$/i.exec(r);
+      const n=(m?m[1]:r).trim(),s=m?+m[2]:1,rr=m?m[3].trim():'';
+      const c=Object.entries(CAT).find(([,v])=>v.n.toLowerCase()===n.toLowerCase());
+      const db=!c&&window.PREV_DB?(window.PREV_DB.find(x=>String(x.n).toLowerCase()===n.toLowerCase())||null):null;
+      return {id:c?c[0]:null,n,k:c?c[1].k:db?db.k:null,s,r:rr,c:nota};
+    });
+  }
+  // quale scheda per una seduta: corsa e sprint la corsa; la forza dalle sue gambe
+  const GAMBE=/squat|stacco|deadlift|rdl|affond|lunge|split|step ?up|hip thrust|leg press|pressa|bulgar|nordic|calf|hamstring|glute|trap bar|good morning|pistol|clean|snatch|jump|salt/i;
+  function tipoSeduta(s){
+    if(!s)return null;if(s.type==='corsa'||s.type==='sprint')return 'corsa';
+    if(s.type!=='pesi')return null;
+    const nomi=Object.values(s.exercises||{}).filter(e=>e&&!/^Prevenzione/.test(e.cue||'')).map(e=>e.name||'');
+    const g=nomi.filter(n=>GAMBE.test(n)).length;return g>=2||g/Math.max(1,nomi.length)>=0.4?'gambe':'alta';
+  }
+  // la scheda di una seduta del programma: quella salvata dal preparatore o la bozza
+  function carta(p,wi,sid){
+    const W=Object.entries(p&&p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),w=W[+wi];if(!w)return null;
+    const s=(w[1].sessions||{})[sid],t=tipoSeduta(s);if(!t)return null;
+    let k=t;
+    if(t==='gambe'){const gs=Object.entries(w[1].sessions||{}).filter(([,x])=>tipoSeduta(x)==='gambe').sort((a,b)=>((a[1].dayOfWeek??9)-(b[1].dayOfWeek??9))||((a[1].order||0)-(b[1].order||0)));k=gs.findIndex(([id])=>id===sid)%2===1?'gambeB':'gambeA';}
+    const sal=p.prehab&&p.prehab[k];
+    if(sal&&sal.es)return Object.assign({tipo:k},sal,{es:Array.isArray(sal.es)?sal.es:Object.values(sal.es)});
+    return bozza(k,p.intake||{});
+  }
+  return {CAT,TIPI,bozza,minuti,testo,daTesto,tipoSeduta,carta,zoneDi};
+})();
