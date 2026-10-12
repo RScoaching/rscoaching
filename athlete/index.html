@@ -2296,7 +2296,11 @@ function fuOpzioni(){
     pianoSett()[di].forEach(x=>{if(x.pid&&!logDi(x))op.push({id:'p:'+x.pid+':'+x.wi+':'+x.sid,nome:x.nome,tipo:x.tipo});});
     logsGiorno(di).forEach(l=>{const k=isoLoc(l.ts);if(!(+l.avgRpe)&&(l.gm||!(ST.sess[k]&&+ST.sess[k].rpe)))op.push({id:'l:'+l.ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true});});
   }
-  op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'},{id:'partita',nome:'Partita',tipo:'match'},{id:'altro',nome:'Altro allenamento',tipo:'altro'});
+  // squadra e partita gia' nel programma: niente doppione generico
+  const hai=t=>op.some(o=>o.tipo===t);
+  if(!hai('squadra'))op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'});
+  if(!hai('match'))op.push({id:'partita',nome:'Partita',tipo:'match'});
+  op.push({id:'altro',nome:'Altro allenamento',tipo:'altro'});
   if(FU.extra&&!op.some(o=>o.id===FU.extra.id))op.unshift(FU.extra);
   return op;
 }
@@ -2330,7 +2334,7 @@ window.salvaFuori=async()=>{
   if(solo){const l=ST.logs.find(x=>'l:'+x.ts===sc.id);if(!l)return;ts=l.ts;nome=l.sessName||'Seduta';min=+l.duration||+l.minuti||null;if(l.gm)gmL=l;}
   // attivita' dell'orologio: l'RPE resta sulla sua seduta (registro con gmId), il giorno fa la media come per le altre
   if(gmL){log=Object.assign({},gmL,{avgRpe:FU.rpe,note:nota,source:'orologio'});delete log.gm;Object.keys(log).forEach(k=>{if(log[k]==null)delete log[k];});}
-  else if(sc.id.startsWith('p:')){const [,pid,wi,sid]=sc.id.split(':');log={ts,date:itData(ts),progId:pid,weekIdx:+wi,sessId:sid,sessName:nome,type:sc.tipo||'pesi',duration:min,avgRpe:FU.rpe,source:'checkin',note:nota};}
+  else if(sc.id.startsWith('p:')){const [,pid,wi,sid]=sc.id.split(':');log={ts,date:itData(ts),progId:pid,weekIdx:+wi,sessId:sid,sessName:nome,type:sc.tipo||'pesi',duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.tipo==='match'?{minuti:min}:{})};}
   else log={ts,date:itData(ts),sessName:nome,type:sc.tipo,duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.id==='partita'?{minuti:min}:{})};
   // corsa dall'orologio: km, tempo, FC e giri nel registro
   if(log&&FU.corsa){log.corsa=FU.corsa;log.source='orologio';if(sc.id==='altro'){log.type='corsa';log.sessName='Corsa '+nfIt(FU.corsa.km||0,1)+' km';}}
@@ -2883,7 +2887,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     const link=hasLive?`./session.html?id=${aid}&prog=${progId}&week=${weekIdx}&sess=${sessId}`:'';
     // seduta gia' fatta questa settimana: al posto del tasto ci sono i suoi numeri
     const fatto=hasLive?logDi({pid:progId,wi:weekIdx,sid:sessId}):null;
-    if(fatto)return sedutaFattaHtml(fatto,{icon,label,title,progName,link:(RUN_TYPES_ATH.has(type)||type==='rec'||type==='match'||type==='test')?'':link});
+    if(fatto)return sedutaFattaHtml(fatto,{icon,label,title,progName,link:(RUN_TYPES_ATH.has(type)||type==='rec'||type==='match'||type==='squadra'||type==='test')?'':link});
     // corsa e recupero non hanno il lettore delle serie: si registrano con minuti e RPE
     const regBtn=(cosa)=>hasLive?`<button type="button" class="start-btn" onclick="vaiRegistra('p:${progId}:${weekIdx}:${sessId}')">Registra ${cosa}</button>`:_quickBtn(type,cosa==='la corsa'?'Corsa':'Recupero','Fatto',cosa==='la corsa'?'Corsa registrata':'Recupero registrato');
 
@@ -2897,7 +2901,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           ${note?`<div class="sess-note">${note}</div>`:''}
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}        </div>
         <div class="f7-pross" style="border-top:0;margin-top:0">Dopo la partita registri minuti giocati, gol, assist e RPE: servono al preparatore per il carico della settimana.</div>
-        <div class="sess-action"><button class="start-btn" onclick="openMatchSheet('${sid}')">Registra la partita</button></div>
+        <div class="sess-action"><button class="start-btn" onclick="openMatchSheet('${sid}','${progId||''}',${hasLive?+weekIdx:'null'})">Registra la partita</button></div>
       </div>`;
     }
 
@@ -2912,6 +2916,18 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
           ${progName?`<div class="sess-prog-label">${progName}</div>`:''}        </div>
         ${exercises&&exercises.length?exListHtml(exercises):'<div style="padding:12px 16px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);">Sprint 10m · Sprint 30m · Salto · Yo-Yo</div>'}
         <div class="sess-action"><button class="start-btn" onclick="openTestSheet('${sid}')">Registra i test</button></div>
+      </div>`;
+    }
+
+    // ── SQUADRA: allenamento con la squadra, si registra con minuti e RPE
+    if(type==='squadra'){
+      return `<div class="sess-card">
+        <div class="sess-head">
+          <div class="sess-type-tag" style="color:${color};">${icon} ${label}</div>
+          <div class="sess-title">${title}</div>
+          ${note?`<div class="sess-note">${note}</div>`:''}
+          ${progName?`<div class="sess-prog-label">${progName}</div>`:''}        </div>
+        <div class="sess-action">${regBtn('l\'allenamento')}</div>
       </div>`;
     }
 
@@ -3198,6 +3214,7 @@ function distNorm(t){t=String(t==null?'':t).trim().replace(/(\d)\s*km\b/gi,'$1 k
 function pcMeta(s){
   const ne=Object.keys(s.exercises||{}).length;
   const f=Array.isArray(s.corsaFasi)?s.corsaFasi:Object.values(s.corsaFasi||{});
+  if(s.type==='match'||s.type==='squadra')return s.type==='match'?'registra minuti e RPE':'con la squadra';
   if(!f.length)return ne+' esercizi';
   let km=0;
   f.forEach(x=>{if(!x)return;const d=/([\d.,]+)\s*km/i.exec(distNorm(x.dist));if(d)km+=parseFloat(d[1].replace(',','.'));
@@ -3875,8 +3892,9 @@ window.shRpe=(id,v)=>{const i=document.getElementById(id);if(!i)return;i.value=v
   const b=document.getElementById(id+'-btns');if(b)b.innerHTML=[1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" class="${n===+v?'on':''} ${n<=4?'z1':n<=7?'z2':'z3'}" aria-pressed="${n===+v}" aria-label="RPE ${n}, ${RPE_PAROLE[n-1]}" onclick="shRpe('${id}',${n})">${n}</button>`).join('');};
 window.shRuolo=v=>{const i=document.getElementById('match-ruolo');if(!i)return;i.value=v;const b=document.getElementById('match-ruolo-btns');if(b)b.innerHTML=[['titolare','Titolare'],['subentrato','Dalla panchina'],['panchinaro','In panchina']].map(([k,t])=>`<button type="button" class="${k===v?'on':''}" aria-pressed="${k===v}" onclick="shRuolo('${k}')">${t}</button>`).join('');};
 // ── MATCH LOG SHEET
-window.openMatchSheet=function(sessId){
+window.openMatchSheet=function(sessId,pid,wi){
   document.getElementById('match-sess-id').value=sessId||'';
+  window._matchCtx=pid?{progId:pid,weekIdx:wi}:null;
   document.getElementById('match-min').value='';
   document.getElementById('match-gol').value='';
   document.getElementById('match-assist').value='';
@@ -3897,7 +3915,7 @@ window.saveMatchSheet=async function(){
   const rpe=parseInt(document.getElementById('match-rpe').value)||7;
   const note=document.getElementById('match-note').value.trim();
   const sessId=document.getElementById('match-sess-id').value;
-  const log={ts:Date.now(),type:'match',sessName:'Partita',minuti:min,duration:min||null,ruolo,gol,assist,avgRpe:rpe,note,sessId:sessId||null};
+  const log={ts:Date.now(),type:'match',sessName:'Partita',minuti:min,duration:min||null,ruolo,gol,assist,avgRpe:rpe,note,sessId:sessId||null,...(window._matchCtx||{})};
   try{
     await push(ref(db,`session_logs/${aid}`),log);
     await rpeGiorno(log.ts,rpe,min||null,'Partita',note);

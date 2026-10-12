@@ -1146,6 +1146,10 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 .pz-mc{padding:5px;min-height:96px;min-width:0}.pz-mc.vuoto{background:rgba(255,255,255,.01)}
 .pz-mc.oggi .pz-md{color:var(--primary);font-weight:700}
 .pz-md{font-size:11px;color:var(--muted);margin:0 0 4px 2px}
+.pz-mdl{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;font:600 10px/16px Inter,sans-serif;color:#C4B5FD;background:rgba(167,139,250,.12);vertical-align:1px}.pz-mdl.md{color:#FF6A2E;background:rgba(255,106,46,.14)}
+.pz-chip2.t-match{background:rgba(255,106,46,.12);border-color:rgba(255,106,46,.45)}.pz-chip2.t-match>b,.pz-chip2.t-match em{color:#FF9A6E!important}
+.pz-chip2.t-squadra{background:rgba(94,234,212,.07);border-color:rgba(94,234,212,.28)}.pz-chip2.t-squadra>b,.pz-chip2.t-squadra em{color:#99F6E4!important}
+.si-match{background:rgba(255,106,46,.15)}.si-squadra{background:rgba(94,234,212,.12)}
 .pz-ms{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:7px;padding:5px 6px;margin-bottom:5px;cursor:pointer;min-width:0}
 .pz-ms:hover,.pz-ms:focus-visible{border-color:var(--line2);background:rgba(255,255,255,.06);outline:none}
 .pz-ms>b{display:block;font:600 11.5px Inter,sans-serif;color:var(--white);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1370,7 +1374,7 @@ const PROG_TYPES={
     label:'S&C Sport', icon:'sport', cls:'sport-calcio',
     desc:'Forza · Sprint · Conditioning · tutto incluso',
     // Tutti i tipi sessione
-    sessions:['pesi','sprint','corsa','conditioning','recupero'],
+    sessions:['pesi','sprint','corsa','conditioning','recupero','squadra','match'],
     // Tutte le categorie DB
     cats:['forza','olimpico','pliometria','velocita_sprint','velocita_prep','condizionamento','resistenza','priming','mobilita','recupero']
   },
@@ -1401,8 +1405,13 @@ const SESS_TYPES={
   sprint:      {label:'Sprint e velocita\'',icon:'sprint',     cls:'si-sprint'},
   corsa:       {label:'Corsa',            icon:'corsa',        cls:'si-corsa'},
   conditioning:{label:'Condizionamento',  icon:'conditioning', cls:'si-conditioning'},
-  recupero:    {label:'Recupero',         icon:'recupero',     cls:'si-recupero'}
+  recupero:    {label:'Recupero',         icon:'recupero',     cls:'si-recupero'},
+  squadra:     {label:'Squadra',          icon:'sport',        cls:'si-squadra'},
+  match:       {label:'Partita',          icon:'sport',        cls:'si-match'}
 };
+// squadra e partita: sedute fisse dello sport (dal Planner), solo nei programmi S&C Sport
+const PZ_FISSI=new Set(['squadra','match']);
+function pzTipoOk(k,p){return !PZ_FISSI.has(k)||((p||programs[currentProgId]||{}).sport||'sc')==='sc';}
 // icona di un tipo o di una vecchia sigla dei modelli (PE, CO, SP...), dal set di sidebar.js
 const B_ICO={PE:'pesi',CO:'corsa',SP:'sprint',RSA:'sprint',CD:'recupero',RC:'recupero',WU:'corsa',CR:'pesi',PL:'sprint',PW:'sprint',LO:'pesi',UP:'pesi',HY:'ibrido',SC:'sport'};
 function bIco(n){return window.rsIcon?window.rsIcon(B_ICO[n]||n):'';}
@@ -3751,7 +3760,7 @@ function pdfCompattoHTML(p,fio){
   // settimana tipo: la prima settimana normale
   const wt=W.find(w=>!tipoW(w)&&!sessOf(w).some(speciale))||W[0]||{sessions:{}};
   const perG=GG.map(()=>[]);sessOf(wt).forEach(s=>{if(s.dayOfWeek!=null)perG[s.dayOfWeek].push(s);});
-  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Recupero'};
+  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Recupero',squadra:'Squadra',match:'Partita'};
   const setTipo='<div class="c-wk">'+GG.map((g,i)=>'<div class="c-day'+(perG[i].length?'':' off')+'"><b>'+g+'</b>'+(perG[i].length?perG[i].map(s=>'<span class="t-'+esc(s.type)+'">'+esc(s.name)+'<i>'+esc(TIPO[s.type]||s.type||'')+'</i></span>').join(''):'<span class="riposo">riposo</span>')+'</div>').join('')+'</div>';
   // numeri
   const nS=sessOf(wt).length,km=W.map(w=>{const m=/circa (\d+) km/.exec(w.notes||'');return m?+m[1]:0;}).filter(Boolean);
@@ -3876,7 +3885,7 @@ function pdfSettimanaHTML(p,fio){
   const giorno=(i,g)=>{if(!lun0)return null;const a=new Date(lun0);a.setDate(a.getDate()+i*7+g);return a;};
   const dm=d=>d?d.getDate()+'/'+(d.getMonth()+1):'';
   const athl=Object.keys(p.assignedTo||{}).map(id=>(athletes[id]||{}).name).filter(Boolean);
-  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo'};
+  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo',squadra:'Squadra',match:'Partita'};
   const kgAid=pzKgAid&&(p.assignedTo||{})[pzKgAid]?pzKgAid:null;
   const kgOf=e=>{if(!kgAid||!e||!e.pct)return '';const mx=pzMax(e.name);const pc=pzNum(e.pct);return mx&&isFinite(pc)?String(pzR25(mx.v*pc/100)).replace('.',',')+' kg':'';};
   const dose=e=>{const d=[e.sets&&e.reps?e.sets+'x'+String(e.reps).replace(' per lato','/lato'):(e.reps||e.sets||'')];if(e.pct)d.push(String(e.pct).replace('.',',')+'%'+(kgOf(e)?' ('+kgOf(e)+')':''));if(e.rpe)d.push('RPE '+e.rpe);return d.filter(Boolean).join(' ');};
@@ -3948,7 +3957,7 @@ function pdfCalendarioHTML(p,fio){
   const qual=s=>s.type==='corsa'&&(s.corsaFasi||[]).some(f=>/Z[45]/.test(f.zona||'')&&!/Riscaldamento|Defaticamento/.test(f.tipo));
   const lungo=s=>s.type==='corsa'&&/lung/i.test(s.name||'');
   const chiave=s=>{if(s.type!=='corsa')return '';const f=s.corsaFasi||[];const m=f.find(x=>/Z[345]/.test(x.zona||'')&&!/Riscaldamento|Defaticamento|Attivazione/.test(x.tipo))||f.find(x=>!/Riscaldamento|Defaticamento|Attivazione/.test(x.tipo));return m?(stCorsaTesto(m)||''):'';};
-  const TIPO={pesi:'Forza',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo'};
+  const TIPO={pesi:'Forza',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo',squadra:'Squadra',match:'Partita'};
   const cella=s=>{const km=kmS(s);const cls=qual(s)?' q':lungo(s)?' l':s.type!=='corsa'?' x':'';
     return '<div class="k-s'+cls+'"><b>'+esc(s.name)+'</b>'+(s.type==='corsa'?(chiave(s)&&!/^\d+(,\d)? km$/.test(chiave(s))?'<span>'+esc(chiave(s))+'</span>':'')+(km?'<i>'+String(km).replace('.',',')+' km</i>':''):'<span>'+esc(TIPO[s.type]||'')+(s.duration?' &#183; '+esc(s.duration):'')+'</span>')+'</div>';};
   const maxKm=Math.max(1,...kmW);
@@ -4003,7 +4012,7 @@ function pdfBase(p){
   const kgOf=e=>{if(!kgAid||!e||!e.pct)return '';const mx=pzMax(e.name);const pc=pzNum(e.pct);return mx&&isFinite(pc)?String(pzR25(mx.v*pc/100)).replace('.',',')+' kg':'';};
   const prev=e=>/^Prevenzione/.test(e.cue||'');
   const exOf=x=>Object.values(x.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
-  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo'};
+  const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo',squadra:'Squadra',match:'Partita'};
   const GG=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'],GGL=['lunedi\'','martedi\'','mercoledi\'','giovedi\'','venerdi\'','sabato','domenica'];
   return {esc,W,sessOf,ini,lun0,giorno,dm,athl,kgAid,kgOf,prev,exOf,TIPO,GG,GGL};
 }
@@ -6269,6 +6278,12 @@ function stCostruisci(I,P){
         :'Doppia: la corsa facile puo\' stare prima della forza senza togliere niente; se sono attaccate, prima la forza.';
       [fz,cr].forEach(x=>{x.notes=(x.notes?x.notes.trim()+' ':'')+nota;});
     });
+    // squadra e partita nel programma (come faceva il Planner): l'atleta le registra dall'app e i giorni MD si contano da li'
+    if(I.sport!=='nessuno'&&I.obiettivo!=='rientro'){
+      const pa=I.stagione!=='off'&&I.partita>=0?+I.partita:-1,sp=I.sportNome||I.sport;
+      (I.sqGiorni||[]).map(Number).filter(d=>d!==pa).forEach(d=>{sessions['s'+ord]={name:'Allenamento di squadra',type:'squadra',order:ord,dayOfWeek:d,notes:'Con la squadra ('+sp+'). Registra minuti e RPE.',exercises:{}};ord++;});
+      if(pa>=0){sessions['s'+ord]={name:'Partita',type:'match',order:ord,dayOfWeek:pa,notes:'Dopo la partita registra minuti giocati e RPE.',exercises:{}};ord++;}
+    }
     stVolPunti(I,w,sessions);
     weeks['w'+String(wi).padStart(2,'0')]={label:lbl,order:wi,notes:w.fase+(kmSett?' · circa '+kmSett+' km'+(w.tipo==='gara'?' piu\' la gara':''):''),sessions};
   });
@@ -7469,7 +7484,7 @@ function pzGriglia(wid,w){
     });
     h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Scrivi e Invio: A1 Squat 4x6 @75% r2' - spinta dal pavimento. Si possono incollare piu' righe, anche da Excel"></td></tr></tbody></table></div>`;
   });
-  h+=`<div class="pz-addsess">Aggiungi seduta: ${Object.entries(SESS_TYPES).map(([k,v])=>`<button type="button" class="pz-b" onclick="pzAddSess('${wid}','${k}')">${stEsc(v.label)}</button>`).join('')}<button type="button" class="pz-b" onclick="pzPalette('modello ')">Da modello</button></div></div>`;
+  h+=`<div class="pz-addsess">Aggiungi seduta: ${Object.entries(SESS_TYPES).filter(([k])=>pzTipoOk(k)).map(([k,v])=>`<button type="button" class="pz-b" onclick="pzAddSess('${wid}','${k}')">${stEsc(v.label)}</button>`).join('')}<button type="button" class="pz-b" onclick="pzPalette('modello ')">Da modello</button></div></div>`;
   return h;
 }
 window.pzAddSess=async function(wid,tipo){
@@ -8064,7 +8079,7 @@ let pzClip=null,pzDrag=null;
    distribuzione: due giorni duri di fila, gambe pesanti il giorno prima di una
    corsa chiave, piu' di due sedute nello stesso giorno. Si trascina tra i
    giorni (Alt copia), doppio clic su un giorno aggiunge, Invio apre la seduta. */
-const PZ_TIPO_BREVE={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Recupero'};
+const PZ_TIPO_BREVE={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Recupero',squadra:'Squadra',match:'Partita'};
 function pzMinDa(t,passo){
   // minuti da "15'", "8 km", "1000 m", "45 min" (e "6" nudo, che vale 6 km)
   t=stDistNorm(t).toLowerCase();let m;
@@ -8114,6 +8129,8 @@ function pzIntensita(s){
   if(t==='sprint'){const st=pzStatSess(s);return {min:st.min||40,rpe:7,dura:true,chiave:true,gambe:true};}
   if(t==='conditioning'){const m=parseInt(s.duration,10)||30;return {min:m,rpe:/zona 2|z2/i.test(s.condContent||'')?4:7,dura:!/zona 2|z2/i.test(s.condContent||''),chiave:false,gambe:false};}
   if(t==='recupero')return {min:pzStatSess(s).min||25,rpe:2,dura:false,chiave:false,gambe:false};
+  if(t==='match')return {min:parseInt(s.duration,10)||90,rpe:9,dura:true,chiave:true,gambe:true,partita:true};
+  if(t==='squadra')return {min:parseInt(s.duration,10)||90,rpe:/rifinitura|scarico|tattic/i.test((s.name||'')+' '+(s.notes||''))?4:6,dura:false,chiave:false,gambe:false};
   const st=pzStatSess(s),exs=pzExs(s).map(([,e])=>e);
   const pesante=exs.some(e=>pzNum(e.pct)>=80||pzNum(e.rpe)>=8.5);
   const gambe=(st.gr.gambe||0)+(st.gr.anca||0)>=6;
@@ -8153,6 +8170,7 @@ function pzCalendario(){
   const oggi=new Date();oggi.setHours(0,0,0,0);
   const MESI=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
   const senza=W.some(([,w])=>pzSess(w).some(([,x])=>x.dayOfWeek==null||x.dayOfWeek===''));
+  const MD=pzMD();
   const card=(wid,wi,sid,x)=>{
     const fatta=pzLog(wi,sid),r=pzGgRighe(x);
     return `<div class="pz-chip2 pz-cal t-${x.type||'pesi'}${fatta?' fatta':''}${pzSelSet.has(pzK(wid,sid))?' sel':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" title="Clic: apri. Cerchio o Ctrl+clic: seleziona">
@@ -8169,7 +8187,7 @@ function pzCalendario(){
     const giorni=senza?[0,1,2,3,4,5,6,'']:[0,1,2,3,4,5,6];
     giorni.forEach(d=>{
       const dt=d===''?null:pzData(p,wi,d),l=ss.filter(([,x])=>d===''?x.dayOfWeek==null||x.dayOfWeek==='':x.dayOfWeek===d),og=dt&&dt.getTime()===oggi.getTime();
-      h+=`<div class="pz-dc pz-mc${l.length?'':' vuoto'}${og?' oggi':''}" data-w="${wid}" data-d="${d}" tabindex="-1"><div class="pz-md">${dt?dt.getDate():''}</div>${l.map(([sid,x])=>card(wid,wi,sid,x)).join('')}${pzIncollaHtml(wid,d)}</div>`;
+      h+=`<div class="pz-dc pz-mc${l.length?'':' vuoto'}${og?' oggi':''}" data-w="${wid}" data-d="${d}" tabindex="-1"><div class="pz-md">${dt?dt.getDate():''}${d!==''&&MD(wi,d)&&MD(wi,d)!=='MD'?` <span class="pz-mdl">${MD(wi,d)}</span>`:''}</div>${l.map(([sid,x])=>card(wid,wi,sid,x)).join('')}${pzIncollaHtml(wid,d)}</div>`;
     });
   });
   return h+'</div></div><p class="pz-calnota">Trascina per spostare (Alt copia). Doppio clic su un giorno vuoto aggiunge una seduta.</p>';
@@ -8320,6 +8338,15 @@ document.addEventListener('keydown',e=>{
   if((e.key==='Delete'||e.key==='Backspace')&&pzSelSet.size>0){e.preventDefault();e.stopImmediatePropagation();pzSelElimina();}
 },true);
 
+// giorni MD contati dalle partite del programma (anche a cavallo delle settimane):
+// MD la partita, MD-1...MD-5 prima della prossima, MD+1 e MD+2 dopo l'ultima
+function pzMD(){
+  const pa=[];pzWeeks().forEach(([,w],wi)=>pzSess(w).forEach(([,x])=>{if(x.type==='match'&&x.dayOfWeek!=null&&x.dayOfWeek!=='')pa.push(wi*7+(+x.dayOfWeek));}));
+  if(!pa.length)return ()=>'';
+  pa.sort((a,b)=>a-b);
+  return (wi,d)=>{const a=wi*7+d,nx=pa.find(x=>x>=a),pr=[...pa].reverse().find(x=>x<=a);
+    if(nx===a)return 'MD';if(pr!=null&&a-pr<=2)return 'MD+'+(a-pr);if(nx!=null&&nx-a<=5)return 'MD-'+(nx-a);return '';};
+}
 function pzGiorni(wid,w){
   const p=programs[currentProgId],wi=currentWeekIdx,ss=pzSess(w);
   const perG=d=>ss.filter(([,x])=>d===''?x.dayOfWeek==null||x.dayOfWeek==='':x.dayOfWeek===d);
@@ -8328,10 +8355,20 @@ function pzGiorni(wid,w){
   // avvisi sulla distribuzione
   const av=[];
   info.forEach((g,i)=>{const n=info[(i+1)%7];
-    if(i<6&&g.dura&&n.dura)av.push('Due giorni duri di fila: '+ST_GG[i]+' e '+ST_GG[i+1]);
+    // vicino alla partita valgono le regole MD qui sotto
+    const pm=x=>x.l.some(y=>y.x.type==='match');
+    if(i<6&&g.dura&&n.dura&&!pm(g)&&!pm(n))av.push('Due giorni duri di fila: '+ST_GG[i]+' e '+ST_GG[i+1]);
     if(i<6&&g.l.some(y=>y.k.gambe&&y.k.rpe>=7)&&n.l.some(y=>y.k.chiave&&y.x.type==='corsa'))av.push('Gambe pesanti il '+ST_GGL[i].toLowerCase()+' e corsa chiave il giorno dopo');
     if(g.l.length>2)av.push(g.l.length+' sedute il '+ST_GGL[i].toLowerCase());
   });
+  // con la partita (dal Planner): niente lavoro duro il giorno dopo, alla vigilia solo attivazione
+  const MD=pzMD(),mdG=info.map(g=>MD(wi,g.d)),nm=y=>y.x.name||PZ_TIPO_BREVE[y.x.type]||'seduta';
+  info.forEach((g,i)=>{const altre=g.l.filter(y=>y.x.type!=='match');
+    if(mdG[i]==='MD'&&altre.some(y=>y.k.dura))av.push('Lavoro duro nel giorno della partita ('+ST_GGL[i].toLowerCase()+')');
+    if(mdG[i]==='MD+1'){const d=altre.filter(y=>y.k.dura||(y.k.gambe&&y.k.rpe>=7));if(d.length)av.push('Il giorno dopo la partita niente lavoro duro: '+d.map(nm).join(', '));}
+    if(mdG[i]==='MD-1'){const d=altre.filter(y=>(y.k.gambe&&y.k.rpe>=7&&y.x.type!=='sprint')||(y.x.type==='conditioning'&&y.k.dura)||(y.x.type==='corsa'&&y.k.dura));if(d.length)av.push('Alla vigilia della partita solo attivazione breve: '+d.map(nm).join(', '));}
+  });
+  if(pzIsDl(w)){const n=info.reduce((t,g)=>t+g.l.filter(y=>y.k.dura&&y.x.type!=='match').length,0);if(n>=3)av.push('Settimana di scarico con '+n+' sedute dure');}
   const riposo=info.filter(g=>!g.l.length).length,tot=info.reduce((t,g)=>t+g.au,0);
   if(!riposo&&ss.length)av.push('Nessun giorno di riposo');
   const senza=perG('');
@@ -8348,7 +8385,7 @@ function pzGiorni(wid,w){
   info.forEach(g=>{
     const dt=pzData(p,wi,g.d),pc=Math.round(g.au/maxAu*100);
     h+=`<div class="pz-day${g.l.length?'':' vuoto'}">
-      <div class="pz-dh"><b>${ST_GG[g.d]}</b>${dt?`<i>${dt.getDate()}/${dt.getMonth()+1}</i>`:''}
+      <div class="pz-dh"><b>${ST_GG[g.d]}</b>${dt?`<i>${dt.getDate()}/${dt.getMonth()+1}</i>`:''}${mdG[g.d]?`<span class="pz-mdl${mdG[g.d]==='MD'?' md':''}" title="Giorni dalla partita">${mdG[g.d]}</span>`:''}
         <div class="pz-dload" title="Carico stimato ${Math.round(g.au)} UA (minuti x RPE)"><div class="${g.dura?'dura':''}" style="width:${pc}%"></div></div>
         <small>${g.l.length?(g.min?'~'+pzMinTxt(Math.round(g.min/5)*5):'')+(g.dura?' · dura':''):'riposo'}</small></div>
       <div class="pz-dc pz-dbody" data-w="${wid}" data-d="${g.d}" tabindex="-1">${g.l.map(y=>card(y.sid,y.x)).join('')}
@@ -8391,11 +8428,12 @@ async function pzAddSessGiorno(wid,d,tipo){
   const tipi=(PROG_TYPES[p.sport]||PROG_TYPES.sc).sessions.filter(t=>SESS_TYPES[t]).sort((a,b)=>(uso[b]||0)-(uso[a]||0));
   if(!tipo&&tipi.length>1){pzTipoMenu(wid,d,tipi);return;}
   tipo=tipo||tipi[0]||'pesi';
-  const w=p.weeks[wid];const n=pzSess(w).length,nomi={corsa:'Corsa',recupero:'Recupero',conditioning:'Condizionamento',sprint:'Velocita\''};
+  const w=p.weeks[wid];const n=pzSess(w).length,nomi={corsa:'Corsa',recupero:'Recupero',conditioning:'Condizionamento',sprint:'Velocita\'',squadra:'Allenamento di squadra',match:'Partita'};
   const r=push(ref(db,`programs/${currentProgId}/weeks/${wid}/sessions`));
   await set(r,Object.assign({name:nomi[tipo]||'Seduta '+String.fromCharCode(65+n),type:tipo,order:n,dayOfWeek:d===''||d==null?null:+d,notes:'',exercises:{}},tipo==='corsa'?{corsaFasi:[]}:{}));
   pzUndo.push({path:`programs/${currentProgId}/weeks/${wid}/sessions/${r.key}`,prima:null});
   if(tipo==='corsa'){setTimeout(()=>openModal('edit-corsa',wid,r.key),150);return;}
+  if(PZ_FISSI.has(tipo)){showToast((tipo==='match'?'Partita':'Allenamento di squadra')+' aggiunto: i giorni MD si contano da qui');return;}
   pzApriSess(wid,r.key);
   setTimeout(()=>document.querySelector(`.pz-q[data-s="${r.key}"]`)?.focus(),400);
 }
@@ -8476,7 +8514,7 @@ function pzComandi(){
     [['mese','Calendario'],['giorni','Settimana'],['griglia','Tabella'],['progressione','Progressione']].forEach(([k,l],i)=>add('Vista','Vista '+l,()=>pzSetMode(k),'tasto '+(i+1)));
     W.forEach(([wid,x],i)=>add('Settimana','S'+(i+1)+' '+String(x.label||'').replace(/^S\d+\s*/,''),()=>selectWeek(i,wid),pzIsDl(x)?'scarico':''));
     if(w[0]){
-      Object.entries(SESS_TYPES).forEach(([k,v])=>add('Seduta','Aggiungi seduta '+v.label,()=>{if(pzMode==='progressione'||pzMode==='mappa')pzSetMode('griglia');pzAddSess(w[0],k);},'settimana '+(currentWeekIdx+1)));
+      Object.entries(SESS_TYPES).filter(([k])=>pzTipoOk(k)).forEach(([k,v])=>add('Seduta','Aggiungi seduta '+v.label,()=>{if(pzMode==='progressione'||pzMode==='mappa')pzSetMode('griglia');pzAddSess(w[0],k);},'settimana '+(currentWeekIdx+1)));
       add('Settimana','Porta avanti questa settimana',()=>{if(pzMode!=='griglia')pzSetMode('griglia');pzAvToggle(w[0]);},'nelle seguenti, con la progressione');
       add('Settimana','Prevenzione su tutte le sedute della settimana',async()=>{for(const [sid] of pzSess(w[1]))await pzPrevSess(w[0],sid);});
       add('Settimana','Copia la settimana negli appunti',()=>copyWeek(w[0]));
