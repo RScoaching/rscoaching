@@ -1596,6 +1596,61 @@ window.RSObiettivi=(function(){
   return {PRESET,TIPI_OB,iso,attive,valore,fatta,storico,bersaglio,numTxt,attuale,stato,fmt,scadTxt,massimale,kmSett};
 })();
 
+/* Video di esecuzione (come TrueCoach): l'atleta manda un video breve di una serie, il
+   preparatore lo corregge con note al secondo, disegni sul fotogramma e un esito.
+   Niente servizi in piu': il video si comprime nel telefono (lato lungo 480 px, circa
+   700 kbit/s, massimo 20 secondi, senza audio) e va nel database a pezzi da 500 KB.
+   video/{aid}/{vid}: {ts,esercizio,nota,dur,mime,n,poster,stato:'da_vedere'|'visto',esito,commenti}
+   video_dati/{aid}/{vid}/{i}: pezzi in base64 */
+window.RSVideo=(function(){
+  const MAX_SEC=20,PEZZO=500*1024;
+  function tipoRec(){if(!window.MediaRecorder)return null;const L=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];return L.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||null;}
+  function leggi(file){return new Promise((ok,ko)=>{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';v.src=URL.createObjectURL(file);
+    v.onloadedmetadata=()=>ok(v);v.onerror=()=>ko(new Error('Questo video non si apre: prova a registrarlo di nuovo'));});}
+  function fotogramma(v,lato){const r=Math.min(1,(lato||320)/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement('canvas');c.width=Math.round(v.videoWidth*r);c.height=Math.round(v.videoHeight*r);c.getContext('2d').drawImage(v,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.7);}
+  // comprime riproducendo il video su una tela registrata: ci vuole quanto dura il video
+  async function comprimi(file,avanza){
+    const v=await leggi(file),dur=Math.min(v.duration||0,MAX_SEC);
+    await new Promise(r=>{v.currentTime=Math.min(0.2,dur/3);v.onseeked=()=>r();setTimeout(r,1500);});
+    const poster=fotogramma(v,320);
+    const mime=tipoRec(),tela=document.createElement('canvas');
+    const pronto=f=>({blob:f,mime:f.type||'video/mp4',dur:Math.round((v.duration||0)*10)/10,poster,w:v.videoWidth,h:v.videoHeight});
+    // gia' leggero e corto: va com'e'
+    if(file.size<=3.5*1024*1024&&(v.duration||0)<=MAX_SEC+1)return pronto(file);
+    if(!mime||!tela.captureStream){if(file.size<=8*1024*1024)return pronto(file);throw new Error('Video troppo pesante per questo telefono: taglialo a 15 secondi e riprova');}
+    const r=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight));tela.width=Math.round(v.videoWidth*r/2)*2;tela.height=Math.round(v.videoHeight*r/2)*2;
+    const g=tela.getContext('2d'),flusso=tela.captureStream(30),rec=new MediaRecorder(flusso,{mimeType:mime,videoBitsPerSecond:700000}),pezzi=[];
+    rec.ondataavailable=e=>{if(e.data&&e.data.size)pezzi.push(e.data);};
+    v.currentTime=0;await new Promise(r=>{v.onseeked=()=>r();setTimeout(r,800);});
+    let fine=false,raf=0;
+    const disegna=()=>{if(fine)return;g.drawImage(v,0,0,tela.width,tela.height);if(avanza)avanza(Math.min(1,v.currentTime/dur));if(v.currentTime>=dur||v.ended){stop();return;}raf=requestAnimationFrame(disegna);};
+    const finito=new Promise(r=>{rec.onstop=r;});
+    function stop(){if(fine)return;fine=true;cancelAnimationFrame(raf);try{v.pause();}catch(e){}try{rec.stop();}catch(e){}}
+    rec.start(250);await v.play();disegna();setTimeout(stop,(dur+2)*1000);
+    await finito;
+    const blob=new Blob(pezzi,{type:mime.split(';')[0]});
+    if(!blob.size)throw new Error('Compressione non riuscita: riprova');
+    return {blob,mime:mime.split(';')[0],dur:Math.round(dur*10)/10,poster,w:tela.width,h:tela.height};
+  }
+  function inBase64(blob){return new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=ko;r.readAsDataURL(blob);});}
+  function aPezzi(b64){const out=[];for(let i=0;i<b64.length;i+=PEZZO)out.push(b64.slice(i,i+PEZZO));return out;}
+  function daPezzi(arr,mime){const b64=arr.join(''),bin=atob(b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:mime||'video/mp4'});}
+  const tempo=t=>{t=Math.max(0,+t||0);const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(1).replace('.',',');};
+  // frasi pronte per la correzione, per schema di movimento
+  const SPUNTI={
+    squat:['Ginocchia in fuori, sulla linea dei piedi','Petto alto, schiena neutra','Scendi di piu\': anca sotto il ginocchio','Peso su tutto il piede, talloni giu\'','Risali con anche e spalle insieme','Respira e blocca il tronco prima di scendere'],
+    hinge:['Schiena neutra, non arrotondare','Spingi le anche indietro, ginocchia morbide','Bilanciere vicino alle gambe','Chiudi con i glutei, non inarcare la schiena','Spalle sopra il bilanciere alla partenza'],
+    spinta:['Scapole addotte e depresse','Gomiti a 45 gradi dal busto','Piedi stabili a terra','Tocca il petto senza rimbalzare','Polsi dritti sopra i gomiti'],
+    tirata:['Parti dalle scapole, poi le braccia','Niente slancio col busto','Petto verso la sbarra','Controlla la discesa','Collo neutro'],
+    corsa:['Appoggio sotto il bacino, non davanti','Cadenza piu\' alta, passi piu\' corti','Braccia rilassate, gomiti a 90 gradi','Busto alto, leggermente in avanti','Spalle giu\' e morbide'],
+    generale:['Ottima esecuzione','Rallenta la discesa: 2-3 secondi','Controlla il range completo','Carico troppo alto: scala del 10%','Mantieni il core attivo','Riprova e rimanda il video']
+  };
+  function spunti(nome){const M=window.RSMuscoli,i=M?M.info(nome||''):{},sc=i&&i.sc||'',n=String(nome||'').toLowerCase();
+    const k=/corsa|run|sprint|andatura/.test(n)?'corsa':/squat|affondo|lunge|split|leg press|step/.test(n)||sc==='squat'||sc==='unilat'?'squat':/stacco|deadlift|rdl|hip thrust|good morning|swing/.test(n)||sc==='hinge'?'hinge':/panca|press|bench|push|dip|military/.test(n)||/spinta/.test(sc)?'spinta':/row|rematore|pull|traz|chin|lat/.test(n)||/tirata/.test(sc)?'tirata':'generale';
+    return SPUNTI[k].concat(k==='generale'?[]:SPUNTI.generale.slice(0,3));}
+  return {MAX_SEC,comprimi,inBase64,aPezzi,daPezzi,fotogramma,tempo,spunti,tipoRec};
+})();
+
 /* Logo RS Coaching (provvisorio, dato dall'utente il 12/10): la sigla RS su fondo trasparente,
    la scritta COACHING si scrive sotto col testo, nel colore del contesto. Usato da sito,
    app atleta e PDF: .rs-img prende l'immagine da --rs-logo. */
