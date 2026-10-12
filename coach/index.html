@@ -789,6 +789,7 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 @media(max-width:1100px){.dash-grid,.dash-grid-b{grid-template-columns:1fr;}}
 .dcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;min-width:0;}
 .dcard h2{font:400 21px 'Bebas Neue',sans-serif;letter-spacing:.6px;color:var(--white);margin:0;}
+.abb-m{color:var(--text)}.abb-m.pr{color:#FBBF24}.abb-m.sc{color:#F87171}
 .dm-r{padding:12px 0;border-top:1px solid var(--line)}.dm-r:first-child{border-top:0;padding-top:0}
 .dm-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.dm-h b{color:var(--white);font-size:13px}.dm-h em{font-style:normal;font-size:12px;color:var(--muted)}
 .dm-h .dw-av{width:26px;height:26px;font-size:10px}
@@ -1914,6 +1915,8 @@ function dmLista(ids,st){
     const oggi=new Date();oggi.setHours(12,0,0,0);const pv=dPreviste(aid,oggi).filter(v=>v.x&&!v.x.opz);
     if(x.rdy!=null&&x.rdy<40&&pv.length&&ora-uc>6*3600e3)
       add('rdy_'+aid+'_'+oggi.toDateString(),aid,'Prontezza '+x.rdy+' con '+(pv[0].x.name||'una seduta')+' in programma oggi',`${n}, ho visto il check-in di stamattina. Oggi fai la seduta un po' piu' leggera: carichi -10% e niente serie a cedimento. Se qualcosa fa male, scrivimi prima di iniziare.`,3);
+    // abbonamento che scade entro 5 giorni
+    {const g=abbGiorni(aid);if(g!=null&&g>=0&&g<=5&&ora-uc>2*864e5)add('abb_'+aid+'_'+((athletes[aid]||{}).abb||{}).scade,aid,'Abbonamento in scadenza il '+abbData(aid),`Ciao ${n}, ti ricordo che l'abbonamento scade ${g===0?'oggi':g===1?'domani':'il '+abbData(aid)}. Se vuoi continuare, dimmelo e lo rinnoviamo: il programma va avanti senza pause.`,2);}
     // programma che finisce entro 5 giorni
     const pr=dProgAtleta(aid)[0];if(pr){const i=dInizio(pr[1]),nW=dSett(pr[1]).length;if(i&&nW){const fine=new Date(i);fine.setDate(fine.getDate()+nW*7-1);const gg=Math.round((fine-oggi)/864e5);
       if(gg>=0&&gg<=5)add('fine_'+aid+'_'+pr[0],aid,'Il programma '+(pr[1].name||'')+' finisce '+(gg===0?'oggi':'tra '+gg+(gg===1?' giorno':' giorni')),`${n}, il programma finisce ${gg===0?'oggi':gg===1?'domani':'tra '+gg+' giorni'}. Com'e' andato? Dimmi cosa ti e' piaciuto e cosa no: preparo il prossimo blocco su quello.`,1);}}
@@ -2266,6 +2269,7 @@ function athStats(aid){
   }
   if(avgFat!=null&&avgFat>7)add('Fatica '+f1(avgFat),'p-red','media degli ultimi '+ci3.length+' check-in, su 10',3);
   if(avgMot!=null&&avgMot<4)add('Motivazione '+f1(avgMot),'p-warn','media degli ultimi '+ci3.length+' check-in, su 10',1);
+  {const g=abbGiorni(aid);if(g!=null&&g<0)add('Abbonamento scaduto','p-red','scaduto il '+abbData(aid)+(a.abb.pacchetto?' ('+a.abb.pacchetto+')':''),2);else if(g!=null&&g<=7)add('Abbonamento in scadenza','p-warn','scade il '+abbData(aid)+(g===0?', oggi':g===1?', domani':', tra '+g+' giorni'),1);}
   // scheda d'ingresso nuova, obiettivi vicini alla scadenza, abitudini lasciate andare
   if(onbData[aid]&&!onbData[aid].letto)add('Scheda nuova','p-purple','ha compilato la scheda d\'ingresso '+ggFa(onbData[aid].ts)+': aprila in Obiettivi',2);
   {const n=obInScadenza(aid);if(n)add(n===1?'Obiettivo in scadenza':n+' obiettivi in scadenza','p-warn','entro 14 giorni e non ancora raggiunti',1);}
@@ -2556,6 +2560,18 @@ function renderDetHealth(aid){
 /* Come Everfit e TrueCoach: obiettivi con scadenza calcolati dai dati (massimale stimato
    dalle serie, tempo previsto dai ritmi, peso, km a settimana) o liberi; abitudini da
    spuntare ogni giorno nell'app, passi e sonno dall'orologio. */
+// abbonamento del cliente: scadenza, rinnovo di un mese con lo storico in abb_log/{aid}
+function abbGiorni(aid){const a=athletes[aid]||{},s=a.abb&&a.abb.scade;if(!s)return null;const d=new Date(s+'T12:00:00'),o=new Date();o.setHours(12,0,0,0);return Math.round((d-o)/864e5);}
+function abbData(aid){const s=((athletes[aid]||{}).abb||{}).scade;return s?s.split('-').reverse().join('/'):'';}
+window.abbRinnova=async function(aid){
+  const a=athletes[aid]||{},b=a.abb||{},o=new Date();o.setHours(12,0,0,0);
+  const da=b.scade&&new Date(b.scade+'T12:00:00')>o?new Date(b.scade+'T12:00:00'):o,al=new Date(da);al.setMonth(al.getMonth()+1);
+  const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(!confirm('Rinnovare '+(b.pacchetto||'l\'abbonamento')+' di '+(a.name||'')+' fino al '+al.toLocaleDateString('it-IT')+(b.euro?' ('+b.euro+' euro)':'')+'?'))return;
+  await update(ref(db,`athletes/${aid}/abb`),{scade:iso(al)});
+  await push(ref(db,`abb_log/${aid}`),{ts:Date.now(),pacchetto:b.pacchetto||null,euro:b.euro||null,dal:iso(da),al:iso(al)});
+  showToast('Rinnovato fino al '+al.toLocaleDateString('it-IT'));
+};
 function obCtx(aid){const P=athPesi(aid);return {logs:Object.values(sessionLogs[aid]||{}),ritmi:(athletes[aid]||{}).ritmi,peso:P.length?P[P.length-1].kg:null};}
 function obLista(aid){return Object.entries(goalsData[aid]||{}).filter(([,g])=>g&&g.titolo&&!g.archiviato).sort((a,b)=>String(a[1].scadenza||'9').localeCompare(String(b[1].scadenza||'9')));}
 function obInScadenza(aid){const O=window.RSObiettivi;if(!O)return 0;const c=obCtx(aid);return obLista(aid).filter(([,g])=>{const s=O.stato(g,c);return !s.fatto&&s.gg!=null&&s.gg>=0&&s.gg<=14;}).length;}
@@ -2838,13 +2854,14 @@ window.openAthlete=function(aid,silent){
       <div class="det-av">${ini(a.name)}</div>
       <div style="flex:1;">
         <div class="det-name">${a.name} <span class="lv ${LV_C[lv]}">${LV_L[lv]}</span></div>
-        <div class="det-meta">${a.role||'-'} · ${a.team||'-'} · Mc #${a.micro||1}${a.dob?' · '+(athEta(a.dob)!=null?athEta(a.dob)+' anni':a.dob):''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}</div>
+        <div class="det-meta">${a.role||'-'} · ${a.team||'-'} · Mc #${a.micro||1}${a.dob?' · '+(athEta(a.dob)!=null?athEta(a.dob)+' anni':a.dob):''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}${a.abb&&a.abb.scade?` · <span class="abb-m${abbGiorni(aid)<0?' sc':abbGiorni(aid)<=7?' pr':''}">${athEsc(a.abb.pacchetto||'Abbonamento')} ${abbGiorni(aid)<0?'scaduto il':'fino al'} ${abbData(aid)}</span>`:''}</div>
       </div>
       <div class="det-acts">
         ${miei.length?`<a class="btn btn-orange btn-sm" href="./builder.html?prog=${encodeURIComponent(miei[0][0])}" title="${athEsc(miei[0][1].name||'')}">Apri il programma</a>`:`<a class="btn btn-orange btn-sm" href="./builder.html?studio=${encodeURIComponent(aid)}">Crea il programma</a>`}
         <details class="det-more"><summary class="btn btn-outline btn-sm" aria-label="Altre azioni">&#8943;</summary>
           <div class="det-menu" onclick="this.parentNode.open=false">
             <a href="./builder.html?studio=${encodeURIComponent(aid)}">Programma guidato</a>
+            ${a.abb&&a.abb.scade?`<button type="button" onclick="abbRinnova('${aid}')">Rinnova l'abbonamento di un mese</button>`:''}
             <button type="button" onclick="obChiediScheda('${aid}')">Chiedi la scheda d'ingresso</button>
             <button type="button" onclick="athReport('${aid}')">Report PDF</button>
             <button type="button" onclick="athConfronto('${aid}')">Confronta con un altro atleta</button>
@@ -4793,6 +4810,7 @@ window.openModal=function(type,...args){
       <div class="grid2"><div class="field"><label>Livello</label><select id="m-level"><option value="1"${(a.level||1)==1?' selected':''}>Principiante</option><option value="2"${a.level==2?' selected':''}>Intermedio</option><option value="3"${a.level==3?' selected':''}>Avanzato</option></select></div><div class="field"><label>Microciclo</label><input type="number" id="m-micro" value="${a.micro||1}" min="1" max="52"></div></div>
       <input type="hidden" id="m-group" value="${a.group||''}"><div class="grid2"><div class="field"><label>PIN accesso</label><input id="m-pin" value="${a.pin||''}" placeholder="4 cifre"></div></div>
       <div class="grid2"><div class="field"><label>Sedute attese a settimana</label><input type="number" id="m-freq" value="${a.freq||''}" min="1" max="14" placeholder="2"></div><div class="field"><label>Sesso</label><select id="m-sex"><option value="">Non indicato</option><option value="f"${a.sex==='f'?' selected':''}>Femmina</option><option value="m"${a.sex==='m'?' selected':''}>Maschio</option></select></div></div>
+      <div class="grid2"><div class="field"><label>Abbonamento</label><input id="m-abb-p" value="${athEsc((a.abb||{}).pacchetto||'')}" placeholder="Mensile online, 10 sedute..."></div><div class="grid2" style="gap:8px"><div class="field"><label>Scade il</label><input type="date" id="m-abb-s" value="${(a.abb||{}).scade||''}" style="color-scheme:dark"></div><div class="field"><label>Euro</label><input id="m-abb-e" inputmode="decimal" value="${(a.abb||{}).euro||''}" placeholder="120"></div></div></div>
       <div class="field"><label>Infortuni / Limitazioni</label><input id="m-inj" value="${a.injuries||''}" placeholder="Es. LCA destra, problemi spalla..."></div>
       <div class="field"><label>Note preparatore</label><textarea id="m-notes">${a.notes||''}</textarea></div>
       <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Annulla</button><button class="btn btn-orange" onclick="saveAthlete('${editId||''}')">Salva →</button></div>
@@ -4857,6 +4875,8 @@ document.addEventListener('keydown',e=>{
 window.saveAthlete=async function(editId){
   const name=document.getElementById('m-name').value.trim();if(!name){showToast('Inserisci il nome');return;}
   const data={name,dob:document.getElementById('m-dob').value.trim()||null,role:document.getElementById('m-role').value.trim(),team:document.getElementById('m-team').value.trim(),level:+document.getElementById('m-level').value,micro:+document.getElementById('m-micro').value||1,group:document.getElementById('m-group').value||null,pin:document.getElementById('m-pin').value.trim()||null,injuries:document.getElementById('m-inj').value.trim()||null,notes:document.getElementById('m-notes').value.trim()||null,freq:(+document.getElementById('m-freq').value>0?Math.min(14,Math.round(+document.getElementById('m-freq').value)):null),sex:document.getElementById('m-sex').value||null};
+  {const P=document.getElementById('m-abb-p').value.trim(),S=document.getElementById('m-abb-s').value,E=parseFloat(String(document.getElementById('m-abb-e').value).replace(',','.'));
+    data.abb=P||S?{pacchetto:P||null,scade:S||null,euro:isFinite(E)?E:null}:null;}
   if(editId){await update(ref(db,`athletes/${editId}`),data);closeModal();showToast('Aggiornato!');}
   else{const r=await push(ref(db,'athletes'),data);closeModal();showToast('Atleta aggiunto!');setTimeout(()=>openAthlete(r.key,true),400);}
 };
