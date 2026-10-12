@@ -61,6 +61,7 @@ body::before{
 }
 /* LOGO LOCKUP (mark + wordmark) */
 .rs-logo{display:flex;align-items:center;gap:9px;}
+.qci-hint{font-size:12px;color:#C4B5FD;margin:-2px 0 8px}.qci-oro-r{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.28)}.qci-oro-r span{flex:1;font-size:13px;color:var(--text)}.qci-oro-r b{font-size:14px;color:var(--white)}.qci-oro-r button{all:unset;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--primary2,#FF8A57);padding:4px 6px}
 .rs-mark{flex-shrink:0;width:30px;height:30px;filter:drop-shadow(0 3px 10px rgba(255,106,46,.40));}
 .rs-word{font-family:'Bebas Neue',sans-serif;line-height:1;letter-spacing:1.5px;font-size:19px;white-space:nowrap;}
 .rs-word b{font-weight:400;color:var(--primary);}
@@ -2126,7 +2127,7 @@ function renderProntezza(){
   const or=o?`<div class="pr-or"><b>Dall'orologio</b> ${window.RSGarmin.riga(o)||''}${o.hrvGiu||o.fcSu?'<i>'+(o.hrvGiu?'HRV sotto la tua media':'FC a riposo alta')+': oggi meglio non forzare</i>':''}</div>`:'';
   if(!g){
     el.classList.remove('fatto');el.dataset.st='vuoto';
-    el.innerHTML=`<div class="pr-vuoto"><div><div class="pr-t">Come stai oggi?</div><div class="pr-s">${o?'Il sonno lo prende dall\'orologio: restano dolori, energia e stress.':'Cinque domande, venti secondi. Il preparatore lo vede subito e adatta la seduta.'}</div></div>
+    el.innerHTML=`<div class="pr-vuoto"><div><div class="pr-t">Come stai oggi?</div><div class="pr-s">${o&&o.sonno5?'Il sonno lo prende dall\'orologio: restano energia, dolori, stress e motivazione.':'Cinque domande, venti secondi. Il preparatore lo vede subito e adatta la seduta.'}</div></div>
       <button type="button" class="pr-go" onclick="openQuickCheckin()">Fai il check-in</button></div>`+or;
     return;
   }
@@ -2215,8 +2216,11 @@ function qciDisegna(){
   const b=document.getElementById('qci-body');if(!b)return;
   qciTop();
   const manca=PR_VOCI.filter(([k])=>!QCI.v[k]).length;
-  b.innerHTML=PR_VOCI.map(([k,l,dom,parole])=>`<div class="ci7-q"><div class="ci7-qh"><b>${l}</b><span>${dom}</span></div>
-      <div class="ci7-opt" role="radiogroup" aria-label="${l}">${parole.map((p,i)=>`<button type="button" role="radio" aria-checked="${QCI.v[k]===i+1}" class="${QCI.v[k]===i+1?'on':''}" onclick="qciSet('${k}',${i+1})"><i>${i+1}</i>${p}</button>`).join('')}</div></div>`).join('')
+  const O=QCI.oro,RG=window.RSGarmin;
+  const hint=k=>{if(!O)return '';const t=k==='energia'&&O.bb?'Orologio: body battery '+O.bb+' su 100'+(O.hrvGiu?', HRV sotto la tua media':''):k==='energia'&&O.hrvGiu?'Orologio: HRV sotto la tua media':k==='stress'&&O.stress?'Orologio: stress medio '+O.stress+' su 100':'';return t?`<div class="qci-hint">${t}</div>`:'';};
+  b.innerHTML=PR_VOCI.map(([k,l,dom,parole])=>k==='sonno'&&O&&O.sonno5&&!QCI.sonnoMano&&QCI.v.sonno?`<div class="ci7-q qci-oro"><div class="ci7-qh"><b>Sonno</b><span>Dall'orologio</span></div>
+      <div class="qci-oro-r"><span>${O.sonnoSec?RG.oreTxt(O.sonnoSec):''}${O.sleepScore?' &#183; punteggio '+O.sleepScore:''}</span><b>${parole[QCI.v.sonno-1]}</b><button type="button" onclick="qciSonnoMano()">Cambia</button></div></div>`:`<div class="ci7-q"><div class="ci7-qh"><b>${l}</b><span>${dom}</span></div>
+      ${hint(k)}<div class="ci7-opt" role="radiogroup" aria-label="${l}">${parole.map((p,i)=>`<button type="button" role="radio" aria-checked="${QCI.v[k]===i+1}" class="${QCI.v[k]===i+1?'on':''}" onclick="qciSet('${k}',${i+1})"><i>${i+1}</i>${p}</button>`).join('')}</div></div>`).join('')
     +`<div class="ci7-q"><div class="ci7-qh"><b>Dove senti dolore</b><span>Solo se c'e' un fastidio preciso</span></div>
       <div class="ci7-zone">${PR_ZONE.map(z=>`<button type="button" aria-pressed="${QCI.zone.has(z.toLowerCase())}" class="${QCI.zone.has(z.toLowerCase())?'on':''}" onclick="qciZona('${z.toLowerCase()}')">${z}</button>`).join('')}</div></div>
     ${qxHtml('mattino',QCI.extra,'qciX')}
@@ -2227,12 +2231,16 @@ function qciDisegna(){
 // ridisegnando il foglio la nota scritta non si deve perdere
 function qciNota(){const n=document.getElementById('qci-note');if(n)QCI.nota=n.value;}
 window.qciSet=(k,v)=>{qciNota();QCI.v[k]=v;qciDisegna();};
+window.qciSonnoMano=()=>{qciNota();QCI.sonnoMano=true;qciDisegna();};
 window.qciZona=z=>{qciNota();if(QCI.zone.has(z))QCI.zone.delete(z);else QCI.zone.add(z);qciDisegna();};
 function openQuickCheckin(){
   // si riapre con le risposte di oggi, se ci sono
   const g=prGiorno(isoLoc(new Date()));
   QCI.v={};QCI.zone=new Set();QCI.nota='';QCI.extra=Object.assign({},(ST.q[isoLoc(new Date())]||{}).extra||{});
   if(g){PR_VOCI.forEach(([k])=>{if(g[k])QCI.v[k]=g[k];});g.pains.forEach(z=>QCI.zone.add(String(z).toLowerCase()));QCI.nota=g.nota||'';}
+  // il sonno lo misura l'orologio: la risposta e' gia' data (si puo' cambiare); energia e stress hanno un suggerimento
+  QCI.oro=ST.gd&&window.RSGarmin?window.RSGarmin.sintesi(ST.gd,isoLoc(new Date())):null;QCI.sonnoMano=false;
+  if(QCI.oro&&QCI.oro.sonno5&&!(prGiorno0(isoLoc(new Date()))||{}).sonno)QCI.v.sonno=QCI.oro.sonno5;
   qciDisegna();
   document.getElementById('qci-overlay').classList.add('open');
   document.getElementById('qci-sheet').classList.add('open');
@@ -2252,7 +2260,7 @@ async function saveQuickCheckin(){
   const semaforo=score>=70?'\u{1F7E2}':score>=40?'\u{1F7E1}':'\u{1F534}';
   try{
     await Promise.all([
-      set(ref(db,`questionnaires/${aid}/${key}/readiness`),{ts,sleep:v.sonno,soreness:v.dolori,stress:v.stress,energy:v.energia,motivation:v.motiv,score,avg,semaforo,src:'checkin'}),
+      set(ref(db,`questionnaires/${aid}/${key}/readiness`),{ts,sleep:v.sonno,soreness:v.dolori,stress:v.stress,energy:v.energia,motivation:v.motiv,score,avg,semaforo,src:'checkin',...(QCI.oro&&QCI.oro.sonno5&&!QCI.sonnoMano&&v.sonno===QCI.oro.sonno5?{sleepSrc:'orologio'}:{})}),
       ...(Object.keys(qxRaccogli(QCI.extra)).length?[update(ref(db,`questionnaires/${aid}/${key}/extra`),qxRaccogli(QCI.extra))]:[]),
       // la fatica del vecchio check-in e' l'energia girata: 5 su 5 di energia vuol dire fatica 1 su 10
       set(ref(db,`checkins/${aid}/${key}`),{ts,date:itData(now),sonno:to10(v.sonno),doms:to10(v.dolori),stress:to10(v.stress),motivazione:to10(v.motiv),fatica:11-to10(v.energia),pains:[...QCI.zone],note:nota||null,src:'mattino'})
