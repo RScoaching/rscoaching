@@ -1284,15 +1284,29 @@ window.RSPrehab = (function(){
     const nomi=Object.values(s.exercises||{}).filter(e=>e&&!/^Prevenzione/.test(e.cue||'')).map(e=>e.name||'');
     const g=nomi.filter(n=>GAMBE.test(n)).length;return g>=2||g/Math.max(1,nomi.length)>=0.4?'gambe':'alta';
   }
+  /* Le schede seguono le sedute del programma: "Pre-corsa" per corse e sprint, poi una per
+     ogni tipo di seduta di forza, col suo nome (Forza corsa A, Forza corsa B, Gambe...).
+     La bozza di ognuna dipende da cosa c'e' nella seduta (gambe o parte alta); con due tipi
+     di gambe il rinforzo si divide fra la prima e la seconda. */
+  function nomeBase(n){return String(n||'Seduta').replace(/\s*\((?:MD[-+]\d|[^)]*)\)\s*$/,'').replace(/\s+\d+$/,'').trim();}
+  function chiave(n){return 'f_'+nomeBase(n).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);}
+  function schede(p){
+    const W=Object.entries(p&&p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),out=[],visti={};let corsa=false;
+    W.forEach(([,w])=>Object.values(w&&w.sessions||{}).sort((a,b)=>((a.dayOfWeek??9)-(b.dayOfWeek??9))||((a.order||0)-(b.order||0))).forEach(x=>{
+      if(!x||/^Test|^Controllo/i.test(x.name||''))return;const t=tipoSeduta(x);if(!t)return;
+      if(t==='corsa'){corsa=true;return;}const k=chiave(x.name);if(visti[k])return;visti[k]=1;out.push({k,nome:nomeBase(x.name),cl:t});}));
+    let ng=0;out.forEach(o=>{o.base=o.cl==='gambe'?(ng++%2===1?'gambeB':'gambeA'):'alta';});
+    return (corsa?[{k:'corsa',nome:'Pre-corsa',base:'corsa'}]:[]).concat(out);
+  }
+  function bozzaDi(p,sc){const b=bozza(sc.base,p&&p.intake||{});return Object.assign(b,{tipo:sc.k,nome:sc.nome});}
   // la scheda di una seduta del programma: quella salvata dal preparatore o la bozza
   function carta(p,wi,sid){
     const W=Object.entries(p&&p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),w=W[+wi];if(!w)return null;
     const s=(w[1].sessions||{})[sid],t=tipoSeduta(s);if(!t)return null;
-    let k=t;
-    if(t==='gambe'){const gs=Object.entries(w[1].sessions||{}).filter(([,x])=>tipoSeduta(x)==='gambe').sort((a,b)=>((a[1].dayOfWeek??9)-(b[1].dayOfWeek??9))||((a[1].order||0)-(b[1].order||0)));k=gs.findIndex(([id])=>id===sid)%2===1?'gambeB':'gambeA';}
+    const k=t==='corsa'?'corsa':chiave(s.name),sc=schede(p).find(x=>x.k===k)||{k,nome:t==='corsa'?'Pre-corsa':nomeBase(s.name),base:t==='corsa'?'corsa':t==='gambe'?'gambeA':'alta'};
     const sal=p.prehab&&p.prehab[k];
-    if(sal&&sal.es)return Object.assign({tipo:k},sal,{es:Array.isArray(sal.es)?sal.es:Object.values(sal.es)});
-    return bozza(k,p.intake||{});
+    if(sal&&sal.es)return Object.assign({tipo:k,nome:sc.nome},sal,{es:Array.isArray(sal.es)?sal.es:Object.values(sal.es)});
+    return bozzaDi(p,sc);
   }
-  return {CAT,TIPI,bozza,minuti,testo,daTesto,tipoSeduta,carta,zoneDi};
+  return {CAT,TIPI,bozza,bozzaDi,schede,chiave,nomeBase,minuti,testo,daTesto,tipoSeduta,carta,zoneDi};
 })();
