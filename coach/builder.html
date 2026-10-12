@@ -207,6 +207,10 @@ kbd{font:600 10.5px ui-monospace,'SF Mono',Menlo,monospace;padding:1px 5px;borde
 .pzpv-tutte{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);margin:4px 0 10px;cursor:pointer}
 .pz-t.solo-add thead{display:none}.pz-t.solo-add .pz-q::placeholder{opacity:.6}
 .pz-prsel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:7px;color:var(--white);font:500 11.5px Inter,sans-serif;padding:4px 6px;max-width:170px}.pz-prsel option{background:#121111}
+.pz-opzt{display:inline-block;font:600 10px Inter,sans-serif;font-style:normal;color:#C4B5FD;border:1px dashed rgba(196,181,253,.5);border-radius:999px;padding:0 7px;margin-left:6px;vertical-align:1px}
+.pz-opzh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border-radius:10px;border:1px dashed rgba(196,181,253,.35);font-size:12px;color:var(--text)}.pz-opzh.ok{color:var(--muted)}.pz-opzh .pz-b{margin-left:auto}
+.prog-fine{font:600 10.5px Inter,sans-serif;color:#FDBA74;margin-top:3px}.prog-now{font:500 10.5px Inter,sans-serif;color:var(--muted);margin-top:3px}
+.pz-carl{display:flex;flex-direction:column;gap:2px;max-height:50vh;overflow:auto;margin:4px 0 8px}.pz-carl em{font-style:normal;color:var(--muted);font-size:11.5px}
 .pz-ncell{display:flex;align-items:center;gap:1px;position:relative}
 .pz-grip{cursor:grab;color:rgba(255,255,255,.22);font-size:11px;letter-spacing:-3px;padding:0 3px 0 0;user-select:none;line-height:1}
 tr:hover .pz-grip{color:var(--muted)}.pz-grip:active{cursor:grabbing}
@@ -1371,6 +1375,10 @@ html,body{background:#0A0909!important}
                 <button type="button" onclick="openModal('edit-prog')">Modifica nome, tipo e note</button>
                 <button type="button" id="pz-strut" onclick="pzStrutApri()" hidden>Struttura delle settimane</button>
                 <button type="button" id="pz-rifai" onclick="openStudioDaProg()" hidden>Rifai dalla scheda</button>
+                <button type="button" onclick="pzRinnovaApri()">Rinnova: crea il blocco dopo</button>
+                <button type="button" onclick="pzCarichiApri()">Aggiorna i carichi da quello fatto</button>
+                <button type="button" onclick="pzSpostaApri()">Sposta: settimana di pausa</button>
+                <button type="button" onclick="pzSostApri()">Sostituisci un esercizio ovunque</button>
                 <button type="button" onclick="openModal('gen-meso')">Genera settimane da una base</button>
                 <button type="button" onclick="pzRitmiApri()">Ritmi dell'atleta</button>
                 <button type="button" onclick="pzOrologioApri()">Corse sull'orologio (.FIT, Garmin)</button>
@@ -1994,6 +2002,7 @@ function renderProgList(){
       <div class="prog-name">${p.name}${archBadge}</div>
       ${catBadge?`<div style="margin-bottom:2px;">${catBadge}</div>`:''}
       <div class="prog-meta">${wks} sett. · ${assigned}</div>
+      ${(()=>{if(isArchived)return '';const g=pzGiorniFine(p);if(g==null)return '';if(g<0)return '<div class="prog-fine">finito: da rinnovare</div>';if(g<=14)return '<div class="prog-fine">finisce tra '+g+(g===1?' giorno':' giorni')+'</div>';const k=pzSettOggi(p);return k>=0&&k<wks?'<div class="prog-now">settimana '+(k+1)+' di '+wks+'</div>':'';})()}
       <span class="prog-sport ${sp.cls}">${bIco(sp.icon)} ${sp.label}</span>
     </div>`;
   }).join('');
@@ -2022,6 +2031,7 @@ window.lpTog=function(f){const lp=document.getElementById('left-panel');if(!lp)r
 try{if(localStorage.getItem('rsc_lp_chiuso')==='1')setTimeout(()=>lpTog(true),0);}catch(e){}
 window.selectProg=function(id){
   currentProgId=id; currentWeekIdx=0;
+  {const k=pzSettOggi(programs[id]);if(k!=null&&k>=0&&k<pzWkOrd(programs[id]).length)currentWeekIdx=k;}
   localStorage.setItem('rsc_last_prog',id);
   document.getElementById('rp-empty').style.display='none';
   document.getElementById('rp-editor').style.display='block';
@@ -7400,7 +7410,8 @@ function pzToolbar(wid,wk){
   const viste=[['mese','Calendario'],['giorni','Settimana'],['griglia','Tabella'],['progressione','Progressione']];
   const voce=(f,t,cl)=>`<button type="button"${cl?' class="'+cl+'"':''} onclick="${f}">${t}</button>`;
   const menu=`<details class="pz-more" ontoggle="if(this.open){const m=this.querySelector('.pz-menu');m.classList.toggle('sx',this.getBoundingClientRect().right<250);}"><summary class="pz-mode pz-dots" aria-label="Altre azioni">&#8943;</summary><div class="pz-menu" onclick="this.parentNode.open=false">
-    ${wid?`<span class="pz-mtit">Questa settimana</span>${voce(`openModal('edit-week','${wid}')`,'Nome e note della settimana')}${voce(`openModal('templates','${wid}')`,'Aggiungi da un modello')}${voce(`copyWeek('${wid}')`,'Copia la settimana')}${voce(`pzAvToggle('${wid}')`,'Porta avanti nelle seguenti')}`:''}
+    ${wid?`<span class="pz-mtit">Questa settimana</span>${voce(`openModal('edit-week','${wid}')`,'Nome e note della settimana')}${voce(`openModal('templates','${wid}')`,'Aggiungi da un modello')}${voce(`copyWeek('${wid}')`,'Copia la settimana')}${voce(`pzAvToggle('${wid}')`,'Porta avanti nelle seguenti')}${voce(`pzSalvaSettModello('${wid}')`,'Salva come modello di settimana')}`:''}
+    ${voce('pzSettModelliApri()','Usa un modello di settimana')}
     ${voce(`openModal('add-week')`,'Aggiungi una settimana')}
     <span class="pz-mtit">Programma</span>${voce('pzPrevProg()','Prevenzione del programma')}
     <span class="pz-mtit">Strumenti</span>${voce(`pzPalette('')`,'Cerca un comando <kbd>Ctrl K</kbd>')}${voce('pzAnnulla()','Annulla <kbd>Ctrl Z</kbd>')}${voce('pzAiuto()','Scorciatoie da tastiera')}
@@ -7604,7 +7615,7 @@ function pzGriglia(wid,w){
   const G=ST_GG;
   const lim=+(((programs[currentProgId]||{}).intake||{}).minuti)||0;
   const conF=pzHaLog();
-  let h=pzDatalist()+pzWeekBar(w)+pzGrSett(w)+`<div class="pz-grid" id="pz-grid">`;
+  let h=pzDatalist()+pzWeekBar(w)+pzOpzHint(wid,w)+pzGrSett(w)+`<div class="pz-grid" id="pz-grid">`;
   ss.forEach(([sid,s],si)=>{
     const exs=pzExs(s);
     const tipo=s.type||'pesi';
@@ -7616,7 +7627,7 @@ function pzGriglia(wid,w){
         <input class="pz-sn" value="${stEsc(s.name||'')}" data-pz="sname" data-w="${wid}" data-s="${sid}" aria-label="Nome seduta">
         <select class="pz-sd" data-pz="sday" data-w="${wid}" data-s="${sid}" aria-label="Giorno">
           <option value="">Ogni giorno</option>${G.map((g,i)=>`<option value="${i}"${s.dayOfWeek===i?' selected':''}>${ST_GGL[i]}</option>`).join('')}</select>
-        <span class="pz-st">${stEsc((SESS_TYPES[tipo]||{}).label||tipo)}</span>
+        <span class="pz-st">${stEsc((SESS_TYPES[tipo]||{}).label||tipo)}</span>${s.opz?'<span class="pz-opzt" title="L\'atleta la fa se ha tempo">facoltativa</span>':''}
         <span class="pz-ss${lungo?' warn':''}"${lungo?` title="Piu' lunga dei ${lim}' disponibili"`:''}>${st.es?st.es+' es · '+st.serie+' serie · ':''}${st.min?'~'+pzMinTxt(st.min):''}</span>
         ${conF?(log?`<span class="pz-done" title="${stEsc(athletes[pzKgAid]?.name||'')}">Fatta ${stEsc(log.date||'')}${log.duration?' · '+log.duration+'\'':''}${log.avgRpe?' · RPE '+String(log.avgRpe).replace('.',','):''}${log.totalSets?' · '+log.totalSets+' serie':''}</span>`:'<span class="pz-todo">Da fare</span>'):''}
         <span class="pz-sp"></span>
@@ -7626,6 +7637,7 @@ function pzGriglia(wid,w){
           <button type="button" onclick="pzCopiaUna('${wid}','${sid}')">Copia la seduta</button>
           <button type="button" onclick="pzDupSess('${wid}','${sid}')">Duplica</button>
           <button type="button" onclick="pzRipetiApri('${wid}','${sid}')">Ripeti nelle settimane...</button>
+          <button type="button" onclick="pzOpz('${wid}','${sid}')">${s.opz?'Rendi obbligatoria':'Rendi facoltativa'}</button>
           ${s.link?`<button type="button" onclick="pzScollegaUna('${wid}','${sid}')">Scollega dalle altre</button>`:''}
           <button type="button" onclick="pzPrevVedi('${wid}','${sid}')">Vedi la prevenzione di questa seduta</button>
           <button type="button" onclick="pzSalvaModello('${wid}','${sid}')">Salva come modello</button>
@@ -7890,6 +7902,166 @@ async function pzLibScegli(nome,dose){
   await set(r,Object.assign({name:nome,order:n},dose?Object.assign({},dose,{name:nome}):pzDoseBase(nome)));
   showToast(nome+' aggiunto');
 }
+/* ── STRUMENTI DEL PROGRAMMA ───────────────────────────────────────────
+   Le cose che con i privati si rifanno ogni settimana: il programma si apre sulla settimana
+   di oggi; nella lista chi finisce entro due settimane; Rinnova crea il blocco dopo dal
+   picco di questo; Aggiorna i carichi guarda RPE e ripetizioni fatte; Sposta mette una
+   settimana di pausa (malattia, vacanza) e fa slittare tutto; Sostituisci cambia un
+   esercizio in tutte le settimane da una in poi; le sedute facoltative si segnano. */
+function pzLunedi(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
+function pzWkOrd(p){return Object.entries((p&&p.weeks)||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));}
+// indice della settimana di oggi, o null se il programma non e' in corso
+function pzSettOggi(p){const d=stDate(p&&p.startDate);if(!d)return null;const k=Math.floor((pzLunedi(new Date())-pzLunedi(d))/(7*864e5)+0.01),n=pzWkOrd(p).length;return k>=0&&k<n?k:k<0?-1:n;}
+// giorni alla fine del programma (null senza data)
+function pzGiorniFine(p){const d=stDate(p&&p.startDate);if(!d)return null;const f=pzLunedi(d);f.setDate(f.getDate()+pzWkOrd(p).length*7);return Math.round((f-new Date())/864e5);}
+function pzDlg(id,html){
+  let d=document.getElementById(id);
+  if(!d){d=document.createElement('dialog');d.id=id;d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
+  d.innerHTML=html;if(typeof d.showModal==='function'&&!d.open)d.showModal();else d.setAttribute('open','');return d;
+}
+const pzX='<button type="button" class="pzs-x" onclick="this.closest(\'dialog\').close()" aria-label="Chiudi">&#215;</button>';
+// ── sedute facoltative ──
+window.pzOpz=async function(wid,sid){
+  const s=programs[currentProgId].weeks[wid].sessions[sid];
+  await pzExSetSess(wid,sid,{opz:s.opz?null:true});
+  showToast(s.opz?'Seduta di nuovo da fare':'Seduta facoltativa: l\'atleta la fa se ha tempo');
+};
+async function pzExSetSess(wid,sid,campi){const up={};Object.entries(campi).forEach(([k,v])=>{up[pzBase(wid,sid)+'/'+k]=v;});pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);}
+// nella settimana dopo una facoltativa saltata: proposta di recuperare il volume (una serie in piu')
+function pzOpzHint(wid,w){
+  const W=pzWeeks(),i=W.findIndex(([k])=>k===wid);if(i<1||!pzHaLog())return '';
+  const prev=W[i-1],op=pzSess(prev[1]).filter(([,s])=>s.opz&&s.type!=='corsa');if(!op.length)return '';
+  const M=window.RSMuscoli;
+  return op.map(([sid,s])=>{const fatta=pzLog(i-1,sid);
+    if(fatta)return `<div class="pz-opzh ok"><b>${stEsc(s.name)}</b> (facoltativa) fatta la settimana scorsa: il volume resta quello scritto.</div>`;
+    const gr=M?Object.keys(M.serie(pzExs(s).map(([,e])=>e))).filter(g=>g!=='esplosivo'&&g!=='core'):[];
+    return `<div class="pz-opzh"><b>${stEsc(s.name)}</b> (facoltativa) non e' stata fatta la settimana scorsa${gr.length?' ('+gr.map(g=>M.GR[g].n.toLowerCase()).join(', ')+')':''}.<button type="button" class="pz-b" onclick="pzOpzRecupera('${wid}','${prev[0]}','${sid}')">Una serie in piu' su quei gruppi in questa settimana</button></div>`;}).join('');
+}
+window.pzOpzRecupera=async function(wid,pw,psid){
+  const M=window.RSMuscoli,p=programs[currentProgId],s=p.weeks[pw].sessions[psid];if(!M||!s)return;
+  const gr=new Set(Object.keys(M.serie(pzExs(s).map(([,e])=>e))).filter(g=>g!=='esplosivo'&&g!=='core'));
+  const up={},fatti=new Set();
+  pzSess(p.weeks[wid]).forEach(([sid,x])=>{if(x.opz)return;pzExs(x).forEach(([eid,e])=>{const g=M.info(e.name).g;if(!gr.has(g)||fatti.has(g)||/^Prevenzione/.test(e.cue||''))return;fatti.add(g);up[pzBase(wid,sid)+'/exercises/'+eid+'/sets']=String((+e.sets||3)+1);});});
+  if(!Object.keys(up).length){showToast('In questa settimana non ci sono esercizi di quei gruppi');return;}
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);showToast('Una serie in piu\' su '+fatti.size+' esercizi (Ctrl+Z annulla)');
+};
+// ── sostituisci un esercizio ovunque ──
+window.pzSostApri=function(nome){
+  const p=programs[currentProgId];if(!p)return;const W=pzWeeks();
+  const nomi=[...new Set(W.flatMap(([,w])=>pzSess(w).flatMap(([,s])=>pzExs(s).map(([,e])=>e.name)).filter(Boolean)))].sort((a,b)=>a.localeCompare(b,'it'));
+  pzDlg('pz-sost-dlg',`<div class="pzs-b"><div class="pzs-h"><div><h3>Sostituisci un esercizio ovunque</h3><p>Per un dolore, un attrezzo che manca o un cambio di blocco: serie, ripetizioni e progressione restano.</p></div>${pzX}</div>
+    <datalist id="pz-exlist2">${pzNomiForza().map(n=>`<option value="${stEsc(n)}">`).join('')}</datalist>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Togli</span><select id="pzso-da">${nomi.map(n=>`<option${n===nome?' selected':''}>${stEsc(n)}</option>`).join('')}</select></div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Metti</span> <input id="pzso-a" class="pz-in" list="pz-exlist2" placeholder="nuovo esercizio" style="flex:1"></div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Dalla</span><select id="pzso-wk">${W.map(([,w],i)=>`<option value="${i}"${i===Math.max(0,currentWeekIdx)?' selected':''}>S${i+1}${pzIsDl(w)?' scarico':''}</option>`).join('')}</select><span class="pzs-n" style="margin:0">in poi</span></div>
+    <div class="pzs-f"><span>Ctrl+Z annulla.</span><button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button><button type="button" class="btn btn-orange" onclick="pzSostApplica()">Sostituisci</button></div></div>`);
+  setTimeout(()=>document.getElementById('pzso-a')?.focus(),50);
+};
+window.pzSostApplica=async function(){
+  const da=document.getElementById('pzso-da').value,a=document.getElementById('pzso-a').value.trim(),wk=+document.getElementById('pzso-wk').value;
+  if(!a){showToast('Scrivi il nuovo esercizio');return;}
+  const up={};pzWeeks().forEach(([wid,w],i)=>{if(i<wk)return;pzSess(w).forEach(([sid,s])=>pzExs(s).forEach(([eid,e])=>{if(e.name===da)up[pzBase(wid,sid)+'/exercises/'+eid+'/name']=a;}));});
+  const n=Object.keys(up).length;if(!n){showToast('Nessun '+da+' da S'+(wk+1)+' in poi');return;}
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);
+  document.getElementById('pz-sost-dlg').close();showToast(da+' diventa '+a+' in '+n+(n===1?' seduta':' sedute')+' (Ctrl+Z annulla)');
+};
+// ── sposta: una settimana di pausa che fa slittare tutto ──
+window.pzSpostaApri=function(){
+  const p=programs[currentProgId];if(!p)return;const W=pzWeeks(),oggi=pzSettOggi(p);
+  pzDlg('pz-sposta-dlg',`<div class="pzs-b"><div class="pzs-h"><div><h3>Sposta il programma</h3><p>Malattia, vacanza, trasferta: le settimane non fatte slittano avanti e le date si ricalcolano (anche sull'orologio).</p></div>${pzX}</div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Una settimana di pausa prima della</span><select id="pzsp-wk">${W.map(([,w],i)=>`<option value="${i}"${i===Math.max(0,oggi==null?currentWeekIdx:Math.min(oggi,W.length-1))?' selected':''}>S${i+1} ${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</option>`).join('')}</select></div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Settimane di pausa</span><select id="pzsp-n"><option>1</option><option>2</option><option>3</option></select></div>
+    <label class="pzpv-tutte"><input type="checkbox" id="pzsp-rip"> nella pausa corse facili e mobilita' (se no vuota)</label>
+    <div class="pzs-f"><span>Ctrl+Z annulla.</span><button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button><button type="button" class="btn btn-orange" onclick="pzSpostaApplica()">Inserisci la pausa</button></div></div>`);
+};
+window.pzSpostaApplica=async function(){
+  const W=pzWeeks(),wk=+document.getElementById('pzsp-wk').value,n=+document.getElementById('pzsp-n').value,rip=document.getElementById('pzsp-rip').checked;
+  const base=`programs/${currentProgId}/weeks`,up={},o0=W[wk]?(W[wk][1].order||0):W.length;
+  W.forEach(([wid,w],i)=>{if(i>=wk)up[base+'/'+wid+'/order']=(w.order||0)+n;});
+  for(let j=0;j<n;j++){
+    const k=push(ref(db,base)).key,ss={};
+    if(rip){ss.s0={name:'Corsa facile',type:'corsa',order:0,dayOfWeek:1,corsaFasi:[{tipo:'Fondo Lento',zona:'Z2',dist:'30\'',note:'facile, a sensazione'}],exercises:{}};ss.s1={name:'Mobilita\' e core',type:'recupero',order:1,dayOfWeek:3,notes:'20-30 minuti tranquilli',exercises:{}};ss.s2={name:'Corsa facile',type:'corsa',order:2,dayOfWeek:5,corsaFasi:[{tipo:'Fondo Lento',zona:'Z2',dist:'40\'',note:'facile'}],exercises:{}};}
+    up[base+'/'+k]={label:'Pausa',order:o0+j,notes:'Settimana di pausa',sessions:ss};
+  }
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);
+  document.getElementById('pz-sposta-dlg').close();showToast(n+(n===1?' settimana':' settimane')+' di pausa prima di S'+(wk+1)+': il resto slitta (Ctrl+Z annulla)');
+};
+// ── aggiorna i carichi da quello che l'atleta ha fatto ──
+function pzProposteCarichi(){
+  const W=pzWeeks(),out=[];if(!pzHaLog())return out;
+  const ultimo={};// nome -> {wi, d (RPE fatto - scritto), corte (ripetizioni sotto)}
+  W.forEach(([wid,w],wi)=>pzSess(w).forEach(([sid,s])=>{const log=pzLog(wi,sid);if(!log||!log.exerciseData)return;
+    pzExs(s).forEach(([,e])=>{const d=log.exerciseData[e.name];if(!Array.isArray(d)||!d.length)return;
+      const rpe=d.map(x=>+x.rpe).filter(Boolean),rm=rpe.length?rpe.reduce((a,b)=>a+b,0)/rpe.length:null;
+      const pr=pzNum(e.rpe)||(pzNum(e.pct)?pzNum(stPctRpe(pzNum(e.pct))):NaN);
+      const rmin=parseInt(String(e.reps||''),10),corte=isFinite(rmin)?d.filter(x=>+x.reps&&+x.reps<rmin).length:0;
+      ultimo[e.name]={wi,d:rm!=null&&isFinite(pr)?rm-pr:0,corte,n:d.length,rm,pr};});}));
+  Object.entries(ultimo).forEach(([nome,u])=>{
+    let dir=0,perche='';
+    if(u.d>=1.5||u.corte>=Math.ceil(u.n/2)){dir=-1;perche=u.corte?'ripetizioni sotto il range':'RPE '+pzNumFmt(u.rm)+' contro '+pzNumFmt(u.pr)+' scritto';}
+    else if(u.d<=-1.5&&!u.corte){dir=1;perche='RPE '+pzNumFmt(u.rm)+' contro '+pzNumFmt(u.pr)+': facile';}
+    if(!dir)return;
+    const dove=[];W.forEach(([wid,w],wi)=>{if(wi<=u.wi||pzIsDl(w))return;pzSess(w).forEach(([sid,s])=>{if(pzLog(wi,sid))return;pzExs(s).forEach(([eid,e])=>{if(e.name===nome)dove.push({wid,sid,eid,e,wi});});});});
+    if(dove.length)out.push({nome,dir,perche,dove,da:u.wi});
+  });
+  return out;
+}
+window.pzCarichiApri=function(){
+  const P=pzProposteCarichi();window.__pzCar=P;
+  const nome=(athletes[pzKgAid]||{}).name||'l\'atleta';
+  pzDlg('pz-car-dlg',`<div class="pzs-b"><div class="pzs-h"><div><h3>Aggiorna i carichi da quello fatto</h3><p>Dalle ultime sedute registrate da ${stEsc(nome)}: troppo dure si scende di un passo, troppo facili si sale (2,5% o mezzo RPE), nelle settimane non ancora fatte.</p></div>${pzX}</div>
+    ${P.length?`<div class="pz-carl">${P.map((x,i)=>`<label class="pzpv-tutte"><input type="checkbox" data-ci="${i}" checked> <b>${stEsc(x.nome)}</b> ${x.dir>0?'sale':'scende'} <em>${stEsc(x.perche)}, fatto in S${x.da+1}; cambia in ${x.dove.length} ${x.dove.length===1?'seduta':'sedute'}</em></label>`).join('')}</div>`
+      :`<p class="pzs-n">${pzHaLog()?'Niente da cambiare: quello che ha fatto e\' in linea con quello scritto.':'Ancora nessuna seduta registrata da '+stEsc(nome)+' in questo programma.'}</p>`}
+    <div class="pzs-f"><span>Ctrl+Z annulla.</span><button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button>${P.length?'<button type="button" class="btn btn-orange" onclick="pzCarichiApplica()">Aggiorna</button>':''}</div></div>`);
+};
+window.pzCarichiApplica=async function(){
+  const P=window.__pzCar||[],up={};
+  document.querySelectorAll('#pz-car-dlg [data-ci]').forEach(c=>{if(!c.checked)return;const x=P[+c.dataset.ci];
+    x.dove.forEach(d=>{const b=pzBase(d.wid,d.sid)+'/exercises/'+d.eid,p=pzNum(d.e.pct),r=pzNum(d.e.rpe);
+      if(isFinite(p))up[b+'/pct']=pzNumFmt(Math.max(40,Math.min(95,pzR25(p+2.5*x.dir))));
+      else if(isFinite(r))up[b+'/rpe']=pzSpostaNum(d.e.rpe,0.5*x.dir,5,9.5);});});
+  if(!Object.keys(up).length){document.getElementById('pz-car-dlg').close();return;}
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);
+  document.getElementById('pz-car-dlg').close();showToast('Carichi aggiornati in '+Object.keys(up).length+' righe (Ctrl+Z annulla)');
+};
+// ── rinnova: il blocco dopo, dal picco di questo ──
+window.pzRinnovaApri=function(){
+  const p=programs[currentProgId];if(!p)return;const W=pzWkOrd(p);
+  const d=stDate(p.startDate),fine=d?(()=>{const x=pzLunedi(d);x.setDate(x.getDate()+W.length*7);return x;})():pzLunedi(new Date());
+  const iso=x=>x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+  const nome=String(p.name||'Programma').replace(/\s+\(?blocco \d+\)?$/i,'')+' - blocco '+((+(/blocco (\d+)/i.exec(p.name||'')||[0,1])[1])+1);
+  pzDlg('pz-rin-dlg',`<div class="pzs-b"><div class="pzs-h"><div><h3>Rinnova il programma</h3><p>Un programma nuovo che parte quando finisce questo: le sedute di forza ripartono dalla settimana piu' dura di questo blocco e salgono, l'ultima e' di scarico. Le corse si copiano dall'ultima settimana normale: rivedile.</p></div>${pzX}</div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Nome</span><input id="pzrn-nome" class="pz-in" style="flex:1" value="${stEsc(nome.replace(/ - blocco/,' blocco'))}"></div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Inizio</span><input id="pzrn-ini" type="date" class="pz-in" value="${iso(fine)}"><span class="pzs-n" style="margin:0">Settimane</span><select id="pzrn-n">${[3,4,5,6,8].map(n=>`<option${n===4?' selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="pzr-add"><span class="pzs-n" style="margin:0">Progressione</span><select id="pzrn-prog"><option value="pct">Carico +2,5% a settimana</option><option value="rpe">RPE +0,5 a settimana</option><option value="rip">+1 ripetizione a settimana</option><option value="uguale">Uguale, decido io</option></select></div>
+    <label class="pzpv-tutte"><input type="checkbox" id="pzrn-ass" checked> assegnato agli stessi atleti (${Object.keys(p.assignedTo||{}).filter(a=>athletes[a]).map(a=>stEsc(athletes[a].name)).join(', ')||'nessuno'})</label>
+    <div class="pzs-f"><span>Il programma di adesso resta com'e'.</span><button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button><button type="button" class="btn btn-orange" onclick="pzRinnova()">Crea il blocco</button></div></div>`);
+};
+window.pzRinnova=async function(){
+  const p=programs[currentProgId];if(!p)return;const W=pzWkOrd(p).map(([,w])=>w);
+  const nome=document.getElementById('pzrn-nome').value.trim()||p.name+' 2',n=+document.getElementById('pzrn-n').value,modo=document.getElementById('pzrn-prog').value;
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(document.getElementById('pzrn-ini').value||''),ini=m?m[3]+'/'+m[2]+'/'+m[1]:null;
+  // settimana di riferimento: la piu' dura tra le normali (piu' alta la percentuale media, se no l'ultima normale)
+  const norm=W.filter(w=>!pzIsDl(w)&&!/^pausa$/i.test(w.label||''));
+  const peso=w=>{let t=0,c=0;pzSess(w).forEach(([,s])=>pzExs(s).forEach(([,e])=>{const x=pzNum(e.pct);if(isFinite(x)){t+=x;c++;}}));return c?t/c:0;};
+  const base=norm.length?norm.reduce((a,w)=>peso(w)>=peso(a)?w:a,norm[norm.length-1]):W[W.length-1];
+  const ultima=norm[norm.length-1]||base;
+  if(!base){showToast('Il programma non ha settimane');return;}
+  const weeks={};
+  for(let j=0;j<n;j++){
+    const dl=j===n-1&&n>=3,k=j-1,ss={};
+    // forza dalla settimana piu' dura (si riparte un passo sotto), corse dall'ultima normale
+    pzSess(base).filter(([,s])=>s.type!=='corsa').forEach(([sid,s])=>{const c=JSON.parse(JSON.stringify(s));if(c.exercises)Object.keys(c.exercises).forEach(eid=>{c.exercises[eid]=pzAvEx(c.exercises[eid],k,modo,dl);});ss[sid]=c;});
+    pzSess(ultima).filter(([,s])=>s.type==='corsa').forEach(([sid,s])=>{ss[ss[sid]?sid+'c':sid]=JSON.parse(JSON.stringify(s));});
+    weeks['w'+String(j).padStart(2,'0')]={label:'S'+(j+1)+(dl?' scarico':''),order:j,notes:dl?'Settimana di scarico':'',sessions:ss};
+  }
+  const ass=document.getElementById('pzrn-ass').checked;
+  const nuovo={name:nome,sport:p.sport||'sc',category:p.category||'',duration:n,createdAt:Date.now(),startDate:ini,weeks,assignedTo:ass?Object.assign({},p.assignedTo||{}):{},archived:false};
+  ['ritmi','prehab','intake','partita'].forEach(k=>{if(p[k])nuovo[k]=JSON.parse(JSON.stringify(p[k]));});
+  const r=push(ref(db,'programs'));await set(r,nuovo);
+  document.getElementById('pz-rin-dlg').close();showToast('Blocco creato: '+nome+(ini?' dal '+ini:''));
+  setTimeout(()=>selectProg(r.key),350);
+};
 window.pzAddSess=async function(wid,tipo){
   const w=programs[currentProgId].weeks[wid];const n=pzSess(w).length;
   const usati=new Set(pzSess(w).map(([,s])=>s.dayOfWeek));
@@ -8173,6 +8345,33 @@ async function pzBulk(wid,sid,righe){
 let pzModelli=null;
 function pzCoach(){return sessionStorage.getItem('rsc_pin')||'raoul';}
 async function pzCaricaModelli(){try{pzModelli=(await get(ref(db,'templates/'+pzCoach()))).val()||{};}catch(e){pzModelli={};}}
+// modelli di settimana (come nel Planner): una settimana intera salvata e riusata in altri programmi;
+// i kg si ricalcolano da soli sui massimali dell'atleta del programma dove si mette
+let pzModSett=null;
+async function pzCaricaModSett(){try{pzModSett=(await get(ref(db,'templates_sett/'+pzCoach()))).val()||{};}catch(e){pzModSett={};}}
+window.pzSalvaSettModello=async function(wid){
+  const w=programs[currentProgId].weeks[wid];if(!w)return;
+  const nome=prompt('Nome del modello di settimana:',String(w.label||'Settimana').replace(/^S\d+\s*/,'')||'Settimana');if(!nome||!nome.trim())return;
+  await push(ref(db,'templates_sett/'+pzCoach()),{name:nome.trim(),sessions:JSON.parse(JSON.stringify(w.sessions||{})),notes:w.notes||'',savedAt:Date.now()});
+  await pzCaricaModSett();showToast('Modello di settimana salvato: '+nome.trim());
+};
+window.pzUsaSettModello=async function(tid){
+  if(!pzModSett)await pzCaricaModSett();
+  const t=(pzModSett||{})[tid];if(!t)return;
+  const W=pzWeeks(),cur=W[currentWeekIdx];const base=`programs/${currentProgId}/weeks`,up={};
+  if(cur&&!pzSess(cur[1]).length){up[base+'/'+cur[0]+'/sessions']=JSON.parse(JSON.stringify(t.sessions||{}));}
+  else{const k=push(ref(db,base)).key,o=W.length?Math.max(...W.map(([,w])=>w.order||0))+1:0;up[base+'/'+k]={label:'S'+(W.length+1)+' '+t.name,order:o,notes:t.notes||'',sessions:JSON.parse(JSON.stringify(t.sessions||{}))};}
+  pzUndo.push({multi:pzPrima(up)});await update(ref(db),up);
+  showToast('Modello "'+t.name+'" '+(cur&&!pzSess(cur[1]).length?'messo in questa settimana':'aggiunto come nuova settimana')+' (Ctrl+Z annulla)');
+};
+window.pzSettModelliApri=async function(){
+  if(!pzModSett)await pzCaricaModSett();
+  const L=Object.entries(pzModSett||{}).sort((a,b)=>(b[1].savedAt||0)-(a[1].savedAt||0));
+  const W=pzWeeks(),cur=W[currentWeekIdx];
+  pzDlg('pz-msett-dlg',`<div class="pzs-b"><div class="pzs-h"><div><h3>Modelli di settimana</h3><p>${cur&&!pzSess(cur[1]).length?'La settimana aperta e\' vuota: il modello va li\'.':'Il modello si aggiunge in fondo come settimana nuova.'} I kg si ricalcolano sui massimali dell'atleta di questo programma.</p></div>${pzX}</div>
+    ${L.length?`<div class="pz-carl">${L.map(([k,t])=>`<button type="button" class="pz-lib-r" onclick="this.closest('dialog').close();pzUsaSettModello('${k}')"><span class="pz-gchip" style="--g:var(--primary)">${Object.keys(t.sessions||{}).length}</span><b>${stEsc(t.name)}</b><em>${stEsc(Object.values(t.sessions||{}).map(s=>s.name).join(', '))}</em></button>`).join('')}</div>`:'<p class="pzs-n">Nessun modello: apri una settimana fatta bene e dal menu scegli "Salva come modello di settimana".</p>'}
+    <div class="pzs-f"><span></span><button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Chiudi</button></div></div>`);
+};
 window.pzSalvaModello=async function(wid,sid){
   const s=programs[currentProgId].weeks[wid].sessions[sid];
   const nome=prompt('Nome del modello:',s.name||'');if(!nome||!nome.trim())return;
@@ -8586,7 +8785,7 @@ function pzCalendario(){
   const card=(wid,wi,sid,x)=>{
     const fatta=pzLog(wi,sid),r=pzGgRighe(x);
     return `<div class="pz-chip2 pz-cal t-${x.type||'pesi'}${fatta?' fatta':''}${pzSelSet.has(pzK(wid,sid))?' sel':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" title="Clic: apri. Cerchio o Ctrl+clic: seleziona">
-      ${pzSelBtn()}<b>${stEsc(x.name||'Seduta')}</b>${x.type==='corsa'&&pzCorsaKm(x)?`<span class="pz-ckm">${String(Math.round(pzCorsaKm(x)*10)/10).replace('.',',')} km${pzCorsaMin(x)?' &#183; ~'+pzMinTxt(Math.round(pzCorsaMin(x)/5)*5):''}</span>`:''}${pzLinkTag(x)}${fatta?'<i class="pz-ft">fatta</i>':''}
+      ${pzSelBtn()}<b>${stEsc(x.name||'Seduta')}</b>${x.opz?'<i class="pz-opzt">facoltativa</i>':''}${x.type==='corsa'&&pzCorsaKm(x)?`<span class="pz-ckm">${String(Math.round(pzCorsaKm(x)*10)/10).replace('.',',')} km${pzCorsaMin(x)?' &#183; ~'+pzMinTxt(Math.round(pzCorsaMin(x)/5)*5):''}</span>`:''}${pzLinkTag(x)}${fatta?'<i class="pz-ft">fatta</i>':''}
       ${r.slice(0,4).map(t=>{const k=t.indexOf('  ');return `<div class="pz-mr"><span>${stEsc(k>0?t.slice(0,k):t)}</span>${k>0?`<em>${stEsc(t.slice(k+2))}</em>`:''}</div>`;}).join('')}${r.length>4?`<div class="pz-mr piu">e altri ${r.length-4}</div>`:''}
     </div>`;
   };
@@ -8787,7 +8986,7 @@ function pzGiorni(wid,w){
   const card=(sid,x)=>{
     const k=pzIntensita(x),fatta=pzLog(wi,sid),r=pzGgRighe(x),kx=x.type==='corsa'?pzCorsaKm(x):0,km=kx?[null,String(Math.round(kx))]:null;
     return `<div class="pz-chip2 pz-dcard t-${x.type||'pesi'}${fatta?' fatta':''}${pzSelSet.has(pzK(wid,sid))?' sel':''}" draggable="true" tabindex="0" data-w="${wid}" data-s="${sid}" title="Clic: apri. Cerchio o Ctrl+clic: seleziona">
-      ${pzSelBtn()}<em>${stEsc(PZ_TIPO_BREVE[x.type]||'Seduta')}${k.dura?' <u>dura</u>':''}</em>${pzLinkTag(x)}
+      ${pzSelBtn()}<em>${stEsc(PZ_TIPO_BREVE[x.type]||'Seduta')}${k.dura?' <u>dura</u>':''}${x.opz?' <u>facoltativa</u>':''}</em>${pzLinkTag(x)}
       <b>${stEsc(x.name||'Seduta')}</b>
       ${r.length?`<ul>${r.slice(0,5).map(t=>`<li>${stEsc(t)}</li>`).join('')}${r.length>5?`<li class="piu">e altri ${r.length-5}</li>`:''}</ul>`:''}
       <span>${fatta?'fatta '+stEsc(String(fatta.date||'').slice(0,5))+pzFattaKm(fatta)+' · ':''}${k.min?'~'+pzMinTxt(Math.round(k.min/5)*5||k.min):''}${km?' · '+km[1]+' km':''}</span>

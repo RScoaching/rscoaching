@@ -1786,7 +1786,7 @@ function renderDashboard(){
   const righe=ids.filter(id=>dProgAtleta(id).length||(st[id]&&st[id].lastAny&&ggDa(st[id].lastAny)<=14)).sort((a,b)=>String(athletes[a].name).localeCompare(String(athletes[b].name)));
   let tot=0,fat=0;
   const celle=righe.map(id=>{let pv=0,fa=0;
-    const c=giorni.map((d,i)=>{const P=dPreviste(id,d),F=dFatte(id,d),pas=d<oggi,oggiG=d.getTime()===oggi.getTime();
+    const c=giorni.map((d,i)=>{const P=dPreviste(id,d).filter(y=>!y.x.opz),F=dFatte(id,d),pas=d<oggi,oggiG=d.getTime()===oggi.getTime();
       if(P.length){pv+=P.length;if(F.length)fa+=Math.min(P.length,F.length);}
       const tip=P.map(v=>v.x.name).join(', ');
       if(P.length&&F.length)return `<td><span class="dk ok" title="${dEsc(tip)}: fatta">${dIco('ok')}</span></td>`;
@@ -2435,7 +2435,7 @@ window.athReport=async function(aid){
   // programma in corso e aderenza delle ultime 4 settimane
   const pr=dProgAtleta(aid)[0];let progTxt='';
   if(pr){const k=dSettIdx(pr[0],pr[1],aid,new Date()),W=dSett(pr[1]).length;progTxt=athEsc(pr[1].name||'Programma')+(k!=null&&k>=0&&k<W?', settimana '+(k+1)+' di '+W:k!=null&&k>=W?', finito':'');}
-  let pv=0,fa=0;for(let i=27;i>=0;i--){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);const P=dPreviste(aid,d),F=dFatte(aid,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}
+  let pv=0,fa=0;for(let i=27;i>=0;i--){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-i);const P=dPreviste(aid,d).filter(y=>!y.x.opz),F=dFatte(aid,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}
   const ader=pv?Math.round(fa/pv*100):null;
   // carico delle ultime 8 settimane in barre, si legge anche stampato in bianco e nero
   const s8=car.settimane.slice(-8),mx=Math.max(1,...s8.map(w=>w.tot));
@@ -3865,7 +3865,7 @@ window.chatRiepilogo=function(aid){
   const oggi=new Date();oggi.setHours(0,0,0,0);const lun=dLunedi(oggi);
   let prev=0,fatte=0,giorni=0,n=0,somma=0;
   for(let i=0;i<7;i++){const d=new Date(lun);d.setDate(d.getDate()+i);if(d>oggi)break;giorni++;
-    const P=dPreviste(aid,d),F=dFatte(aid,d);prev+=P.length;if(P.length&&F.length)fatte+=Math.min(P.length,F.length);
+    const P=dPreviste(aid,d).filter(y=>!y.x.opz),F=dFatte(aid,d);prev+=P.length;if(P.length&&F.length)fatte+=Math.min(P.length,F.length);
     const g=qzGiorno(aid,isoDay(d.getTime()));if(g){n++;somma+=g.score;}}
   const logs=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts>=lun.getTime());
   const min=logs.reduce((t,l)=>t+(+l.duration||+l.minuti||0),0);
@@ -4063,7 +4063,7 @@ function renderAnalytics(){
   // aderenza
   const oggi=new Date();oggi.setHours(0,0,0,0);
   let pvT=0,faT=0;
-  const righe=ids.map(id=>{const cel=sett.map(l=>{let pv=0,fa=0;for(let g=0;g<7;g++){const d=new Date(l);d.setDate(d.getDate()+g);if(d>oggi)break;const P=dPreviste(id,d),F=dFatte(id,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}return {pv,fa};});
+  const righe=ids.map(id=>{const cel=sett.map(l=>{let pv=0,fa=0;for(let g=0;g<7;g++){const d=new Date(l);d.setDate(d.getDate()+g);if(d>oggi)break;const P=dPreviste(id,d).filter(y=>!y.x.opz),F=dFatte(id,d);pv+=P.length;if(P.length&&F.length)fa+=Math.min(P.length,F.length);}return {pv,fa};});
     const pv=cel.reduce((t,x)=>t+x.pv,0),fa=cel.reduce((t,x)=>t+x.fa,0);pvT+=pv;faT+=fa;return {id,cel,pv,fa};}).filter(r=>r.pv);
   document.getElementById('an-ader').innerHTML=righe.length?`<table class="dash-wk an-t"><thead><tr><th></th>${lbl.map(l=>`<th>${l}</th>`).join('')}<th>Totale</th></tr></thead><tbody>${righe.map(r=>`<tr><th><button type="button" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openAthlete('${r.id}')">${dEsc(athletes[r.id].name)}</button></th>${r.cel.map(x=>{if(!x.pv)return '<td></td>';const q=x.fa/x.pv;return `<td><span class="an-c ${q>=0.8?'ok':q>=0.5?'mez':'no'}" title="${x.fa} su ${x.pv}">${x.fa}/${x.pv}</span></td>`;}).join('')}<td class="dk-s"><b>${Math.round(r.fa/r.pv*100)}%</b></td></tr>`).join('')}</tbody></table>`
     :`<div class="d-vuoto">${dIco('planner')}<b>Nessuna seduta in programma nel periodo</b><span>L'aderenza si calcola sui programmi assegnati con i giorni fissati.</span></div>`;

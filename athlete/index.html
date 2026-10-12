@@ -147,6 +147,7 @@ body::before{
 .sess-head{padding:12px 16px 10px;}
 .sess-readiness-chip{display:inline-block;margin-top:5px;font-size:16px;line-height:1;}
 .sess-type-tag{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;margin-bottom:4px;display:flex;align-items:center;gap:5px;}
+.sess-opz{display:inline-block;font:600 11px Inter,sans-serif;color:#C4B5FD;border:1px dashed rgba(196,181,253,.5);border-radius:999px;padding:2px 9px;margin:2px 0 6px}
 .sess-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:.8px;color:var(--white);line-height:1.05;}
 .sess-note{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55;}
 .sess-prog-label{font-size:10px;color:var(--muted);margin-top:3px;font-weight:500;opacity:.7;}
@@ -2875,6 +2876,9 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
     const ph=progId&&window.RSPrehab?window.RSPrehab.carta((ST.progs||{})[progId],weekIdx,sessId):null;
     const exs=ph?(exercises||[]).filter(e=>!/^Prevenzione/.test(e&&e.cue||'')):exercises;
     let h=sessionCard0(type,title,note,exs,extra,progId,weekIdx,sessId,progName,corsaFasi);
+    // seduta facoltativa: si fa se c'e' tempo, non conta come saltata
+    const sx=progId&&ST.progs&&ST.progs[progId]?(()=>{const W=Object.entries(ST.progs[progId].weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));const w=W[+weekIdx];return w&&w[1].sessions?w[1].sessions[sessId]:null;})():null;
+    if(sx&&sx.opz)h=h.replace('<div class="sess-title">','<div class="sess-opz">Facoltativa: se hai tempo e gambe</div><div class="sess-title">');
     if(ph){const b=`<button type="button" class="ph-btn" onclick="apriPrehab('${progId}',${+weekIdx},'${sessId}')"><span class="ph-ic">${_ri('recupero')}</span><b>Prevenzione</b><i>${ph.es.length} esercizi &#183; ~${window.RSPrehab.minuti(ph)}'</i></button>`;
       const k=h.indexOf('<div class="sess-action">');h=k>=0?h.slice(0,k)+b+h.slice(k):h.replace(/<\/div>\s*$/,b+'</div>');}
     return h;
