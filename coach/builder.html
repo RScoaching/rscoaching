@@ -4950,6 +4950,7 @@ function stConsigli(I){
   }
   // la mobilita' consigliata esiste solo se le resta un giorno libero: come doppia
   // accanto a una corsa o alla forza non ha senso (conta i numeri scelti a mano)
+  {const v=(k,f)=>I[f]!=null&&I[f]!==''?+I[f]:c[k];if(c.cond&&(I.nCond==null||I.nCond==='')){const altre=v('forza','nForza')+v('corsa','nCorsa')+v('vel','nVel')+v('rtp','nRtp');if(altre+c.cond>d)c.cond=Math.max(0,d-altre);}}
   if(c.mob){const v=(k,f)=>I[f]!=null&&I[f]!==''?+I[f]:c[k];const altre=v('forza','nForza')+v('corsa','nCorsa')+v('vel','nVel')+v('cond','nCond')+v('rtp','nRtp');if(altre+c.mob>d)c.mob=Math.max(0,d-altre);}
   return c;
 }
@@ -4988,6 +4989,14 @@ function stRuoliCorsa(I,n){
   return seq.slice(0,n);
 }
 function stSplit(I,nF){
+  if(!nF)return [];
+  const base0=stSplit0(I,Math.min(nF,5));
+  if(nF<=5||base0.length>=nF)return base0.slice(0,nF);
+  // dalla sesta seduta: spinta, tirata e gambe in piu' (la classica PPL due volte)
+  const extra=[['PUSH','Spinta 2'],['PULL','Tirata 2'],['LOW_B','Gambe 2']].map(([r,n])=>({ruolo:r,nome:n}));
+  return base0.concat(extra).slice(0,nF);
+}
+function stSplit0(I,nF){
   if(!nF)return [];
   const sp=I.split&&I.split!=='auto'?I.split:(I.sport!=='nessuno'?'sport':(I.obiettivo==='gara'||(stNumeri(I).corsa>=2&&!['forza','estetica','ibrido'].includes(I.obiettivo)))?'corsa':'auto');
   const mk=r=>({ruolo:r,nome:ST_RUOLO_LBL[r]});
@@ -6376,6 +6385,7 @@ function stCorpo(I,g,w){
   stPuntiEff(I).forEach(pk=>{
     const def=ST_PUNTI.find(x=>x[0]===pk);if(!def||extra>=2)return;
     if(!(reg==='x'||def[2]==='c'||def[2]===reg))return;
+    if((/^PULL/.test(g.ruolo)&&pk==='petto')||(/^PUSH/.test(g.ruolo)&&pk==='dorso'))return;
     const cand=stEsPunto(I,pk).find(n=>!out.some(e=>stStessaFam(e.name,n)));if(!cand)return;
     const k=key+'|p'+pk;if(I.esDel[k])return;
     const pr=stDoseEs(I.esOv[k]||cand,stPrescr(I,w,'iso'),w);
