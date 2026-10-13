@@ -1096,6 +1096,23 @@ button,input,select,textarea{font-family:inherit}
 .ex-type-pill{display:inline-flex!important;align-items:center;padding:4px 10px!important;border-radius:999px!important;background:rgba(255,106,46,.15)!important;color:#FFA27A!important;font:600 12px Inter,sans-serif!important}
 .musc-tag{background:rgba(167,139,250,.12)!important;border-color:rgba(167,139,250,.22)!important;color:#D7CCFF!important}
 .ex-card-wrap.cur .ex-card{background:radial-gradient(120% 60% at 100% 0%,rgba(255,106,46,.10) 0%,rgba(255,106,46,0) 60%),#1C1412!important}
+.sv-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.sv-cam{appearance:none;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,214,196,.16);background:rgba(255,214,196,.05);color:var(--white);font:600 12.5px Inter,sans-serif;padding:7px 11px;border-radius:999px;cursor:pointer;min-height:36px}
+.sv-cam svg{width:16px;height:16px}
+[hidden]{display:none!important}
+.sv-ov{position:fixed;inset:0;z-index:600;background:rgba(10,7,6,.94);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sv-box{width:100%;max-width:520px;background:#1C1412;border:1px solid rgba(255,214,196,.1);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px;margin-bottom:env(safe-area-inset-bottom,0px)}
+.sv-h{display:flex;justify-content:space-between;align-items:center}.sv-h b{font:400 26px 'Bebas Neue',sans-serif;letter-spacing:.4px;color:var(--white)}
+.sv-h button{appearance:none;border:0;background:none;color:var(--muted);font:500 14px Inter,sans-serif;cursor:pointer;padding:8px 0}
+.sv-es{font:600 15px Inter,sans-serif;color:var(--white)}.sv-es span{font-weight:500;font-size:13px;color:var(--muted)}
+.sv-p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+.sv-poster{width:100%;max-height:240px;object-fit:contain;border-radius:12px;background:#000}
+.sv-scegli{display:flex;gap:8px}
+.sv-b{position:relative;flex:1;display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:14px;background:var(--primary);color:#1A1210;font:600 14px Inter,sans-serif;cursor:pointer;overflow:hidden;text-align:center}
+.sv-b.sec{background:rgba(255,214,196,.08);color:var(--white)}.sv-b input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.sv-t{width:100%;box-sizing:border-box;min-height:70px;background:rgba(255,214,196,.05);border:1px solid rgba(255,214,196,.14);border-radius:12px;color:var(--white);font:15px/1.5 Inter,sans-serif;padding:10px 12px;resize:vertical}
+.sv-stato{font-size:13px;color:var(--muted)}.sv-bar{height:6px;border-radius:3px;background:rgba(255,214,196,.08);margin-top:6px;overflow:hidden}.sv-bar i{display:block;height:100%;background:var(--primary)}
+.sv-invia{appearance:none;border:0;border-radius:14px;min-height:52px;background:var(--primary);color:#1A1210;font:600 15px Inter,sans-serif;cursor:pointer}.sv-invia:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
@@ -1548,6 +1565,47 @@ function buildFromArray(type,arr){
    portava su YouTube e per tornare alla serie bisognava riaprire l'app. youtube-nocookie,
    parte da solo e muto finche' non lo si tocca. Se il link non e' di YouTube si apre fuori. */
 function ytId(u){const m=String(u||'').match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);return m?m[1]:null;}
+// ── VIDEO DALLA SEDUTA: si filma una serie e va al preparatore (window.RSVideo in sidebar.js)
+/* Stesso formato dell'app (video/{aid}/{vid}, video_dati, messaggio in chat): l'esercizio e
+   l'ultima serie fatta (kg, ripetizioni, RPE) si aggiungono da soli alla nota. */
+let SV=null;
+function svUltimaSerie(ei){const sd=setData[ei]||{};const L=Object.values(sd).filter(x=>x&&x.done);const x=L[L.length-1];if(!x)return '';
+  return [x.kg?String(x.kg).replace('.',',')+' kg':'',x.reps?'x '+x.reps:'',x.rpe?'RPE '+x.rpe:''].filter(Boolean).join(' ');}
+window.svVideo=function(ei){
+  const ex=exs[ei];if(!ex||!window.RSVideo)return;
+  SV={ei,es:ex.name||'Esercizio',serie:svUltimaSerie(ei),nota:'',file:null,poster:null};
+  let ov=document.getElementById('sv-ov');if(!ov){ov=document.createElement('div');ov.id='sv-ov';ov.className='sv-ov';ov.setAttribute('role','dialog');ov.setAttribute('aria-modal','true');document.body.appendChild(ov);}
+  ov.hidden=false;svDisegna();
+};
+function svDisegna(){
+  const ov=document.getElementById('sv-ov');if(!ov||!SV)return;
+  ov.innerHTML=`<div class="sv-box"><div class="sv-h"><b>Video per il preparatore</b><button type="button" onclick="svChiudi()">Chiudi</button></div>
+    <div class="sv-es">${escH(SV.es)}${SV.serie?` <span>ultima serie ${escH(SV.serie)}</span>`:''}</div>
+    <p class="sv-p">Telefono di lato, tutto il corpo e il bilanciere dentro. Massimo ${window.RSVideo.MAX_SEC} secondi.</p>
+    ${SV.poster?`<img class="sv-poster" src="${SV.poster}" alt="">`:''}
+    <div class="sv-scegli"><label class="sv-b"><input type="file" accept="video/*" capture="environment" onchange="svFile(this.files[0])">Registra adesso</label><label class="sv-b sec"><input type="file" accept="video/*" onchange="svFile(this.files[0])">Scegli dalla galleria</label></div>
+    <textarea class="sv-t" placeholder="Cosa vuoi che guardi (facoltativo)" oninput="svNota(this.value)">${escH(SV.nota)}</textarea>
+    <div class="sv-stato" id="sv-stato"></div>
+    <button type="button" class="sv-invia" id="sv-invia" onclick="svInvia()" ${SV.file?'':'disabled'}>Manda al preparatore</button></div>`;
+}
+window.svNota=v=>{if(SV)SV.nota=v;};
+window.svChiudi=()=>{if(SV&&SV.invio)return;const ov=document.getElementById('sv-ov');if(ov){ov.hidden=true;ov.innerHTML='';}SV=null;};
+window.svFile=async f=>{if(!f||!SV)return;SV.file=f;SV.poster=null;
+  try{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.src=URL.createObjectURL(f);await new Promise(r=>{v.onloadeddata=r;v.onerror=r;setTimeout(r,2500);});v.currentTime=Math.min(0.3,(v.duration||1)/3);await new Promise(r=>{v.onseeked=r;setTimeout(r,1200);});if(v.videoWidth)SV.poster=window.RSVideo.fotogramma(v,320);}catch(e){}
+  svDisegna();};
+window.svInvia=async()=>{
+  const RV=window.RSVideo,st=document.getElementById('sv-stato'),b=document.getElementById('sv-invia');if(!SV||!SV.file)return;
+  SV.invio=true;b.disabled=true;const msg=(t,p)=>{st.innerHTML=escH(t)+(p!=null?`<div class="sv-bar"><i style="width:${Math.round(p*100)}%"></i></div>`:'');};
+  try{
+    msg('Preparo il video...',0);const c=await RV.comprimi(SV.file,p=>msg('Preparo il video...',p*0.6));
+    const P=RV.aPezzi(await RV.inBase64(c.blob)),vid='v'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    for(let i=0;i<P.length;i++){await set(ref(db,`video_dati/${AID}/${vid}/${i}`),P[i]);msg('Invio '+(i+1)+' di '+P.length+'...',0.6+0.4*(i+1)/P.length);}
+    const nota=[SV.serie?'Serie: '+SV.serie:'',(SV.nota||'').trim()].filter(Boolean).join('. ');
+    await set(ref(db,`video/${AID}/${vid}`),{ts:Date.now(),esercizio:SV.es,nota:nota||null,dur:c.dur,mime:c.mime,n:P.length,poster:c.poster||null,kb:Math.round(c.blob.size/1024),stato:'da_vedere',daSeduta:true});
+    await push(ref(db,`chat/${AID}/messages`),{ts:Date.now(),text:'Video: '+SV.es+(nota?' - '+nota:''),from:'athlete',fromName:(athlete&&athlete.name)||'Atleta',read:false,video:vid});
+    SV.invio=false;svChiudi();toast('Video mandato: la correzione arriva in chat');
+  }catch(e){SV.invio=false;b.disabled=false;msg(e&&e.message||'Invio non riuscito');}
+};
 window.apriVideo=function(u,nome){
   const id=ytId(u);if(!id)return true;
   nome=escH(nome||'Video');
@@ -1951,7 +2009,7 @@ function renderPesi(ex,ei){
       <div class="ex-card-params">${paramsSummary}${pct>0?(rm===0?` · @${pct}% 1RM`:''):(ex.carico?` · ${ex.carico}`:'')}${ex.rpe?` · RPE target ${ex.rpe}`:''}</div>
       ${exTagsHtml(ex.name)}
       ${ex.cue?`<div class="cue-chip">${ex.cue}</div>`:''}
-      ${_vidUrl?`<a href="${_vidUrl}" target="_blank" rel="noopener" class="ex-video-link" data-n="${escH(ex.name)}" onclick="return apriVideo(this.href,this.dataset.n)">Guarda il video</a>`:''}
+      <div class="sv-row">${_vidUrl?`<a href="${_vidUrl}" target="_blank" rel="noopener" class="ex-video-link" data-n="${escH(ex.name)}" onclick="return apriVideo(this.href,this.dataset.n)">Guarda il video</a>`:''}<button type="button" class="sv-cam" onclick="svVideo(${ei})" aria-label="Filma una serie e mandala al preparatore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/></svg>Filma una serie</button></div>
     </div>
     ${kgSug>0?`<div class="sug-kg-bar">
       <div><div class="sug-kg-lbl">Carico suggerito</div><div class="sug-kg-pct">${pct>0?(rmStimato(ex.name)?'dal massimale stimato':'dal tuo 1RM'):'Diretto'}</div></div>
@@ -2037,6 +2095,7 @@ function renderCampo(ex,ei){
       <span class="ex-type-pill tp-campo">Campo</span>
       <div class="ex-card-name">${ex.name}</div>
       <div class="ex-card-params">${[ex.sets&&`${ex.sets}×`,ex.reps,ex.rest&&`rec ${ex.rest}`].filter(Boolean).join(' · ')}</div>
+      <div class="sv-row"><button type="button" class="sv-cam" onclick="svVideo(${ei})" aria-label="Filma una serie e mandala al preparatore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/></svg>Filma una serie</button></div>
       ${exTagsHtml(ex.name)}
       ${ex.cue?`<div class="cue-chip">${ex.cue}</div>`:''}
     </div>
