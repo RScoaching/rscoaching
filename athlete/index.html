@@ -1474,6 +1474,10 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .chat-vthumb{position:relative;display:block;width:200px;max-width:100%;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000;margin-bottom:6px;border:0;padding:0;cursor:pointer}
 .chat-vthumb img{width:100%;height:100%;object-fit:cover;opacity:.85}
 .chat-vthumb i{position:absolute;inset:auto auto 8px 8px;font:600 11px Inter,sans-serif;font-style:normal;color:#fff;background:rgba(0,0,0,.55);padding:3px 8px;border-radius:999px}
+.mv-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:6px 18px 24px}
+.mv-c{appearance:none;border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:4px;cursor:pointer;color:var(--ink8)}
+.mv-i{display:block;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000}.mv-i img{width:100%;height:100%;object-fit:cover}
+.mv-c b{font:600 14px Inter,sans-serif}.mv-c em{font-style:normal;font-size:12px;color:var(--mut8)}.mv-c .vd-es{align-self:flex-start}
 .ob-lk{appearance:none;border:0;background:none;padding:6px 0;color:var(--primary2);font:600 13px Inter,sans-serif;cursor:pointer}
 .ob-agg{display:flex;gap:8px;margin-top:10px}
 .ob-agg input{flex:1;min-width:0;background:rgba(255,214,196,.06);border:1px solid rgba(255,214,196,.12);border-radius:12px;color:var(--ink8);font:500 15px Inter,sans-serif;padding:10px 12px;min-height:44px}
@@ -1728,6 +1732,7 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
       <button class="prof-tab" onclick="profTab('test',this)">Test</button>
       <button class="prof-tab" onclick="profTab('1rm',this)">Massimali</button>
       <button class="prof-tab" onclick="profTab('body',this)">Corpo</button>
+      <button class="prof-tab" onclick="profTab('video',this)">Video</button>
       <button class="prof-tab" onclick="profTab('strumenti',this)">Strumenti</button>
     </div>
 
@@ -1787,6 +1792,7 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
     </div>
 
     <!-- STRUMENTI -->
+    <div id="prof-video" style="display:none"><div id="miei-video" class="mv"></div></div>
     <div id="prof-strumenti" style="display:none">
       <div class="ci7-card">
         <div class="ci7-qh"><b>Massimale stimato</b><span>Formula di Epley, va bene fino a 10 ripetizioni</span></div>
@@ -2203,7 +2209,7 @@ if(!aid){
     });
     // abitudini e obiettivi scelti dal preparatore
     setTimeout(()=>onbControlla(athlete),1800);
-    onValue(ref(db,`video/${aid}`),v=>{ST.video=v.val()||{};if(document.getElementById('page-chat')?.style.display!=='none')renderChat();},()=>{});
+    onValue(ref(db,`video/${aid}`),v=>{ST.video=v.val()||{};if(document.getElementById('prof-video')?.style.display==='block')renderMieiVideo();if(document.getElementById('page-chat')?.style.display!=='none')renderChat();},()=>{});
     onValue(ref(db,`habits/${aid}`),h=>{ST.hab=h.val()||{};renderAbitudini();},()=>{});
     onValue(ref(db,`goals/${aid}`),g=>{ST.goals=g.val()||{};renderObiettivi();},()=>{});
 
@@ -2695,6 +2701,15 @@ window.vdVedi=async vid=>{
       v.addEventListener('loadedmetadata',()=>{misura();disegna();});v.addEventListener('timeupdate',disegna);v.addEventListener('seeked',disegna);window.addEventListener('resize',()=>{misura();disegna();});}}
   catch(e){const box=document.getElementById('vd-play');if(box)box.innerHTML='<div class="vd-load">Video non disponibile</div>';}
 };
+// archivio dei video mandati, con l'esito: per rivedere i progressi nel tempo
+function renderMieiVideo(){
+  const el=document.getElementById('miei-video');if(!el)return;
+  const L=Object.entries(ST.video||{}).filter(([,v])=>v&&v.ts).sort((a,b)=>b[1].ts-a[1].ts);
+  const ES={ok:['Ok','ok'],sistemare:['Da sistemare','no'],rifai:['Da rifare','no']};
+  el.innerHTML=L.length?`<div class="mv-g">${L.map(([id,v])=>{const e=v.stato==='visto'?(ES[v.esito]||['Visto','']):['In attesa',''];
+    return `<button type="button" class="mv-c" onclick="vdVedi('${id}')"><span class="mv-i">${v.poster?`<img src="${v.poster}" alt="">`:''}</span><b>${escH(v.esercizio||'Video')}</b><em>${new Date(v.ts).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} &#183; ${(n=>n+(n===1?' nota':' note'))(Object.keys(v.commenti||{}).length)}</em><span class="vd-es ${e[1]}">${e[0]}</span></button>`;}).join('')}</div>`
+    :`<div class="empty" style="margin:30px 18px">Nessun video ancora. Dalla seduta tocca "Filma una serie", oppure il tasto con la videocamera in chat: il preparatore li corregge con note e disegni.</div>`;
+}
 window.vdVai=t=>{const v=document.getElementById('vd-v');if(!v)return;v.pause();v.currentTime=t;v.scrollIntoView({block:'center',behavior:'smooth'});};
 
 // ── SCHEDA D'INGRESSO (come l'onboarding di Everfit e TrueCoach)
@@ -4055,7 +4070,8 @@ window.bnSwitch=(page,btn)=>{
 };
 
 window.profTab=(tab,btn)=>{
-  ['storico','ritmi','test','1rm','body','strumenti'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
+  if(tab==='video')renderMieiVideo();
+  ['storico','ritmi','test','1rm','body','strumenti','video'].forEach(t=>{const el=document.getElementById('prof-'+t);if(el)el.style.display=t===tab?'block':'none';});
   document.querySelectorAll('.prof-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(tab==='1rm'){
