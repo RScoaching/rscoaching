@@ -1478,6 +1478,14 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .mv-c{appearance:none;border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:4px;cursor:pointer;color:var(--ink8)}
 .mv-i{display:block;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000}.mv-i img{width:100%;height:100%;object-fit:cover}
 .mv-c b{font:600 14px Inter,sans-serif}.mv-c em{font-style:normal;font-size:12px;color:var(--mut8)}.mv-c .vd-es{align-self:flex-start}
+.rw{background:linear-gradient(160deg,rgba(167,139,250,.14),rgba(255,106,46,.08));border:1px solid rgba(167,139,250,.25);border-radius:20px;padding:18px}
+.rw-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.rw-h span{display:block;font:600 12.5px Inter,sans-serif;color:var(--violet2)}.rw-h b{display:block;font:400 30px/1.05 'Bebas Neue',sans-serif;color:var(--ink8);letter-spacing:.3px;margin-top:4px}
+.rw-h button{appearance:none;border:0;background:none;color:var(--mut8);font:500 13px Inter,sans-serif;padding:6px 0;cursor:pointer}
+.rw-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px;margin:16px 0 4px}
+.rw-g b{display:block;font:400 34px/1 'Bebas Neue',sans-serif;color:var(--ink8);letter-spacing:.3px}.rw-g b small{font-size:20px;color:var(--mut8)}.rw-g b i{font:600 12px Inter,sans-serif;font-style:normal;margin-left:6px;vertical-align:middle}
+.rw-g i.su{color:#4ADE80}.rw-g i.giu{color:#FB923C}.rw-g span{font-size:12px;color:var(--mut8)}
+.rw-r{display:flex;flex-direction:column;gap:4px;margin-top:14px;font-size:13.5px;color:var(--ink8)}.rw-r>b{font:600 12.5px Inter,sans-serif;color:var(--mut8)}.rw-r em{font-style:normal;color:var(--mut8)}
+.rw-f{margin:14px 0 0;font-size:13.5px;color:var(--ink8)}
 .sy-a{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
 .sy-a button{appearance:none;border:1px solid rgba(255,214,196,.14);background:rgba(255,214,196,.05);color:var(--ink8);font:600 13px Inter,sans-serif;padding:9px 14px;min-height:40px;border-radius:12px;cursor:pointer}
 .sy-a span{font-size:12.5px;color:var(--mut8)}
@@ -1655,6 +1663,8 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
       <div id="week-progress-bar-wrap" class="o9-bar" style="display:none"><div id="week-progress-bar" style="width:0%"></div></div>
       <div class="wd-row" id="week-dots-row"></div>
     </section>
+
+    <section class="o9-sec" id="rs-sec" hidden></section>
 
     <section class="o9-sec" id="onb-banner" hidden>
       <button type="button" class="onb-ban" onclick="onbApri()"><b>Completa la tua scheda</b><span>Il preparatore la usa per costruire il tuo programma. Tre minuti.</span></button>
@@ -2832,6 +2842,52 @@ async function onbControlla(athlete){
   }catch(e){}
 }
 
+// ── LA TUA SETTIMANA (lunedi' e martedi', come i report settimanali di Strava e Whoop)
+/* La settimana appena chiusa: allenamenti fatti su quelli in programma, minuti, km, serie,
+   record di forza stimati, abitudini, prontezza media; ogni numero contro la settimana prima. */
+function riepSett(lunTs){
+  const fine=lunTs+7*864e5,L=(ST.logs||[]).filter(l=>l&&l.ts>=lunTs&&l.ts<fine);
+  const min=L.reduce((t,l)=>t+((+l.duration||+l.minuti||0)||(l.corsa&&+l.corsa.sec?Math.round(l.corsa.sec/60):0)),0);
+  const km=L.reduce((t,l)=>t+((l.corsa&&+l.corsa.km)||0),0);
+  let serie=0;L.forEach(l=>Object.values(l.exerciseData||{}).forEach(a=>{serie+=(Array.isArray(a)?a:Object.values(a||{})).filter(x=>x&&(parseInt(x.reps)>0)).length;}));
+  const giorni=new Set(L.map(l=>new Date(l.ts).toDateString())).size;
+  let pr=[],pv=[];for(let i=0;i<7;i++){const g=prGiorno(isoLoc(new Date(lunTs+i*864e5+12*3600e3)));if(g)pr.push(g.score);}
+  return {n:L.length,giorni,min,km,serie,prMedia:pr.length?Math.round(pr.reduce((a,b)=>a+b,0)/pr.length):null,L};
+}
+function riepPrevisti(){
+  // sedute in programma la settimana scorsa (facoltative escluse)
+  let n=0;Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived).forEach(([pid,p])=>{
+    const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),wi=settAttiva(pid,p,W.length)-1,i=_inizioProg(p);
+    if(wi<0||!W[wi]||(i&&_lunedi(i).getTime()>lunTs()-7*864e5))return;
+    n+=Object.values(W[wi][1].sessions||{}).filter(x=>x&&x.dayOfWeek!=null&&!x.opz).length;});
+  return n;
+}
+function riepRecord(lunTs){
+  const e1=x=>{const kg=+String(x&&x.kg||'').replace(',','.'),r=parseInt(x&&x.reps)||0,rpe=+(x&&x.rpe)||0;if(!(kg>0&&r>0&&r<=12))return 0;return kg*(1+(r+(rpe?Math.max(0,Math.min(4,10-rpe)):0))/30);};
+  const prima={},ora={};(ST.logs||[]).forEach(l=>{if(!l||!l.exerciseData||l.ts<lunTs-63*864e5||l.ts>=lunTs+7*864e5)return;const D=l.ts>=lunTs?ora:prima;
+    Object.entries(l.exerciseData).forEach(([n,a])=>(Array.isArray(a)?a:Object.values(a||{})).forEach(x=>{const v=e1(x);if(v>(D[n]||0))D[n]=v;}));});
+  return Object.entries(ora).filter(([n,v])=>prima[n]&&v>=prima[n]+1).sort((a,b)=>(b[1]-prima[b[0]])-(a[1]-prima[a[0]])).slice(0,3).map(([n,v])=>({n,v:Math.round(v*2)/2,d:Math.round((v-prima[n])*2)/2}));
+}
+window.riepChiudi=()=>{try{localStorage.setItem('rs_riep_'+aid,String(lunTs()));}catch(e){}const el=document.getElementById('rs-sec');if(el)el.hidden=true;};
+function renderRiepilogo(){
+  const el=document.getElementById('rs-sec');if(!el)return;
+  const g=(new Date().getDay()+6)%7;let chiuso=0;try{chiuso=+localStorage.getItem('rs_riep_'+aid)||0;}catch(e){}
+  if(g>1||chiuso===lunTs()){el.hidden=true;return;}
+  const l0=lunTs()-7*864e5,a=riepSett(l0),b=riepSett(l0-7*864e5);
+  if(!a.n){el.hidden=true;return;}
+  const pv=riepPrevisti(),rec=riepRecord(l0),O=window.RSObiettivi,H=ST.hab||{};
+  const ab=O?O.attive(H.defs).map(([id,d])=>{const s=O.storico(d,id,H.log||{},ST.gd,7,new Date(l0+6*864e5));return {nome:d.nome,ok:s.ok};}):[];
+  const f1=x=>String(Math.round(x*10)/10).replace('.',','),dl=(x,y,u)=>{if(!y)return '';const d=x-y;return d?`<i class="${d>0?'su':'giu'}">${d>0?'+':''}${u==='km'?f1(d):Math.round(d)}</i>`:'';};
+  const dd=new Date(l0),de=new Date(l0+6*864e5),per=dd.getDate()+(dd.getMonth()!==de.getMonth()?' '+dd.toLocaleDateString('it-IT',{month:'short'}):'')+' - '+de.getDate()+' '+de.toLocaleDateString('it-IT',{month:'short'});
+  const cel=(v,l,d)=>`<div><b>${v}${d||''}</b><span>${l}</span></div>`;
+  el.hidden=false;
+  el.innerHTML=`<div class="rw"><div class="rw-h"><div><span>La tua settimana</span><b>${per}</b></div><button type="button" onclick="riepChiudi()" aria-label="Chiudi il riepilogo">Chiudi</button></div>
+    <div class="rw-g">${cel(a.n,pv?'allenamenti, '+pv+' in programma':'allenamenti',dl(a.n,b.n))}${cel(a.min,'minuti',dl(a.min,b.min))}${a.km?cel(f1(a.km),'km di corsa',dl(a.km,b.km,'km')):''}${a.serie?cel(a.serie,'serie di forza',dl(a.serie,b.serie)):''}${a.prMedia!=null?cel(a.prMedia,'prontezza media',dl(a.prMedia,b.prMedia)):''}</div>
+    ${rec.length?`<div class="rw-r"><b>Record</b>${rec.map(r=>`<span>${escH(r.n)} <em>${f1(r.v)} kg stimati, +${f1(r.d)}</em></span>`).join('')}</div>`:''}
+    ${ab.length?`<div class="rw-r"><b>Abitudini</b>${ab.map(x=>`<span>${escH(x.nome)} <em>${x.ok}/7</em></span>`).join('')}</div>`:''}
+    <p class="rw-f">${pv&&a.n>=pv?'Settimana completa: ottimo lavoro.':pv&&a.n<pv?'Questa settimana punta a farle tutte: '+pv+' in programma.':'Ogni settimana conta: continua cosi\'.'}</p></div>`;
+}
+
 // ── ABITUDINI E OBIETTIVI (window.RSObiettivi in sidebar.js)
 /* Le abitudini del giorno si spuntano qui (oggi o ieri); passi e sonno arrivano
    dall'orologio e si possono correggere. Gli obiettivi mostrano dove sei rispetto
@@ -3144,7 +3200,7 @@ window.syncChiedi=async()=>{
 function oggiAgg(){
   clearTimeout(_oggiT);
   _oggiT=setTimeout(()=>{
-    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();syncMostra();
+    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();syncMostra();try{renderRiepilogo();}catch(e){}
     if(typeof renderCiPagina==='function')renderCiPagina();
     // la seduta di oggi cambia aspetto quando viene registrata
     if(ST.logs.length!==_oggiLogs&&window._ath&&window._oggiPronto){_oggiLogs=ST.logs.length;loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx);if(ST.progs)renderPrograms(ST.progs);}

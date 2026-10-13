@@ -2021,6 +2021,17 @@ function dmLista(ids,st){
     const oggi=new Date();oggi.setHours(12,0,0,0);const pv=dPreviste(aid,oggi).filter(v=>v.x&&!v.x.opz);
     if(x.rdy!=null&&x.rdy<40&&pv.length&&ora-uc>6*3600e3)
       add('rdy_'+aid+'_'+oggi.toDateString(),aid,'Prontezza '+x.rdy+' con '+(pv[0].x.name||'una seduta')+' in programma oggi',`${n}, ho visto il check-in di stamattina. Oggi fai la seduta un po' piu' leggera: carichi -10% e niente serie a cedimento. Se qualcosa fa male, scrivimi prima di iniziare.`,3);
+    // lunedi' e martedi': riepilogo della settimana chiusa, se non gli hai gia' scritto da lunedi'
+    {const gg=(new Date().getDay()+6)%7,lun=new Date();lun.setHours(0,0,0,0);lun.setDate(lun.getDate()-gg);const l0=lun.getTime()-7*864e5;
+     if(gg<=1&&uc<lun.getTime()){const L=Object.values(sessionLogs[aid]||{}).filter(l=>l&&l.ts>=l0&&l.ts<lun.getTime());
+      if(L.length){let pv=0;for(let i=0;i<7;i++){const d=new Date(l0+i*864e5+12*3600e3);pv+=dPreviste(aid,d).filter(v=>v.x&&!v.x.opz).length;}
+        const km=L.reduce((t,l)=>t+((l.corsa&&+l.corsa.km)||0),0),min=L.reduce((t,l)=>t+((+l.duration||0)||(l.corsa&&+l.corsa.sec?Math.round(l.corsa.sec/60):0)),0);
+        let serie=0;L.forEach(l=>Object.values(l.exerciseData||{}).forEach(a=>{serie+=(Array.isArray(a)?a:Object.values(a||{})).filter(x=>x&&parseInt(x.reps)>0).length;}));
+        let rec=null;try{const S=fzSerie(aid),best={},nuovo={};S.forEach(y=>{const e=fzE1(y);if(!e||y.ts<l0-63*864e5||y.ts>=lun.getTime())return;if(y.ts<l0)best[y.ex]=Math.max(best[y.ex]||0,e);else nuovo[y.ex]=Math.max(nuovo[y.ex]||0,e);});
+          rec=Object.entries(nuovo).filter(([e,v])=>best[e]&&v>=best[e]+1).sort((a,b)=>(b[1]-best[b[0]])-(a[1]-best[a[0]]))[0]||null;}catch(e){}
+        const f1=x=>String(Math.round(x*10)/10).replace('.',',');
+        const pezzi=[L.length+(L.length===1?' allenamento':' allenamenti')+(pv?' ('+pv+' in programma)':''),min?min+' minuti':'',km?f1(km)+' km di corsa':'',serie?serie+' serie di forza':''].filter(Boolean);
+        add('sett_'+aid+'_'+l0,aid,'Riepilogo della settimana: '+pezzi.join(', '),`Ciao ${n}, la tua settimana: ${pezzi.join(', ')}.${rec?' Nuovo record su '+rec[0]+': '+f1(rec[1])+' kg stimati.':''} ${pv&&L.length>=pv?'Settimana completa, ottimo lavoro.':pv?'Questa settimana proviamo a farle tutte.':''} Come ti senti per quella che inizia?`.replace(/\s+/g,' ').trim(),1);}}}
     // abbonamento che scade entro 5 giorni
     {const g=abbGiorni(aid);if(g!=null&&g>=0&&g<=5&&ora-uc>2*864e5)add('abb_'+aid+'_'+((athletes[aid]||{}).abb||{}).scade,aid,'Abbonamento in scadenza il '+abbData(aid),`Ciao ${n}, ti ricordo che l'abbonamento scade ${g===0?'oggi':g===1?'domani':'il '+abbData(aid)}. Se vuoi continuare, dimmelo e lo rinnoviamo: il programma va avanti senza pause.`,2);}
     // programma che finisce entro 5 giorni
