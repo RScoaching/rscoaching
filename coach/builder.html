@@ -5561,9 +5561,14 @@ function stQuota(I,nC){
   return q;
 }
 // settimane di rientro dopo uno stop: qualita' e medio diventano corse facili
-function stRuoloRientro(w,r){return w&&((w.rientro&&['Qualita\'','Qualita\' 2','Medio'].includes(r))||(w.dopoRientro&&['Qualita\' 2','Medio'].includes(r)))?'Facile':r;}
+function stRuoloRientro(w,r,I){
+  if(w&&((w.rientro&&['Qualita\'','Qualita\' 2','Medio'].includes(r))||(w.dopoRientro&&['Qualita\' 2','Medio'].includes(r))))return 'Facile';
+  // principiante: nella fase di base una sola corsa impegnativa oltre al lungo (il medio arriva in costruzione)
+  if(I&&I.livello==='princ'&&w&&/Base|Adattamento/.test(w.fase||'')&&r==='Medio')return 'Facile';
+  return r;
+}
 function stKmRuoli(I,w,kmW,tipo,rit){
-  const cs=tipo.filter(x=>x.tipo==='corsa').map(x=>w&&w.rientro?Object.assign({},x,{ruolo:stRuoloRientro(w,x.ruolo)}):x),nC=cs.length,ps=stPassi(I,rit),D=+I.garaDist||10;
+  const cs=tipo.filter(x=>x.tipo==='corsa').map(x=>Object.assign({},x,{ruolo:stRuoloRientro(w,x.ruolo,I)})),nC=cs.length,ps=stPassi(I,rit),D=+I.garaDist||10;
   const scar=w.tipo!=='carico',f=w.fase,gara=stGr(I);
   const wu=((kmW<35?10:12.5)+10)*60/ps.pe; // riscaldamento e defaticamento in km
   const o={};
@@ -5689,7 +5694,7 @@ function stCorsa(I,w,ruolo,kmW,rit,nC,tipo,opz){
     if(!cam)return {nome:'Corsa continua',min:corsa+10,fasi:[att,stFase('Fondo Lento','Z2',corsa+'\'','','corsa continua, si deve poter parlare; se serve si cammina un minuto e si riparte'),fin]};
     return {nome:'Corri e cammina',min:Math.round(rip*(corsa+cam)+10),fasi:[att,stFase('Ripetute','Z2','','','corsa facile, deve restare comoda',{reps:String(rip),repDist:(corsa%1?Math.floor(corsa)+'\'30"':corsa+'\'')+' corsa',recTime:(cam%1?Math.floor(cam)+'\'30"':cam+'\'')+' camminata'}),fin]};
   }
-  ruolo=stRuoloRientro(w,ruolo);
+  ruolo=stRuoloRientro(w,ruolo,I);
   const K=stKmRuoli(I,w,kmW,tipo||stSettimanaTipo(I),rit),ps=stPassi(I,rit);
   if(ruolo==='Rigenerante')return {nome:'Corsa rigenerante',km:K.Rigenerante,fasi:[stFase('Fondo Lento','Z1',(kmW>=50?40:30)+'\'',rit?P(rit.lungo):'','piano davvero, anche piu\' lento del facile')]};
   if(ruolo==='Lungo')return stLungo(I,w,K.Lungo,rit,scar);
@@ -6550,6 +6555,7 @@ function stGaraPrep(I,P,w,sessions,nuova){
     if(x===gara)return;const dd=G.dow-x.dayOfWeek;
     // il lungo che resta nella settimana della gara si accorcia e resta facile
     if(x.type==='corsa'&&/lung/i.test(x.name)){x.name='Corsa facile';x.notes='Settimana della gara di preparazione: facile e piu\' corta.';x.corsaFasi=[stFase('Fondo Lento','Z2','40\'',rit?stPace(rit.facile[0])+'-'+stPace(rit.facile[1]):'','facile')];return;}
+    if(dd===3&&x.type==='corsa'&&!/facile|rigenerante|sgambata/i.test(x.name)){x.name='Corsa facile';x.notes='Tre giorni alla gara di preparazione: facile, con 4 allunghi.';x.corsaFasi=[stFase('Fondo Lento','Z2','40\'','','facile, poi 4 allunghi da 80 m')];}
     if(dd>=1&&dd<=2){
       if(x.type==='corsa'&&!/facile|rigenerante|sgambata/i.test(x.name)){x.name=dd===1?'Sgambata pre gara':'Corsa facile';x.notes=dd===1?'Solo per sciogliersi.':'Facile, con 3 allunghi.';x.corsaFasi=[stFase('Fondo Lento','Z2',dd===1?'20\'':'30\'','','facile'+(dd===1?', poi 3 allunghi da 80 m':''))];}
       if(x.type==='pesi'&&/gambe|forza per la corsa|total body|glutei/i.test(x.name)&&!/^Test/.test(x.name))delete sessions[kk];
@@ -6632,7 +6638,7 @@ function stCostruisci(I,P){
         const exs={};void tIso;
         kmSett+=c.km||0;
         const dove=c.km?'Circa '+c.km+' km. ':c.min?'Circa '+c.min+' minuti. ':'';
-        sessions['s'+ord]={name:gi===iRes||w.rientro||w.dopoRientro||['Corri e cammina','Qualita\'','Qualita\' 2','Lungo'].includes(g.ruolo)?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa la scheda di prevenzione (tasto Prevenzione nell\'app).':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
+        sessions['s'+ord]={name:gi===iRes||stRuoloRientro(w,g.ruolo,I)!==g.ruolo||['Corri e cammina','Qualita\'','Qualita\' 2','Lungo'].includes(g.ruolo)?c.nome:(g.nome||c.nome),type:'corsa',order:ord,dayOfWeek:g.d,notes:dove+(pb.att.length?'Prima della corsa la scheda di prevenzione (tasto Prevenzione nell\'app).':''),corsaFasi:c.fasi,exercises:exs};ord++;return;
       }
       if(g.tipo==='sprint'){
         const exs={};stVel(I,w).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
