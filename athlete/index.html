@@ -2860,13 +2860,16 @@ function renderGara(){
   Object.values(ST.progs||{}).forEach(p=>{if(!p||!p.assignedTo||!p.assignedTo[aid]||p.archived)return;const I=p.intake||{};
     const d=I.obiettivo==='gara'?String(I.garaDist||''):I.obiettivo==='ibrido'?String(I.ibGara||''):'';const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(I.garaData||'');
     if(!d||!M[d]||!m)return;const dt=new Date(+m[3],+m[2]-1,+m[1],12);const gg=Math.round((dt-oggi)/864e5);if(gg<0||gg>200)return;
-    if(!g||gg<g.gg)g={gg,dist:d,dt,tempo:I.garaTempo||'',nome:p.name||''};});
+    if(!g||gg<g.gg)g={gg,dist:d,dt,tempo:I.garaTempo||'',nome:p.name||''};
+    // gara di preparazione: si mostra lei finche' non e' passata
+    const mp=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(I.garaPrepData||''),dp=String(I.garaPrepDist||'');
+    if(mp&&M[dp]){const dt2=new Date(+mp[3],+mp[2]-1,+mp[1],12),g2=Math.round((dt2-oggi)/864e5);if(g2>=0&&g2<gg&&(!g||g2<g.gg))g={gg:g2,dist:dp,dt:dt2,tempo:I.garaPrepTempo||'',nome:'',prep:true};}});
   el.hidden=!g;if(!g)return;
   const R=(window._ath||{}).ritmi,V=R&&(R.vx||R.vdot),prev=V&&RR?Math.round(RR.previsto(V,M[g.dist])):null,obj=RR&&g.tempo?RR.sec(g.tempo):null;
   const T=s=>RR?RR.tempo(s):'';
   const nome=(/maratona di [a-z]+/i.exec(g.nome)||[])[0];
   const diff=prev&&obj?prev-obj:null;
-  el.innerHTML=`<div class="gr"><div class="gr-l"><span>${escH(nome?nome.replace(/^m/,'M'):N[g.dist])}</span><b>${g.gg===0?'Oggi':g.gg===1?'Domani':'Tra '+g.gg+' giorni'}</b><i>${g.dt.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}</i></div>
+  el.innerHTML=`<div class="gr"><div class="gr-l"><span>${escH(g.prep?'Gara di preparazione: '+N[g.dist]:nome?nome.replace(/^m/,'M'):N[g.dist])}</span><b>${g.gg===0?'Oggi':g.gg===1?'Domani':'Tra '+g.gg+' giorni'}</b><i>${g.dt.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}</i></div>
     <div class="gr-n">${obj?`<div><span>Obiettivo</span><b>${T(obj)}</b><i>${RR.passo(obj/(M[g.dist]/1000))}/km</i></div>`:''}${prev?`<div><span>Previsto oggi</span><b>${T(prev)}</b><i>${diff==null?'dai tuoi ritmi':Math.abs(diff)<30?'in linea con l\'obiettivo':diff<0?'in vantaggio di '+T(-diff):'mancano '+T(diff)}</i></div>`:''}</div></div>`;
 }
 
