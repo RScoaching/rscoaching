@@ -2004,6 +2004,18 @@ function rmDi(name,best){
    riquadro faceva i suoi conti (la prontezza di Oggi usciva diversa da quella che vede
    il preparatore, la settimana contava i giorni passati invece delle sedute previste). */
 const ST={logs:[],sess:{},ci:{},q:{},progs:null};
+// programmi: un download solo, partito subito all'apertura e riusato da Oggi, Settimana e Piano
+// (prima si scaricavano tutti fino a tre volte di fila, dopo i massimali: ~10 secondi)
+let _progsP=null,_progsTs=0;
+function progsCarica(nuovo){
+  if(nuovo||!_progsP){_progsTs=Date.now();_progsP=get(ref(db,'programs')).then(s=>{ST.progs=s.val()||{};if(ST.gd)gmLogs();return ST.progs;}).catch(e=>{_progsP=null;throw e;});}
+  return _progsP;
+}
+// tornando sull'app dopo un po' si riprendono i programmi: le modifiche del preparatore arrivano
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!window._ath||!window._oggiPronto||Date.now()-_progsTs<5*60e3)return;
+  progsCarica(true).then(()=>{loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx!=null?window._selectedDayIdx:window._todayIdx);renderPrograms(ST.progs);renderSettimana();}).catch(()=>{});
+});
 const isoLoc=d=>{d=new Date(d);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const itData=d=>new Date(d).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
 const nfIt=(v,dec)=>v==null||isNaN(v)?'-':String(Math.round(+v*Math.pow(10,dec||0))/Math.pow(10,dec||0)).replace('.',',');
@@ -2078,6 +2090,7 @@ if(!aid){
   get(ref(db,`athletes/${aid}`)).then(snap=>{
     if(!snap.exists()){document.getElementById('loading').style.display='none';document.getElementById('error-screen').style.display='flex';return;}
     const athlete=snap.val();
+    progsCarica().catch(()=>{});
     document.getElementById('loading').style.display='none';
     document.getElementById('app').style.display='block';
     requestAnimationFrame(window._bnH);
@@ -3359,7 +3372,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
 
   // ── Priority 1: athlete_plans (assigned by coach via planner)
   // un programma in corso vale piu' di un vecchio piano del Planner rimasto attivo
-  if(!ST.progs){try{ST.progs=(await get(ref(db,'programs'))).val()||{};}catch(e){}}
+  try{await progsCarica();}catch(e){}
   const qpSnap=progAttivo()?null:await get(ref(db,`athlete_plans/${aid}/${wk}`));
   if(qpSnap&&qpSnap.exists()){
     const qp=qpSnap.val();
@@ -3391,9 +3404,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
   }
 
   // ── Priority 2: Programs (program builder)
-  const progSnap=await get(ref(db,'programs'));
-  const progs=progSnap.val()||{};
-  ST.progs=progs;if(ST.gd)gmLogs();
+  const progs=await progsCarica();
   const myProgs=Object.entries(progs).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived);
   const progCards=[];let _firstPT=null;
   for(const [progId,prog] of myProgs){
@@ -3546,8 +3557,7 @@ async function loadWeekPlan(athlete){
   const now=new Date();const dayIdx=now.getDay()===0?6:now.getDay()-1;
   const monday=getMondayOf(new Date());const wk=monday.toISOString().slice(0,10);
   const wrap=document.getElementById('week-list');
-  const progSnap=await get(ref(db,'programs'));
-  ST.progs=progSnap.val()||{};if(ST.gd)gmLogs();
+  await progsCarica();
   renderPrograms(ST.progs);
   // Load all athlete-specific plans (sent by coach)
   const qpSnap=await get(ref(db,`athlete_plans/${aid}`));
