@@ -835,6 +835,7 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
 @media(max-width:860px){.vr-in{grid-template-columns:1fr}.vr-cl{max-height:none}}
 /* quello che ha hidden resta nascosto anche con display nelle classi */
 [hidden]{display:none!important}
+.sy{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}.sy-st{font-style:normal;font-size:11.5px;color:var(--muted)}.sy-st.go{color:#FBBF24}.sy-st.er{color:#F87171}
 .anA-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}.anA-n{flex:1;min-width:200px}.anA-n b{display:block;font:400 30px/1 'Bebas Neue',sans-serif;letter-spacing:.5px;color:var(--white)}.anA-n span{font-size:12px;color:var(--muted)}
 .anA-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px}
 .anA-k{background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:2px}.anA-k span{font-size:11px;color:var(--muted)}.anA-k b{font:400 28px/1.05 'Bebas Neue',sans-serif;letter-spacing:.4px;color:var(--white)}.anA-k i{font-style:normal;font-size:11px;color:var(--text)}
@@ -1564,6 +1565,7 @@ input,select,textarea{border-radius:10px}
   <div class="pg-head">
     <div><div class="pg-title">Oggi</div><div class="pg-sub" id="dash-date">-</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <span class="sy"><button type="button" class="btn btn-ghost" onclick="syncChiedi()">Aggiorna dall'orologio</button><em class="sy-st"></em></span>
       <a class="btn btn-ghost" href="./builder.html?studio=">Nuovo programma guidato</a>
       <button class="btn btn-orange" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openModal('athlete')">Aggiungi atleta</button>
     </div>
@@ -1872,6 +1874,8 @@ onValue(ref(db,'injuries'),s=>{injuries=s.val()||{};refreshHealth();renderAthlet
 onValue(ref(db,'coach_notes'),s=>{coachNotes=s.val()||{};refreshHealth();});
 onValue(ref(db,'habits'),s=>{habitsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
 onValue(ref(db,'video'),s=>{videoData=s.val()||{};const el=document.getElementById('det-video');if(currentAid&&el)el.innerHTML=renderDetVideo(currentAid);renderDashboard();if(_gcAid)renderGlobalChatConv(_gcAid);},()=>{});
+onValue(ref(db,'sync_richiesta'),s=>{syncRich=s.val()||{};syncMostra();},()=>{});
+onValue(ref(db,'sync_stato'),s=>{syncStato=s.val()||{};syncMostra();},()=>{});
 onValue(ref(db,'colloqui'),s=>{colloquiData=s.val()||{};if(!CQ)refreshColloquio();},()=>{});
 onValue(ref(db,'onboarding'),s=>{onbData=s.val()||{};refreshObiettivi();renderDashboard();renderAthletes();},()=>{});
 onValue(ref(db,'goals'),s=>{goalsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
@@ -3418,7 +3422,7 @@ function rdyScore(aid){const ri=readinessInfo(aid);return ri.avg7!=null?ri.avg7:
    per chilo di peso) e per accorgersi di un calo o di un aumento. Per questo non
    e' un campo solo ma un registro, `body_log/{aid}`, e vale l'ultima pesata.
    L'altezza cambia poco e sta nella scheda atleta (`alt`, in cm). */
-let bodyLog={},habitsData={},goalsData={},onbData={},colloquiData={},videoData={};
+let bodyLog={},habitsData={},goalsData={},onbData={},colloquiData={},videoData={},syncRich={},syncStato={};
 function athEta(dob){
   const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(dob||'').trim());
   if(!m)return null;
@@ -4993,6 +4997,27 @@ function renderAnalytics(){
   document.getElementById('an-sum').innerHTML=sum.map(([n,t])=>`<span><b>${n}</b>${t}</span>`).join('');
   try{anExtra(ids,sett);}catch(e){console.error(e);}
 }
+// ── AGGIORNA DALL'OROLOGIO a richiesta
+/* Il tasto scrive sync_richiesta; sul Mac richieste_sync.py (LaunchAgent ogni minuto) fa
+   la stessa sincronizzazione della mattina e della sera e scrive sync_stato. */
+function syncTesto(){
+  const r=+syncRich.ts||0,st=syncStato||{},ora=Date.now(),hm=t=>new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  if(r&&r>(+st.richiesta||0))return ora-r>3*60e3?'Il Mac non ha risposto: dev\'essere acceso e connesso':'Richiesta inviata, parte entro un minuto';
+  if(st.esito==='in_corso')return 'Aggiornamento in corso...';
+  if(st.esito==='ok'&&st.fine)return 'Aggiornato alle '+hm(st.fine)+(new Date(st.fine).toDateString()!==new Date().toDateString()?' del '+new Date(st.fine).toLocaleDateString('it-IT',{day:'numeric',month:'short'}):'');
+  if(st.esito==='errore')return 'Non riuscito'+(st.msg?': '+st.msg:'');
+  return '';
+}
+function syncMostra(){const t=syncTesto(),st=syncStato||{};document.querySelectorAll('.sy-st').forEach(e=>{e.textContent=t;e.className='sy-st'+(st.esito==='errore'?' er':st.esito==='in_corso'||(+syncRich.ts>(+st.richiesta||0))?' go':'');});
+  clearTimeout(window._syT);if(+syncRich.ts>(+st.richiesta||0))window._syT=setTimeout(syncMostra,30e3);}
+window.syncChiedi=async function(){
+  const st=syncStato||{};
+  if(st.esito==='in_corso'||(+syncRich.ts>(+st.richiesta||0)&&Date.now()-syncRich.ts<3*60e3)){showToast('Aggiornamento gia\' in corso');return;}
+  if(st.esito==='ok'&&st.fine&&Date.now()-st.fine<2*60e3){showToast('Appena aggiornato: riprova tra un paio di minuti');return;}
+  await set(ref(db,'sync_richiesta'),{ts:Date.now(),da:'coach',nome:'Raoul'});showToast('Richiesta inviata: il Mac aggiorna entro un minuto');
+};
+// quando finisce, i dati nuovi arrivano da soli (garmin_data e session_logs sono in ascolto)
+
 // ── ANALISI DELL'ATLETA: tutto in una pagina (come intervals.icu e TrainingPeaks)
 /* Scegliendo un atleta: numeri chiave, poi una vista alla volta: Corsa (forma e fatica,
    intensita', migliori tratti), Tutte le corse (elenco filtrabile, clic = analisi della
@@ -5035,6 +5060,7 @@ function anAtleta(force){
   else if(anVista==='benessere')body=anBenessere(aid)+`<div class="tdet-h" style="margin-top:18px">Ultimi 14 giorni</div><div id="det-checkin">${renderDetCheckin(aid,Object.values(checkins[aid]||{}).sort((x,y)=>y.ts-x.ts))}</div>`;
   else if(anVista==='video')body=`<div id="det-video">${renderDetVideo(aid)}</div>`;
   box.innerHTML=`<div class="anA-head"><div class="det-av">${ini(a.name)}</div><div class="anA-n"><b>${athEsc(a.name)}</b><span>${[a.role,a.team].filter(Boolean).map(athEsc).join(' &#183; ')}${k.last?' &#183; ultima attivita\' '+ggFa(k.last):''}</span></div>
+      <span class="sy"><button type="button" class="btn btn-ghost btn-sm" onclick="syncChiedi()">Aggiorna dall'orologio</button><em class="sy-st">${syncTesto()}</em></span>
       <button type="button" class="btn btn-ghost btn-sm" onclick="anSet('')">Tutta la squadra</button><button type="button" class="btn btn-outline btn-sm" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openAthlete('${aid}')">Apri la scheda</button></div>
     <div class="anA-kpi">
       ${kpi('Prontezza',k.rdy!=null?k.rdy:'-','media 7 giorni',k.rdy!=null&&k.rdy<40?'r':'')}

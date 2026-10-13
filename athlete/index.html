@@ -1478,6 +1478,9 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .mv-c{appearance:none;border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:4px;cursor:pointer;color:var(--ink8)}
 .mv-i{display:block;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000}.mv-i img{width:100%;height:100%;object-fit:cover}
 .mv-c b{font:600 14px Inter,sans-serif}.mv-c em{font-style:normal;font-size:12px;color:var(--mut8)}.mv-c .vd-es{align-self:flex-start}
+.sy-a{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
+.sy-a button{appearance:none;border:1px solid rgba(255,214,196,.14);background:rgba(255,214,196,.05);color:var(--ink8);font:600 13px Inter,sans-serif;padding:9px 14px;min-height:40px;border-radius:12px;cursor:pointer}
+.sy-a span{font-size:12.5px;color:var(--mut8)}
 .ob-lk{appearance:none;border:0;background:none;padding:6px 0;color:var(--primary2);font:600 13px Inter,sans-serif;cursor:pointer}
 .ob-agg{display:flex;gap:8px;margin-top:10px}
 .ob-agg input{flex:1;min-width:0;background:rgba(255,214,196,.06);border:1px solid rgba(255,214,196,.12);border-radius:12px;color:var(--ink8);font:500 15px Inter,sans-serif;padding:10px 12px;min-height:44px}
@@ -1669,6 +1672,7 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 
     <section class="o9-sec">
       <div class="pr7 o9-ready" id="readiness-hero"></div>
+      <div class="sy-a" id="sy-a" hidden><button type="button" onclick="syncChiedi()">Aggiorna dall'orologio</button><span id="sy-a-st"></span></div>
     </section>
 
     <section class="o9-sec">
@@ -2209,6 +2213,8 @@ if(!aid){
     });
     // abitudini e obiettivi scelti dal preparatore
     setTimeout(()=>onbControlla(athlete),1800);
+    onValue(ref(db,'sync_richiesta'),x=>{ST.syR=x.val()||{};syncMostra();},()=>{});
+    onValue(ref(db,'sync_stato'),x=>{ST.syS=x.val()||{};syncMostra();},()=>{});
     onValue(ref(db,`video/${aid}`),v=>{ST.video=v.val()||{};if(document.getElementById('prof-video')?.style.display==='block')renderMieiVideo();if(document.getElementById('page-chat')?.style.display!=='none')renderChat();},()=>{});
     onValue(ref(db,`habits/${aid}`),h=>{ST.hab=h.val()||{};renderAbitudini();},()=>{});
     onValue(ref(db,`goals/${aid}`),g=>{ST.goals=g.val()||{};renderObiettivi();},()=>{});
@@ -3118,10 +3124,27 @@ function renderNumeri(){
 
 // tutto quello che dipende dai registri si ridisegna insieme, una volta sola per giro
 let _oggiT=null,_oggiLogs=-1;
+// aggiorna dall'orologio a richiesta: lo fa il Mac del preparatore (richieste_sync.py)
+function syncTesto(){
+  const r=+(ST.syR||{}).ts||0,st=ST.syS||{},ora=Date.now(),hm=t=>new Date(t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  if(r&&r>(+st.richiesta||0))return ora-r>3*60e3?'In attesa: riprova piu\' tardi':'Richiesta inviata, parte entro un minuto';
+  if(st.esito==='in_corso')return 'Aggiornamento in corso...';
+  if(st.esito==='ok'&&st.fine&&new Date(st.fine).toDateString()===new Date().toDateString())return 'Aggiornato alle '+hm(st.fine);
+  if(st.esito==='errore')return 'Non riuscito, riprova tra poco';
+  return '';
+}
+function syncMostra(){const b=document.getElementById('sy-a'),t=document.getElementById('sy-a-st');if(!b)return;b.hidden=!ST.gd;if(t)t.textContent=syncTesto();
+  clearTimeout(window._syT);if(+(ST.syR||{}).ts>(+(ST.syS||{}).richiesta||0))window._syT=setTimeout(syncMostra,30e3);}
+window.syncChiedi=async()=>{
+  const st=ST.syS||{},r=ST.syR||{};
+  if(st.esito==='in_corso'||(+r.ts>(+st.richiesta||0)&&Date.now()-r.ts<3*60e3)){showToast('Aggiornamento gia\' in corso');return;}
+  if(st.esito==='ok'&&st.fine&&Date.now()-st.fine<2*60e3){showToast('Appena aggiornato');return;}
+  try{await set(ref(db,'sync_richiesta'),{ts:Date.now(),da:'atleta',nome:(window._ath||{}).name||''});showToast('Richiesta inviata: i dati arrivano in un paio di minuti');}catch(e){showToast('Non inviata: controlla la connessione');}
+};
 function oggiAgg(){
   clearTimeout(_oggiT);
   _oggiT=setTimeout(()=>{
-    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();
+    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();syncMostra();
     if(typeof renderCiPagina==='function')renderCiPagina();
     // la seduta di oggi cambia aspetto quando viene registrata
     if(ST.logs.length!==_oggiLogs&&window._ath&&window._oggiPronto){_oggiLogs=ST.logs.length;loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx);if(ST.progs)renderPrograms(ST.progs);}
