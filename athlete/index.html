@@ -1478,6 +1478,9 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .mv-c{appearance:none;border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:4px;cursor:pointer;color:var(--ink8)}
 .mv-i{display:block;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:#000}.mv-i img{width:100%;height:100%;object-fit:cover}
 .mv-c b{font:600 14px Inter,sans-serif}.mv-c em{font-style:normal;font-size:12px;color:var(--mut8)}.mv-c .vd-es{align-self:flex-start}
+.gr{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;justify-content:space-between;border:1px solid var(--border2);border-radius:20px;padding:16px 18px;background:rgba(255,106,46,.06)}
+.gr-l span{display:block;font:600 12.5px Inter,sans-serif;color:var(--primary2)}.gr-l b{display:block;font:400 40px/1 'Bebas Neue',sans-serif;color:var(--ink8);letter-spacing:.3px;margin:4px 0 2px}.gr-l i{font-style:normal;font-size:12.5px;color:var(--mut8)}
+.gr-n{display:flex;gap:20px}.gr-n span{display:block;font-size:11.5px;color:var(--mut8)}.gr-n b{display:block;font:400 28px/1.05 'Bebas Neue',sans-serif;color:var(--ink8);letter-spacing:.3px}.gr-n i{font-style:normal;font-size:11.5px;color:var(--mut8)}
 .rw{background:linear-gradient(160deg,rgba(167,139,250,.14),rgba(255,106,46,.08));border:1px solid rgba(167,139,250,.25);border-radius:20px;padding:18px}
 .rw-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.rw-h span{display:block;font:600 12.5px Inter,sans-serif;color:var(--violet2)}.rw-h b{display:block;font:400 30px/1.05 'Bebas Neue',sans-serif;color:var(--ink8);letter-spacing:.3px;margin-top:4px}
 .rw-h button{appearance:none;border:0;background:none;color:var(--mut8);font:500 13px Inter,sans-serif;padding:6px 0;cursor:pointer}
@@ -1665,6 +1668,8 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
     </section>
 
     <section class="o9-sec" id="rs-sec" hidden></section>
+
+    <section class="o9-sec" id="gara-sec" hidden></section>
 
     <section class="o9-sec" id="onb-banner" hidden>
       <button type="button" class="onb-ban" onclick="onbApri()"><b>Completa la tua scheda</b><span>Il preparatore la usa per costruire il tuo programma. Tre minuti.</span></button>
@@ -2842,6 +2847,24 @@ async function onbControlla(athlete){
   }catch(e){}
 }
 
+// ── LA GARA: conto alla rovescia, obiettivo e tempo previsto oggi dai ritmi
+function renderGara(){
+  const el=document.getElementById('gara-sec');if(!el)return;
+  const RR=window.RSRitmi,M={5:5000,10:10000,21:21097.5,42:42195},N={5:'5 km',10:'10 km',21:'Mezza maratona',42:'Maratona'};
+  const oggi=new Date();oggi.setHours(12,0,0,0);let g=null;
+  Object.values(ST.progs||{}).forEach(p=>{if(!p||!p.assignedTo||!p.assignedTo[aid]||p.archived)return;const I=p.intake||{};
+    const d=I.obiettivo==='gara'?String(I.garaDist||''):I.obiettivo==='ibrido'?String(I.ibGara||''):'';const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(I.garaData||'');
+    if(!d||!M[d]||!m)return;const dt=new Date(+m[3],+m[2]-1,+m[1],12);const gg=Math.round((dt-oggi)/864e5);if(gg<0||gg>200)return;
+    if(!g||gg<g.gg)g={gg,dist:d,dt,tempo:I.garaTempo||'',nome:p.name||''};});
+  el.hidden=!g;if(!g)return;
+  const R=(window._ath||{}).ritmi,V=R&&(R.vx||R.vdot),prev=V&&RR?Math.round(RR.previsto(V,M[g.dist])):null,obj=RR&&g.tempo?RR.sec(g.tempo):null;
+  const T=s=>RR?RR.tempo(s):'';
+  const nome=(/maratona di [a-z]+/i.exec(g.nome)||[])[0];
+  const diff=prev&&obj?prev-obj:null;
+  el.innerHTML=`<div class="gr"><div class="gr-l"><span>${escH(nome?nome.replace(/^m/,'M'):N[g.dist])}</span><b>${g.gg===0?'Oggi':g.gg===1?'Domani':'Tra '+g.gg+' giorni'}</b><i>${g.dt.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}</i></div>
+    <div class="gr-n">${obj?`<div><span>Obiettivo</span><b>${T(obj)}</b><i>${RR.passo(obj/(M[g.dist]/1000))}/km</i></div>`:''}${prev?`<div><span>Previsto oggi</span><b>${T(prev)}</b><i>${diff==null?'dai tuoi ritmi':Math.abs(diff)<30?'in linea con l\'obiettivo':diff<0?'in vantaggio di '+T(-diff):'mancano '+T(diff)}</i></div>`:''}</div></div>`;
+}
+
 // ── LA TUA SETTIMANA (lunedi' e martedi', come i report settimanali di Strava e Whoop)
 /* La settimana appena chiusa: allenamenti fatti su quelli in programma, minuti, km, serie,
    record di forza stimati, abitudini, prontezza media; ogni numero contro la settimana prima. */
@@ -3200,7 +3223,7 @@ window.syncChiedi=async()=>{
 function oggiAgg(){
   clearTimeout(_oggiT);
   _oggiT=setTimeout(()=>{
-    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();syncMostra();try{renderRiepilogo();}catch(e){}
+    renderSettimana();renderProntezza();renderNumeri();renderWorkoutLogs(ST.logs);renderPfNum();renderE1rm();renderAbitudini();renderObiettivi();syncMostra();try{renderRiepilogo();}catch(e){}try{renderGara();}catch(e){}
     if(typeof renderCiPagina==='function')renderCiPagina();
     // la seduta di oggi cambia aspetto quando viene registrata
     if(ST.logs.length!==_oggiLogs&&window._ath&&window._oggiPronto){_oggiLogs=ST.logs.length;loadTodayPlan(window._ath,window._athRecs||{},window._athBest1rm||{},window._selectedDayIdx);if(ST.progs)renderPrograms(ST.progs);}

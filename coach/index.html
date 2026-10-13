@@ -1565,6 +1565,7 @@ input,select,textarea{border-radius:10px}
   <div class="pg-head">
     <div><div class="pg-title">Oggi</div><div class="pg-sub" id="dash-date">-</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-ghost" id="noti-btn" onclick="notiAttiva()" hidden>Attiva gli avvisi</button>
       <span class="sy"><button type="button" class="btn btn-ghost" onclick="syncChiedi()">Aggiorna dall'orologio</button><em class="sy-st"></em></span>
       <a class="btn btn-ghost" href="./builder.html?studio=">Nuovo programma guidato</a>
       <button class="btn btn-orange" onclick="pg('athletes',document.querySelectorAll('.nav-item')[1]);openModal('athlete')">Aggiungi atleta</button>
@@ -1873,7 +1874,7 @@ onValue(ref(db,'body_log'),s=>{bodyLog=s.val()||{};refreshOverview();});
 onValue(ref(db,'injuries'),s=>{injuries=s.val()||{};refreshHealth();renderAthletes();});
 onValue(ref(db,'coach_notes'),s=>{coachNotes=s.val()||{};refreshHealth();});
 onValue(ref(db,'habits'),s=>{habitsData=s.val()||{};refreshObiettivi();renderDashboard();},()=>{});
-onValue(ref(db,'video'),s=>{videoData=s.val()||{};const el=document.getElementById('det-video');if(currentAid&&el)el.innerHTML=renderDetVideo(currentAid);renderDashboard();if(_gcAid)renderGlobalChatConv(_gcAid);},()=>{});
+onValue(ref(db,'video'),s=>{videoData=s.val()||{};try{notiVideo();}catch(e){}const el=document.getElementById('det-video');if(currentAid&&el)el.innerHTML=renderDetVideo(currentAid);renderDashboard();if(_gcAid)renderGlobalChatConv(_gcAid);},()=>{});
 onValue(ref(db,'sync_richiesta'),s=>{syncRich=s.val()||{};syncMostra();},()=>{});
 onValue(ref(db,'sync_stato'),s=>{syncStato=s.val()||{};syncMostra();},()=>{});
 onValue(ref(db,'colloqui'),s=>{colloquiData=s.val()||{};if(!CQ)refreshColloquio();},()=>{});
@@ -1893,6 +1894,7 @@ onValue(ref(db,'questionnaires'),s=>{questionnaires=s.val()||{};renderAthletes()
 onValue(ref(db,'questionnaire_defs'),s=>{qDefs=s.val()||{};renderQuestionari();});
 onValue(ref(db,'chat'),s=>{
   chatData=s.val()||{};
+  try{notiChat();}catch(e){}
   renderAthletes(); // aggiorna badge messaggi non letti nella lista atleti
   updateChatNavBadge(); // badge nav sidebar
   renderDashboard(); // i messaggi non letti entrano in Da guardare
@@ -5008,6 +5010,35 @@ function renderAnalytics(){
   document.getElementById('an-sum').innerHTML=sum.map(([n,t])=>`<span><b>${n}</b>${t}</span>`).join('');
   try{anExtra(ids,sett);}catch(e){console.error(e);}
 }
+// ── AVVISI SUL COMPUTER: messaggi e video degli atleti mentre il sito e' aperto
+/* Notifica di sistema (serve il permesso del browser, tasto 'Attiva gli avvisi') e numero
+   nel titolo della scheda: messaggi non letti piu' video da correggere. Clic sull'avviso:
+   si apre la chat o il video. Solo per quello che arriva dopo l'apertura della pagina. */
+const NOTI_T0=Date.now(),notiVisti=new Set();
+function notiOk(){return 'Notification' in window&&Notification.permission==='granted';}
+function notiBottone(){const b=document.getElementById('noti-btn');if(b)b.hidden=!('Notification' in window)||Notification.permission!=='default';}
+window.notiAttiva=async function(){if(!('Notification' in window))return;try{const r=await Notification.requestPermission();showToast(r==='granted'?'Avvisi attivi: arrivano anche con il sito in un\'altra scheda':'Avvisi non attivati: si cambia dalle impostazioni del browser');}catch(e){}notiBottone();};
+function notiMostra(chiave,titolo,testo,apri){
+  if(notiVisti.has(chiave))return;notiVisti.add(chiave);
+  if(!notiOk()||(document.visibilityState==='visible'&&document.hasFocus()))return;
+  try{const n=new Notification(titolo,{body:String(testo||'').slice(0,140),tag:chiave,icon:window.RS_LOGO||undefined});n.onclick=()=>{window.focus();n.close();try{apri();}catch(e){}};}catch(e){}
+}
+function notiTitolo(){
+  const msg=Object.values(chatData||{}).reduce((t,c)=>t+Object.values(c&&c.messages||{}).filter(m=>m&&m.from==='athlete'&&!m.read).length,0);
+  const vid=Object.keys(athletes||{}).reduce((t,id)=>t+vrDaVedere(id),0),n=msg+vid;
+  document.title=(n?'('+n+') ':'')+'RS Coaching - Coach';
+}
+function notiChat(){
+  Object.entries(chatData||{}).forEach(([aid,c])=>Object.entries(c&&c.messages||{}).forEach(([k,m])=>{
+    if(m&&m.from==='athlete'&&!m.read&&+m.ts>NOTI_T0)notiMostra('c'+k,((athletes[aid]||{}).name||'Atleta')+' ti ha scritto',m.video?'Ha mandato un video: '+String(m.text||'').replace(/^Video: /,''):m.text,()=>{const nav=[...document.querySelectorAll('.nav-item')].find(e=>/chat/i.test(e.textContent));if(nav)nav.click();setTimeout(()=>openGlobalChat(aid),80);});}));
+  notiTitolo();
+}
+function notiVideo(){
+  Object.entries(videoData||{}).forEach(([aid,V])=>Object.entries(V||{}).forEach(([k,v])=>{if(v&&v.stato!=='visto'&&+v.ts>NOTI_T0)notiMostra('v'+k,'Video da correggere: '+(v.esercizio||''),(athletes[aid]||{}).name||'',()=>vrApri(aid,k));}));
+  notiTitolo();
+}
+setTimeout(notiBottone,1500);
+
 // ── AGGIORNA DALL'OROLOGIO a richiesta
 /* Il tasto scrive sync_richiesta; sul Mac richieste_sync.py (LaunchAgent ogni minuto) fa
    la stessa sincronizzazione della mattina e della sera e scrive sync_stato. */
