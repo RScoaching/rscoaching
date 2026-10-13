@@ -1113,6 +1113,7 @@ button,input,select,textarea{font-family:inherit}
 .sv-t{width:100%;box-sizing:border-box;min-height:70px;background:rgba(255,214,196,.05);border:1px solid rgba(255,214,196,.14);border-radius:12px;color:var(--white);font:15px/1.5 Inter,sans-serif;padding:10px 12px;resize:vertical}
 .sv-stato{font-size:13px;color:var(--muted)}.sv-bar{height:6px;border-radius:3px;background:rgba(255,214,196,.08);margin-top:6px;overflow:hidden}.sv-bar i{display:block;height:100%;background:var(--primary)}
 .sv-invia{appearance:none;border:0;border-radius:14px;min-height:52px;background:var(--primary);color:#1A1210;font:600 15px Inter,sans-serif;cursor:pointer}.sv-invia:disabled{opacity:.4;cursor:default}
+.coda-av{margin:0 0 14px;padding:12px 14px;border-radius:14px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:#FDE68A;font:500 13.5px/1.45 Inter,sans-serif;text-align:left}
 </style>
 </head>
 <body>
@@ -1330,7 +1331,15 @@ let tabWork=20, tabRest=10, tabRounds=8;
 let tabSecs=0, tabPhase='prep', tabCurRound=1, tabRunning=false, tabIv=null;
 let tabPrepSecs=3;
 
+// coda delle sedute finite non ancora confermate dal server (stessa chiave dell'app atleta)
+const CODA_K='rs_coda_logs_'+AID;
+function codaLeggi(){try{return JSON.parse(localStorage.getItem(CODA_K)||'{}')||{};}catch(e){return {};}}
+function codaScrivi(c){try{if(Object.keys(c).length)localStorage.setItem(CODA_K,JSON.stringify(c));else localStorage.removeItem(CODA_K);}catch(e){}}
+function conTempo(p,ms){return Promise.race([p,new Promise((_,ko)=>setTimeout(()=>ko(new Error('rete lenta')),ms))]);}
+async function codaInvia(){for(const [k,d] of Object.entries(codaLeggi())){try{await conTempo(set(ref(db,`session_logs/${AID}/${k}`),d),15000);const c=codaLeggi();delete c[k];codaScrivi(c);}catch(e){}}}
+window.addEventListener('online',()=>codaInvia());
 async function init(){
+  codaInvia();
   if(!AID){err('ID atleta mancante');return;}
   try{
     const [aS,rmS,logsS]=await Promise.all([
@@ -2600,14 +2609,21 @@ async function finish(){
         .filter(s=>s.kg!=null); // only save sets with actual kg
     }
   });
-  window._logRef=await push(ref(db,`session_logs/${AID}`),{
+  // la seduta finita va prima nella coda del telefono: senza rete non si perde e non si resta
+  // fermi su 'Completa'; si manda con la stessa chiave appena il server risponde (niente doppioni)
+  const _r=push(ref(db,`session_logs/${AID}`));window._logRef=_r;
+  const _dati=JSON.parse(JSON.stringify({
     ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
     condSecs,condRounds,isQuick,avgRpe,exerciseData,
     date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
-  });
+  }));
+  {const c=codaLeggi();c[_r.key]=_dati;codaScrivi(c);}
+  let _inviata=true;
+  try{await conTempo(set(_r,_dati),8000);const c=codaLeggi();delete c[_r.key];codaScrivi(c);}catch(e){_inviata=false;}
+  window._logInAttesa=!_inviata;
 
-  if(newPRs.length){
+  if(newPRs.length&&_inviata){
     const exSnap=await get(ref(db,`rm_exercises/${AID}`));
     const exObj=exSnap.val()||{};
     for(const pr of newPRs){
@@ -2626,6 +2642,7 @@ async function finish(){
   try{localStorage.removeItem(_sessKey);}catch(e){}
 
   showDoneScreen(dur,totalSets,avgRpe);
+  if(!_inviata){const h=document.querySelector('#done-screen .done-hero');if(h)h.insertAdjacentHTML('afterbegin','<div class="coda-av">Niente rete: la seduta e\' salvata sul telefono e si invia da sola appena torna la connessione.</div>');}
 }
 
 function showDoneScreen(dur,totalSets,avgRpe){
@@ -2817,10 +2834,10 @@ window.saveSessionCheckin=async function(){
        l'RPE nella fatica, cosi' il preparatore vedeva "fatica 9" dopo ogni seduta dura.
        Se il giorno aveva gia' un RPE (allenamento di squadra, altra seduta) si fa la media
        pesata sui minuti, perche' il carico del giorno e' uno solo. */
-    const prima=(await get(ref(db,`sessions/${AID}/${_dateKey}`))).val();
+    let prima=null;try{prima=(await conTempo(get(ref(db,`sessions/${AID}/${_dateKey}`)),6000)).val();}catch(e){}
     let rpeG=rpe,dayG=_day;
     if(prima&&+prima.rpe>0&&prima.day!==_day){const m0=+prima.min||60,m1=_min||60;rpeG=Math.round((prima.rpe*m0+rpe*m1)/(m0+m1)*10)/10;dayG=(prima.day||'Seduta')+' + '+_day;}
-    await Promise.all([
+    await conTempo(Promise.all([
       set(ref(db,`sessions/${AID}/${_dateKey}`),{
         ts:_ts,date:_date,
         rpe:rpeG,note,day:dayG,min:(prima&&prima.day!==_day&&+prima.min?+prima.min:0)+(_min||0)||null,pains:pains.length?pains:null
@@ -2829,10 +2846,12 @@ window.saveSessionCheckin=async function(){
         ts:_ts,sessionRpe:rpe,note:note||null,fromSession:_day
       }),
       ...(Object.keys(CI.extraOk()).length?[update(ref(db,`questionnaires/${AID}/${_dateKey}/extra`),CI.extraOk())]:[])
-    ]);
+    ]),10000);
     document.getElementById('ci-card').innerHTML='<div class="ci-ok"><span class="ci-ok-txt">Inviato al preparatore</span></div>';
     document.getElementById('done-actions').style.display='flex';
   }catch(e){
+    // senza rete i dati restano in attesa e partono appena torna la connessione (tenendo aperta la pagina)
+    if(e&&e.message==='rete lenta'){document.getElementById('ci-card').innerHTML='<div class="ci-ok"><span class="ci-ok-txt">Niente rete: parte appena torna la connessione. Tieni aperta la pagina qualche secondo quando c\'e\' campo.</span></div>';document.getElementById('done-actions').style.display='flex';return;}
     btn.textContent='Invia';btn.disabled=false;
     toast('Non inviato: controlla la connessione e riprova');
   }

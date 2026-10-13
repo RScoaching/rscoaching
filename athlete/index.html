@@ -2031,6 +2031,11 @@ function rmDi(name,best){
 const ST={logs:[],sess:{},ci:{},q:{},progs:null};
 // programmi: un download solo, partito subito all'apertura e riusato da Oggi, Settimana e Piano
 // (prima si scaricavano tutti fino a tre volte di fila, dopo i massimali: ~10 secondi)
+// sedute finite senza rete (session.html le mette in coda sul telefono): si mandano qui con la stessa chiave
+async function codaInvia(){const K='rs_coda_logs_'+aid;let c={};try{c=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
+  for(const [k,d] of Object.entries(c)){try{await Promise.race([set(ref(db,`session_logs/${aid}/${k}`),d),new Promise((_,ko)=>setTimeout(()=>ko(0),15000))]);
+    let c2={};try{c2=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}delete c2[k];try{if(Object.keys(c2).length)localStorage.setItem(K,JSON.stringify(c2));else localStorage.removeItem(K);}catch(e){}showToast('Seduta salvata senza rete: inviata ora');}catch(e){}}}
+window.addEventListener('online',()=>{if(aid)codaInvia();});
 let _progsP=null,_progsTs=0;
 function progsCarica(nuovo){
   if(nuovo||!_progsP){_progsTs=Date.now();_progsP=get(ref(db,'programs')).then(s=>{ST.progs=s.val()||{};if(ST.gd)gmLogs();return ST.progs;}).catch(e=>{_progsP=null;throw e;});}
@@ -2115,7 +2120,7 @@ if(!aid){
   get(ref(db,`athletes/${aid}`)).then(snap=>{
     if(!snap.exists()){document.getElementById('loading').style.display='none';document.getElementById('error-screen').style.display='flex';return;}
     const athlete=snap.val();
-    progsCarica().catch(()=>{});
+    progsCarica().catch(()=>{});codaInvia();
     document.getElementById('loading').style.display='none';
     document.getElementById('app').style.display='block';
     requestAnimationFrame(window._bnH);
