@@ -5882,7 +5882,9 @@ function stRtpStima(I){
   const fonte=t==='muscolo'?'Ekstrand 2013, classificazione di Monaco'+(z==='hamstring'?'; Askling 2013':''):z==='caviglia'?'PAASS 2021 per i criteri':'collaterale mediale, trattamento conservativo';
   return {min:a,max:b,txt:(a===b?a:a+'-'+b)+(b===1?' settimana':' settimane')+(note.length?' ('+note.join(', ')+')':''),fonte};
 }
-function stRtpNomi(I){return I.rtpSport==='corsa'?ST_RTP_NOMI_C:ST_RTP_NOMI;}
+// spalla: le gambe sono sane, si corre da subito; le fasi seguono il braccio fino al gesto dello sport
+const ST_RTP_NOMI_S=['Ricondizionamento','Rinforzo','Ritorno al gesto','Ritorno in squadra'];
+function stRtpNomi(I){return I.rtpSport==='corsa'?ST_RTP_NOMI_C:I.rtpInf==='spalle'?ST_RTP_NOMI_S:ST_RTP_NOMI;}
 function stRtpFasi(I){
   const s={ricond:0,corsa:1,campo:2}[I.rtpFase]||0,n=stRtpNomi(I);
   const q=[[.3,.3,.25,.15],[0,.35,.4,.25],[0,0,.55,.45]][s];
@@ -5907,7 +5909,7 @@ const ST_RTP_CRIT={
   anca:[[['Rotazioni anca 90-90','senza dolore, simili fra i lati']],[],[],[]],
   lombalgia:[[['Side Plank','45" per lato'],['Biering-Sorensen','60" o piu\'']],[],[],[]],
   ernia:[[['Side Plank','45" per lato'],['Dolore alla gamba','assente']],[],[],[]],
-  spalle:[[['Rotazione esterna spalla','forza almeno 80% dell\'altra'],['Movimento sopra la testa','completo e senza dolore']],[],[['Rotazione esterna spalla','forza almeno 90% dell\'altra'],['Lanci o contrasti','senza dolore']],[]],
+  spalle:[[['Rotazione esterna spalla','forza almeno 80% dell\'altra'],['Movimento sopra la testa','completo e senza dolore']],[['CKCUEST (tocchi in appoggio sulle mani)','almeno 21 in 15"'],['Spinte e tirate','carichi di prima, 8 ripetute senza dolore']],[['Rotazione esterna spalla','forza almeno 90% dell\'altra'],['Lanci o contrasti','senza dolore']],[]],
   lcp:[[['Cassetto posteriore','stabile, la lassita\' non aumenta'],['Estensione completa','senza dolore']],[['Quadricipite isometrico','almeno 80% dell\'altra gamba']],[['Quadricipite','LSI 90% o piu\''],['Hop test','LSI 90% o piu\'']],[['Tempo dall\'intervento','9-12 mesi se ricostruito']]],
   lcm:[[['Stress in valgo a 30 gradi','senza dolore ne\' apertura'],['Flessione del ginocchio','oltre 120 gradi']],[],[['Cambi di direzione laterali','senza dolore'],['Passaggio di interno piede','senza dolore']],[]],
   quadricipite:[[['Flessione del ginocchio da prono','simmetrica e senza dolore'],['Isometria del quadricipite','senza dolore']],[['Sprint al 70-80%','senza dolore']],[['Calcio lungo','senza dolore'],['Sprint al 95-100%','senza dolore']],[]]};
@@ -5915,6 +5917,8 @@ function stRtpCrit(I,s){
   const sp=((ST_RTP_CRIT[I.rtpInf]||[])[s])||[],gen=ST_RTP_GEN[s]||[],out=[];
   sp.concat(gen).forEach(x=>{if(!out.some(y=>y[0]===x[0]))out.push(x);});
   // senza sport di squadra il gruppo non c'e': conta tornare ad allenarsi pieno
+  // spalla: niente criteri delle gambe (salti a una gamba, equilibrio, corsa)
+  if(I.rtpInf==='spalle')return out.filter(x=>!/hop|single leg|y balance|corsa continua|sprint|change of|forza della parte lesa/i.test(x[0])||(ST_RTP_CRIT.spalle[s]||[]).some(y=>y[0]===x[0]));
   return I.rtpSport==='corsa'?out.map(x=>x[0]==='Allenamento pieno'?['Allenamento pieno','7 giorni con le corse di prima senza sintomi']:x).filter(x=>!/^Change of|^Sprint 30m/.test(x[0])):out;
 }
 // corri e cammina del ritorno alla corsa: ripetute x minuti di corsa / minuti di cammino
@@ -5934,6 +5938,11 @@ function stRtp(I,w,k0,nR){
     return {name:'Condizionamento a basso impatto',type:'conditioning',condType:'Testo libero',duration:'25min',notes:'Fase 1 di 4: '+nomi[0]+'.',
       condContent:'Bici o vogatore: '+n+' x 30" forte / 60" facile\npoi 10\' camminata veloce in salita',exercises:{}};
   }
+  if(s===1&&I.rtpInf==='spalle'&&I.rtpSport!=='corsa'){
+    const m=30+5*Math.min(2,p);
+    return {name:'Corsa e allunghi',type:'corsa',notes:'Fase 2 di 4: '+nomi[1]+'. Le gambe sono sane: si corre normale, braccia rilassate.',
+      corsaFasi:[stFase('Fondo Lento','Z2',m+'\'','','corsa facile'),stFase('Attivazione','Z3','6 allunghi da 80 m','','sciolti, braccia rilassate')],exercises:{}};
+  }
   if(s===1){
     const runW=Math.ceil(nR/2);
     if(k%2===0){
@@ -5951,6 +5960,16 @@ function stRtp(I,w,k0,nR){
     if(c){
       if(k%2===0)return {name:'Corsa con allunghi',type:'corsa',notes:'Fase 3 di 4: '+nomi[2]+'.',corsaFasi:[stFase('Fondo Lento','Z2',(30+5*Math.min(2,p))+'\'','','facile'),stFase('Attivazione','Z3',(4+Math.min(2,p))+' allunghi da 80 m','','progressivi, sciolti')],exercises:{}};
       return {name:'Fartlek leggero',type:'corsa',notes:'Fase 3 di 4: '+nomi[2]+'.',corsaFasi:[stFase('Riscaldamento','Z1','10\'','','corsa lenta'),stFase('Fartlek','Z3','','','svelto ma comodo',{reps:String(6+2*Math.min(1,p)),repDist:'1\' svelto',recTime:'1\' facile',recPace:'trotto'}),stFase('Defaticamento','Z1','10\'','','corsa lenta')],exercises:{}};
+    }
+    // spalla: la terza fase riporta il braccio al gesto (lanci e spinte veloci) invece di sprint e cambi di direzione
+    if(k%2===0&&I.rtpInf==='spalle'){
+      const pc=[50,70,85,95][Math.min(3,p)];
+      const e=[{name:'Sidelying External Rotation',sets:2,reps:'12 per lato',cue:'attivazione della cuffia, carico leggero'},
+        {name:'Med Ball Chest Pass',sets:3,reps:'8',rest:'60"',cue:'a muro, a due mani, palla leggera'},
+        {name:p>=1?'Med Ball Overhead Slam':'Med Ball Rotational Throw',sets:3,reps:p>=1?'6':'6 per lato',rest:'60"',cue:p>=1?'sopra la testa solo se il movimento e\' completo e senza dolore':'la forza parte dalle anche, braccio rilassato'}];
+      if(p>=1)e.push({name:'Lancio a una mano con palla leggera',sets:2,reps:'8 per lato',rest:'60"',cue:'prima il braccio sano, poi il leso: stessa qualita\''});
+      e.push({name:'Gesto dello sport',sets:1,reps:String(10+5*Math.min(2,p)),rest:'a piacere',cue:'al '+pc+'%: lancio, colpo o contrasto, mai con dolore'});
+      return {name:'Ritorno al gesto: lanci e spinte',type:'pesi',notes:'Fase 3 di 4: '+nomi[2]+'. Dolore durante e il giorno dopo non oltre 3 su 10; il gesto sale solo se il giorno dopo la spalla e\' tranquilla.',exercises:Object.fromEntries(e.map((x,i)=>['e'+i,Object.assign(x,{order:i})]))};
     }
     if(k%2===0){
       const pc=[75,85,90,95][Math.min(3,p)];
@@ -6129,6 +6148,7 @@ function stPrevLista(I,zona,tipo){
   const l=db.filter(x=>x.z&&x.z.includes(zona)&&x.t===tipo&&!stVietato(I,x.n)).filter(x=>{
     if(I.materiale==='palestra')return true;
     if(ST_PREV_ATTR.test(x.n))return false;
+    if(/deadlift|stacco/i.test(x.n)&&!/single|gamba|bastone|manubri/i.test(x.n)&&!stHa(I,'bilanciere'))return false;
     if(I._fuori&&/con peso|zavorr|weighted|sovraccarico/i.test(x.n))return false;
     if(/kettlebell|\bkb\b/i.test(x.n)&&!stHa(I,'kettlebell'))return false;
     if(/manubri|manubrio|disco|bilanciere/i.test(x.n)&&!stHa(I,'manubri'))return false;
@@ -6314,7 +6334,7 @@ function stCorpo(I,g,w){
   if(I.obiettivo==='rientro'&&I.rtpInf==='hamstring'&&stRtpIdx(I,w)>=0&&stRtpIdx(I,w)<=1){
     [['Askling Extender','2','12 per lato','gamba sospesa: estensione lenta del ginocchio fino al primo fastidio, mai dolore'],['Askling Diver','2','6 per lato','tuffo in avanti su una gamba, braccia avanti: allungamento attivo, lento']].forEach(([n,se,re,cu],j)=>{const k=key+'|ask'+j;if(!I.esDel[k])out.push({k,name:I.esOv[k]||n,pr:{sets:+se,reps:re,rest:'60"',cue:'protocollo L (Askling 2013): '+cu},ruolo:'acc'});});
   }
-  if(stRtpIdx(I,w)>=1&&!tpl.some(x=>x[1]==='pliom')&&!I.esDel[key+'|rp']&&!/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'')){const n=I.esOv[key+'|rp']||stEs(I,'pogo');out.push({k:key+'|rp',name:n,pr:Object.assign(stPrescr(I,w,'pliom'),{sets:2,cue:'ritorno ai salti: atterraggi morbidi e silenziosi, niente dolore'}),ruolo:'pliom'});}
+  if(stRtpIdx(I,w)>=1&&I.rtpInf!=='spalle'&&!tpl.some(x=>x[1]==='pliom')&&!I.esDel[key+'|rp']&&!/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'')){const n=I.esOv[key+'|rp']||stEs(I,'pogo');out.push({k:key+'|rp',name:n,pr:Object.assign(stPrescr(I,w,'pliom'),{sets:2,cue:'ritorno ai salti: atterraggi morbidi e silenziosi, niente dolore'}),ruolo:'pliom'});}
   tpl.forEach(([slot,ruolo0],i)=>{
     const k=key+'|'+i;if(I.esDel[k])return;
     // ibrido: il total body e' la seduta leggera delle gambe, la pesante e' Gambe
@@ -7277,7 +7297,7 @@ function stNomeAuto(){
 }
 const ST_FASE_COL={Base:'#6366F1',Adattamento:'#6366F1',Accumulo:'#6366F1',Ipertrofia:'#6366F1','Forza generale':'#6366F1',Ricondizionamento:'#6366F1',
   Costruzione:'#A78BFA',Sviluppo:'#A78BFA',Intensificazione:'#A78BFA','Ipertrofia intensa':'#A78BFA','Forza massima':'#A78BFA',Rinforzo:'#A78BFA',
-  'Ritorno alla corsa':'#A78BFA','Velocita\' e cambi di direzione':'#FF8A57','Ritmo e allunghi':'#FF8A57','Ritorno in squadra':'#FF6A2E','Ritorno all\'allenamento':'#FF6A2E',
+  'Ritorno alla corsa':'#A78BFA','Velocita\' e cambi di direzione':'#FF8A57','Ritmo e allunghi':'#FF8A57','Ritorno al gesto':'#FF8A57','Ritorno in squadra':'#FF6A2E','Ritorno all\'allenamento':'#FF6A2E',
   Mantenimento:'#A78BFA','Mantenimento e potenza':'#FF6A2E',Specifico:'#FF6A2E',Realizzazione:'#FF6A2E',Definizione:'#FF6A2E',Potenza:'#FF6A2E',Consolidamento:'#FF6A2E',Ritorno:'#FF6A2E',Taper:'#22C55E'};
 let stFTab=0;
 function stAnteprima(){
