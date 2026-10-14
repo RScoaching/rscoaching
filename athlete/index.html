@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#110C0B">
+<meta name="theme-color" content="#2A1510" id="tema">
 <meta name="color-scheme" content="dark">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="RS Coaching">
 <meta name="format-detection" content="telephone=no">
 <title>RS Coaching - Atleta</title>
@@ -1655,6 +1655,29 @@ button,a,[onclick]{-webkit-tap-highlight-color:transparent;touch-action:manipula
 }
 /* iPhone con la barra della home: la barra in basso non finisce sotto l'indicatore */
 .bottom-nav{padding-bottom:max(env(safe-area-inset-bottom,0px),6px)}
+
+/* ── IMMERSIVO ──
+   Il bagliore ember dell'apertura parte dal bordo dello schermo e sale sotto la barra di Safari
+   (che prende il colore dal meta theme-color o dal fondo in alto). La barra in alto e' trasparente
+   finche' si sta in cima e diventa scura e sfocata scorrendo; nell'app aggiunta alla Home il
+   contenuto passa sotto la barra di stato (black-translucent) con lo spazio della tacca. */
+#app{position:relative;isolation:isolate}
+#app::before{content:"";position:absolute;top:0;left:0;right:0;height:min(920px,115vh);z-index:-1;pointer-events:none;
+  background:radial-gradient(120% 62% at 100% 0%,rgba(255,106,46,.34) 0%,rgba(255,106,46,0) 62%),linear-gradient(180deg,rgba(255,106,46,.16) 0%,rgba(255,106,46,0) 100%)}
+.o9-hero{background:none!important}
+.header{background:transparent!important;border-bottom-color:transparent!important;-webkit-backdrop-filter:none;backdrop-filter:none;
+  padding-top:calc(14px + env(safe-area-inset-top,0px))!important;transition:background-color .22s cubic-bezier(.23,1,.32,1),border-color .22s cubic-bezier(.23,1,.32,1)}
+.header.solid{background:rgba(17,12,11,.86)!important;-webkit-backdrop-filter:blur(20px) saturate(1.5);backdrop-filter:blur(20px) saturate(1.5);border-bottom-color:rgba(255,214,196,.07)!important}
+/* barra in basso staccata dai bordi, come le barre di iOS: il contenuto scorre sotto e resta visibile ai lati */
+.bottom-nav{left:10px!important;right:10px!important;bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;padding-bottom:0!important;border-radius:22px;
+  border:1px solid rgba(255,214,196,.09)!important;background:rgba(20,14,12,.80)!important;-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);box-shadow:none!important}
+body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
+.chat-wrap{height:calc(100dvh - 152px - env(safe-area-inset-bottom,0px))!important}
+/* cambio di scheda: la pagina nuova entra di poco dal basso, senza spostare niente sotto */
+.pg-in{animation:pgIn .24s cubic-bezier(.23,1,.32,1)}
+@keyframes pgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.pg-in{animation:pgFade .12s linear}@keyframes pgFade{from{opacity:.4}to{opacity:1}}}
+@media (prefers-reduced-transparency:reduce){.header.solid,.bottom-nav{background:#140E0C!important;-webkit-backdrop-filter:none;backdrop-filter:none}}
 </style>
 </head>
 <body>
@@ -4237,8 +4260,14 @@ window.bnSwitch=(page,btn)=>{
   btn.classList.add('active');
   if(page==='checkin')renderCiPagina();
   window.scrollTo(0,0);
+  const pg=document.getElementById('page-'+page);if(pg){pg.classList.remove('pg-in');void pg.offsetWidth;pg.classList.add('pg-in');}
   if(page==='chat'){renderChat();markChatRead();}
 };
+// barra in alto e colore della barra del browser: trasparente col bagliore in cima, scura scorrendo.
+// Un osservatore su un punto in cima alla pagina, niente ascolto dello scroll.
+(()=>{const app=document.getElementById('app'),hd=document.querySelector('#app > .header'),tema=document.getElementById('tema');if(!app||!hd||!('IntersectionObserver' in window))return;
+  const s=document.createElement('div');s.style.cssText='position:absolute;top:0;left:0;width:1px;height:24px;pointer-events:none';app.prepend(s);
+  new IntersectionObserver(([e])=>{const su=e.isIntersecting;hd.classList.toggle('solid',!su);if(tema)tema.setAttribute('content',su?'#2A1510':'#110C0B');}).observe(s);})();
 
 window.profTab=(tab,btn)=>{
   if(tab==='video')renderMieiVideo();
