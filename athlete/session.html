@@ -1155,14 +1155,19 @@ button,a,[onclick]{-webkit-tap-highlight-color:transparent;touch-action:manipula
 .prog7 span{display:block}
 .prev-col-sub,.vol-tracker-label,.vol-tracker-val,.vol-tracker-unit,.vol-tracker-sep{display:none!important}
 
-/* ── FOCUS SULL'ESERCIZIO IN CORSO ── */
-body.focus-on .ex-card-wrap{transition:opacity .28s cubic-bezier(.23,1,.32,1),transform .28s cubic-bezier(.23,1,.32,1),filter .28s cubic-bezier(.23,1,.32,1);transform-origin:center}
-body.focus-on .ex-card-wrap:not(.cur){opacity:.28;transform:scale(.965);cursor:pointer}
-body.focus-on .ex-card-wrap.near{filter:blur(2.5px) saturate(.6)}
+/* ── FOCUS SULL'ESERCIZIO IN CORSO ──
+   Solo l'opacita' cambia (niente scala, sfocature o testi che crescono: cambiavano l'altezza delle
+   card mentre si scorre e il fuoco rimbalzava). Le card sono piene, senza backdrop-filter, e non
+   rifanno l'animazione d'ingresso a ogni serie spuntata: lo scorrimento resta fluido. */
+.ex-card{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;animation:none!important;background:#1C1412!important}
+body.focus-on .ex-card-wrap{transition:opacity .22s ease}
+body.focus-on .ex-card-wrap:not(.cur){opacity:.4;cursor:pointer}
 body.focus-on .ex-card-wrap:not(.cur) *{pointer-events:none}
-body.focus-on .ex-card-wrap.cur .ex-card{box-shadow:0 0 0 1px rgba(255,106,46,.45),0 8px 8px -6px rgba(0,0,0,.4)!important}
-body.focus-on .ex-card-wrap.cur .ex-card-name{font-size:30px!important;letter-spacing:.5px}
-@media (prefers-reduced-motion:reduce){body.focus-on .ex-card-wrap{transition:none}body.focus-on .ex-card-wrap:not(.cur){transform:none}}
+body.focus-on .ex-card-wrap.cur .ex-card{border-color:rgba(255,106,46,.55)!important}
+@media (prefers-reduced-motion:reduce){body.focus-on .ex-card-wrap{transition:none}}
+/* la riga sotto il titolo dice sempre quale esercizio e' in corso, anche se la card e' piu' alta dello schermo */
+#vol-ex-count{font:600 13px Inter,sans-serif!important;color:var(--white)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#vol-ex-count i{font-style:normal;color:var(--muted);font-weight:500;margin-right:6px}
 </style>
 </head>
 <body>
@@ -1772,7 +1777,9 @@ function initSets(){
 
 // v9: l'esercizio in corso ha il bordo arancio anche nella lista, non solo nei segmenti in alto
 // focus sull'esercizio in corso: gli altri si spengono, i due vicini anche sfocati (solo loro, per non pesare sui telefoni)
-function markCur(){document.querySelectorAll('.ex-card-wrap').forEach(w=>{const i=+w.dataset.ei;w.classList.toggle('cur',i===cur);w.classList.toggle('near',Math.abs(i-cur)===1);});document.body.classList.add('focus-on');}
+// nome dell'esercizio in corso nella barra in alto
+function exNome(){const el=document.getElementById('vol-ex-count');if(!el)return;const ex=exs[cur]||{};const nm=ex.name||(ex.items?ex.items.map(it=>it.name).join(' + '):'');el.innerHTML=`<i>${cur+1}/${exs.length}</i>${String(nm).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}`;}
+function markCur(){exNome();document.querySelectorAll('.ex-card-wrap').forEach(w=>{const i=+w.dataset.ei;w.classList.toggle('cur',i===cur);w.classList.toggle('near',Math.abs(i-cur)===1);});document.body.classList.add('focus-on');}
 // il primo tocco su un esercizio spento lo porta a fuoco, non spunta una serie per sbaglio
 document.addEventListener('click',e=>{const w=e.target.closest&&e.target.closest('.ex-card-wrap');if(!w||w.classList.contains('cur')||!document.body.classList.contains('focus-on'))return;
   e.preventDefault();e.stopPropagation();window.jumpTo&&window.jumpTo(+w.dataset.ei);},true);
@@ -1823,31 +1830,16 @@ window.jumpTo=i=>{
 let _exObserver=null;
 function alFondo(){return exs.length>1&&window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-24;}
 // arrivati in fondo l'esercizio attivo e' l'ultimo e il tasto dice Completa (prima restava Prossimo e non chiudeva)
-window.addEventListener('scroll',()=>{if(alFondo()&&cur!==exs.length-1){cur=exs.length-1;renderExNav();const pf=document.getElementById('pfill');if(pf)pf.style.width=`${(cur/Math.max(exs.length,1))*100}%`;}},{passive:true});
-function initExObserver(){
-  if(_exObserver)_exObserver.disconnect();
-  const cards=document.querySelectorAll('.ex-card-wrap');
-  if(!cards.length)return;
-  _exObserver=new IntersectionObserver(entries=>{
-    entries.forEach(entry=>{
-      if(entry.isIntersecting){
-        // in fondo alla pagina l'ultimo esercizio non sale fino alla fascia: resta quello attivo
-        if(alFondo())return;
-        const i=parseInt(entry.target.dataset.ei);
-        if(!isNaN(i)&&i!==cur){
-          cur=i;
-          renderExNav();
-          document.getElementById('pfill').style.width=`${(cur/Math.max(exs.length,1))*100}%`;
-          const isLast=cur===exs.length-1;
-          const nb=document.getElementById('next-btn');
-          nb.textContent=isLast?'Completa':'Prossimo →';
-          nb.className='next-btn'+(isLast?' fin':'');
-        }
-      }
-    });
-  },{rootMargin:'-15% 0px -70% 0px',threshold:0});
-  cards.forEach(c=>_exObserver.observe(c));
-}
+// esercizio in corso: quello che attraversa la linea al 30% dello schermo; in fondo alla pagina l'ultimo.
+// Un calcolo per fotogramma mentre si scorre, nei due sensi (l'osservatore saltava quello di mezzo risalendo)
+let _curRaf=0;
+function aggiornaCur(){_curRaf=0;if(!exs.length)return;let i=-1;
+  if(alFondo())i=exs.length-1;
+  else{const y=window.innerHeight*0.3;const cards=document.querySelectorAll('.ex-card-wrap');for(const c of cards){const r=c.getBoundingClientRect();if(r.top<=y&&r.bottom>=y){i=+c.dataset.ei;break;}}
+    if(i<0&&cards.length&&cards[0].getBoundingClientRect().top>y)i=0;}
+  if(i>=0&&i!==cur){cur=i;renderExNav();const pf=document.getElementById('pfill');if(pf)pf.style.width=`${(cur/Math.max(exs.length,1))*100}%`;}}
+window.addEventListener('scroll',()=>{if(!_curRaf)_curRaf=requestAnimationFrame(aggiornaCur);},{passive:true});
+function initExObserver(){aggiornaCur();}
 
 
 function updateVolumeTracker(){
@@ -1875,7 +1867,7 @@ function updateVolumeTracker(){
   // il numero e la sua unita': tonnellate da 1 t in su, chili sotto (prima usciva "390kg t")
   if(volEl)volEl.textContent=tonnes>=1?tonnes.toFixed(1).replace('.',','):String(Math.round(totalKg));
   const vu=document.querySelector('.vol-tracker-unit');if(vu)vu.textContent=tonnes>=1?'t':'kg';
-  if(exEl)exEl.textContent=`${doneEx} / ${exs.length} esercizi`;
+  exNome();
 }
 
 // Surgical update of a single exercise card (no scroll jump)
