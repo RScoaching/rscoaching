@@ -1231,6 +1231,8 @@ window.RSPrehab = (function(){
     caviglia:{n:'Dorsiflessione caviglia a muro',k:'dorsiflessione-caviglia-a-muro',s:2,r:'10 per lato',c:'ginocchio verso il muro, tallone a terra'},
     tibiale:{n:'Tibialis raise',k:null,s:2,r:'15',c:'schiena al muro, punte su senza staccare i talloni: tibiale anteriore e periostite'},
     copen:{n:'Copenhagen plank',k:'copenhagen-half-planks',s:2,r:'20" per lato',c:'isometria di tenuta degli adduttori; leva corta (ginocchio) se e\' la prima volta'},
+    respiro:{n:'Respirazione con pavimento pelvico',k:'',s:2,r:'5 respiri',c:'inspira e lascia scendere pancia e pavimento pelvico, espira e chiudi dal basso: trasverso e pavimento insieme'},
+    birddog:{n:'Bird dog',k:'',s:2,r:'8 per lato',c:'schiena ferma, braccio e gamba opposti lenti: il core senza stare a pancia in su'},
     deadbug:{n:'Dead bug',k:'dead-bug-elastico-gambe-alternate',s:2,r:'8 per lato',c:'schiena appoggiata, espira lungo'},
     goblet:{n:'Goblet squat lento',k:null,s:2,r:'8',c:'3" in discesa e 2" fermo in basso: caviglia, anca e ginocchio insieme'},
     slBridge:{n:'Single leg glute bridge',k:'single-leg-glute-bridge',s:2,r:'8 per lato',c:'tenuta 5" in alto sull\'ultima'},
@@ -1262,6 +1264,13 @@ window.RSPrehab = (function(){
     else if(tipo==='gambeB'){ids=personalizza(['caviglia','stretch','slBridge','soleoEcc','tibiale','copen','deadbug'],zone,8,['deadbug','tibiale']);intro='rullo';fine='Poi le serie di avvicinamento del primo esercizio.';}
     else if(tipo==='alta'){ids=personalizza(['tspine','extrarot','pullApart','scapPush','deadbug'],zone.filter(z=>['spalle','core','colonna','lombalgia'].includes(z)),7,['scapPush']);intro='rulloAlto';fine='Poi le serie di avvicinamento del primo esercizio.';}
     else{ids=personalizza(['caviglia','n9090','bridge','spanish','avampiede','goblet','deadbug'],zone,8,['deadbug','goblet']);intro='rullo';fine='Poi le serie di avvicinamento del primo esercizio.';}
+    // condizioni: niente salti con pavimento pelvico, parete addominale, gravidanza o lipedema; in gravidanza niente
+    // esercizi lunghi a pancia in su; con l'ipermobilita' niente allungamenti a fine corsa
+    const pb=(profilo&&profilo.problemi)||[];
+    if(['postparto','gravidanza','diastasi','pavimento','lipedema'].some(k=>pb.includes(k)))ids=ids.filter(x=>x!=='pogo');
+    if(['postparto','gravidanza','diastasi','pavimento'].some(k=>pb.includes(k))&&!ids.includes('respiro'))ids.unshift('respiro');
+    if(pb.includes('gravidanza'))ids=ids.map(x=>x==='deadbug'?'birddog':x);
+    if(pb.includes('ipermob'))ids=ids.filter(x=>x!=='stretch');
     return {tipo,intro:voce(intro),es:ids.map(id=>voce(id)).filter(Boolean),fine};
   }
   const TIPI=[['corsa','Prima della corsa'],['gambeA','Prima della forza: gambe A'],['gambeB','Prima della forza: gambe B'],['alta','Prima della forza: parte alta']];

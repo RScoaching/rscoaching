@@ -4803,7 +4803,7 @@ function stDefault(){
     // da dove parte davvero: si allena gia'? quante volte, cosa fa, da quanto e' fermo; condizioni
     giaAllena:'',sedAttuali:'',cosaFa:[],fermo:'',problemi:[],
     // ritorno al gioco: lesione, operato, settimane dall'infortunio, a che punto e', dove torna
-    rtpInf:'',rtpOp:'',rtpSett:'',rtpFase:'ricond',rtpSport:'calcio',nRtp:null,rtpGrado:'',rtpTend:'',rtpMecc:'',
+    rtpInf:'',rtpOp:'',rtpSett:'',rtpFase:'ricond',rtpSport:'calcio',nRtp:null,rtpGrado:'',rtpTend:'',rtpMecc:'',rtpSede:'',rtpTipoL:'',rtpTendFase:'',rtpRischio:'',gravSett:'',ppSett:'',
     // modifiche fatte a mano sull'anteprima
     settimana:null,scarichiMan:null,fasiW:null,esOv:{},esDel:{},esAdd:{},kmPicco:'',lungoMax:'',testOff:[],testAdd:[]};
 }
@@ -5183,6 +5183,13 @@ function stEsBase(I,slot){
    flessione sotto carico; la spalla niente spinte sopra la testa e la cuffia in
    attivazione. Recente vuol dire meno di sei mesi: le regole piu' strette valgono
    li'; le vecchie lesioni restano come zone da proteggere nella prevenzione. */
+// condizioni che cambiano carichi, impatto ed esercizi. Generali e, a parte, quelle delle donne
+const ST_COND_G=[['sovrappeso','Sovrappeso'],['over50','Oltre 50 anni'],['ipertensione','Pressione alta'],['diabete','Diabete tipo 2'],['asma','Asma da sforzo'],['ipermob','Ipermobilita\' articolare']];
+const ST_COND_F=[['lipedema','Lipedema'],['pcos','Ovaio policistico (PCOS)'],['endometriosi','Endometriosi'],['gravidanza','Gravidanza'],['postparto','Post parto'],['diastasi','Diastasi addominale'],['pavimento','Pavimento pelvico (perdite, pesantezza)'],['menopausa','Perimenopausa o menopausa'],['osteopenia','Osteopenia o osteoporosi'],['ferro','Ferro basso o anemia'],['ciclo','Ciclo assente o irregolare']];
+// niente salti: pavimento pelvico e parete addominale da proteggere, gravidanza, lipedema (gambe dolenti, impatto mal tollerato)
+const ST_NOSALTI=['postparto','gravidanza','diastasi','pavimento','lipedema'];
+// RPE massimo per condizione: niente sforzi massimali e apnee (pressione addominale e arteriosa)
+const ST_COND_RPE={gravidanza:7,postparto:8,diastasi:8,pavimento:8,ipertensione:8,endometriosi:8,ferro:8,ciclo:8};
 const ST_INF=[['caviglia','Distorsione caviglia'],['achille','Achille o polpaccio'],['piede','Fascite plantare'],['lca','Crociato anteriore (LCA)'],['lcp','Crociato posteriore (LCP)'],['lcm','Collaterale mediale (LCM)'],['rotulea','Ginocchio anteriore o rotuleo'],['ginocchio','Menisco o altro ginocchio'],['hamstring','Flessori'],['quadricipite','Quadricipite'],['adduttori','Adduttori o pubalgia'],['anca','Anca'],['bandelletta','Bandelletta ileotibiale'],['glutei_t','Tendinopatia glutea (trocantere)'],['hamprox','Tendinopatia prossimale flessori'],['tibiale','Periostite tibiale'],['lombalgia','Lombalgia'],['ernia','Ernia discale'],['spalle','Spalla']];
 // zone da proteggere nella prevenzione, per lesione
 const ST_INF_ZONE={caviglia:['caviglia'],achille:['polpaccio'],piede:['piede','polpaccio'],lca:['ginocchio','anca','hamstring'],lcp:['ginocchio','anca'],lcm:['ginocchio','adduttori'],quadricipite:['ginocchio','anca'],rotulea:['ginocchio','glutei'],ginocchio:['ginocchio'],hamstring:['hamstring'],adduttori:['adduttori'],anca:['anca'],bandelletta:['anca','glutei'],glutei_t:['glutei','anca'],hamprox:['hamstring','glutei'],tibiale:['polpaccio','piede'],lombalgia:['colonna','core'],ernia:['colonna','core'],spalle:['spalle']};
@@ -5256,8 +5263,11 @@ function stEs(I,slot){
   if(rec('hamstring')&&slot==='pliom2')n='Pogo Hop';
   if(rec('hamstring')&&slot==='ham')n=P?'Seated Hamstring Curl Machine':'Hamstring Curl Sliders Eccentric';
   // condizioni: sovrappeso, over 50 e post parto partono senza salti
-  if((pb.includes('sovrappeso')||pb.includes('over50')||pb.includes('postparto'))&&(slot==='pliom'||slot==='pliom2'))n=pb.includes('postparto')?'Glute Bridge':'Pogo Hop';
-  if(pb.includes('postparto')&&(slot==='core'||slot==='core2'))n='Dead Bug';
+  const noS=ST_NOSALTI.some(k=>pb.includes(k));
+  if((noS||pb.includes('sovrappeso')||pb.includes('over50'))&&(slot==='pliom'||slot==='pliom2'))n=noS?(pb.includes('gravidanza')||pb.includes('lipedema')?'Step Up':'Glute Bridge'):'Pogo Hop';
+  if(['postparto','diastasi','pavimento'].some(k=>pb.includes(k))&&(slot==='core'||slot==='core2'))n='Dead Bug';
+  // gravidanza: dopo il primo trimestre niente esercizi a pancia in su lunghi (compressione della vena cava, ACOG 2020)
+  if(pb.includes('gravidanza')){if(slot==='core')n='Pallof Press';if(slot==='core2'||slot==='coreAR')n='Side Plank';if(/^spO/.test(slot)&&/bench press|floor press/i.test(n)&&!/incline/i.test(n))n=P?'Incline Dumbbell Bench Press':'Push Up';}
   return n;
 }
 // attivazione mirata per le lesioni recenti e per i tendini (che la vogliono sempre),
@@ -5391,7 +5401,11 @@ function stPrescr(I,w,ruolo,name){
     p.cue=(p.cue?p.cue+'; ':'')+'riadattamento: tecnica e confidenza, carico che lascia 2-3 ripetizioni';
   }
   // post parto: niente sforzi massimali (pressione addominale sul pavimento pelvico)
-  if((I.problemi||[]).includes('postparto')&&p.rpe)p.rpe=String(p.rpe).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.min(8,parseFloat(v.replace(',','.')))));
+  const capR=Math.min(10,...(I.problemi||[]).map(k=>ST_COND_RPE[k]||10));
+  if(capR<10&&p.rpe)p.rpe=String(p.rpe).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.min(capR,parseFloat(v.replace(',','.')))));
+  if(capR<10&&p.pct)p.pct=String(Math.min(capR<=7?70:80,+p.pct));
+  // pressione alta e gravidanza: niente apnea sotto carico (Valsalva)
+  if(['ipertensione','gravidanza'].some(k=>(I.problemi||[]).includes(k))&&['main','main2'].includes(ruolo))p.cue=(p.cue?p.cue+'; ':'')+'senza apnea: espira mentre spingi';
   if((I.problemi||[]).includes('over50')){
     if(p.rpe)p.rpe=String(p.rpe).replace(/\d+(?:[.,]\d+)?/g,v=>String(Math.min(8,parseFloat(v.replace(',','.')))));
     if(p.pct)p.pct=String(Math.min(82.5,+p.pct));
@@ -5838,7 +5852,13 @@ function stVel(I,w){
 function stCond(I,w){
   const sc=w.tipo!=='carico',sport=I.sport!=='nessuno',p=w.pos||0;
   if(sport)return {condType:'Testo libero',duration:(sc?15:20+p*2)+'min',condContent:sc?'Intermittente 15-15: 2 x 6\' (rec 3\')':'Intermittente 15-15 al 100% della VIFT\n'+(2+Math.min(1,p))+' serie da 8\' (rec 3\')'};
-  if((I.problemi||[]).includes('sovrappeso'))return {condType:'Testo libero',duration:(sc?20:25+p*5)+'min',condContent:(sc?'Zona 2 continua':'Zona 2 continua, poi '+(4+p*2)+' x 1\' piu\' svelto / 2\' facile')+'\nbici, vogatore o camminata in salita: niente corsa e salti per ora'};
+  const pb=I.problemi||[];
+  if(pb.includes('gravidanza'))return {condType:'Testo libero',duration:(sc?20:25+p*3)+'min',condContent:'Bici, ellittica, nuoto o camminata veloce, continua\nsi parla a frasi intere (talk test), niente caldo eccessivo, si beve'};
+  if(pb.includes('lipedema'))return {condType:'Testo libero',duration:(sc?20:25+p*5)+'min',condContent:'Bici, ellittica, nuoto o acquagym: basso impatto'+(sc?'':', poi '+(4+p*2)+' x 1\' piu\' svelto / 1\' facile')+'\ncon le calze contenitive se le usa; l\'acqua aiuta il ritorno dei liquidi'};
+  if(['postparto','pavimento','diastasi'].some(k=>pb.includes(k)))return {condType:'Testo libero',duration:(sc?20:25+p*3)+'min',condContent:'Bici, ellittica o camminata in salita, Zona 2\nniente corsa ne\' salti finche\' il test di carico e impatto non e\' superato'};
+  if(pb.includes('endometriosi'))return {condType:'Testo libero',duration:(sc?20:25+p*4)+'min',condContent:'Zona 2 continua (bici, vogatore, camminata in salita o corsa facile)\nnei giorni di dolore si cambia con camminata e mobilita\''};
+  if(pb.includes('pcos')||pb.includes('diabete'))return {condType:'Testo libero',duration:(sc?20:25+p*3)+'min',condContent:'10\' Zona 2, poi '+(6+p*2)+' x 1\' svelto / 1\' facile (bici o vogatore), 5\' facile\nanche brevi: dopo i pasti 10-15\' di camminata aiutano la glicemia'};
+  if(pb.includes('sovrappeso'))return {condType:'Testo libero',duration:(sc?20:25+p*5)+'min',condContent:(sc?'Zona 2 continua':'Zona 2 continua, poi '+(4+p*2)+' x 1\' piu\' svelto / 2\' facile')+'\nbici, vogatore o camminata in salita: niente corsa e salti per ora'};
   if(I.obiettivo==='estetica')return {condType:'Testo libero',duration:(sc?15:20+p*3)+'min',condContent:sc?'8 x 30" forte / 60" facile (bici o vogatore)':(10+p*2)+' x 30" forte / 30" facile (bici, vogatore o corsa)\npoi 10\' camminata in salita'};
   return {condType:'Testo libero',duration:(sc?25:35+p*5)+'min',condContent:'Zona 2 continua (bici, vogatore, camminata in salita o corsa facile)\nsi deve poter parlare'};
 }
@@ -5867,22 +5887,48 @@ const ST_RTP_FASEP=[['ricond','Cammina senza dolore, non corre'],['corsa','Corre
 // flessori da allungamento circa il doppio di quelli da sprint (Askling 2013), caviglia
 // e collaterale per grado, crociati dall'intervento (Grindem 2016: non prima di 9 mesi)
 const ST_RTP_TIPO={hamstring:'muscolo',adduttori:'muscolo',quadricipite:'muscolo',caviglia:'legamento',lcm:'legamento',lcp:'legamento'};
-const ST_RTP_GRADI={muscolo:[['funz','Disturbo funzionale, senza lesione'],['1','Grado 1, lesione minore'],['2','Grado 2, lesione moderata'],['3','Grado 3, estesa o completa']],
+// che cosa si e' fatto, dentro la stessa zona: cambia tempi e criteri
+const ST_RTP_SOTTO={
+  achille:[['muscolo','Polpaccio (stiramento)'],['tendinopatia','Tendinopatia'],['rottura','Rottura del tendine']],
+  ginocchio:[['menisco_r','Menisco tolto in parte'],['menisco_s','Menisco suturato'],['menisco_c','Menisco senza intervento']],
+  tibiale:[['periostite','Periostite (MTSS)'],['frattura','Frattura da stress']],
+  spalle:[['tendine','Cuffia o tendinopatia'],['lussazione','Lussazione o instabilita\''],['post_op','Stabilizzazione operata']],
+  rotulea:[['tendinopatia','Tendinopatia rotulea'],['fp','Dolore femoro-rotuleo']]};
+// tendinopatie: stadio del continuum (Cook e Purdam 2009)
+const ST_TEND_FASE=[['reattiva','Reattiva: recente, gonfia, fa male anche a riposo'],['cronica','Cronica: da mesi, fa male col carico']];
+function stRtpTend(I){return ['glutei_t','hamprox'].includes(I.rtpInf)||(['achille','rotulea'].includes(I.rtpInf)&&I.rtpTipoL==='tendinopatia');}
+function stRtpTipo(I){return I.rtpInf==='achille'&&I.rtpTipoL==='muscolo'?'muscolo':ST_RTP_TIPO[I.rtpInf];}
+const ST_RTP_GRADI={muscolo:[['funz','Disturbo funzionale, senza lesione'],['1','Grado 1, lesione minore'],['2','Grado 2, lesione moderata'],['3','Grado 3, estesa'],['4','Grado 4, rottura completa o avulsione']],
   legamento:[['1','Grado I, distrazione'],['2','Grado II, rottura parziale'],['3','Grado III, rottura completa']]};
 function stRtpStima(I){
-  const z=I.rtpInf,g=I.rtpGrado,t=ST_RTP_TIPO[z];
+  const z=I.rtpInf,g=I.rtpGrado,t=stRtpTipo(I),tl=I.rtpTipoL,ws=stNum(I.rtpSett)||0;
+  const da=(a,b,txt,fonte)=>({min:Math.max(1,a),max:Math.max(2,b),txt,fonte});
+  // lesioni con tempi propri, dall'intervento o dall'infortunio
+  if(z==='achille'&&tl==='rottura')return da(24-ws,36-ws,'corsa a circa 6 mesi, sport pieno a 9','rottura del tendine d\'Achille: ritorno alla corsa intorno ai 6 mesi, allo sport a 8-9 (serie chirurgiche e di riabilitazione)');
+  if(z==='ginocchio'&&tl==='menisco_r')return da(4-ws,8-ws,'4-8 settimane','meniscectomia parziale: in media 2 mesi allo sport (meta-analisi, 84% allo stesso livello)');
+  if(z==='ginocchio'&&tl==='menisco_s')return da(16-ws,26-ws,'4-6 mesi','sutura del menisco: in media 5-6 mesi allo sport, carico protetto all\'inizio');
+  if(z==='ginocchio'&&tl==='menisco_c')return da(4,10,'4-10 settimane','menisco senza intervento: si progredisce col gonfiore, che deve restare assente');
+  if(z==='tibiale'&&tl==='frattura')return I.rtpRischio==='alto'?da(14-ws,20-ws,'14-20 settimane, con il via del medico','frattura da stress in sede ad alto rischio: navicolare circa 18 settimane, collo del femore circa 15 (Hoenig 2022)'):da(6-ws,10-ws,'6-10 settimane','frattura da stress in sede a basso rischio: tibia posteromediale circa 6 settimane, perone 8 (Hoenig 2022)');
+  if(z==='tibiale')return da(3,6,'3-6 settimane','periostite tibiale: carico graduale guidato dal dolore');
+  if(z==='spalle'&&tl==='lussazione')return da(3,6,'3-6 settimane senza intervento','lussazione di spalla trattata senza intervento: rientro dopo forza e assenza di apprensione; le ricadute sono frequenti nei giovani');
+  if(z==='spalle'&&tl==='post_op')return da(16-ws,26-ws,'4-6 mesi dall\'intervento','stabilizzazione di spalla: sport di contatto di solito a 5-6 mesi');
+  // tendinopatie: il carico progressivo dura almeno 12 settimane (Kongsgaard 2009), la fase reattiva prima si calma
+  if(stRtpTend(I))return I.rtpTendFase==='reattiva'?da(8,12,'8-12 settimane','tendinopatia reattiva: prima isometrie per calmarla, poi carico lento pesante (Cook e Purdam 2009; modello del dolore di Silbernagel)'):da(12,16,'12-16 settimane','tendinopatia cronica: carico lento pesante per almeno 12 settimane, poi rimbalzi e salti (Kongsgaard 2009)');
   if((z==='lca'||z==='lcp')&&I.rtpOp==='si'){const ws=stNum(I.rtpSett)||0;return {min:Math.max(1,36-ws),max:Math.max(2,52-ws),txt:'9-12 mesi dall\'intervento',fonte:z==='lca'?'Grindem 2016: ogni mese di attesa fino a 9 riduce del 51% il rischio di nuova lesione':'9-12 mesi dopo la ricostruzione del crociato posteriore'};}
   if(z==='lcp')return g==='3'?{min:8,max:16,txt:'2-4 mesi senza intervento',fonte:'crociato posteriore isolato, trattamento conservativo'}:g?{min:4,max:8,txt:'4-8 settimane',fonte:'crociato posteriore isolato, trattamento conservativo'}:null;
   if(!t||!g)return null;
   let r;
-  if(t==='muscolo')r={funz:[1,1],1:[2,3],2:[4,6],3:[8,12]}[g];
+  if(t==='muscolo')r={funz:[1,1],1:[2,3],2:[4,6],3:[8,12],4:[12,24]}[g];
   else if(z==='caviglia')r={1:[1,2],2:[2,6],3:[6,12]}[g];
   else r={1:[1,3],2:[3,6],3:[6,10]}[g];
   if(!r)return null;
   let [a,b]=r;const note=[];
-  if(t==='muscolo'&&I.rtpTend==='si'&&g!=='funz'){a+=2;b+=4;note.push('col tendine coinvolto');}
+  // sede BAMIC: dentro il tendine (c) ritorno piu' lungo e piu' ricadute (Pollock 2016; British Athletics: 2c circa 5 settimane, 3c circa 7)
+  const sede=I.rtpSede||(I.rtpTend==='si'?'c':'');
+  if(t==='muscolo'&&sede==='c'&&!['funz','4'].includes(g)){a+=2;b+=4;note.push('dentro il tendine');}
+  if(t==='muscolo'&&g==='4')note.push('spesso chirurgica');
   if(z==='hamstring'&&I.rtpMecc==='allungamento'){a=Math.round(a*1.8);b=Math.round(b*1.8);note.push('da allungamento');}
-  const fonte=t==='muscolo'?'Ekstrand 2013, classificazione di Monaco'+(z==='hamstring'?'; Askling 2013':''):z==='caviglia'?'PAASS 2021 per i criteri':'collaterale mediale, trattamento conservativo';
+  const fonte=t==='muscolo'?'Ekstrand 2013, classificazione di Monaco; sede BAMIC, Pollock 2016'+(z==='hamstring'?'; Askling 2013':''):z==='caviglia'?'PAASS 2021 per i criteri':'collaterale mediale, trattamento conservativo';
   return {min:a,max:b,txt:(a===b?a:a+'-'+b)+(b===1?' settimana':' settimane')+(note.length?' ('+note.join(', ')+')':''),fonte};
 }
 // spalla: le gambe sono sane, si corre da subito; le fasi seguono il braccio fino al gesto dello sport
@@ -5916,8 +5962,16 @@ const ST_RTP_CRIT={
   lcp:[[['Cassetto posteriore','stabile, la lassita\' non aumenta'],['Estensione completa','senza dolore']],[['Quadricipite isometrico','almeno 80% dell\'altra gamba']],[['Quadricipite','LSI 90% o piu\''],['Hop test','LSI 90% o piu\'']],[['Tempo dall\'intervento','9-12 mesi se ricostruito']]],
   lcm:[[['Stress in valgo a 30 gradi','senza dolore ne\' apertura'],['Flessione del ginocchio','oltre 120 gradi']],[],[['Cambi di direzione laterali','senza dolore'],['Passaggio di interno piede','senza dolore']],[]],
   quadricipite:[[['Flessione del ginocchio da prono','simmetrica e senza dolore'],['Isometria del quadricipite','senza dolore']],[['Sprint al 70-80%','senza dolore']],[['Calcio lungo','senza dolore'],['Sprint al 95-100%','senza dolore']],[]]};
+const ST_RTP_CRIT_T={
+  tend:[[['Dolore nel test di carico','non oltre 5 su 10 e torna come prima entro 24 ore'],['Isometria','5 x 45" senza dolore in aumento il giorno dopo']],[['Carico lento pesante','3-4 x 6-8 al carico pieno, dolore stabile']],[['Rimbalzi e salti','10 per lato, il giorno dopo il dolore non e\' salito']],[]],
+  menisco:[[['Gonfiore','assente dopo le sedute'],['Flessione del ginocchio','completa o quasi, senza dolore']],[],[['Accosciata profonda','senza dolore ne\' blocchi']],[]],
+  rottura:[[['Heel raise su una gamba','almeno 10 sulla gamba operata']],[['Heel raise su una gamba','almeno 80% dell\'altra']],[['Hop su una gamba','almeno 90% dell\'altra (LSI)']],[]],
+  frattura:[[['Dolore alla pressione sull\'osso','assente'],['Camminata 30-45\'','senza dolore']],[['30 saltelli a due piedi','senza dolore'],['Via del medico','alla corsa, se la sede e\' ad alto rischio']],[],[]],
+  lussazione:[[['Rotazione esterna','forza almeno 80% dell\'altro lato'],['Apprensione','assente nei movimenti di tutti i giorni']],[],[['Test di apprensione','negativo, anche in abduzione e rotazione esterna']],[]],
+  muscoloC:[[],[],[['Velocita\' piena e Nordic','senza dolore: con la lesione nel tendine le ricadute sono piu\' frequenti']],[]]};
 function stRtpCrit(I,s){
-  const sp=((ST_RTP_CRIT[I.rtpInf]||[])[s])||[],gen=ST_RTP_GEN[s]||[],out=[];
+  const tl=I.rtpTipoL,kT=stRtpTend(I)?'tend':/^menisco/.test(tl||'')?'menisco':tl==='rottura'?'rottura':tl==='frattura'?'frattura':tl==='lussazione'?'lussazione':(stRtpTipo(I)==='muscolo'&&(I.rtpSede==='c'||I.rtpTend==='si'))?'muscoloC':null;
+  const sp=(((ST_RTP_CRIT[I.rtpInf]||[])[s])||[]).concat(kT?(ST_RTP_CRIT_T[kT][s]||[]):[]),gen=ST_RTP_GEN[s]||[],out=[];
   sp.concat(gen).forEach(x=>{if(!out.some(y=>y[0]===x[0]))out.push(x);});
   // senza sport di squadra il gruppo non c'e': conta tornare ad allenarsi pieno
   // spalla: niente criteri delle gambe (salti a una gamba, equilibrio, corsa)
@@ -6026,7 +6080,18 @@ function stTestTutti(I){
   Object.keys(I.infortuni||{}).forEach(k=>{const x=TI[k];if(x&&!mis.some(y=>y[0]===x[0]))mis.push(x);});
   // flessori prossimali dolenti: il Nordic come test e' troppo, si misura il dolore nel ponte a gamba quasi tesa
   if(stTendDol(I).includes('hamprox')){const j=mis.findIndex(y=>/Nordic/.test(y[0]));const x=['Single Leg Bridge','a gamba quasi tesa: ripetute per lato e dolore da 0 a 10'];if(j>=0)mis.splice(j,1);const g=mis.findIndex(y=>y[0]===x[0]);if(g>=0)mis[g]=x;else mis.push(x);}
-  if(sport||N.vel)neu.push(['Countermovement Jump','cm, migliore di 3'],['Sprint 10m','secondi, migliore di 2'],['Sprint 30m','secondi']);
+  const pb=I.problemi||[],inStag=sport&&I.stagione==='in';
+  // in stagione la batteria e' corta: salto e 10 metri dicono freschezza e potenza, i massimali e l'intermittente si fanno in precampionato
+  if(sport||N.vel)neu.push(['Countermovement Jump','cm, migliore di 3'],['Sprint 10m','secondi, migliore di 2']);
+  if((sport&&!inStag)||N.vel)neu.push(['Sprint 30m','secondi']);
+  // condizioni: misure che si possono ripetere e che dicono qualcosa di quella condizione
+  if(pb.some(k=>['osteopenia','menopausa','over50'].includes(k)))mis.push(['5 alzate dalla sedia','secondi, braccia incrociate: forza delle gambe e rischio di caduta'],['Equilibrio su una gamba','secondi per lato a occhi aperti, fino a 30']);
+  if(pb.includes('diastasi'))mis.push(['Distanza fra i retti','dita fra i retti sopra, all\'altezza e sotto l\'ombelico a testa sollevata, e se la linea alba fa la "cupola"']);
+  if(pb.includes('lipedema'))mis.push(['Circonferenze delle gambe','coscia, sopra il ginocchio, polpaccio, caviglia e braccio, stesso punto ogni volta'],['Dolore e pesantezza alle gambe','da 0 a 10, a fine giornata']);
+  if(pb.some(k=>['pcos','diabete','sovrappeso'].includes(k))&&!mis.some(y=>y[0]==='Peso e circonferenze'))mis.push(['Peso e circonferenze','vita e fianchi al mattino, stesse condizioni']);
+  if(pb.some(k=>['ferro','ciclo'].includes(k)))mis.push(['Esami del sangue','ferritina ed emoglobina dal medico: con ferritina sotto 30 se ne parla prima di caricare']);
+  // post parto e pavimento pelvico: la batteria di carico e impatto prima di correre (Goom 2019)
+  if(pb.some(k=>['postparto','pavimento'].includes(k))&&(corsa||sport)){mis.push(['Test di carico e impatto','camminata 30\', equilibrio 10" per gamba, 10 squat su una gamba, 1\' di corsa sul posto, 10 balzi avanti, 10 saltelli per gamba: senza perdite, pesantezza o dolore'],['Forza per tornare a correre','20 per lato: calf raise, ponte e sit to stand su una gamba, abduzione da sdraiata'],);}
   if(pesi&&I.obiettivo==='gara'){
     // per chi corre: forza a una gamba e tenuta, non i massimali
     fz.push([stEs(I,'unilat'),L==='zero'||L==='princ'?'10 ripetute per lato: controllo del ginocchio':'8RM per lato'],['Single Leg Heel Raise','ripetute massime per lato'],['Side Plank','secondi per lato']);
@@ -6043,9 +6108,14 @@ function stTestTutti(I){
       if(I.obiettivo==='forza'&&!fam)fz.push([I.liftObj,I.liftDa?'1RM di partenza '+I.liftDa+' kg: verifica con 3RM':'3RM, da cui il 1RM di partenza']);
     }
   }
+  // gravidanza, pressione alta: niente massimali, la forza si stima da carichi lontani dal cedimento
+  if(pb.some(k=>['gravidanza','ipertensione'].includes(k)))fz.forEach(t=>{if(/RM|massim/i.test(t[1]))t[1]=pb.includes('gravidanza')?'carico per 10 ripetute a RPE 6, tecnica e respirazione':'8RM, da cui il 1RM stimato (niente apnea)';});
+  // in stagione un solo test di forza, lontano dalla partita
+  if(inStag&&fz.length>1)fz.splice(1);if(inStag&&fz[0]&&/RM/.test(fz[0][1]))fz[0]=[fz[0][0],'3RM o carico a RPE 8 per 3, a MD-4'];
   // spalla dolente: niente piegamenti o panca al massimo, si testa la tenuta del tronco
   if((I.infortuni||{}).spalle==='rec')for(let j=fz.length-1;j>=0;j--){if(/push up|bench|panca|press/i.test(fz[j][0])){fz.splice(j,1);if(!fz.some(y=>/plank/i.test(y[0])))fz.push(['Plank','secondi']);}}
-  if(sport&&(I.qualita||[]).includes('resistenza')||sport&&!(I.qualita||[]).length)res.push(['30-15 IFT','velocita\' finale','res']);
+  if(!inStag&&(sport&&(I.qualita||[]).includes('resistenza')||sport&&!(I.qualita||[]).length))res.push(['30-15 IFT','velocita\' finale','res']);
+  if(pb.includes('gravidanza'))for(let j=res.length-1;j>=0;j--)res.splice(j,1);
   if(corsa){
     if(L==='zero')res.push(['Corri e cammina 20\'','quanti minuti riesce a correre di fila, a ritmo di conversazione','res']);
     else if(!stSec(I.t5)&&!stSec(I.t10))res.push(['Cooper Test','metri in 12 minuti, o un 5 km a tutta','res']);
@@ -6138,15 +6208,27 @@ function stPrevRuolo(ruolo){
   return 'full';
 }
 // esercizi che un infortunio recente o una condizione escludono, anche fra i complementari
+// le regole delle condizioni (gravidanza, diastasi, osso fragile...): valgono anche per il corpo della seduta
+function stVietatoCond(I,n){
+  const pb=I.problemi||[];n=String(n||'');
+  if(ST_NOSALTI.some(k=>pb.includes(k))&&/jump|hop|balz|salt|bound|skip/i.test(n))return true;
+  // flessione del tronco sotto carico: no con diastasi, gravidanza e osso fragile (Too Fit To Fracture)
+  if(['diastasi','gravidanza','osteopenia'].some(k=>pb.includes(k))&&/crunch|sit.?up|v.?up|toes to bar|russian twist|jackknife|toe touch/i.test(n))return true;
+  if(pb.includes('gravidanza')&&/dead ?bug|floor press|lying|supin|sdraiat|nordic|bosu|instabil|box jump|kipping/i.test(n))return true;
+  // ipermobilita': niente allungamenti a fine corsa articolare, serve controllo
+  if(pb.includes('ipermob')&&/pigeon|frog|split passiv|allungamento passivo/i.test(n))return true;
+  return false;
+}
 function stVietato(I,n){
   const inf=I.infortuni||{},rec=z=>inf[z]==='rec',pb=I.problemi||[];n=String(n||'');
+  if(I.obiettivo==='rientro'&&I.rtpTipoL==='menisco_s'&&/affond.*(avanzament|spinta)|walking lunge|pistol|sissy|profond|deep|pivot|cambio di direzione/i.test(n))return true;
   if(rec('spalle')&&/arnold|strict press|military|push press|lento avanti|frontal|overhead|sopra la testa/i.test(n))return true;
   if((rec('lombalgia')||inf.ernia)&&/good morning|stacco|deadlift|stiff/i.test(n)&&!/trap bar|single leg|una gamba/i.test(n))return true;
   if(rec('hamstring')&&/nordic|stiff|good morning|volant|sprint/i.test(n))return true;
   if(rec('lca')&&/depth|bound|balz|pivot|cambio di direzione/i.test(n))return true;
   if((rec('rotulea')||rec('achille')||rec('piede')||rec('caviglia'))&&/jump|balz|salt|bound|hop/i.test(n)&&!/isometr/i.test(n))return true;
   if(rec('rotulea')&&/affond.*(avanzament|spinta)|walking lunge|jump/i.test(n))return true;
-  if(pb.includes('postparto')&&/jump|hop|balz|salt|bound/i.test(n))return true;
+  if(stVietatoCond(I,n))return true;
   return false;
 }
 function stPrevLista(I,zona,tipo){
@@ -6332,7 +6414,7 @@ function stLiftPiano(I){
   stLpMemo={k,v};return v;
 }
 // famiglie di esercizi: due della stessa famiglia nella stessa seduta sono un doppione
-const ST_FAM_ES=[/pull ?up|chin ?up|trazion/i,/bicep|bicipit|hammer curl|dumbbell curl|barbell curl|curl (con |coi )?manubri|curl (al |col )?bilanciere|curl manubri/i,/bridge|hip thrust|ponte/i,/lunge|split squat|affond|rfess|bulgarian/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
+const ST_FAM_ES=[/pull ?up|chin ?up|trazion/i,/curl con presa|martello|bicep|bicipit|hammer curl|dumbbell curl|barbell curl|curl (con |coi )?manubri|curl (al |col )?bilanciere|curl manubri/i,/bridge|hip thrust|ponte/i,/lunge|split squat|affond|rfess|bulgarian/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
 function stStessaFam(a,b){return a===b||ST_FAM_ES.some(f=>f.test(a)&&f.test(b));}
 function stCorpo(I,g,w){
   const tpl=/^HY_/.test(g.ruolo)?stTplHy(g,w):ST_TPL[g.ruolo]||ST_TPL.FB_A,out=[],key=g.nome;
@@ -6341,7 +6423,7 @@ function stCorpo(I,g,w){
   if(I.obiettivo==='rientro'&&I.rtpInf==='hamstring'&&stRtpIdx(I,w)>=0&&stRtpIdx(I,w)<=1){
     [['Askling Extender','2','12 per lato','gamba sospesa: estensione lenta del ginocchio fino al primo fastidio, mai dolore'],['Askling Diver','2','6 per lato','tuffo in avanti su una gamba, braccia avanti: allungamento attivo, lento']].forEach(([n,se,re,cu],j)=>{const k=key+'|ask'+j;if(!I.esDel[k])out.push({k,name:I.esOv[k]||n,pr:{sets:+se,reps:re,rest:'60"',cue:'protocollo L (Askling 2013): '+cu},ruolo:'acc'});});
   }
-  if(stRtpIdx(I,w)>=1&&I.rtpInf!=='spalle'&&!tpl.some(x=>x[1]==='pliom')&&!I.esDel[key+'|rp']&&!/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'')){const n=I.esOv[key+'|rp']||stEs(I,'pogo');out.push({k:key+'|rp',name:n,pr:Object.assign(stPrescr(I,w,'pliom'),{sets:2,cue:'ritorno ai salti: atterraggi morbidi e silenziosi, niente dolore'}),ruolo:'pliom'});}
+  if(stRtpIdx(I,w)>=1&&I.rtpInf!=='spalle'&&!stTendDol(I).some(z=>ST_TEND[z]&&ST_TEND[z].gambe)&&!stVietatoCond(I,'hop')&&!tpl.some(x=>x[1]==='pliom')&&!I.esDel[key+'|rp']&&!/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'')){const n=I.esOv[key+'|rp']||stEs(I,'pogo');out.push({k:key+'|rp',name:n,pr:Object.assign(stPrescr(I,w,'pliom'),{sets:2,cue:'ritorno ai salti: atterraggi morbidi e silenziosi, niente dolore'}),ruolo:'pliom'});}
   tpl.forEach(([slot,ruolo0],i)=>{
     const k=key+'|'+i;if(I.esDel[k])return;
     // ibrido: il total body e' la seduta leggera delle gambe, la pesante e' Gambe
@@ -6366,8 +6448,10 @@ function stCorpo(I,g,w){
     if(I.esOv[k])name=I.esOv[k];
     // doppione nella stessa seduta (stesso esercizio o stessa famiglia negli accessori): si salta
     if(!I.esOv[k]&&out.some(e=>e.name===name||(['acc','iso'].includes(ruolo)&&stStessaFam(e.name,name))))return;
-    let pr=stDoseInf(I,name,stDoseEs(name,stPrescr(I,w,ruolo,name),w));
-    if(ruolo==='pliom')pr=Object.assign({},pr,stPliomDose(I,w,name,tpl.filter(x=>x[1]==='pliom').length));
+    // al posto dei salti per una condizione (ponte, step up): si dosa come un complementare, non 6 x 6
+    const ruoloP=ruolo==='pliom'&&!/jump|hop|balz|salt|bound|skip|pogo|box/i.test(name)?'acc':ruolo;
+    let pr=stDoseInf(I,name,stDoseEs(name,stPrescr(I,w,ruoloP,name),w));
+    if(ruoloP==='pliom')pr=Object.assign({},pr,stPliomDose(I,w,name,tpl.filter(x=>x[1]==='pliom').length));
     if(hamR&&/hamstring curl/i.test(name))pr=Object.assign({},pr,{cue:'flessori in recupero: carico che non fa male, niente cedimento'});
     if(ruolo==='main'&&stPctOk(name)){let tr=stTriphasic(I,w);
       // l'eccentrica lenta in 5-6 secondi regge poche ripetizioni: con 5 o piu' la discesa resta controllata
@@ -6524,6 +6608,7 @@ function stProposta(I){
   if(I.obiettivo==='ibrido'&&stUomo(I))avvisi.push('Ibrido: negli uomini la corsa toglie un po\' di forza alle gambe (nelle donne meno, Schumann 2023). Le gambe vanno prima della corsa o ad almeno 3 ore, le ripetute brevi (fino a 10 secondi) non danno interferenza.');
   if(I.obiettivo==='gara'&&I.livello!=='zero')avvisi.push(I.livello==='avanz'&&+I.garaDist<=10?'Intensita\': distribuzione polarizzata, quasi tutto facile e la qualita\' a VO2max, che negli atleti allenati alza di piu\' il massimo consumo di ossigeno (Rosenblat 2025).':'Intensita\': distribuzione piramidale, tanto facile, una parte a soglia e poco a VO2max: per chi corre per se\' rende quanto la polarizzata ed e\' piu\' sostenibile (Rosenblat 2025).');
   const tdol=stTendDol(I),tst=stTendStab(I);
+  if(I.obiettivo==='rientro'&&I.rtpTipoL==='frattura')TD.tibiale='frattura da stress: osso in guarigione, il carico sale solo senza dolore alla pressione e il salto arriva per ultimo';
   if(tdol.length)avvisi.push('Tendini dolenti adesso, '+tdol.map(k=>TD[k]).join('; ')+'. Regola del dolore: durante fino a 5 su 10, la mattina dopo dolore e rigidita\' tornano come prima; se no la seduta dopo si scala.');
   if(tst.length)avvisi.push('Tendini stabili ('+tst.map(k=>(ST_INF.find(x=>x[0]===k)||[0,k])[1].toLowerCase()).join(', ')+'): resta il carico lento e pesante due volte a settimana, per non perdere quello che si e\' guadagnato.');
   if(I.obiettivo==='rientro'){
@@ -6536,13 +6621,33 @@ function stProposta(I){
     }
     const st=stRtpStima(I);
     if(st)avvisi.push('Stima del ritorno per questa lesione: '+st.txt+' ('+st.fonte+'). Il programma ha '+fasi.length+' settimane'+(fasi.length<st.min?': poche, servono almeno '+st.min:fasi.length>st.max*1.5&&!(I.rtpInf==='lca'||I.rtpInf==='lcp')?': piu\' della stima, le ultime fasi possono accorciarsi se i criteri sono rispettati':'')+'. Decidono i criteri, non il calendario.');
-    if(I.rtpInf&&ST_RTP_TIPO[I.rtpInf]&&!I.rtpGrado&&!((I.rtpInf==='lcp')&&I.rtpOp==='si'))avvisi.push('Indica il grado della lesione: cambia la stima dei tempi.');
+    if(I.rtpInf&&stRtpTipo(I)&&!I.rtpGrado&&!((I.rtpInf==='lcp')&&I.rtpOp==='si'))avvisi.push('Indica il grado della lesione: cambia la stima dei tempi.');
+    if(ST_RTP_SOTTO[I.rtpInf]&&!I.rtpTipoL)avvisi.push('Indica che cosa si e\' fatto ('+ST_RTP_SOTTO[I.rtpInf].map(x=>x[1].toLowerCase()).join(', ')+'): cambia tempi e criteri.');
+    if(stRtpTend(I))avvisi.push('Tendinopatia: si lavora col modello del dolore, fino a 5 su 10 durante il carico va bene se il giorno dopo il dolore e la rigidita\' del mattino non sono saliti; se salgono si torna al gradino prima.');
+    if(I.rtpTipoL==='menisco_s')avvisi.push('Menisco suturato: nelle prime 16 settimane piegamenti sotto carico non oltre 90 gradi, niente rotazioni sul ginocchio carico ne\' affondi in avanzamento; la progressione la conferma il chirurgo.');
+    if(I.rtpTipoL==='frattura'&&I.rtpRischio==='alto')avvisi.push('Frattura da stress ad alto rischio: la corsa riparte solo col via del medico e con l\'immagine di guarigione. Vanno controllati alimentazione, ciclo e vitamina D (REDs).');
     if(!N.rtp)avvisi.push('Senza sedute di campo il ritorno resta in palestra: almeno una a settimana.');
     const nF=stRtpFasi(I).length;
     if(fasi.length<nF*2)avvisi.push('Con '+fasi.length+' settimane le '+nF+' fasi durano meno di due settimane l\'una: per un ritorno vero ne servono almeno '+nF*2+', oppure si parte da una fase piu\' avanti.');
   }
   const pb=I.problemi||[];
-  if(pb.includes('postparto'))avvisi.push('Post parto: niente salti e core in respirazione nelle prime settimane; serve il via libera del ginecologo o del fisioterapista del pavimento pelvico prima di corsa e carichi.');
+  const ppS=stNum(I.ppSett),gS=stNum(I.gravSett),corsaP=stNumeri(I).corsa>0;
+  if(pb.includes('postparto'))avvisi.push('Post parto'+(ppS?' ('+ppS+' settimane)':'')+': niente salti e core in respirazione nelle prime settimane; serve il via libera del ginecologo o del fisioterapista del pavimento pelvico prima di corsa e carichi.'+(corsaP?' Corsa non prima di 12 settimane dal parto e dopo il test di carico e impatto senza perdite, pesantezza o dolore (Goom, Donnelly, Brockwell 2019).':''));
+  if(pb.includes('postparto')&&corsaP&&ppS&&ppS<12)avvisi.push('Sono '+ppS+' settimane dal parto: le corse del programma vanno sostituite con camminata veloce o bici fino alla dodicesima settimana.');
+  if(pb.includes('gravidanza'))avvisi.push('Gravidanza'+(gS?' ('+gS+' settimane)':'')+': 150 minuti a settimana di attivita\' moderata piu\' due sedute di forza (ACOG 2020), RPE fino a 7, niente apnea, niente sport di contatto o con rischio di caduta'+(gS>=20?', niente esercizi lunghi a pancia in su':'')+'. Si ferma e si sente il ginecologo con perdite o sanguinamento, capogiri, dolore al petto, mal di testa forte, contrazioni regolari, gonfiore o dolore al polpaccio.');
+  if(pb.includes('diastasi'))avvisi.push('Diastasi addominale: carico progressivo, prima attivazione del trasverso e respirazione, poi tenute e carichi; niente crunch e sit up finche\' la linea alba non regge (niente "cupola"). Misura della distanza fra i retti a ogni controllo.');
+  if(pb.includes('pavimento'))avvisi.push('Pavimento pelvico: niente salti e corsa finche\' ci sono perdite o pesantezza; meglio una valutazione dal fisioterapista del pavimento pelvico. Espirazione in spinta e carichi che non danno sintomi.');
+  if(pb.includes('lipedema'))avvisi.push('Lipedema: forza e attivita\' a basso impatto (bici, nuoto, acquagym) migliorano dolore, gonfiore e qualita\' di vita; il grasso del lipedema non cala con dieta e allenamento, quindi l\'obiettivo e\' la funzione, non la bilancia. Calze contenitive se prescritte (consenso SISMeS e SIF 2024).');
+  if(pb.includes('pcos'))avvisi.push('Ovaio policistico: 150-300 minuti a settimana moderati o 75-150 intensi piu\' due sedute di forza in giorni non consecutivi (linea guida internazionale PCOS 2023); nessun tipo di allenamento e\' superiore agli altri, conta la costanza.');
+  if(pb.includes('endometriosi'))avvisi.push('Endometriosi: nei giorni di dolore si scala (basso impatto, mobilita\', respirazione), negli altri si progredisce normalmente; core lento e controllato, niente crunch se aumentano dolore o pressione. Segnare il ciclo aiuta a capire le settimane difficili.');
+  if(pb.includes('menopausa'))avvisi.push('Perimenopausa e menopausa: la forza pesante e progressiva e\' la prima scelta per osso e muscolo; dove possibile carichi alti (5 x 5 all\'80-85% dopo un mese di tecnica, LIFTMOR 2018) e un po\' di impatto, piu\' equilibrio.');
+  if(pb.includes('osteopenia'))avvisi.push('Osteopenia o osteoporosi: forza pesante e impatto progressivi, supervisionati, aumentano la densita\' ossea senza piu\' fratture (LIFTMOR, Watson 2018); niente flessioni del tronco sotto carico. Con fratture vertebrali o osteoporosi grave serve il via del medico.');
+  if(pb.includes('ferro'))avvisi.push('Ferro basso: con ferritina sotto 30 si sentono stanchezza e cali di prestazione; esami e integrazione li decide il medico. Volume dell\'intensita\' prudente finche\' i valori non risalgono.');
+  if(pb.includes('ciclo'))avvisi.push('Ciclo assente o irregolare: e\' il primo segnale di bassa disponibilita\' energetica (REDs, IOC 2023). Prima di aumentare il volume si parla di alimentazione e si sente il ginecologo o il medico dello sport.');
+  if(pb.includes('ipertensione'))avvisi.push('Pressione alta: si allena con la pressione controllata (sotto 160/100 a riposo), RPE fino a 8, niente apnea e niente massimali; forza e aerobico la abbassano entrambi.');
+  if(pb.includes('diabete'))avvisi.push('Diabete tipo 2: forza e aerobico insieme migliorano la glicemia; controllo prima e dopo se usa insulina o farmaci che danno ipoglicemia, e qualcosa di zuccherato a portata di mano.');
+  if(pb.includes('asma'))avvisi.push('Asma da sforzo: riscaldamento lungo e progressivo (10-15 minuti con qualche tratto piu\' svelto), broncodilatatore come da prescrizione, attenzione all\'aria fredda e secca.');
+  if(pb.includes('ipermob'))avvisi.push('Ipermobilita\': niente allungamenti a fine corsa, si lavora il controllo e la forza in tutto il range con tempi lenti e isometrie.');
   if(pb.includes('over50'))avvisi.push('Sopra i 50 anni: RPE non oltre 8, recuperi piu\' lunghi, equilibrio in apertura, salti ridotti.');
   if(pb.includes('sovrappeso'))avvisi.push('Sovrappeso: niente salti all\'inizio, condizionamento a basso impatto (bici, vogatore, camminata in salita).');
   const Rr=stRientro(I);
@@ -6664,6 +6769,11 @@ function stCostruisci(I,P){
       if(w.tipo==='gara'&&g===lg){
         sessions['s'+ord]={name:'Gara: '+ST_DIST[I.garaDist],type:'corsa',order:ord,dayOfWeek:dGara,notes:I.garaTempo?'Obiettivo '+I.garaTempo+', passo '+stPace(P.rit?P.rit.gara:0)+'/km':zero?'Partenza piano, ritmo di conversazione: l\'obiettivo e\' arrivare correndo.':'Buona gara',corsaFasi:[stFase('Riscaldamento','Z1',zero?'10\'':'15\'','',zero?'camminata veloce e 2\' di corsa leggera':'con 3 allunghi'),stFase('Gara','Z4',ST_DIST[I.garaDist],P.rit?stPace(P.rit.gara):'','gara')],exercises:{}};ord++;return;
       }
+      // post parto: prima della dodicesima settimana dal parto niente corsa, camminata veloce o bici (Goom 2019)
+      if(g.tipo==='corsa'&&(I.problemi||[]).includes('postparto')&&stNum(I.ppSett)&&stNum(I.ppSett)+wi<12){
+        const m=g.ruolo==='Lungo'?45:30;
+        sessions['s'+ord]={name:'Camminata veloce o bici',type:'conditioning',order:ord,dayOfWeek:g.d,condType:'Testo libero',duration:m+'min',notes:'Al posto della corsa fino alla dodicesima settimana dal parto. Poi test di carico e impatto e si riparte con corri e cammina.',condContent:m+'\' a ritmo di conversazione, in salita se si puo\'\nniente perdite, pesantezza o dolore',exercises:{}};ord++;return;
+      }
       if(g.tipo==='corsa'){
         let c=stCorsa(I,w,g.ruolo,(P.kmT||P.kmW)[wi]||0,P.rit,P.T.nC,P.tipo,{lungo:g===lg});
         if(g.ruolo==='Facile'&&!conAllunghi.includes(g.d))c=Object.assign({},c,{fasi:c.fasi.filter(f=>!(f.tipo==='Attivazione'&&/allunghi/.test(f.dist||f.note||'')))});
@@ -6718,7 +6828,7 @@ function stCostruisci(I,P){
       const alta=/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'');
       const tB=alta?[]:stTendBlocco(I,w,corpo.map(e=>e.name),false);
       // il blocco del tendine (isometria e carico lento) basta: niente terzo esercizio della stessa famiglia nella seduta
-      const lista=tB.concat(corpo.filter(e=>!tB.some(t=>stStessaFam(t.name,e.name))),compl);
+      const lista=tB.concat(corpo.filter(e=>!tB.some(t=>stStessaFam(t.name,e.name))),compl).filter(e=>!stVietatoCond(I,e.name));
       if((I.problemi||[]).includes('sovrappeso')&&w.tipo==='carico')sessNote.push('In fondo 10-15\' di bici, vogatore o camminata in salita a ritmo di conversazione.');
       stNelTempo(I,lista,corpo.length);
       lista.forEach(e=>{delete e._p;});
@@ -7269,11 +7379,14 @@ function stForm(){
       stRiga('Squadra',`<span class="pz-inline">${stIn('sqAll','3',50,'numeric')} allenamenti a settimana</span>`)+stRiga('Giorni squadra',stGiorni('sqGiorni'))+(I.stagione==='off'?'':stRiga('Partita',stGiorni('partita',true)))+
       stRiga('Cosa migliorare',stChips('qualita',ST_QUAL,true),'decide le sedute'):'')+
     (I.obiettivo==='rientro'?stRiga('Lesione',stChips('rtpInf',ST_INF),'decide fasi e criteri')+
-      (ST_RTP_TIPO[I.rtpInf]?stRiga('Grado',stChips('rtpGrado',ST_RTP_GRADI[ST_RTP_TIPO[I.rtpInf]]),'dall\'ecografia o dalla risonanza'):'')+
-      (ST_RTP_TIPO[I.rtpInf]==='muscolo'&&I.rtpGrado&&I.rtpGrado!=='funz'?stRiga('Tendine coinvolto',stChips('rtpTend',[['si','Si'],['no','No']]),'allunga i tempi'):'')+
+      (ST_RTP_SOTTO[I.rtpInf]?stRiga('Che cosa',stChips('rtpTipoL',ST_RTP_SOTTO[I.rtpInf]),'cambia tempi e criteri'):'')+
+      (I.rtpInf==='tibiale'&&I.rtpTipoL==='frattura'?stRiga('Sede',stChips('rtpRischio',[['basso','Basso rischio: tibia posteriore, perone, metatarsi centrali'],['alto','Alto rischio: navicolare, collo del femore, tibia anteriore, quinto metatarso']]),'dalla risonanza'):'')+
+      (stRtpTend(I)?stRiga('Stadio',stChips('rtpTendFase',ST_TEND_FASE),'Cook e Purdam'):'')+
+      (stRtpTipo(I)?stRiga('Grado',stChips('rtpGrado',ST_RTP_GRADI[stRtpTipo(I)]),'dall\'ecografia o dalla risonanza'):'')+
+      (stRtpTipo(I)==='muscolo'&&I.rtpGrado&&!['funz','4'].includes(I.rtpGrado)?stRiga('Sede',stChips('rtpSede',[['a','Periferia del muscolo (a)'],['b','Giunzione muscolo-tendine (b)'],['c','Dentro il tendine (c)']]),'classificazione BAMIC: (c) allunga i tempi'):'')+
       (I.rtpInf==='hamstring'?stRiga('Come si e\' fatta male',stChips('rtpMecc',[['sprint','In sprint'],['allungamento','In allungamento (calcio, scivolata)']]),'da allungamento serve circa il doppio'):'')+
       ((st=>st?`<p class="pz-hint">Stima del ritorno: ${stEsc(st.txt)} (${stEsc(st.fonte)}). ${stChips('settimane',[[Math.max(2,Math.min(30,Math.round((st.min+st.max)/2))),'Usa la stima: '+Math.max(2,Math.min(30,Math.round((st.min+st.max)/2)))+' settimane']])}</p>`:'')(stRtpStima(I)))+
-      (ST_RTP_TIPO[I.rtpInf]==='muscolo'?stRiga('Da quando',`<span class="pz-inline">${stIn('rtpSett','n',44,'numeric')} settimane dall'infortunio</span>`):stRiga('Operato',stChips('rtpOp',[['si','Si'],['no','No']])+`<span class="pz-inline">${stIn('rtpSett','n',44,'numeric')} settimane dall'infortunio o dall'intervento</span>`))+
+      (stRtpTipo(I)==='muscolo'?stRiga('Da quando',`<span class="pz-inline">${stIn('rtpSett','n',44,'numeric')} settimane dall'infortunio</span>`):stRiga('Operato',stChips('rtpOp',[['si','Si'],['no','No']])+`<span class="pz-inline">${stIn('rtpSett','n',44,'numeric')} settimane dall'infortunio o dall'intervento</span>`))+
       stRiga('A che punto e\'',stChips('rtpFase',ST_RTP_FASEP),'da qui parte il percorso')+
       stRiga('Torna a',stChips('rtpSport',[['calcio','Calcio'],['altro','Altro sport'],['corsa','Corsa']])):'')+
     (['estetica','salute','forza'].includes(I.obiettivo)?stRiga('Punti da migliorare',stChips('punti',ST_PUNTI.map(x=>[x[0],x[1]]),true)+(I.obiettivo==='estetica'&&!(I.punti||[]).length&&(stDonna(I)||stUomo(I))?`<p class="pz-hint">Se non scegli: ${stDonna(I)?'glutei e gambe':'petto, spalle e braccia'}, come si fa di solito per ${stDonna(I)?'una donna':'un uomo'}.</p>`:''),'esercizi in piu\''):'')+`</section>`;
@@ -7287,7 +7400,10 @@ function stForm(){
   h+=`<section class="pz-sec"><h4><b>4</b>Infortuni e carenze</h4>`+
     stRiga('Infortuni passati',stInfortuni(),'adattano esercizi e prevenzione')+
     stRiga('Carenze',stChips('carenze',ST_CAR,true),'dai test o dalla visita')+
-    stRiga('Condizioni',stChips('problemi',[['sovrappeso','Sovrappeso'],['over50','Oltre 50 anni'],['postparto','Post parto']],true),'cambiano carichi e impatto')+
+    stRiga('Condizioni',stChips('problemi',ST_COND_G,true),'cambiano carichi e impatto')+
+    (I.sesso!=='M'?stRiga('Salute femminile',stChips('problemi',ST_COND_F,true),'esercizi, impatto e avvisi')+
+      ((I.problemi||[]).includes('gravidanza')?stRiga('Gravidanza',`<span class="pz-inline">${stIn('gravSett','n',44,'numeric')} settimane</span>`,'dopo la 20a niente esercizi lunghi a pancia in su'):'')+
+      ((I.problemi||[]).includes('postparto')?stRiga('Dal parto',`<span class="pz-inline">${stIn('ppSett','n',44,'numeric')} settimane</span>`,'la corsa non prima di 12'):''):'')+
     `<p class="pz-hint">Gli infortuni in corso della scheda Salute sono gia' tra le carenze. Ogni seduta apre con un'attivazione e chiude con il rinforzo su queste zone.</p></section>`;
   h+=`<section class="pz-sec"><h4><b>5</b>Tempo e materiale</h4>`+
     stRiga('Giorni liberi',stGiorni('giorni'))+
@@ -7521,8 +7637,9 @@ document.addEventListener('click',e=>{
     // cambiata la lesione del ritorno: quella di prima non resta come infortunio recente
     if(k==='rtpInf'&&old&&old!==stI.rtpInf&&stI.infortuni[old]==='rec')delete stI.infortuni[old];
     if(['obiettivo','garaDist','ibGara','ibPrio','stagione','livello','split','sport','qualita','materiale','sesso','rtpFase','rtpSport'].includes(k))stI.settimana=null;
-    if(['obiettivo','settimane','blocco','garaDist','ibGara','ibPrio','stagione','rtpFase','rtpSport','rtpGrado','rtpTend','rtpMecc'].includes(k)){stI.fasiW=null;stI.scarichiMan=null;}
-    if(k==='rtpInf')stI.rtpGrado='';
+    if(['obiettivo','settimane','blocco','garaDist','ibGara','ibPrio','stagione','rtpFase','rtpSport','rtpGrado','rtpTend','rtpMecc','rtpSede','rtpTipoL','rtpTendFase','rtpRischio'].includes(k)){stI.fasiW=null;stI.scarichiMan=null;}
+    if(k==='rtpInf'){stI.rtpGrado='';stI.rtpTipoL='';stI.rtpSede='';stI.rtpTendFase='';stI.rtpRischio='';}
+    if(k==='rtpTipoL'){stI.rtpGrado='';stI.rtpSede='';}
     stRender();return;}
   const g=t.closest('[data-st-g]');
   if(g){const k=g.dataset.stG,i=+g.dataset.stI;
