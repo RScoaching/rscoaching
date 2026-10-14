@@ -1737,6 +1737,23 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
 #page-oggi .pg-kpi b{font-size:26px}
 #page-oggi .pg-wk{height:86px}
 #page-oggi .o9-greet{font-size:14px!important}
+
+#today-content:has(.fatta7){margin-top:12px}
+/* ── PRIMA SCHERMATA: la seduta fatta e' una riga ──
+   nome, ora e tre numeri piccoli; tratti, mappa, "elimina" e i numeri grandi stanno nel dettaglio */
+#today-content .fatta7{display:grid!important;grid-template-columns:28px minmax(0,1fr) auto;grid-template-areas:"ok t t" "ok n n" "ok r r";column-gap:12px;row-gap:3px;align-items:center;padding:14px 16px!important;margin:0 0 10px!important;border-radius:16px!important;background:rgba(255,214,196,.045)!important;border:1px solid rgba(255,214,196,.08)!important;cursor:pointer}
+#today-content .fatta7 .sess-head{grid-area:t;margin:0!important;padding:0 22px 0 0!important}
+#page-oggi #today-content .fatta7 .sess-title{font:600 16px/1.25 Inter,sans-serif!important;letter-spacing:0!important;margin:0!important;color:var(--ink8)!important;text-transform:none!important}
+#today-content .fatta7 .sess-prog-label,#today-content .fatta7 .f7-giri,#today-content .fatta7 .f7-del,#today-content .fatta7 .f7-run,#today-content .fatta7 .sess-action{display:none!important}
+#today-content .fatta7 .f7-ok{grid-area:ok;margin:0!important;align-self:start;padding-top:2px}
+#today-content .fatta7 .f7-ok span{display:none}
+#today-content .fatta7 .f7-ok svg,#today-content .fatta7 .f7-ok .rsi{width:22px!important;height:22px!important}
+#today-content .fatta7 .f7-num{grid-area:n;display:flex!important;flex-wrap:wrap;gap:4px 12px!important;margin:0!important}
+#today-content .fatta7 .f7-num>div{display:flex!important;flex-direction:row!important;align-items:baseline;gap:4px}
+#today-content .fatta7 .f7-num b{font:600 13.5px Inter,sans-serif!important;color:var(--ink8)!important;letter-spacing:0!important}
+#today-content .fatta7 .f7-num i{font:500 12.5px Inter,sans-serif!important;font-style:normal!important;color:var(--mut8)!important;text-transform:none!important;letter-spacing:0!important}
+#today-content .fatta7 .f7-rpe{grid-area:r;justify-self:start;margin:6px 0 0!important;padding:6px 12px!important;min-height:0!important;font:600 12.5px Inter,sans-serif!important;border-radius:999px!important}
+#today-content .fatta7::after{content:"";grid-area:t;justify-self:end;width:8px;height:8px;border-right:2px solid var(--mut8);border-top:2px solid var(--mut8);transform:rotate(45deg);opacity:.7}
 </style>
 </head>
 <body>
@@ -3819,18 +3836,20 @@ function sedutaFattaHtml(l,m){
   const C=l.corsa&&+l.corsa.km>0&&window.RSRitmi?l.corsa:null;
   const num=(C?[[nfIt(+C.km,C.km>=10?1:2),'km'],[C.passo?window.RSRitmi.passo(C.passo):null,'al km'],[min?nfIt(min,0):null,'minuti'],[C.fc||null,'FC media'],[rpe?nfIt(rpe,1):null,'RPE']]
     :[[min?nfIt(min,1):null,'minuti'],[+l.totalSets||null,'serie'],[rpe?nfIt(rpe,1):null,'RPE'],[pr||null,'record']]).filter(x=>x[0]);
-  return `<div class="sess-card fatta7">
+  return `<div class="sess-card fatta7" data-ts="${l.ts}">
     <div class="sess-head"><div class="sess-type-tag">${m.icon} ${escH(m.label)}</div><div class="sess-title">${escH(m.title)}</div>${m.progName?`<div class="sess-prog-label">${escH(m.progName)}</div>`:''}</div>
     <div class="f7-ok">${_ri('ok')}<span>Fatta ${quando}</span></div>
     ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>`:''}
     ${l.corsa&&l.corsa.centrati?`<div class="f7-run">Nel passo in <b>${l.corsa.centrati.ok} tratti su ${l.corsa.centrati.n}</b></div>`:''}
     ${l.gmTraccia&&window.RSTraccia?`<div class="f7-giri"><button type="button" class="f7-trk" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')">Dettagli della corsa</button></div>`:''}
     ${l.corsa&&l.corsa.giri&&l.corsa.giri.length&&window.RSRitmi?`<details class="f7-giri"><summary>${l.corsa.giri.some(g=>g.t)?'Fatto e programma, tratto per tratto':'I tratti della corsa'}</summary>${giriTab(l.corsa.giri)}</details>`:''}
-    ${rpe?'':`<button type="button" class="f7-rpe" onclick="vaiRpe(${l.ts})">Manca l'RPE della seduta: aggiungilo</button>`}
+    ${rpe?'':`<button type="button" class="f7-rpe" onclick="vaiRpe(${l.ts})">Aggiungi l'RPE</button>`}
     ${m.link?`<div class="sess-action"><a class="f7-again" href="${m.link}">Apri di nuovo la seduta</a></div>`:''}
     ${l._k?`<button type="button" class="f7-del" onclick="eliminaLog('${l._k}')">Elimina questa registrazione</button>`:''}
   </div>`;
 }
+// in home la seduta fatta e' una riga: toccandola si apre il dettaglio (numeri, tratti, mappa, elimina)
+document.addEventListener('click',e=>{const c=e.target.closest&&e.target.closest('#today-content .fatta7');if(!c||e.target.closest('.f7-rpe'))return;e.preventDefault();window.apriLog&&window.apriLog(+c.dataset.ts);},true);
 // una seduta registrata per sbaglio si toglie (quelle dell'orologio no: arrivano da Garmin o intervals.icu)
 window.eliminaLog=async k=>{
   if(!k||!confirm('Eliminare questa registrazione? Non si puo\' annullare.'))return;
