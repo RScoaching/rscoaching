@@ -586,6 +586,17 @@ window.RSOrologio = (function(){
   }
   function iso(d){return d?d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'):null;}
 
+  // traccia della corsa dal file, nel formato di garmin_tracce (come intervals_sync.py): un punto ogni 10 s,
+  // t secondi dalla partenza, d metri, fc, v m/s, q quota, lat/lon. Cosi' anche la corsa caricata a mano ha mappa e grafici
+  function tracciaDa(P){
+    P=P.filter(x=>x&&x.t!=null).sort((a,b)=>a.t-b.t);if(P.length<30)return null;
+    const t0=P[0].t,out={t:[],d:[]},k=['fc','v','q','lat','lon'],has={};k.forEach(c=>{has[c]=P.some(x=>x[c]!=null);if(has[c])out[c]=[];});
+    let next=t0;const r=(x,n)=>x==null?null:Math.round(x*Math.pow(10,n))/Math.pow(10,n);
+    P.forEach((x,i)=>{if(x.t<next&&i!==P.length-1)return;next=x.t+10;out.t.push(Math.round(x.t-t0));out.d.push(x.d!=null?Math.round(x.d):null);
+      if(has.fc)out.fc.push(x.fc!=null?Math.round(x.fc):null);if(has.v)out.v.push(r(x.v,2));if(has.q)out.q.push(x.q!=null?Math.round(x.q):null);
+      if(has.lat){out.lat.push(r(x.lat,5));out.lon.push(r(x.lon,5));}});
+    return out.t.length>=10?out:null;
+  }
   // ── FIT: lettura di un'attivita'
   function leggiFit(buf){
     const v=new DataView(buf),hs=v.getUint8(0);
@@ -614,7 +625,9 @@ window.RSOrologio = (function(){
     const lp=laps.map(l=>({m:l[9]!=null?l[9]/100:null,s:ms(l[8]!=null?l[8]:l[7]),fc:l[15]||null,fcMax:l[16]||null,step:l[71]!=null?l[71]:null})).filter(l=>l.s>0);
     let km=S[9]!=null?S[9]/100000:null,sec=ms(S[8]!=null?S[8]:S[7]),tot=ms(S[7]),fc=S[16]||null,fcMax=S[17]||null,dsl=S[22]||null,start=S[2]!=null?S[2]:(recs[0]&&recs[0][253]);
     if(km==null&&recs.length){const dd=recs.filter(r=>r[5]!=null);if(dd.length)km=dd[dd.length-1][5]/100000;const ts=recs.filter(r=>r[253]);if(ts.length){sec=sec||ts[ts.length-1][253]-ts[0][253];}const hr=recs.filter(r=>r[3]);if(hr.length&&!fc){fc=Math.round(hr.reduce((t,r)=>t+r[3],0)/hr.length);fcMax=Math.max(...hr.map(r=>r[3]));}}
-    return {fonte:'fit',sport:S[5]!=null?S[5]:sport,start:start?(start+FIT_EPOCH)*1000:null,km:km!=null?Math.round(km*100)/100:null,sec:sec?Math.round(sec):null,tot:tot?Math.round(tot):null,fc,fcMax,dsl,laps:lp};
+    const SC=180/Math.pow(2,31);
+    let tr=null;try{tr=tracciaDa(recs.map(r=>({t:r[253],d:r[5]!=null?r[5]/100:null,fc:r[3]||null,v:r[73]!=null?r[73]/1000:r[6]!=null?r[6]/1000:null,q:r[78]!=null?r[78]/5-500:r[2]!=null?r[2]/5-500:null,lat:r[0]!=null&&r[1]!=null?r[0]*SC:null,lon:r[0]!=null&&r[1]!=null?r[1]*SC:null})));}catch(e){}
+    return {tr,fonte:'fit',sport:S[5]!=null?S[5]:sport,start:start?(start+FIT_EPOCH)*1000:null,km:km!=null?Math.round(km*100)/100:null,sec:sec?Math.round(sec):null,tot:tot?Math.round(tot):null,fc,fcMax,dsl,laps:lp};
   }
   // ── GPX: lettura (Strava, Garmin, Coros, Suunto esportano tutti GPX)
   function leggiGpx(txt){
@@ -634,7 +647,9 @@ window.RSOrologio = (function(){
     }
     const t0=pts[0].t,t1=pts[pts.length-1].t;
     if(m-lm>200&&t1&&lt)kmL.push({m:Math.round(m-lm),s:Math.round((t1-lt)/1000),fc:lhr.length?Math.round(lhr.reduce((t,x)=>t+x,0)/lhr.length):null});
-    return {fonte:'gpx',sport:null,start:t0||null,km:Math.round(m/10)/100,sec:Math.round(mov||(t1-t0)/1000),tot:t0&&t1?Math.round((t1-t0)/1000):null,fc:hrs.length?Math.round(hrs.reduce((t,x)=>t+x,0)/hrs.length):null,fcMax:hrs.length?Math.max(...hrs):null,dsl:Math.round(dsl)||null,laps:kmL,auto:true};
+    let tr=null;try{let dd=0;const Q=pts.map((x,i)=>{if(i){const a=pts[i-1],dl=rad(x.lat-a.lat),dn=rad(x.lon-a.lon),h=Math.sin(dl/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(x.lat))*Math.sin(dn/2)**2;const st=2*R*Math.asin(Math.sqrt(h));dd+=st;
+        const dt=a.t&&x.t?(x.t-a.t)/1000:0;x._v=dt>0?st/dt:null;}return {t:x.t?x.t/1000:null,d:dd,fc:x.hr,v:x._v,q:x.ele,lat:x.lat,lon:x.lon};});tr=tracciaDa(Q);}catch(e){}
+    return {tr,fonte:'gpx',sport:null,start:t0||null,km:Math.round(m/10)/100,sec:Math.round(mov||(t1-t0)/1000),tot:t0&&t1?Math.round((t1-t0)/1000):null,fc:hrs.length?Math.round(hrs.reduce((t,x)=>t+x,0)/hrs.length):null,fcMax:hrs.length?Math.max(...hrs):null,dsl:Math.round(dsl)||null,laps:kmL,auto:true};
   }
   async function leggiFile(file){
     const n=String(file&&file.name||'').toLowerCase();

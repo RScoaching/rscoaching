@@ -6031,7 +6031,7 @@ function stTestTutti(I){
     // per chi corre: forza a una gamba e tenuta, non i massimali
     fz.push([stEs(I,'unilat'),L==='zero'||L==='princ'?'10 ripetute per lato: controllo del ginocchio':'8RM per lato'],['Single Leg Heel Raise','ripetute massime per lato'],['Side Plank','secondi per lato']);
   }else if(pesi&&(rientro||['lca','ernia','lombalgia','rotulea'].some(z=>(I.infortuni||{})[z]==='rec'))){
-    fz.push([stEs(I,'squat'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],[stEs(I,'hinge'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],['Push Up','ripetute massime pulite']);
+    fz.push([stEs(I,'squat'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],(I.infortuni||{}).hamstring==='rec'?['Single Leg Bridge','ripetute per lato, dolore da 0 a 10']:[stEs(I,'hinge'),'carico per 8 ripetute a RPE 6-7, dolore non oltre 3 su 10'],['Push Up','ripetute massime pulite']);
   }else if(pesi){
     if(L==='zero')fz.push(['Bodyweight Squat','qualita\' del gesto, 10 ripetute'],['Push Up','ripetute massime pulite'],['Plank','secondi'],['Dumbbell RDL','cerniera d\'anca con bastone, qualita\'']);
     else if(L==='princ')fz.push(['Dumbbell Goblet Squat','8RM'],['Push Up','ripetute massime'],['Feet Elevated Inverted Row','ripetute massime']);
@@ -6332,7 +6332,7 @@ function stLiftPiano(I){
   stLpMemo={k,v};return v;
 }
 // famiglie di esercizi: due della stessa famiglia nella stessa seduta sono un doppione
-const ST_FAM_ES=[/bicep|bicipit|hammer curl|dumbbell curl|barbell curl|curl (con |coi )?manubri|curl (al |col )?bilanciere|curl manubri/i,/bridge|hip thrust|ponte/i,/lunge|split squat|affond|rfess|bulgarian/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
+const ST_FAM_ES=[/pull ?up|chin ?up|trazion/i,/bicep|bicipit|hammer curl|dumbbell curl|barbell curl|curl (con |coi )?manubri|curl (al |col )?bilanciere|curl manubri/i,/bridge|hip thrust|ponte/i,/lunge|split squat|affond|rfess|bulgarian/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
 function stStessaFam(a,b){return a===b||ST_FAM_ES.some(f=>f.test(a)&&f.test(b));}
 function stCorpo(I,g,w){
   const tpl=/^HY_/.test(g.ruolo)?stTplHy(g,w):ST_TPL[g.ruolo]||ST_TPL.FB_A,out=[],key=g.nome;
@@ -6415,6 +6415,8 @@ function stCorpo(I,g,w){
     const def=ST_PUNTI.find(x=>x[0]===pk);if(!def||extra>=2)return;
     if(!(reg==='x'||def[2]==='c'||def[2]===reg))return;
     if((/^PULL/.test(g.ruolo)&&pk==='petto')||(/^PUSH/.test(g.ruolo)&&pk==='dorso'))return;
+    // spinta e tirata hanno gia' il loro esercizio per le braccia: il punto in piu' finiva col curl nella spinta e il tricipite nella tirata
+    if(pk==='braccia'&&/^(PUSH|PULL)/.test(g.ruolo))return;
     const cand=stEsPunto(I,pk).find(n=>!out.some(e=>stStessaFam(e.name,n)));if(!cand)return;
     const k=key+'|p'+pk;if(I.esDel[k])return;
     const pr=stDoseEs(I.esOv[k]||cand,stPrescr(I,w,'iso'),w);
@@ -6705,6 +6707,7 @@ function stCostruisci(I,P){
       // la seduta che cade il giorno dopo la partita diventa di recupero: i salti il giorno dopo 90 minuti di gioco fanno solo danni
       if(g.md==='MD-6'&&g.ruolo==='SPORT_P')g=Object.assign({},g,{ruolo:'SPORT_R',nome:'Recupero e parte alta',mdNota:true});
       const corpo=stCorpo(I,g,conTest&&fine&&w.tipo==='carico'?Object.assign({},w,{tipo:'scarico'}):w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;const av=stAvvicinamento(e);if(av)e.cue=av+(e.cue?'. '+e.cue:'');if(['main','main2','mainU','pow','pliom'].includes(x.ruolo))e._p=1;return e;});const sessNote=[];
+      if(['MD-2','MD-1'].includes(g.md)&&corpo.some(e=>e._p&&/jump|hop|bound|box|salt|skip/i.test(e.name))){corpo.forEach(e=>{if(/jump|hop|bound|box|salt/i.test(e.name)){e.sets=Math.min(+e.sets||3,3);const r=parseInt(e.reps);if(r>5)e.reps='5';}});sessNote.push('Vicino alla partita: pochi salti, freschi e di qualita\'.');}
       if(g.mdNota)sessNote.push('Il giorno dopo la partita: carichi moderati, niente salti. Chi ha giocato meno di 45 minuti aggiunge 3 x 5 salti e 4 allunghi.');
       const exs={};let i=0;
       const pb=stPrevBlocco(I,g.ruolo,{bi,gi,dl,nomi:corpo.map(e=>e.name)});
@@ -6713,7 +6716,9 @@ function stCostruisci(I,P){
       const compl=pb.rin.slice(0,2).map(e=>({name:e.name,sets:e.sets,reps:e.reps,cue:'Complementare: '+String(e.cue||'').replace(/^Prevenzione:?\s*/,'')}));
       // le isometrie e il carico lento dei tendini delle gambe stanno nelle sedute con le gambe
       const alta=/^(UP|PUSH|PULL|HY_3)/.test(g.ruolo||'');
-      const lista=(alta?[]:stTendBlocco(I,w,corpo.map(e=>e.name),false)).concat(corpo,compl);
+      const tB=alta?[]:stTendBlocco(I,w,corpo.map(e=>e.name),false);
+      // il blocco del tendine (isometria e carico lento) basta: niente terzo esercizio della stessa famiglia nella seduta
+      const lista=tB.concat(corpo.filter(e=>!tB.some(t=>stStessaFam(t.name,e.name))),compl);
       if((I.problemi||[]).includes('sovrappeso')&&w.tipo==='carico')sessNote.push('In fondo 10-15\' di bici, vogatore o camminata in salita a ritmo di conversazione.');
       stNelTempo(I,lista,corpo.length);
       lista.forEach(e=>{delete e._p;});

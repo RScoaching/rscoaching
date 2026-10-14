@@ -2476,6 +2476,12 @@ function fuOpzioni(){
     pianoSett()[di].forEach(x=>{if(x.pid&&!logDi(x))op.push({id:'p:'+x.pid+':'+x.wi+':'+x.sid,nome:x.nome,tipo:x.tipo});});
     logsGiorno(di).forEach(l=>{const k=isoLoc(l.ts);if(!(+l.avgRpe)&&(l.gm||!(ST.sess[k]&&+ST.sess[k].rpe)))op.push({id:'l:'+l.ts,nome:(l.sessName||'Seduta')+', manca l\'RPE',solo:true});});
   }
+  // le sedute della settimana non ancora fatte, anche di altri giorni: chi sposta la soglia da giovedi' a
+  // mercoledi' la collega al programma (prima diventava una corsa libera e la seduta restava da fare)
+  if(di>=0)pianoSett().forEach((l,d)=>{if(d===di)return;l.forEach(x=>{
+    if(!x.pid||logDi(x)||['squadra','match'].includes(x.tipo)||(FU.corsa&&x.tipo!=='corsa'))return;
+    const id='p:'+x.pid+':'+x.wi+':'+x.sid;if(op.some(o=>o.id===id))return;
+    op.push({id,nome:x.nome+' (era per '+GG_LUNGHI[d]+')',nomeLog:x.nome,tipo:x.tipo});});});
   // squadra e partita gia' nel programma: niente doppione generico
   const hai=t=>op.some(o=>o.tipo===t);
   // squadra e partita solo per chi gioca: a chi corre o fa palestra erano due scelte in piu' da saltare
@@ -2504,7 +2510,7 @@ function renderCiFuori(){
     <div class="ci7-q"><div class="ci7-qh"><b>Note</b><span>Facoltative</span></div><textarea id="fu-nota" rows="2" placeholder="Come e' andata?">${escH(FU.nota)}</textarea></div>
     <button type="button" class="ci7-invia" id="fu-invia" onclick="salvaFuori()"${manca.length?' disabled':''}>${manca.length?fuManca(manca):'Registra l\'allenamento'}</button>`;
 }
-window.fuSet=(k,v)=>{const nt=document.getElementById('fu-nota');if(nt)FU.nota=nt.value;FU[k]=v;if(k==='giorno')FU.cosa=null;renderCiFuori();};
+window.fuSet=(k,v)=>{const nt=document.getElementById('fu-nota');if(nt)FU.nota=nt.value;FU[k]=v;if(k==='giorno')FU.cosa=null;if(k==='cosa'&&FU._a&&FU.corsa)orolCorsa(FU._a,v);renderCiFuori();};
 window.fuMin=v=>{FU.min=+v||null;fuBtn();};
 window.fuBtn=()=>{const b=document.getElementById('fu-invia');if(!b)return;const sc=fuOpzioni().find(o=>o.id===FU.cosa),solo=!!(sc&&sc.solo);const manca=[!FU.cosa&&'cosa hai fatto',!solo&&!FU.min&&'i minuti',!FU.rpe&&'l\'RPE'].filter(Boolean);b.disabled=!!manca.length;b.textContent=manca.length?fuManca(manca):'Registra l\'allenamento';};
 window.salvaFuori=async()=>{
@@ -2514,7 +2520,7 @@ window.salvaFuori=async()=>{
   const b=document.getElementById('fu-invia');if(b){b.disabled=true;b.textContent='Invio...';}
   const nota=(FU.nota||'').trim()||null;
   let when=FU.ts?new Date(FU.ts):new Date();if(!FU.ts&&FU.giorno==='ieri'){when.setDate(when.getDate()-1);when.setHours(19,0,0,0);}
-  let ts=when.getTime(),nome=sc.nome,min=FU.min,log=null,gmL=null;
+  let ts=when.getTime(),nome=sc.nomeLog||sc.nome,min=FU.min,log=null,gmL=null;
   if(solo){const l=ST.logs.find(x=>'l:'+x.ts===sc.id);if(!l)return;ts=l.ts;nome=l.sessName||'Seduta';min=+l.duration||+l.minuti||null;if(l.gm)gmL=l;}
   // attivita' dell'orologio: l'RPE resta sulla sua seduta (registro con gmId), il giorno fa la media come per le altre
   if(gmL){log=Object.assign({},gmL,{avgRpe:FU.rpe,note:nota,source:'orologio'});delete log.gm;Object.keys(log).forEach(k=>{if(log[k]==null)delete log[k];});}
@@ -2534,9 +2540,11 @@ window.salvaFuori=async()=>{
   try{
     const w=[set(ref(db,`sessions/${aid}/${key}`),{...(prima||{}),ts,date:itData(ts),rpe:rpeG,day:dayLbl,note:nota||(prima&&prima.note)||null,min:solo&&!gmL?((prima&&+prima.min)||min||null):(((prima&&+prima.min)||0)+(min||0))||null}),
       set(ref(db,`questionnaires/${aid}/${key}/feedback`),{ts,sessionRpe:FU.rpe,note:nota,fromSession:nome})];
+    // la traccia del file (mappa, passo, FC nel tempo) accanto alle corse dell'orologio: si apre dal registro
+    if(log&&FU.corsa&&FU._a&&FU._a.tr){const tid='imp'+ts;log.gmTraccia=tid;w.push(set(ref(db,`garmin_tracce/${aid}/${tid}`),FU._a.tr));}
     if(log)w.push(push(ref(db,`session_logs/${aid}`),log));
     await Promise.all(w);
-    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,extra:null,ts:null,km:null});
+    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,_a:null,extra:null,ts:null,km:null});
     renderCiFuori();
     showToast(solo?'RPE registrato':'Allenamento registrato');
   }catch(e){console.error(e);if(b){b.disabled=false;b.textContent='Registra l\'allenamento';}showToast('Non registrato: controlla la connessione e riprova');}
@@ -2586,8 +2594,12 @@ function renderWorkoutLogs(logs){
     else if(l.type==='test'){if(l.sprint10)bits.push('10 m '+nfIt(l.sprint10,2)+'s');if(l.salto)bits.push('salto '+l.salto+' cm');}
     if(min)bits.unshift(nfIt(min)+' min');
     if(+l.totalSets)bits.push(l.totalSets+' serie');
+    // corsa: km e passo; con la traccia (orologio o file caricato) la riga apre mappa e grafici
+    if(l.corsa&&+l.corsa.km>0){bits.splice(min?1:0,0,nfIt(l.corsa.km,1)+' km');if(l.corsa.passo&&window.RSRitmi)bits.push(window.RSRitmi.passo(l.corsa.passo)+'/km');}
     if((l.newPRs||[]).length)bits.push(l.newPRs.length===1?'1 record':l.newPRs.length+' record');
-    return `<div class="wlog-card">
+    const trk=l.gmTraccia&&window.RSTraccia?` role="button" tabindex="0" style="cursor:pointer" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')"`:'';
+    if(trk)bits.push('<u>mappa e grafici</u>');
+    return `<div class="wlog-card"${trk}>
       <div class="wlog-date-box"><div class="wlog-d">${String(d.getDate()).padStart(2,'0')}</div><div class="wlog-m">${GGc[d.getDay()]}</div></div>
       <div class="wlog-body"><div class="wlog-name">${escH(l.sessName||'Seduta')}</div><div class="wl7-m">${bits.join(' · ')||'&nbsp;'}</div></div>
       <div class="wl7-rpe${rpe>=9?' hi':rpe>=7?' mid':rpe?' lo':''}">${rpe?`<b>${nfIt(rpe,1)}</b><i>RPE</i>`:'<i>senza RPE</i>'}</div>
@@ -2690,7 +2702,8 @@ function vdDisegna(){
   vdBtn();
 }
 window.vdSet=(k,v)=>{if(VD)VD[k]=v;vdBtn();};
-window.vdBtn=()=>{const b=document.getElementById('vd-invia');if(b&&!VD.invio)b.disabled=!(VD.file&&VD.es.trim());};
+// il tasto dice cosa manca: prima restava spento senza spiegare perche'
+window.vdBtn=()=>{const b=document.getElementById('vd-invia');if(b&&!VD.invio){const f=!!VD.file,e=!!VD.es.trim();b.disabled=!(f&&e);b.textContent=f&&e?'Manda al preparatore':!f&&!e?'Scegli il video e scrivi l\'esercizio':!f?'Scegli il video':'Scrivi l\'esercizio';}};
 window.vdFile=async f=>{if(!f)return;VD.file=f;VD.poster=null;
   try{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.src=URL.createObjectURL(f);await new Promise((ok,ko)=>{v.onloadeddata=ok;v.onerror=ko;setTimeout(ok,2500);});v.currentTime=Math.min(0.3,(v.duration||1)/3);await new Promise(r=>{v.onseeked=r;setTimeout(r,1200);});
     if(v.videoWidth)VD.poster=window.RSVideo.fotogramma(v,320);if(v.duration>window.RSVideo.MAX_SEC+1)showToast('Prendo i primi '+window.RSVideo.MAX_SEC+' secondi');}catch(e){}
@@ -3063,16 +3076,21 @@ function orolUsa(a,id){
   if(!a||!(a.km>0||a.sec>0)){showToast('Nel file non ci sono km ne\' tempo');return;}
   const O=window.RSOrologio,ts=a.start||Date.now();
   FU.ts=ts;FU.giorno=isoLoc(ts)===isoLoc(new Date(Date.now()-864e5))?'ieri':'oggi';
-  let conf=null;
-  if(id&&String(id).startsWith('p:')){const [,pid,wi,sid]=id.split(':');const s=orolSess(pid,wi,sid);if(s){conf=O.confronta(s,a,(window._ath||{}).ritmi);FU.extra={id,nome:s.name||'Corsa',tipo:s.type||'corsa'};}FU.cosa=id;}
-  FU.min=Math.max(1,Math.round((a.tot||a.sec)/60));FU.rpe=null;
-  const giri=conf&&conf.giri.length?conf.giri.map(g=>({n:g.nome,m:Math.round(g.m||0),s:Math.round(g.s||0),fc:g.fc||null,t:g.bersaglio||null,e:g.esito||null})):(a.laps||[]).slice(0,60).map(l=>({m:Math.round(l.m||0),s:Math.round(l.s||0),fc:l.fc||null}));
-  FU.corsa={fonte:a.fonte,km:a.km,sec:a.sec,tot:a.tot||null,fc:a.fc||null,fcMax:a.fcMax||null,dsl:a.dsl||null,start:a.start||null,passo:a.km&&a.sec?Math.round(a.sec/a.km):null,giri,centrati:conf&&conf.centrati||null,prevKm:conf?conf.prev.km:null};
+  FU._a=a;FU.min=Math.max(1,Math.round((a.tot||a.sec)/60));FU.rpe=null;
+  orolCorsa(a,id);
   bnSwitch('checkin',document.querySelectorAll('.bn-item')[2]);
   renderCiFuori();
   setTimeout(()=>{const e=document.getElementById('ci-fuori');if(e)window.scrollTo(0,e.getBoundingClientRect().top+window.scrollY-120);},80);
 }
-window.orolVia=()=>{FU.corsa=null;FU.ts=null;FU.extra=null;renderCiFuori();};
+// riepilogo della corsa importata, col confronto tratto per tratto se e' una seduta del programma:
+// vale anche quando la seduta si sceglie dopo aver caricato il file (prima il confronto si perdeva)
+function orolCorsa(a,id){
+  const O=window.RSOrologio;let conf=null;
+  if(id&&String(id).startsWith('p:')){const [,pid,wi,sid]=id.split(':');const s=orolSess(pid,wi,sid);if(s){conf=O.confronta(s,a,(window._ath||{}).ritmi);FU.extra={id,nome:s.name||'Corsa',tipo:s.type||'corsa'};}FU.cosa=id;}
+  const giri=conf&&conf.giri.length?conf.giri.map(g=>({n:g.nome,m:Math.round(g.m||0),s:Math.round(g.s||0),fc:g.fc||null,t:g.bersaglio||null,e:g.esito||null})):(a.laps||[]).slice(0,60).map(l=>({m:Math.round(l.m||0),s:Math.round(l.s||0),fc:l.fc||null}));
+  FU.corsa={fonte:a.fonte,km:a.km,sec:a.sec,tot:a.tot||null,fc:a.fc||null,fcMax:a.fcMax||null,dsl:a.dsl||null,start:a.start||null,passo:a.km&&a.sec?Math.round(a.sec/a.km):null,giri,centrati:conf&&conf.centrati||null,prevKm:conf?conf.prev.km:null};
+}
+window.orolVia=()=>{FU.corsa=null;FU._a=null;FU.ts=null;FU.extra=null;renderCiFuori();};
 // tabella dei tratti: fatto, passo in programma sotto, esito a colori
 // grafici e mappa della corsa a tutto schermo (garmin_tracce: si leggono solo quando si apre)
 window.apriTraccia=async(id,tit)=>{
@@ -3757,7 +3775,7 @@ function renderPrograms(progData){
   const el=document.getElementById('prog-list-athlete');if(!el)return;
   const myProgs=Object.entries(progData||{}).filter(([,p])=>p.assignedTo&&p.assignedTo[aid]);
   if(!myProgs.length){el.innerHTML='<div class="empty" style="margin:0 18px;">Nessun programma assegnato.</div>';return;}
-  const SPORT_LABELS={calcio:'Calcio',hybrid:'Hybrid',forza:'Forza',corsa:'Corsa',conditioning:'Conditioning'};
+  const SPORT_LABELS={calcio:'Calcio',hybrid:'Corsa e forza',forza:'Forza',corsa:'Corsa',conditioning:'Conditioning'};
   const SPORT_CLS={calcio:'pst-calcio',hybrid:'pst-hybrid',forza:'pst-forza',corsa:'pst-calcio',conditioning:'pst-hybrid'};
 
   // in corso tutti i programmi non archiviati e non ancora finiti (forza e corsa insieme, per esempio);
@@ -4221,7 +4239,7 @@ function renderChat(){
     const status=m.from==='athlete'?(m._pending?'<span style="opacity:.5;margin-left:4px;font-size:9px;"></span>':'<span style="margin-left:4px;font-size:9px;opacity:.6;"></span>'):'';
     return `<div class="chat-msg ${who}">
       ${sender}
-      ${m.video&&(ST.video||{})[m.video]?`<button type="button" class="chat-vthumb" onclick="vdVedi('${m.video}')" aria-label="Apri il video">${ST.video[m.video].poster?`<img src="${ST.video[m.video].poster}" alt="">`:''}<i>${m.from==='coach'?'Vedi la correzione':ST.video[m.video].stato==='visto'?'Corretto, tocca per vedere':'Video mandato'}</i></button>`:''}
+      ${m.video&&(ST.video||{})[m.video]?`<button type="button" class="chat-vthumb" onclick="vdVedi('${m.video}')" aria-label="Apri il video">${ST.video[m.video].poster?`<img src="${ST.video[m.video].poster}" alt="">`:''}<i>${m.from==='coach'?'Vedi la correzione':ST.video[m.video].stato==='visto'?'Corretto, tocca per vedere':'Video mandato'}</i></button>`:m.video&&ST.video?'<div class="chat-vvia" style="font-size:11px;opacity:.7;font-style:italic;margin-top:4px">Video tolto dal preparatore</div>':''}
       <div class="chat-bubble">${(m.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
       <div class="chat-time">${timeStr}${status}</div>
     </div>`;
