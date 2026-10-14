@@ -1154,6 +1154,15 @@ button,a,[onclick]{-webkit-tap-highlight-color:transparent;touch-action:manipula
 .cue-chip{background:none!important;border:0!important;padding:0!important;margin-top:6px!important;color:#C9B8AE!important;font:400 13.5px/1.45 Inter,sans-serif!important}
 .prog7 span{display:block}
 .prev-col-sub,.vol-tracker-label,.vol-tracker-val,.vol-tracker-unit,.vol-tracker-sep{display:none!important}
+
+/* ── FOCUS SULL'ESERCIZIO IN CORSO ── */
+body.focus-on .ex-card-wrap{transition:opacity .28s cubic-bezier(.23,1,.32,1),transform .28s cubic-bezier(.23,1,.32,1),filter .28s cubic-bezier(.23,1,.32,1);transform-origin:center}
+body.focus-on .ex-card-wrap:not(.cur){opacity:.28;transform:scale(.965);cursor:pointer}
+body.focus-on .ex-card-wrap.near{filter:blur(2.5px) saturate(.6)}
+body.focus-on .ex-card-wrap:not(.cur) *{pointer-events:none}
+body.focus-on .ex-card-wrap.cur .ex-card{box-shadow:0 0 0 1px rgba(255,106,46,.45),0 8px 8px -6px rgba(0,0,0,.4)!important}
+body.focus-on .ex-card-wrap.cur .ex-card-name{font-size:30px!important;letter-spacing:.5px}
+@media (prefers-reduced-motion:reduce){body.focus-on .ex-card-wrap{transition:none}body.focus-on .ex-card-wrap:not(.cur){transform:none}}
 </style>
 </head>
 <body>
@@ -1762,7 +1771,11 @@ function initSets(){
 }
 
 // v9: l'esercizio in corso ha il bordo arancio anche nella lista, non solo nei segmenti in alto
-function markCur(){document.querySelectorAll('.ex-card-wrap').forEach(w=>w.classList.toggle('cur',+w.dataset.ei===cur));}
+// focus sull'esercizio in corso: gli altri si spengono, i due vicini anche sfocati (solo loro, per non pesare sui telefoni)
+function markCur(){document.querySelectorAll('.ex-card-wrap').forEach(w=>{const i=+w.dataset.ei;w.classList.toggle('cur',i===cur);w.classList.toggle('near',Math.abs(i-cur)===1);});document.body.classList.add('focus-on');}
+// il primo tocco su un esercizio spento lo porta a fuoco, non spunta una serie per sbaglio
+document.addEventListener('click',e=>{const w=e.target.closest&&e.target.closest('.ex-card-wrap');if(!w||w.classList.contains('cur')||!document.body.classList.contains('focus-on'))return;
+  e.preventDefault();e.stopPropagation();window.jumpTo&&window.jumpTo(+w.dataset.ei);},true);
 function renderExNav(){
   const el=document.getElementById('ex-nav');
   el.innerHTML=exs.map((ex,i)=>{
@@ -2476,6 +2489,8 @@ window.toggleDone=function(ei,s){
         nextRow.classList.add('cur');
       }
     },150);
+    // ultima serie dell'esercizio: dopo un attimo (si vede la spunta) il fuoco passa al prossimo
+    if(Object.values(setData[ei]).every(x=>x&&x.done)&&ei<exs.length-1&&!document.querySelector(`.set-row[data-si="${ei}-${nextS}"]`))setTimeout(()=>{if(cur===ei&&window.jumpTo)window.jumpTo(ei+1);},700);
   }
 };
 window.setCxKg=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].kg=v;saveProgressDebounced();};
