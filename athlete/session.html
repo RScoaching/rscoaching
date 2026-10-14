@@ -1763,6 +1763,9 @@ window.jumpTo=i=>{
 };
 
 let _exObserver=null;
+function alFondo(){return exs.length>1&&window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-24;}
+// arrivati in fondo l'esercizio attivo e' l'ultimo e il tasto dice Completa (prima restava Prossimo e non chiudeva)
+window.addEventListener('scroll',()=>{if(alFondo()&&cur!==exs.length-1){cur=exs.length-1;renderExNav();const pf=document.getElementById('pfill');if(pf)pf.style.width=`${(cur/Math.max(exs.length,1))*100}%`;}},{passive:true});
 function initExObserver(){
   if(_exObserver)_exObserver.disconnect();
   const cards=document.querySelectorAll('.ex-card-wrap');
@@ -1770,6 +1773,8 @@ function initExObserver(){
   _exObserver=new IntersectionObserver(entries=>{
     entries.forEach(entry=>{
       if(entry.isIntersecting){
+        // in fondo alla pagina l'ultimo esercizio non sale fino alla fascia: resta quello attivo
+        if(alFondo())return;
         const i=parseInt(entry.target.dataset.ei);
         if(!isNaN(i)&&i!==cur){
           cur=i;
@@ -1947,7 +1952,8 @@ function renderPesi(ex,ei){
       }
     }
   }
-  const isPR=e1rm>0&&e1rm>(best1rm[ex.name]||0);
+  // record solo se batte un massimale che c'era: la prima volta non e' un record
+  const isPR=e1rm>0&&newPRs.some(p=>p.name===ex.name);
   const _vidUrl=typeof getExUrl==='function'?getExUrl(ex.name||''):null;
   // esercizi a tempo, di mobilita' o di prevenzione: niente chili, la casella delle
   // ripetizioni prende tutta la riga e dice secondi o "per lato"
@@ -1979,7 +1985,7 @@ function renderPesi(ex,ei){
       const prevRepHint=d.prevReps&&!d.done&&!actualReps?d.prevReps:'';
       const prevKgVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].kg:null;
       const prevRepsVal=_prevKg[ex.name]&&_prevKg[ex.name][s]?_prevKg[ex.name][s].reps:null;
-      const prevText=(prevRepsVal&&prevKgVal)?`${prevRepsVal}×${prevKgVal}`:(prevKgVal?`${prevKgVal}kg`:'-');
+      const prevText=(prevRepsVal&&prevKgVal)?`${prevRepsVal}×${String(prevKgVal).replace('.',',')}`:(prevKgVal?`${String(prevKgVal).replace('.',',')}kg`:'-');
       const prevSub=(prevRepsVal&&prevKgVal)?'reps×kg':(prevKgVal?'kg':'');
       return `<div class="set-row${d.done?' done':isCur?' cur':''}${isWorking?'':' st-alt'}${noKg?' nokg':''}" data-si="${ei}-${s}">
         <div class="set-row-inner">
@@ -2030,7 +2036,7 @@ function renderPesi(ex,ei){
     </div>
     ${kgSug>0?`<div class="sug-kg-bar">
       <div><div class="sug-kg-lbl">Carico suggerito</div><div class="sug-kg-pct">${pct>0?(rmStimato(ex.name)?'dal massimale stimato':'dal tuo 1RM'):'Diretto'}</div></div>
-      <div><span class="sug-kg-val">${kgSug}</span><span class="sug-kg-unit"> kg</span></div>
+      <div><span class="sug-kg-val">${String(kgSug).replace('.',',')}</span><span class="sug-kg-unit"> kg</span></div>
     </div>`:''}
     ${(()=>{const pr=calcProg(ex);return pr?`<div class="prog7${pr.su?' su':''}"><b>${pr.titolo}</b><span>${pr.txt}</span></div>`:'';})()}
     ${pct>0&&rm===0?`<div style="padding:10px 16px;background:rgba(255,209,102,.06);border-bottom:1px solid var(--border);font-size:11px;color:var(--amber);">Primo giro: scegli un carico con cui fai le ripetizioni scritte lasciandone 2 in riserva. Dalla prossima volta il carico lo calcola l'app dalle tue serie.</div>`:''}
@@ -2374,9 +2380,16 @@ window.setRepsActual=(ei,s,v)=>{
 window.setRpe=(ei,s,r)=>{if(!setData[ei][s])setData[ei][s]={};setData[ei][s].rpe=r;renderCard(ei);};
 window.toggleDone=function(ei,s){
   const inp=document.getElementById(`kg-${ei}-${s}`);
-  const kg=inp?.value||setData[ei]?.[s]?.kg||'';
+  // il carico suggerito scritto in grigio vale: chi spunta senza scrivere ha usato quello
+  const ph=inp&&getComputedStyle(inp).display!=='none'&&parseFloat(String(inp.placeholder).replace(',','.'))>0?String(inp.placeholder):'';
+  const kg=inp?.value||setData[ei]?.[s]?.kg||(setData[ei]?.[s]?.done?'':ph);
   if(!setData[ei])setData[ei]={};if(!setData[ei][s])setData[ei][s]={};
   if(kg){setData[ei][s].kg=kg;setData[ei][s].suggested=false;}
+  // ripetizioni non scritte: valgono quelle in grigio (le prescritte, il minimo del range); a tempo restano vuote
+  if(!setData[ei][s].done&&(setData[ei][s].reps==null||setData[ei][s].reps==='')){
+    const ri=document.getElementById(`reps-${ei}-${s}`),pv=ri&&ri.inputMode==='numeric'?String(ri.placeholder||''):'';
+    const m=/^\s*(\d+)/.exec(pv);if(m){setData[ei][s].reps=+m[1];setData[ei][s].repsAuto=true;}
+  }
   setData[ei][s].done=!setData[ei][s].done;
   if(setData[ei][s].done){
     checkPR(exs[ei],ei,s);
@@ -2492,10 +2505,16 @@ function checkPR(ex,ei,s){
   const rawReps=d.reps||ex.reps||'';
   const reps=parseFloat(String(rawReps).split(/[--]/)[0])||5;
   const e1rm=reps===1?kg:Math.round(kg*(1+reps/30));
-  if(e1rm>(best1rm[ex.name]||0)){
+  // il riferimento: il massimale salvato o il migliore stimato dalle sedute delle ultime 10 settimane
+  // anche col nome scritto in un altro modo (Barbell Bench Press e Panca Piana): una serie leggera non abbassa il massimale vero
+  const prima=rmDi0(ex.name,best1rm)||(_stima[ex.name]&&_stima[ex.name].v)||0;
+  if(e1rm>prima){
     best1rm[ex.name]=e1rm;
-    if(!newPRs.find(pr=>pr.name===ex.name))newPRs.push({name:ex.name,value:e1rm});
-    toast(`PR! ${ex.name}: ${e1rm}kg e1RM`);
+    // la prima volta che si registra un esercizio non e' un record: niente festa a ogni esercizio
+    if(prima>0){
+      const g=newPRs.find(pr=>pr.name===ex.name);if(g)g.value=e1rm;else newPRs.push({name:ex.name,value:e1rm});
+      toast(`PR! ${ex.name}: ${e1rm}kg e1RM`);
+    }
   }
 }
 
@@ -2689,7 +2708,7 @@ function showDoneScreen(dur,totalSets,avgRpe){
       Object.values(sd2).forEach(s2=>{if(s2?.done){const k=parseFloat(s2.kg)||0;const r=parseFloat(s2.reps)||parseFloat(ex2.reps)||5;finVolKg+=k*r;}});
     }
   });
-  const volDisplay=finVolKg>=1000?(finVolKg/1000).toFixed(1)+'<span style="font-size:14px;color:var(--muted)"> t</span>':finVolKg>0?finVolKg+'<span style="font-size:14px;color:var(--muted)"> kg</span>':'<span style="color:var(--muted)">-</span>';
+  const volDisplay=finVolKg>=1000?(finVolKg/1000).toFixed(1).replace('.',',')+'<span style="font-size:14px;color:var(--muted)"> t</span>':finVolKg>0?finVolKg+'<span style="font-size:14px;color:var(--muted)"> kg</span>':'<span style="color:var(--muted)">-</span>';
   document.getElementById('done-stats').innerHTML=`
     <div class="ds-item" style="padding:12px 14px;">
       <div class="ds-val">${dur}<span style="font-size:14px;color:var(--muted)"> min</span></div>

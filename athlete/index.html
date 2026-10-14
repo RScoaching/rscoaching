@@ -2455,7 +2455,7 @@ async function saveQuickCheckin(){
 // "Manca l'RPE", "Mancano i minuti e l'RPE"
 function fuManca(m){return m.length===1?'Manca '+m[0]:'Mancano '+m.slice(0,-1).join(', ')+' e '+m[m.length-1];}
 const RPE_PAROLE=['Molto facile','Facile','Moderato','Un po\' duro','Duro','Duro','Molto duro','Molto duro','Quasi massimale','Massimale'];
-const FU={cosa:null,giorno:'oggi',min:null,rpe:null,nota:''};
+const FU={cosa:null,giorno:'oggi',min:null,rpe:null,nota:'',km:null};window.FU=FU;
 function renderCiOggi(){
   const el=document.getElementById('ci-oggi');if(!el)return;
   const g=prGiorno(isoLoc(new Date()));
@@ -2478,8 +2478,11 @@ function fuOpzioni(){
   }
   // squadra e partita gia' nel programma: niente doppione generico
   const hai=t=>op.some(o=>o.tipo===t);
-  if(!hai('squadra'))op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'});
-  if(!hai('match'))op.push({id:'partita',nome:'Partita',tipo:'match'});
+  // squadra e partita solo per chi gioca: a chi corre o fa palestra erano due scelte in piu' da saltare
+  const a=window._ath||{},sportivo=!!(a.team||a.group)||Object.values(ST.progs||{}).some(p=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived&&((p.intake&&p.intake.sport&&p.intake.sport!=='nessuno')||/sport|squadra|calcio/i.test(String(p.category||''))));
+  if(sportivo&&!hai('squadra'))op.push({id:'squadra',nome:'Allenamento di squadra',tipo:'campo'});
+  if(sportivo&&!hai('match'))op.push({id:'partita',nome:'Partita',tipo:'match'});
+  op.push({id:'corsaL',nome:'Corsa libera',tipo:'corsa'});
   op.push({id:'altro',nome:'Altro allenamento',tipo:'altro'});
   if(FU.extra&&!op.some(o=>o.id===FU.extra.id))op.unshift(FU.extra);
   return op;
@@ -2495,6 +2498,7 @@ function renderCiFuori(){
     +(FU.ts?`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b><span>dal file</span></div><div class="ci7-zone"><button type="button" class="on" aria-pressed="true">${GG_LUNGHI[(new Date(FU.ts).getDay()+6)%7]+' '+new Date(FU.ts).toLocaleDateString('it-IT',{day:'numeric',month:'long'})}</button></div></div>`
     :`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b></div><div class="ci7-zone">${[['oggi','Oggi'],['ieri','Ieri']].map(([k,t])=>`<button type="button" class="${FU.giorno===k?'on':''}" aria-pressed="${FU.giorno===k}" onclick="fuSet('giorno','${k}')">${t}</button>`).join('')}</div></div>`)+`
     <div class="ci7-q"><div class="ci7-qh"><b>Cosa hai fatto</b></div><div class="ci7-lista fu9">${op.map(o=>{const ic=o.tipo==='campo'||o.tipo==='match'?_ri('sport'):o.tipo==='altro'?_ri('conditioning'):(TICONS[o.tipo]||_ri('sedute'));return `<button type="button" class="${FU.cosa===o.id?'on':''}${o.solo?' solo':''}" aria-pressed="${FU.cosa===o.id}" onclick="fuSet('cosa','${o.id}')"><span class="fu9-ic">${ic}</span><span class="fu9-n">${escH(o.nome)}</span><span class="fu9-r"></span></button>`;}).join('')}</div></div>
+    ${!solo&&sc&&sc.tipo==='corsa'&&!FU.corsa?`<div class="ci7-q"><div class="ci7-qh"><b>Km</b><span>Senza orologio: quanti chilometri, anche a occhio</span></div><div class="ci7-min"><input type="number" id="fu-km" inputmode="decimal" min="0.5" max="80" step="0.1" value="${FU.km||''}" placeholder="8" oninput="FU.km=+String(this.value).replace(',','.')||null"></div></div>`:''}
     ${solo?'':`<div class="ci7-q"><div class="ci7-qh"><b>Minuti</b><span>Dall'inizio del riscaldamento alla fine</span></div><div class="ci7-min"><input type="number" id="fu-min" inputmode="numeric" min="5" max="300" value="${FU.min||''}" placeholder="60" oninput="fuMin(this.value)" aria-label="Minuti">${[45,60,75,90].map(m=>`<button type="button" class="${FU.min===m?'on':''}" onclick="fuSet('min',${m})">${m}</button>`).join('')}</div></div>`}
     <div class="ci7-q"><div class="ci7-qh"><b>Quanto e' stata dura (RPE)</b><span>${FU.rpe?FU.rpe+': '+RPE_PAROLE[FU.rpe-1]:'Da 1 molto facile a 10 massimale, sulla seduta intera'}</span></div><div class="ci7-rpe rpe9">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<button type="button" class="${FU.rpe===v?'on':''} ${v<=4?'z1':v<=7?'z2':'z3'}" aria-pressed="${FU.rpe===v}" aria-label="RPE ${v}, ${RPE_PAROLE[v-1]}" onclick="fuSet('rpe',${v})">${v}</button>`).join('')}</div></div>
     <div class="ci7-q"><div class="ci7-qh"><b>Note</b><span>Facoltative</span></div><textarea id="fu-nota" rows="2" placeholder="Come e' andata?">${escH(FU.nota)}</textarea></div>
@@ -2517,7 +2521,9 @@ window.salvaFuori=async()=>{
   else if(sc.id.startsWith('p:')){const [,pid,wi,sid]=sc.id.split(':');log={ts,date:itData(ts),progId:pid,weekIdx:+wi,sessId:sid,sessName:nome,type:sc.tipo||'pesi',duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.tipo==='match'?{minuti:min}:{})};}
   else log={ts,date:itData(ts),sessName:nome,type:sc.tipo,duration:min,avgRpe:FU.rpe,source:'checkin',note:nota,...(sc.id==='partita'?{minuti:min}:{})};
   // corsa dall'orologio: km, tempo, FC e giri nel registro
-  if(log&&FU.corsa){log.corsa=FU.corsa;log.source='orologio';if(sc.id==='altro'){log.type='corsa';log.sessName='Corsa '+nfIt(FU.corsa.km||0,1)+' km';}}
+  if(log&&FU.corsa){log.corsa=FU.corsa;log.source='orologio';if(sc.id==='altro'||sc.id==='corsaL'){log.type='corsa';log.sessName='Corsa '+nfIt(FU.corsa.km||0,1)+' km';}}
+  // corsa senza orologio: i km scritti a mano, il passo dai minuti
+  else if(log&&sc.tipo==='corsa'&&FU.km>0&&FU.km<100){log.corsa={km:Math.round(FU.km*10)/10,sec:min?min*60:null,passo:min?Math.round(min*60/FU.km):null,manuale:true};if(sc.id==='corsaL')log.sessName='Corsa '+nfIt(FU.km,1)+' km';}
   const key=isoLoc(ts),prima=ST.sess[key];
   // un RPE per giorno: se il giorno ne aveva gia' uno (un'altra seduta) si fa la media sui minuti
   let rpeG=FU.rpe,dayLbl=nome;
@@ -2530,7 +2536,7 @@ window.salvaFuori=async()=>{
       set(ref(db,`questionnaires/${aid}/${key}/feedback`),{ts,sessionRpe:FU.rpe,note:nota,fromSession:nome})];
     if(log)w.push(push(ref(db,`session_logs/${aid}`),log));
     await Promise.all(w);
-    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,extra:null,ts:null});
+    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,extra:null,ts:null,km:null});
     renderCiFuori();
     showToast(solo?'RPE registrato':'Allenamento registrato');
   }catch(e){console.error(e);if(b){b.disabled=false;b.textContent='Registra l\'allenamento';}showToast('Non registrato: controlla la connessione e riprova');}
@@ -3008,7 +3014,9 @@ function ritPasso(f,campo){const RR=window.RSRitmi,R=ritPersonali(_ritPid)&&RR?R
 function ritChip(f){return f&&f.rit?`<span class="corsa-rit" title="${escH(window.RSRitmi?window.RSRitmi.NOMI[f.rit]||'':'')}">${escH(f.rit)}</span>`:'';}
 function renderPfRitmi(){
   const el=document.getElementById('pf-ritmi');if(!el||!window.RSRitmi)return;
-  const RR=window.RSRitmi,R=(window._ath||{}).ritmi,pfO=ST.gd&&window.RSGarmin?window.RSGarmin.profilo(ST.gd):null;
+  const RR=window.RSRitmi,R0=(window._ath||{}).ritmi,pfO=ST.gd&&window.RSGarmin?window.RSGarmin.profilo(ST.gd):null;
+  // senza ritmi sull'atleta valgono quelli del programma in corso (il Programma guidato li calcola dai tempi della scheda)
+  const R=R0&&R0.vdot?R0:(()=>{const p=Object.values(ST.progs||{}).filter(p=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived&&p.ritmi&&p.ritmi.vdot).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];return p?Object.assign({fonte:'programma'},p.ritmi):null;})();
   const L=Object.values(ST.tempi||{}).filter(x=>x&&x.sec>0).sort((a,b)=>RR.dataTs(b.date)-RR.dataTs(a.date)||(b.ts||0)-(a.ts||0));
   let h='';
   if(R&&R.vdot){
@@ -3172,6 +3180,8 @@ function renderSettimana(){
     else if(inCorso.length){tag.textContent=inCorso.length+' programmi in corso';tag.style.display='';}
     else tag.style.display='none';}
 }
+// etichetta della settimana senza il 'S3' iniziale del Programma guidato: il numero c'e' gia'
+function etSett(l){const x=String(l||'').replace(/^S\d+\s*/,'');return x?' - '+x:'';}
 function renderWeekDots(){renderSettimana();}
 function decorateWeekDotsPlan(){renderSettimana();}
 function updateWeekProgress(){}
@@ -3189,7 +3199,10 @@ function caricoAtleta(){
   const oggi=new Date();oggi.setHours(12,0,0,0);
   let acute=0,cron=0;for(let i=0;i<28;i++){const k=isoLoc(oggi.getTime()-i*864e5);const v=day[k]||0;if(i<7)acute+=v;cron+=v;}
   cron/=4;
-  return {acute,cron,acwr:cron>0?acute/cron:null};
+  // con meno di 3 settimane di storia il confronto non ha senso (alla prima seduta usciva 'Molto alto')
+  const primo=Object.keys(day).filter(k=>day[k]>0).sort()[0];
+  const storia=primo?(oggi.getTime()-new Date(primo+'T12:00:00').getTime())/864e5:0;
+  return {acute,cron,acwr:cron>0&&storia>=21?acute/cron:null};
 }
 function renderNumeri(){
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
@@ -3349,7 +3362,8 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       const z=f.zona||'';
       const zc=ZC_ATH[z]||'';
       const fz=z?`<span class="corsa-fz" style="background:${zc}22;color:${zc};border:1px solid ${zc}44;">${z}</span>`:'';
-      const tipo=esc(f.tipo||ZL_ATH[z]||'Corsa');
+      // 'Testo libero' e' il nome del campo nell'editor, non una parte della corsa
+      const tipo=esc(f.tipo&&f.tipo!=='Testo libero'?f.tipo:ZL_ATH[z]||'Corsa');
       const isIntv=f.reps||f.repDist||f.repPace;
       let detail='';
       if(isIntv){
@@ -3544,7 +3558,7 @@ async function loadTodayPlan(athlete,records,best1rm,targetDayIdx){
       const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
       let extra='';
       if(s.type==='conditioning')extra=`${s.condType||''}${s.duration?' · '+s.duration:''}\n${s.condContent||''}`;
-      progCards.push(sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,progId,wi,sid,`${prog.name} · Sett. ${wi+1}${wkData.label?' - '+wkData.label:''}`,s.corsaFasi));
+      progCards.push(sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,progId,wi,sid,`${prog.name} · Sett. ${wi+1}${etSett(wkData.label)}`,s.corsaFasi));
     }
   }
   if(progCards.length){wrap.innerHTML=progCards.join('');if(dayIdx===todayIdx){window._whSessType=_firstPT;updateWHMetaRow();updateWeekDotToday();}return;}
@@ -3633,7 +3647,7 @@ window.apriSeduta=(pid,wi,sid)=>{
   const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),wk=W[+wi]?W[+wi][1]:{};
   const exs=Object.values(s.exercises||{}).sort((a,b)=>(a.order||0)-(b.order||0));
   const extra=s.type==='conditioning'?`${s.condType||''}${s.duration?' · '+s.duration:''}\n${s.condContent||''}`:'';
-  svApri(window._sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,pid,+wi,sid,`${p.name} · Sett. ${+wi+1}${wk.label?' - '+wk.label:''}`,s.corsaFasi));
+  svApri(window._sessionCard(s.type||'pesi',s.name||'Sessione',s.notes,exs,extra,pid,+wi,sid,`${p.name} · Sett. ${+wi+1}${etSett(wk.label)}`,s.corsaFasi));
   // seduta di un giorno che deve ancora venire: si guarda e si scarica sull'orologio, non si registra ne' si avvia
   const O=window.RSOrologio,dg=O&&s.dayOfWeek!=null?O.giorno(p,+wi,s.dayOfWeek):null,oggi=new Date();oggi.setHours(0,0,0,0);
   if(dg&&dg.getTime()>oggi.getTime()){const b=document.getElementById('sv-body');
@@ -3794,7 +3808,7 @@ function renderPrograms(progData){
         const nF=wi<=cur?sessions.filter(([sid])=>logProg(pid,wi,sid)).length:0;
         const metaW=wi<cur&&sessions.length&&nF===sessions.length?`${_ri('ok')} Completata`:wi<=cur&&sessions.length?`${nF} di ${sessions.length} ${sessions.length===1?'fatta':'fatte'}`:`${sessions.length} ${sessions.length===1?'seduta':'sedute'}`;
         return `<div class="week-row${wi===cur?' current-week':''}${wi<cur?' passata':''}" onclick="toggleWeek('${wid}')">
-          <div><div class="week-row-name">Settimana ${wi+1}${w.label?' - '+w.label:''}${wi===cur?'<span class="pc-incorso">In corso</span>':''}</div>
+          <div><div class="week-row-name">Settimana ${wi+1}${w.label&&String(w.label).replace(/^S\d+\s*/,'')?' - '+String(w.label).replace(/^S\d+\s*/,''):''}${wi===cur?'<span class="pc-incorso">In corso</span>':''}</div>
           <div class="week-row-meta${wi<=cur&&nF===sessions.length&&sessions.length?' tutte':''}">${metaW}</div></div>
           <span class="pc-chev" id="wchev-${wid}">${aperta?'▴':'▾'}</span>
         </div>

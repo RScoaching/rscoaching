@@ -2470,10 +2470,12 @@ function athCarico(aid){
   const sum=(a)=>a.reduce((t,x)=>t+x.load,0);
   const acute=sum(serie.slice(-7));
   const chronic=sum(serie.slice(-28))/4;
-  const acwr=chronic>0?acute/chronic:null;
+  // con meno di 3 settimane di storia il rapporto non dice niente: un atleta nuovo usciva con ACWR 4 in rosso
+  const i0=serie.findIndex(x=>x.load>0),storia=i0<0?0:serie.length-1-i0;
+  const acwr=chronic>0&&storia>=21?acute/chronic:null;
   const la=2/(7+1),lc=2/(28+1);let ea=0,ec=0;
   serie.forEach(x=>{ea=x.load*la+(1-la)*ea;ec=x.load*lc+(1-lc)*ec;});
-  const ewma=ec>0?ea/ec:null;
+  const ewma=ec>0&&storia>=21?ea/ec:null;
   // settimane da lunedi' a domenica, le ultime 8
   const lun=new Date(oggi);lun.setDate(lun.getDate()-((lun.getDay()+6)%7));
   const settimane=[];
@@ -2834,7 +2836,7 @@ window.vrManda=async function(){
   if(!n&&!VR.esito&&!risp){showToast('Aggiungi almeno una nota o scegli l\'esito');return;}
   await update(ref(db,`video/${aid}/${vid}`),{stato:'visto',esito:VR.esito||null,risposta:risp||null,corretto:Date.now()});
   const es={ok:'esecuzione ok',sistemare:'da sistemare',rifai:'da rifare'}[VR.esito];
-  await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),from:'coach',fromName:'Raoul (Coach)',read:false,video:vid,text:`Ho corretto il video di ${m.esercizio||'esecuzione'}${es?': '+es:''}${n?', '+n+(n===1?' nota':' note'):''}.${risp?' '+risp:''} Tocca il video per vedere i punti.`});
+  await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),from:'coach',fromName:'Raoul (Coach)',read:false,video:vid,text:`Ho corretto il video di ${m.esercizio||'esecuzione'}${es?': '+es:''}${n?', '+n+(n===1?' nota':' note'):''}.${risp?' '+risp+(/[.!?]$/.test(risp)?'':'.'):''} Tocca il video per vedere i punti.`});
   showToast('Correzione mandata');vrChiudi();
 };
 
@@ -3270,7 +3272,7 @@ window.openAthlete=function(aid,silent){
       <div class="det-av">${ini(a.name)}</div>
       <div style="flex:1;">
         <div class="det-name">${a.name} <span class="lv ${LV_C[lv]}">${LV_L[lv]}</span></div>
-        <div class="det-meta">${a.role||'-'} · ${a.team||'-'} · Mc #${a.micro||1}${a.dob?' · '+(athEta(a.dob)!=null?athEta(a.dob)+' anni':a.dob):''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}${a.abb&&a.abb.scade?` · <span class="abb-m${abbGiorni(aid)<0?' sc':abbGiorni(aid)<=7?' pr':''}">${athEsc(a.abb.pacchetto||'Abbonamento')} ${abbGiorni(aid)<0?'scaduto il':'fino al'} ${abbData(aid)}</span>`:''}</div>
+        <div class="det-meta">${[a.role,a.team,a.team||a.group?'Mc #'+(a.micro||1):''].filter(Boolean).join(' · ')||'Individuale'}${a.dob?' · '+(athEta(a.dob)!=null?athEta(a.dob)+' anni':a.dob):''}${a.group&&groups[a.group]?' · '+groups[a.group].name:''}${a.abb&&a.abb.scade?` · <span class="abb-m${abbGiorni(aid)<0?' sc':abbGiorni(aid)<=7?' pr':''}">${athEsc(a.abb.pacchetto||'Abbonamento')} ${abbGiorni(aid)<0?'scaduto il':'fino al'} ${abbData(aid)}</span>`:''}</div>
       </div>
       <div class="det-acts">
         ${miei.length?`<a class="btn btn-orange btn-sm" href="./builder.html?prog=${encodeURIComponent(miei[0][0])}" title="${athEsc(miei[0][1].name||'')}">Apri il programma</a>`:`<a class="btn btn-orange btn-sm" href="./builder.html?studio=${encodeURIComponent(aid)}">Crea il programma</a>`}
@@ -4100,6 +4102,19 @@ function renderDetSessList(aid,aSess){
           }).join('')
           +'</div>';
       }
+    }
+    // serie registrate dall'app (exerciseData: nome -> serie fatte): prima qui si vedeva solo il numero di serie
+    if(!exHtml&&wlog?.exerciseData&&typeof wlog.exerciseData==='object'){
+      const nf=v=>String(v).replace('.',',');
+      const righe=Object.entries(wlog.exerciseData).map(([n,arr])=>{
+        const L=(Array.isArray(arr)?arr:Object.values(arr||{})).filter(Boolean);if(!L.length)return '';
+        // serie uguali raggruppate: 2 x 10 a 62,5 kg, 1 x 8 a 62,5 kg
+        const g=[];L.forEach(x=>{const k=(x.reps!=null?x.reps:'?')+'|'+(x.kg||'');const u=g[g.length-1];if(u&&u.k===k)u.n++;else g.push({k,n:1,r:x.reps,kg:x.kg});});
+        const txt=g.map(y=>y.n+' x '+(y.r!=null?y.r:'?')+(+y.kg>0?' a '+nf(y.kg)+' kg':'')).join(', ');
+        const rp=L.map(x=>+x.rpe).filter(x=>x>0);
+        return `<div style="font-size:11px;color:var(--text);padding:2px 0;"><span style="color:var(--white);font-weight:600;">${athEsc(n)}</span><span style="color:var(--muted);"> · ${txt}${rp.length?' · RPE '+nf(Math.max(...rp)):''}</span></div>`;
+      }).filter(Boolean);
+      if(righe.length)exHtml=`<details class="all-det"><summary>${righe.length} esercizi</summary><div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">${righe.join('')}</div></details>`;
     }
     const note=ci?.note||wlog?.note||'';
     // corsa dall'orologio: tratto per tratto, con il passo in programma accanto

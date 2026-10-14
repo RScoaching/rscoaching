@@ -4974,7 +4974,7 @@ const ST_RUOLO_LBL={FB_A:'Total body A',FB_B:'Total body B',FB_C:'Total body C',
   VEL:'Velocita\' e salti',COND:'Condizionamento',MOB:'Mobilita\' e recupero',RTP:'Campo'};
 // quanto pesa una seduta: serve a non metterne due dure di fila
 const ST_DURO={Lungo:3,'Qualita\'':3,'Qualita\' 2':2.5,Medio:2,Facile:1,Rigenerante:0,'Corri e cammina':1,
-  FB_A:2,FB_B:2,FB_C:1.5,GLU:2,GLU2:2,LOW_A:2.5,LOW_B:2.5,UP_A:1,UP_B:1,PUSH:1,PULL:1,RUN_A:1.5,RUN_B:1.5,HY_1:2.5,HY_2:2,HY_3:1,SPORT_F:2.5,SPORT_P:2,VEL:2.5,COND:2,MOB:0,RTP:2};
+  FB_A:2,FB_B:2,FB_C:1.5,GLU:2,GLU2:2,LOW_A:2.5,LOW_B:2.5,UP_A:1,UP_B:1,PUSH:1,PULL:1,RUN_A:1.5,RUN_B:1.5,HY_1:2.5,HY_2:2,HY_3:1,SPORT_F:2.5,SPORT_P:2,SPORT_R:0.5,VEL:2.5,COND:2,MOB:0,RTP:2};
 const ST_GAMBE=/^(FB|LOW|RUN|SPORT|VEL|GLU|HY_1|HY_2)/;
 function stRuoliCorsa(I,n){
   if(!n)return [];
@@ -5141,8 +5141,9 @@ function stEsBase(I,slot){
     squat:P?(avz?'High Bar Back Squat':'Dumbbell Goblet Squat'):(man||kb?'Dumbbell Goblet Squat':(L==='zero'?'Box Squat':'Bodyweight Squat')),
     squat2:P?(avz?'Barbell Front Squat':'Leg Press'):(man?'Heel Elevated Goblet Squat':'Heels Elevated Wall Squat'),
     hinge:P?(L==='avanz'?'Conventional Deadlift':avz?'Trap Bar Deadlift':'Dumbbell RDL'):(kb?'Kettlebell RDL':man?'Dumbbell RDL':'Single Leg Bridge'),
-    hinge2:P?(avz?'Barbell RDL':'Dumbbell RDL'):(man?'Single Leg Deadlift':kb?'Kettlebell RDL':'Single Leg RDL'),
-    glutei:P?(avz?'Barbell Hip Thrust':'Hip Thrust'):(man?'Single Leg Hip Thrust':'Single Leg Bridge'),
+    // a casa chi parte (da zero o principiante) lavora a due gambe: le varianti a una gamba vengono dopo
+    hinge2:P?(avz?'Barbell RDL':'Dumbbell RDL'):(man?(avz?'Single Leg Deadlift':'Dumbbell RDL'):kb?'Kettlebell RDL':'Single Leg RDL'),
+    glutei:P?(avz?'Barbell Hip Thrust':'Hip Thrust'):(avz?(man?'Single Leg Hip Thrust':'Single Leg Bridge'):'Glute Bridge'),
     unilat:P?(avz?'RFESS':'Dumbbell Split Squat'):(man?'Dumbbell Reverse Lunge':'Reverse Lunge'),
     unilat2:P?'Step Up':(man?'Dumbbell Walking Lunge':'Step Up'),
     ham:P?(avz?'Nordic Hamstring Curl':'Seated Hamstring Curl Machine'):'Hamstring Curl Sliders Eccentric',
@@ -5351,7 +5352,9 @@ const ST_TPL={
   HY_2:[['tiV','main'],['hinge','main2'],['spV','acc'],['unilat','acc'],['braccia1','iso'],['core2','core']],
   HY_3:[['spO2','main'],['tiO2','main2'],['spV','acc'],['tiV2','acc'],['braccia2','iso'],['coreAR','core']],
   SPORT_F:[['potenza','pow'],['squat','main'],['hinge','main2'],['unilat','acc'],['ham','acc'],['add','acc']],
-  SPORT_P:[['pliom','pliom'],['pliom2','pliom'],['mbl','pow'],['spO','acc'],['tiV','acc'],['core','core']]
+  SPORT_P:[['pliom','pliom'],['pliom2','pliom'],['mbl','pow'],['spO','acc'],['tiV','acc'],['core','core']],
+  // il giorno dopo la partita (MD+1): niente salti ne' gambe pesanti, parte alta e core
+  SPORT_R:[['spO','acc'],['tiV','acc'],['tiO','acc'],['core','core'],['core2','core']]
 };
 
 // ── prescrizione di forza, settimana per settimana ────────────────
@@ -6040,6 +6043,8 @@ function stTestTutti(I){
       if(I.obiettivo==='forza'&&!fam)fz.push([I.liftObj,I.liftDa?'1RM di partenza '+I.liftDa+' kg: verifica con 3RM':'3RM, da cui il 1RM di partenza']);
     }
   }
+  // spalla dolente: niente piegamenti o panca al massimo, si testa la tenuta del tronco
+  if((I.infortuni||{}).spalle==='rec')for(let j=fz.length-1;j>=0;j--){if(/push up|bench|panca|press/i.test(fz[j][0])){fz.splice(j,1);if(!fz.some(y=>/plank/i.test(y[0])))fz.push(['Plank','secondi']);}}
   if(sport&&(I.qualita||[]).includes('resistenza')||sport&&!(I.qualita||[]).length)res.push(['30-15 IFT','velocita\' finale','res']);
   if(corsa){
     if(L==='zero')res.push(['Corri e cammina 20\'','quanti minuti riesce a correre di fila, a ritmo di conversazione','res']);
@@ -6129,6 +6134,7 @@ function stPrevRuolo(ruolo){
   if(/^(LOW|RUN|GLU)/.test(ruolo))return 'lower';
   if(ruolo==='SPORT_F')return 'sport';
   if(ruolo==='SPORT_P')return 'esplo';
+  if(ruolo==='SPORT_R')return 'upper';
   return 'full';
 }
 // esercizi che un infortunio recente o una condizione escludono, anche fra i complementari
@@ -6183,7 +6189,7 @@ function stPrevBlocco(I,ruolo,ctx){
   const bi=ctx.bi||0,gi=ctx.gi||0,dl=!!ctx.dl;
   const gia=(ctx.nomi||[]).map(n=>String(n));
   const usati=new Set();
-  const dup=n=>usati.has(n)||gia.some(g=>g.toLowerCase()===n.toLowerCase()||ST_PREV_FAM.some(f=>f.test(g)&&f.test(n)));
+  const dup=n=>usati.has(n)||gia.some(g=>g.toLowerCase()===n.toLowerCase()||stStessaFam(g,n)||ST_PREV_FAM.some(f=>f.test(g)&&f.test(n)));
   const ZB=['caviglia','piede','polpaccio','ginocchio','anca','adduttori','hamstring','glutei','quadricipite'];
   const car=stCarEff(I).filter(z=>cat==='upper'?!ZB.includes(z):cat==='lower'?z!=='spalle':true);
   const zLbl=z=>((ST_CAR.find(c=>c[0]===z)||[0,z])[1]).toLowerCase();
@@ -6196,7 +6202,8 @@ function stPrevBlocco(I,ruolo,ctx){
       // la zona che il corpo della seduta lavora gia' non si ripete
       if(tipo==='rinforzo'&&ST_PREV_COPRE[z]&&gia.some(g=>ST_PREV_COPRE[z].test(g)))continue;
       let l=stPrevLista(I,z,tipo);if(!l.length&&alt)l=stPrevLista(I,z,alt);
-      l=l.filter(x=>!dup(x.n));if(!l.length)continue;
+      // nella seduta della parte alta niente complementari che lavorano le gambe
+      l=l.filter(x=>!dup(x.n)&&!(cat==='upper'&&/affond|lunge|squat|stacco|deadlift|step/i.test(x.n)));if(!l.length)continue;
       // Nordic, Copenhagen e simili restano per tutto il programma e crescono di dose
       const pr=ST_PREV_PRIO[z];
       const e=tipo==='rinforzo'&&pr&&pr.test(l[0].n)&&/nordic|copenhagen/i.test(l[0].n)?l[0]:l[(bi+gi)%Math.min(l.length,4)];
@@ -6325,7 +6332,7 @@ function stLiftPiano(I){
   stLpMemo={k,v};return v;
 }
 // famiglie di esercizi: due della stessa famiglia nella stessa seduta sono un doppione
-const ST_FAM_ES=[/bridge|hip thrust|ponte/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
+const ST_FAM_ES=[/bicep|bicipit|hammer curl|dumbbell curl|barbell curl|curl (con |coi )?manubri|curl (al |col )?bilanciere|curl manubri/i,/bridge|hip thrust|ponte/i,/lunge|split squat|affond|rfess|bulgarian/i,/heel raise|calf raise/i,/lateral raise|alzate laterali/i,/nordic/i,/copenhagen/i];
 function stStessaFam(a,b){return a===b||ST_FAM_ES.some(f=>f.test(a)&&f.test(b));}
 function stCorpo(I,g,w){
   const tpl=/^HY_/.test(g.ruolo)?stTplHy(g,w):ST_TPL[g.ruolo]||ST_TPL.FB_A,out=[],key=g.nome;
@@ -6391,9 +6398,11 @@ function stCorpo(I,g,w){
       let i=fi;
       if(i<0)i=out.findIndex(e=>e.ruolo==='main2'&&stesso(e)&&libero(e));
       if(i<0)i=out.findIndex(e=>e.ruolo==='acc'&&stesso(e)&&libero(e));
+      // la principale della seduta con lo stesso schema (es. front squat nel total body) diventa l'alzata: mai due squat insieme
+      if(i<0)i=out.findIndex(e=>e.ruolo==='main'&&stesso(e)&&libero(e));
       if(i<0)i=out.findIndex(e=>e.ruolo==='acc'&&inReg(e.slot)&&libero(e));
       if(i<0)i=out.findIndex(e=>e.ruolo==='main2'&&inReg(e.slot)&&libero(e));
-      if(i>=0){const e=out[i],r=e.ruolo==='main'?'main':'main2';out[i]=Object.assign({},e,{name:I.liftObj,ruolo:r,pr:prL(r)});}
+      if(i>=0){const e=out[i],r='main2';out[i]=Object.assign({},e,{name:I.liftObj,ruolo:r,pr:prL(r)});}
       else{const j=out.findIndex(z=>!['pow','pliom','main'].includes(z.ruolo));out.splice(j<0?out.length:j,0,{k:key+'|lift',slot:fam,name:I.liftObj,ruolo:'main2',pr:prL('main2')});}
     }
     // un altro esercizio della stessa famiglia (es. il hip thrust da complementare) non si ripete
@@ -6651,15 +6660,15 @@ function stCostruisci(I,P){
         if(g.tipo==='corsa'&&['Medio','Qualita\' 2'].includes(g.ruolo)){sessions['s'+ord]={name:'Corsa facile',type:'corsa',order:ord,dayOfWeek:g.d,notes:'',corsaFasi:[stFase('Fondo Lento','Z2','30\'','','facile, con 3 x 1\' a passo gara')],exercises:{}};ord++;return;}
       }
       if(w.tipo==='gara'&&g===lg){
-        sessions['s'+ord]={name:'Gara: '+ST_DIST[I.garaDist],type:'corsa',order:ord,dayOfWeek:dGara,notes:I.garaTempo?'Obiettivo '+I.garaTempo+', passo '+stPace(P.rit?P.rit.gara:0)+'/km':zero?'Partenza piano, ritmo di conversazione: l\'obiettivo e\' arrivare correndo.':'Buona gara',corsaFasi:[stFase('Riscaldamento','Z1',zero?'10\'':'15\'','',zero?'camminata veloce e 2\' di corsa leggera':'con 3 allunghi'),stFase('Testo libero','Z4',ST_DIST[I.garaDist],P.rit?stPace(P.rit.gara):'','gara')],exercises:{}};ord++;return;
+        sessions['s'+ord]={name:'Gara: '+ST_DIST[I.garaDist],type:'corsa',order:ord,dayOfWeek:dGara,notes:I.garaTempo?'Obiettivo '+I.garaTempo+', passo '+stPace(P.rit?P.rit.gara:0)+'/km':zero?'Partenza piano, ritmo di conversazione: l\'obiettivo e\' arrivare correndo.':'Buona gara',corsaFasi:[stFase('Riscaldamento','Z1',zero?'10\'':'15\'','',zero?'camminata veloce e 2\' di corsa leggera':'con 3 allunghi'),stFase('Gara','Z4',ST_DIST[I.garaDist],P.rit?stPace(P.rit.gara):'','gara')],exercises:{}};ord++;return;
       }
       if(g.tipo==='corsa'){
         let c=stCorsa(I,w,g.ruolo,(P.kmT||P.kmW)[wi]||0,P.rit,P.T.nC,P.tipo,{lungo:g===lg});
         if(g.ruolo==='Facile'&&!conAllunghi.includes(g.d))c=Object.assign({},c,{fasi:c.fasi.filter(f=>!(f.tipo==='Attivazione'&&/allunghi/.test(f.dist||f.note||'')))});
         if(gi===iRes){
           const t=tRes[0];
-          c=zero?{nome:'Test di corsa',fasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),stFase('Testo libero','Z2','20\'','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','5\'','','camminata')]}
-            :{nome:'Test di corsa',fasi:[stFase('Riscaldamento','Z1','15\'','','corsa lenta e 3 allunghi'),stFase('Testo libero','Z5','','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','10\'','','corsa lenta o camminata')]};
+          c=zero?{nome:'Test di corsa',fasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),stFase('Test','Z2','20\'','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','5\'','','camminata')]}
+            :{nome:'Test di corsa',fasi:[stFase('Riscaldamento','Z1','15\'','','corsa lenta e 3 allunghi'),stFase('Test','Z5','','',t[0]+': '+t[1]),stFase('Defaticamento','Z1','10\'','','corsa lenta o camminata')]};
         }
         const leggera=['Rigenerante','Facile'].includes(g.ruolo)&&P.tipo.some(x=>x.d===g.d&&x.tipo==='pesi');
         const pb=leggera?{att:[],rin:[]}:stPrevBlocco(I,'corsa',{bi,gi,dl});
@@ -6672,7 +6681,7 @@ function stCostruisci(I,P){
       }
       if(g.tipo==='sprint'){
         const exs={};stVel(I,w).forEach((e,i)=>{exs['e'+i]=Object.assign(e,{order:i});});
-        sessions['s'+ord]={name:g.nome+stMdTxt(g),type:'sprint',order:ord,dayOfWeek:g.d,notes:(g.md?g.md+'. ':'')+'Riscaldamento completo prima degli sprint; recuperi pieni, se la velocita\' cala si chiude.',exercises:exs};ord++;return;
+        sessions['s'+ord]={name:g.nome+stMdTxt(g),type:'sprint',order:ord,dayOfWeek:g.d,notes:'Riscaldamento completo prima degli sprint; recuperi pieni, se la velocita\' cala si chiude.',exercises:exs};ord++;return;
       }
       if(g.tipo==='conditioning'){
         const c=stCond(I,w);
@@ -6693,7 +6702,10 @@ function stCostruisci(I,P){
         sessions['s'+ord]={name:g.nome,type:'recupero',order:ord,dayOfWeek:g.d,notes:'20-30 minuti tranquilli: mobilita\' sulle zone da proteggere.',exercises:exs};ord++;return;
       }
       // nella settimana del test finale le altre sedute di forza scaricano
+      // la seduta che cade il giorno dopo la partita diventa di recupero: i salti il giorno dopo 90 minuti di gioco fanno solo danni
+      if(g.md==='MD-6'&&g.ruolo==='SPORT_P')g=Object.assign({},g,{ruolo:'SPORT_R',nome:'Recupero e parte alta',mdNota:true});
       const corpo=stCorpo(I,g,conTest&&fine&&w.tipo==='carico'?Object.assign({},w,{tipo:'scarico'}):w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;const av=stAvvicinamento(e);if(av)e.cue=av+(e.cue?'. '+e.cue:'');if(['main','main2','mainU','pow','pliom'].includes(x.ruolo))e._p=1;return e;});const sessNote=[];
+      if(g.mdNota)sessNote.push('Il giorno dopo la partita: carichi moderati, niente salti. Chi ha giocato meno di 45 minuti aggiunge 3 x 5 salti e 4 allunghi.');
       const exs={};let i=0;
       const pb=stPrevBlocco(I,g.ruolo,{bi,gi,dl,nomi:corpo.map(e=>e.name)});
       // prima della seduta c'e' la scheda di prevenzione; nella seduta le isometrie dei tendini
@@ -6710,7 +6722,7 @@ function stCostruisci(I,P){
       // flessori prossimali dolenti: nel primo blocco niente Nordic, stacchi a escursione parziale
       if(stTendDol(I).includes('hamprox')&&(w.blk||0)===0)for(let j=lista.length-1;j>=0;j--){if(/nordic/i.test(lista[j].name))lista.splice(j,1);else if(/RDL|Stiff|Good Morning/i.test(lista[j].name)&&!/^Tendine/.test(lista[j].cue||''))lista[j].cue=(lista[j].cue?lista[j].cue+'. ':'')+'Escursione parziale: ci si ferma prima della flessione profonda d\'anca';}
       lista.forEach(e=>{exs['e'+String(i).padStart(2,'0')]=Object.assign(e,{order:i});i++;});
-      sessions['s'+ord]={name:g.nome+stMdTxt(g),type:'pesi',order:ord,dayOfWeek:g.d,notes:(g.md?g.md+'. ':'')+(w.tipo==='scarico'?'Settimana di scarico: volume ridotto, tecnica.':'')+(sessNote.length?(w.tipo==='scarico'?' ':'')+sessNote.join(' '):''),exercises:exs};ord++;
+      sessions['s'+ord]={name:g.nome+stMdTxt(g),type:'pesi',order:ord,dayOfWeek:g.d,notes:(w.tipo==='scarico'?'Settimana di scarico: volume ridotto, tecnica.':'')+(sessNote.length?(w.tipo==='scarico'?' ':'')+sessNote.join(' '):''),exercises:exs};ord++;
     });
     if(stGaraPrep(I,P,w,sessions,()=>ord++)){
       // km della settimana rifatti: la gara e le corse cambiate
@@ -7545,6 +7557,24 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();if(document.getElementById('st-menu')?.classList.contains('open'))stMenuChiudi();else closeStudio();}
   if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();creaDaStudio();}
 });
+// i massimali scritti nella scheda vanno nei Massimali dell'atleta: senza, l'app chiedeva
+// "scegli tu il carico" anche dove il preparatore aveva gia' il 1RM (stessi nodi dell'app atleta)
+async function stMassimaliScheda(aid,I){
+  const num=v=>+String(v==null?'':v).replace(',','.')||0;
+  const L=[['Squat',I.rmSquat],['Panca Piana',I.rmPanca],['Stacco da Terra',I.rmStacco]];
+  if(I.obiettivo==='forza'&&I.liftObj&&num(I.liftDa)>0&&!L.some(x=>x[0]===I.liftObj&&num(x[1])>0))L.push([I.liftObj,I.liftDa]);
+  const V=L.map(([n,v])=>[n,num(v)]).filter(x=>x[1]>0&&x[1]<500);if(!V.length)return;
+  const [exS,recS]=await Promise.all([get(ref(db,'rm_exercises/'+aid)),get(ref(db,'rm_records/'+aid))]);
+  let ex=exS.val();
+  if(!ex){ex={};['Squat','Panca Piana','Stacco da Terra','Hip Thrust','Affondi','Military Press','Trazioni','Rematore Bilanciere','Leg Press','Romanian Deadlift'].forEach((name,i)=>{ex['ex_default_'+i]={name,order:i,custom:false};});await set(ref(db,'rm_exercises/'+aid),ex);}
+  const recs=recS.val()||{},oggi=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  for(const [n,v] of V){
+    let k=Object.keys(ex).find(x=>ex[x]&&ex[x].name===n);
+    if(!k){const r=push(ref(db,'rm_exercises/'+aid));k=r.key;await set(r,{name:n,order:Object.keys(ex).length,custom:true});ex[k]={name:n};}
+    if(Object.values(recs[k]||{}).some(r=>+r.value===v))continue;
+    await push(ref(db,`rm_records/${aid}/${k}`),{ts:Date.now(),date:oggi,value:v,type:'scheda',exName:n});
+  }
+}
 window.creaDaStudio=async function(){
   const I=stI;
   if(!I.aid&&!String(I.nome||'').trim()){showToast('Scegli l\'atleta o scrivi il nome');return;}
@@ -7570,6 +7600,7 @@ window.creaDaStudio=async function(){
       pzUndo.push({multi:pzPrima(up)});
       await update(ref(db),up);
       await set(ref(db,'athlete_intake/'+aid),scheda);
+      try{await stMassimaliScheda(aid,I);}catch(e){console.warn(e);}
       closeStudio();currentWeekIdx=0;
       showToast('Programma rifatto: '+P.N+' settimane');
       return;
@@ -7579,6 +7610,7 @@ window.creaDaStudio=async function(){
       notes:ST_OBJ[I.obiettivo]+(stGr(I)?(I.obiettivo==='ibrido'?', gara ':' ')+ST_DIST[I.garaDist]+(I.garaData?' il '+I.garaData:''):'')+'. '+ST_LIV[I.livello]+', '+P.T.n+' sedute a settimana.',
       createdAt:Date.now(),startDate:I.inizio,assignedTo:{[aid]:true},weeks:B.weeks,intake:scheda,origine:'studio',ritmi:ritP,prehab});
     await set(ref(db,'athlete_intake/'+aid),scheda);
+    try{await stMassimaliScheda(aid,I);}catch(e){console.warn(e);}
     closeStudio();
     await pzArchiviaVecchi(aid,r.key,{name:nome,startDate:I.inizio,weeks:B.weeks});
     showToast('Programma creato: '+P.N+' settimane');
