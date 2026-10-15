@@ -449,7 +449,27 @@ table.grid td.cf-n .miss{ color:var(--orange2); }
 .cfr-area{ stroke-width:2; stroke-linejoin:round; }
 .cfr-side{ flex:1 1 220px; min-width:200px; display:flex; flex-direction:column; gap:9px; }
 .cfr-who{ display:flex; align-items:flex-start; gap:9px; font-size:12px; }
-.cfr-sw{ width:11px; height:11px; border-radius:3px; margin-top:4px; flex:0 0 auto; }
+.cfr-sw{ width:11px; height:11px; border-radius:50%; margin-top:4px; flex:0 0 auto; }
+/* il pallino del colore del radar accanto al nome, in tabella e nell'elenco delle atlete:
+   senza, per capire quale forma e' di chi bisognava guardare la legenda a lato */
+.cf-dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align:1px;
+  flex:0 0 auto; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+/* Solo sedute in comune: con due o piu' atlete scelte tiene le sedute in cui ci sono tutte,
+   cosi' il confronto e' fatto sugli stessi allenamenti e le stesse partite */
+.cf-com{ appearance:none; display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+  font-family:inherit; font-size:12px; font-weight:600; color:var(--ink); background:var(--surface);
+  border:1px solid var(--border2); border-radius:8px; padding:5px 11px 5px 7px;
+  transition:border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease); }
+.cf-com:hover{ border-color:var(--border3); }
+.cf-com:active{ transform:scale(.97); }
+.cf-com:focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
+.cf-com .cf-chk{ width:17px; height:17px; border-radius:5px; }
+.cf-com[aria-pressed="true"]{ border-color:var(--ember-border); background:var(--ember-bg); color:var(--orange2); }
+.cf-com[aria-pressed="true"] .cf-chk{ background:var(--orange); border-color:var(--orange); color:#1a0d05; }
+.cf-com .cf-com-n{ color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
+/* nell'elenco delle sedute: chi manca, e con il filtro acceso la seduta esclusa si spegne */
+.sess-item.cf-sess .cf-manca{ color:var(--orange2); }
+.sess-item.cf-sess.cf-out{ opacity:.45; }
 .cfr-nm{ color:var(--ink); font-weight:600; }
 .cfr-best{ display:block; color:var(--muted); font-size:11.5px; }
 .cfr-note{ font-size:11.5px; color:var(--muted); margin:0; }
@@ -909,6 +929,12 @@ table.partite tr.r-model td.comp{ white-space:normal; font-weight:500; font-size
                 <option value="train">Solo allenamenti</option>
               </select>
             </span>
+            <span class="fset" id="cf-com-set" hidden>
+              <button class="cf-com" id="cf-com" type="button" aria-pressed="false" title="Tieni solo le sedute in cui ci sono tutte le atlete scelte">
+                <span class="cf-chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+                <span>Solo sedute in comune</span><span class="cf-com-n" id="cf-com-n"></span>
+              </button>
+            </span>
             <span class="fset" id="cf-role-set">
               <label class="cm-lbl" for="cf-role-sel">Ruolo</label>
               <select class="fsel" id="cf-role-sel" title="Tieni solo le atlete di un ruolo"></select>
@@ -1014,7 +1040,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   const ssort = { col:'name', dir:1 };
   const msort = { col:'data', dir:-1 };
   const csort = { col:'name', dir:1 };
-  const cfState = { scope:'all', cmp:'val', role:'', per:'all', from:'', to:'' };
+  const cfState = { scope:'all', cmp:'val', role:'', per:'all', from:'', to:'', comuni:false };
+  // colore del radar per atleta, aggiornato a ogni disegno: lo usano tabella ed elenco
+  let cfColMap = {};
   // colori del radar: una tinta per atleta, nell'ordine in cui compaiono in tabella
   const CF_COLS = ['oklch(72% 0.17 45)','oklch(70% 0.17 285)','oklch(72% 0.16 152)','oklch(72% 0.14 225)'];
   const CF_RADAR_MAX = 4;
@@ -1810,7 +1838,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return base.filter(s=>{ const t = tsOf(s); return t!=null && t>=w.a && t<=w.b; });
   }
   function cfResetSessSel(){ cfSessSel = new Set(cfScopeSessions().map(s=> s.monthKey+'|'+s.label)); }
-  function cfSelectedSessions(){ if(!cfSessSel) cfResetSessSel(); return cfEligibleSessions().filter(s=> cfSessSel.has(s.monthKey+'|'+s.label)); }
+  function cfSpuntate(){ if(!cfSessSel) cfResetSessSel(); return cfEligibleSessions().filter(s=> cfSessSel.has(s.monthKey+'|'+s.label)); }
+  // Seduta in comune: tutte le atlete scelte hanno un dato in quella seduta.
+  function cfManca(s, players){ return players.filter(n=> !playerRow(n, s.monthKey, s.label)); }
+  function cfComuniOk(){ return cfSelectedPlayers().length>=2; }
+  function cfComuniOn(){ return cfState.comuni && cfComuniOk(); }
+  function cfSelectedSessions(){
+    const sp=cfSpuntate();
+    if(!cfComuniOn()) return sp;
+    const pl=cfSelectedPlayers();
+    return sp.filter(s=> !cfManca(s, pl).length);
+  }
   // Il ruolo e' un filtro sopra la spunta: restringe l'elenco senza cancellare le scelte fatte.
   function cfRoleOk(name){ return !cfState.role || roleOf(name)===cfState.role; }
   function cfRolePlayers(){ return cfAllPlayers().filter(cfRoleOk); }
@@ -1901,12 +1939,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function cfSyncButtons(eff){
     const es=cfEligibleSessions().length, ss=cfSelectedSessions().length, ap=cfRolePlayers().length, sp=cfSelectedPlayers().length;
+    const cset=document.getElementById('cf-com-set'), cb=document.getElementById('cf-com'), cn=document.getElementById('cf-com-n');
+    if(cset){
+      const ok=cfComuniOk();
+      cset.hidden=!ok;
+      if(ok){
+        const pl=cfSelectedPlayers(), sp0=cfSpuntate();
+        const nc=sp0.filter(s=> !cfManca(s, pl).length).length;
+        if(cb) cb.setAttribute('aria-pressed', cfState.comuni?'true':'false');
+        if(cn) cn.textContent=nc+' su '+sp0.length;
+      }
+    }
     const sl=document.getElementById('cf-sess-lbl'); if(sl) sl.textContent='Sedute ('+ss+'/'+es+')';
     const pl=document.getElementById('cf-play-lbl'); if(pl) pl.textContent='Atlete ('+sp+'/'+ap+')';
     const hint=document.getElementById('cf-hint');
     if(hint){
       const t=cfState.scope==='match'?'solo partite':cfState.scope==='train'?'solo allenamenti':'tutte le sedute';
       hint.textContent=cfModeText(eff||cfState.cmp)+'  ·  '+t+'  ·  '+ss+' sedute  ·  '+sp+' atlete'
+        +(cfComuniOn()?'  ·  solo sedute in comune':'')
         +(cfState.role?('  ·  '+cfState.role):'')
         +(cfPerActive()?('  ·  '+cfPerText()):'');
     }
@@ -2058,17 +2108,31 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       +'<span>'+esc(nota || 'parametri chiave, il bordo esterno e\' il valore migliore fra chi e\' selezionato')+'</span></div>'
       +'<div class="cfr-body">'+svg+side+'</div>';
   }
+  function cfDotHtml(name){ const c=cfColMap[name]; return c ? '<span class="cf-dot" style="background:'+c+'" aria-hidden="true"></span>' : ''; }
+  // l'elenco delle atlete non si ridisegna a ogni clic: i pallini si rimettono qui
+  function cfPaintDots(){
+    document.querySelectorAll('#cf-play-list .cf-opt').forEach(b=>{
+      const lb=b.querySelector('.sess-lb'); if(!lb) return;
+      const old=lb.querySelector('.cf-dot'); if(old) old.remove();
+      const c=cfColMap[b.getAttribute('data-name')];
+      if(c) lb.insertAdjacentHTML('afterbegin','<span class="cf-dot" style="background:'+c+'" aria-hidden="true"></span>');
+    });
+  }
+  function cfSessSearch(){ const i=document.getElementById('cf-sess-search'); return i?i.value:''; }
   function renderConfronto(){
     const host=document.getElementById('cf-scroll'); if(!host) return;
     const sess=cfSelectedSessions(), players=cfSelectedPlayers(), V=VIS();
     renderCfStats(sess, players); cfSyncButtons();
     const lg=document.getElementById('cf-legend');
     const rd=document.getElementById('cf-radar');
+    cfColMap={};
     const vuoto=(msg)=>{
+      cfPaintDots();
       if(lg){ lg.hidden=true; lg.innerHTML=''; }
       if(rd){ rd.hidden=true; rd.innerHTML=''; }
       host.innerHTML=emptyBlock(msg);
     };
+    if(!sess.length && cfComuniOn() && cfSpuntate().length){ vuoto('Nessuna seduta in cui ci sono tutte le '+players.length+' atlete scelte: togline una o spegni Solo sedute in comune'); return; }
     if(!sess.length){ vuoto(cfPerActive() ? ('Nessuna seduta in questo periodo: '+cfPerText()) : 'Nessuna seduta selezionata'); return; }
     if(!players.length){ vuoto(cfState.role ? ('Nessuna atleta selezionata fra i ruoli "'+cfState.role+'"') : 'Nessuna atleta selezionata'); return; }
     const teamRows=cfTeamRows(sess);
@@ -2155,6 +2219,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           +'<span class="lg"><span class="dot over"></span>&gt;105%</span>';
       } else { lg.hidden=true; lg.innerHTML=''; }
     }
+    cfColMap={};
+    if(pdata.length<=CF_RADAR_MAX && cfRadarAxes().length>=3) pdata.forEach((p,pi)=>{ cfColMap[p.name]=CF_COLS[pi%CF_COLS.length]; });
+    cfPaintDots();
     renderCfRadar(pdata, teamAgg, !isTvm && teamRows.length>0,
       isTvm ? 'parametri chiave, qui il profilo disegnato e\' quello delle partite' : '');
     const cell=(v,i,rb)=>{
@@ -2191,7 +2258,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     if(!pdata.length){ h+='<tr class="r-day"><td class="col-day" colspan="'+(V.length+2)+'">Nessuna atleta selezionata</td></tr>'; }
     pdata.forEach((r, ri)=>{
-      h+='<tr class="r-day'+(ri%2?' r-alt':'')+'"><td class="col-day"><span class="lb">'+esc(disp(r.name))+'</span>'
+      h+='<tr class="r-day'+(ri%2?' r-alt':'')+'"><td class="col-day"><span class="lb">'+cfDotHtml(r.name)+esc(disp(r.name))+'</span>'
         +(r.role?'<span class="role-inline">'+esc(r.role)+'</span>':'')+'</td>';
       if(isTvm){ h+='<td class="cf-n">'+r.nm+'/'+r.nd+'</td>'; }
       else {
@@ -2236,6 +2303,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(!cfSessSel) cfResetSessSel();
     const q=(filter||'').trim().toLowerCase(); const elig=cfEligibleSessions().slice().reverse();
     let html='',curMonth='',n=0;
+    const plC=cfComuniOk()?cfSelectedPlayers():null, comOn=cfComuniOn();
     elig.forEach(s=>{
       // stessa lettura del rail principale: sopra la data per esteso, sotto la sigla del foglio
       const dt=dFull(tsOf(s)), giorno=sessDay(s), campo=sessCampo(s);
@@ -2245,9 +2313,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       n++; const key=s.monthKey+'|'+s.label,on=cfSessSel.has(key);
       const capo = giorno ? (giorno.charAt(0).toUpperCase()+giorno.slice(1)) : s.label;
       const coda = giorno ? (esc(s.label)+(campo?(' &#183; '+esc(campo)):'')) : esc(s.wd||'');
+      // con piu' atlete scelte la riga dice chi manca in quella seduta
+      const mc=plC?cfManca(s, plC):[];
+      const manca=mc.length ? (' &#183; <span class="cf-manca">'+(mc.length===1?('manca '+esc(disp(mc[0]))):('mancano '+mc.length))+'</span>') : '';
       const sotto = '<span class="sess-kind">'+(s.type==='match'?'Partita':'Allenamento')+'</span>'
-        + (coda?(' &#183; '+coda):'');
-      html+='<button class="sess-item cf-opt cf-sess'+(s.type==='match'?' is-match':'')+(on?' is-on':'')+'" type="button" data-key="'+esc(key)+'">'
+        + (coda?(' &#183; '+coda):'') + manca;
+      html+='<button class="sess-item cf-opt cf-sess'+(s.type==='match'?' is-match':'')+(on?' is-on':'')+(comOn&&mc.length?' cf-out':'')+'" type="button" data-key="'+esc(key)+'"'+(mc.length?' title="Mancano: '+esc(mc.map(disp).join(', '))+'"':'')+'>'
         +'<span class="cf-chk">'+CF_CHK+'</span>'
         +'<span class="sess-when"><span class="sess-lb">'+esc(capo)+'</span>'
         +'<span class="sess-sub">'+sotto+'</span></span></button>';
@@ -2272,13 +2343,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       // il ruolo resta a destra del nome: e' corto e non manda a capo l'atleta
       html+='<button class="sess-item cf-opt'+(on?' is-on':'')+'" type="button" data-name="'+esc(name)+'">'
         +'<span class="cf-chk">'+CF_CHK+'</span>'
-        +'<span class="sess-when"><span class="sess-lb">'+esc(disp(name))+'</span></span>'
+        +'<span class="sess-when"><span class="sess-lb">'+cfDotHtml(name)+esc(disp(name))+'</span></span>'
         +'<span class="sess-role">'+esc(r)+'</span></button>';
     });
     if(!n) html='<div class="sess-empty">'+(cfState.role?'Nessuna atleta con questo ruolo':'Nessuna atleta')+'</div>'; host.innerHTML=html;
     host.querySelectorAll('.cf-opt').forEach(b=> b.addEventListener('click', ()=>{
       const nm=b.getAttribute('data-name'); if(cfPlaySel.has(nm)) cfPlaySel.delete(nm); else cfPlaySel.add(nm);
-      b.classList.toggle('is-on', cfPlaySel.has(nm)); renderConfronto();
+      b.classList.toggle('is-on', cfPlaySel.has(nm)); renderConfronto(); cfRenderSessRail(cfSessSearch());
     }));
   }
   function openCfRail(which){
@@ -2462,7 +2533,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       sel.classList.toggle('is-set', !!cfState.role);
       const s=document.getElementById('cf-play-search');
       cfRenderPlayRail(s?s.value:'');
-      renderConfronto();
+      renderConfronto(); cfRenderSessRail(cfSessSearch());
+    }); }
+  { const b=document.getElementById('cf-com'); if(b) b.addEventListener('click', ()=>{
+      cfState.comuni=!cfState.comuni;
+      cfRenderSessRail(cfSessSearch()); renderConfronto();
+      if(cfState.comuni) toast('Confronto sulle sedute in cui ci sono tutte le atlete scelte');
     }); }
   { const sel=document.getElementById('cf-per-sel'); if(sel) sel.addEventListener('change', ()=>{
       const p=sel.value;
@@ -2513,10 +2589,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // Tutte e Nessuna lavorano su quello che si vede: con un ruolo attivo toccano solo quel ruolo.
   { const b=document.getElementById('cf-play-all'); if(b) b.addEventListener('click', ()=>{
       if(!cfPlaySel) cfPlaySel=new Set(); cfRolePlayers().forEach(n=> cfPlaySel.add(n));
-      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
+      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); cfRenderSessRail(cfSessSearch()); }); }
   { const b=document.getElementById('cf-play-none'); if(b) b.addEventListener('click', ()=>{
       if(!cfPlaySel) cfPlaySel=new Set(); cfRolePlayers().forEach(n=> cfPlaySel.delete(n));
-      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); }); }
+      cfRenderPlayRail(document.getElementById('cf-play-search')?document.getElementById('cf-play-search').value:''); renderConfronto(); cfRenderSessRail(cfSessSearch()); }); }
   { const i=document.getElementById('sess-rail-search'); if(i) i.addEventListener('input', e=>{ renderSessRail(e.target.value); highlightRail(); }); }
   { const b=document.getElementById('btn-rail'); if(b) b.addEventListener('click', toggleRail); }
   { const b=document.getElementById('rail-close'); if(b) b.addEventListener('click', closeRail); }
