@@ -492,7 +492,9 @@ window.RSOrologio = (function(){
     return {km:Math.round(m/100)/10,min:Math.round(s/60)};
   }
   const pTxt=s=>RR().passo(s);
-  function durTxt(d){if(!d||d.tipo==='open')return 'tasto lap';if(d.tipo==='dist')return d.m>=1000?String(Math.round(d.m/100)/10).replace('.',',')+' km':d.m+' m';const m=Math.floor(d.s/60),x=d.s%60;return m?(m+'\''+(x?String(x).padStart(2,'0')+'"':'')):x+'"';}
+  // distanze sempre in km (0,4 km, 1,5 km), come su Garmin: un'unita' sola, niente conversioni a mano
+  function kmTxt(m){return String(Math.round(m/10)/100).replace('.',',')+' km';}
+  function durTxt(d){if(!d||d.tipo==='open')return 'tasto lap';if(d.tipo==='dist')return kmTxt(d.m);const m=Math.floor(d.s/60),x=d.s%60;return m?(m+'\''+(x?String(x).padStart(2,'0')+'"':'')):x+'"';}
   function tgTxt(t){if(!t)return '';if(t.tipo==='pace')return pTxt(t.hi)+'-'+pTxt(t.lo)+' /km';return 'FC '+t.lo+'-'+t.hi;}
   // righe leggibili, come le vedra' l'orologio
   function righe(P){const o=[];P.forEach(x=>{if(x.kind==='repeat'){o.push({rip:x.n,righe:x.steps.map(y=>({nome:y.nome,dur:durTxt(y.dur),tg:tgTxt(y.target),intens:y.intens}))});}else o.push({nome:x.nome,dur:durTxt(x.dur),tg:tgTxt(x.target),intens:x.intens});});return o;}
@@ -542,7 +544,7 @@ window.RSOrologio = (function(){
   }
   // ── testo per il costruttore di intervals.icu
   function icu(P){
-    const L=[];const d=x=>x.dur.tipo==='dist'?(x.dur.m>=1000&&x.dur.m%100===0?String(x.dur.m/1000)+'km':x.dur.m+'mtr'):x.dur.tipo==='time'?(Math.floor(x.dur.s/60)?Math.floor(x.dur.s/60)+'m':'')+(x.dur.s%60?x.dur.s%60+'s':''):'';
+    const L=[];const d=x=>x.dur.tipo==='dist'?String(Math.round(x.dur.m/10)/100)+'km':x.dur.tipo==='time'?(Math.floor(x.dur.s/60)?Math.floor(x.dur.s/60)+'m':'')+(x.dur.s%60?x.dur.s%60+'s':''):'';
     const t=x=>x.target&&x.target.tipo==='pace'?' '+pTxt(x.target.hi)+'/km-'+pTxt(x.target.lo)+'/km Pace':x.target&&x.target.tipo==='hr'?' '+x.target.lo+'-'+x.target.hi+'bpm HR':'';
     const riga=x=>'- '+(d(x)?'':'Press lap ')+(x.intens==='warmup'?'Warmup ':x.intens==='cooldown'?'Cooldown ':'')+String(x.nome).replace(/[-\n]/g,' ')+' '+(d(x)||(x.intens==='rest'?'3m':x.intens==='recovery'?'2m':'5m'))+t(x);
     P.forEach(x=>{if(x.kind==='repeat'){if(L.length&&L[L.length-1]!=='')L.push('');L.push(x.n+'x');x.steps.forEach(y=>L.push(riga(y)));L.push('');}else L.push(riga(x));});

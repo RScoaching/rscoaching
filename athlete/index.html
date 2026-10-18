@@ -4114,7 +4114,7 @@ function renderPrograms(progData){
   function pc8Bar(pid,weeks,cur){
     const t=weeks.map(([,w],wi)=>{
       const ss=Object.keys(w.sessions||{});
-      const f=wi<=cur?ss.filter(sid=>logProg(pid,wi,sid)).length:0;
+      const f=ss.filter(sid=>logProg(pid,wi,sid)).length;
       const q=ss.length?Math.round(100*f/ss.length):0;
       return `<i class="${wi<cur?'p':wi===cur?'c':''}"><b style="width:${q}%"></b></i>`;
     }).join('');
@@ -4144,15 +4144,16 @@ function renderPrograms(progData){
         const sessions=Object.entries(w.sessions||{}).sort((a,b)=>((a[1].dayOfWeek??9)-(b[1].dayOfWeek??9))||((a[1].order||0)-(b[1].order||0)));
         const aperta=isActive&&wi===cur;
         // fatte nella settimana del programma: per quella in corso e per quelle passate
-        const nF=wi<=cur?sessions.filter(([sid])=>logProg(pid,wi,sid)).length:0;
-        const metaW=wi<cur&&sessions.length&&nF===sessions.length?`${_ri('ok')} Completata`:wi<=cur&&sessions.length?`${nF} di ${sessions.length} ${sessions.length===1?'fatta':'fatte'}`:`${sessions.length} ${sessions.length===1?'seduta':'sedute'}`;
+        // anche una seduta della settimana dopo fatta in anticipo conta come fatta
+        const nF=sessions.filter(([sid])=>logProg(pid,wi,sid)).length;
+        const metaW=sessions.length&&nF===sessions.length?`${_ri('ok')} Completata`:(wi<=cur||nF)&&sessions.length?`${nF} di ${sessions.length} ${sessions.length===1?'fatta':'fatte'}`:`${sessions.length} ${sessions.length===1?'seduta':'sedute'}`;
         // le date vere della settimana, se il preparatore ha messo l'inizio del programma
         const lw=ini?new Date(_lunedi(ini).getTime()+wi*7*864e5):null;
         const per=lw?pcPeriodo(lw):'';
         // i sette giorni: allenamento fatto, da fare, oggi, saltato o riposo
         const gg=[0,1,2,3,4,5,6].map(d=>{
           const qui=sessions.filter(([,x])=>x.dayOfWeek===d);if(!qui.length)return 'r';
-          if(wi<=cur&&qui.some(([sid])=>logProg(pid,wi,sid)))return 'ok';
+          if(qui.some(([sid])=>logProg(pid,wi,sid)))return 'ok';
           if(wi<cur||(wi===cur&&d<oggiG))return 'no';
           return wi===cur&&d===oggiG?'og':'pr';
         });
@@ -4160,13 +4161,13 @@ function renderPrograms(progData){
         const nome=String(w.label||'').replace(/^S\d+\s*/,'');
         return `<button type="button" class="week-row pw${wi===cur?' current-week':''}${wi<cur?' passata':''}" onclick="toggleWeek('${wid}')" aria-expanded="${aperta}" aria-controls="wsess-${wid}">
           <div class="pw-t"><div class="week-row-name">Settimana ${wi+1}${nome?'<span class="pw-lb"> · '+escH(nome)+'</span>':''}${wi===cur?'<span class="pw-ora">in corso</span>':''}</div>
-          <div class="week-row-meta${wi<=cur&&nF===sessions.length&&sessions.length?' tutte':''}">${per?per+' · ':''}${metaW}</div></div>
+          <div class="week-row-meta${nF===sessions.length&&sessions.length?' tutte':''}">${per?per+' · ':''}${metaW}</div></div>
           ${strip}
           <span class="pc-chev${aperta?' su':''}" id="wchev-${wid}">${_ri('destra')}</span>
         </button>
         <div class="week-sessions${aperta?' open':''}" id="wsess-${wid}">${sessions.map(([sid,s])=>{
           // stato della seduta: fatta (con il giorno), oggi, da fare, non registrata
-          const l=wi<=cur?logProg(pid,wi,sid):null;
+          const l=logProg(pid,wi,sid);
           let st='';
           const giornoS=(lw&&s.dayOfWeek!=null)?new Date(lw.getTime()+s.dayOfWeek*864e5):null;
           if(l){const d=new Date(l.ts);const altro=giornoS&&isoLoc(d)!==isoLoc(giornoS);
