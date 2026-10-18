@@ -1816,6 +1816,54 @@ html body .ob-c .o9-bar{margin:0}
 html body .ob-s{margin-top:8px}
 html body .ob-c.ok .ob-t span{color:var(--violet2);font-weight:600}
 html body .cm-card p{-webkit-line-clamp:3}
+
+/* ── PIANO: SETTIMANE E GIORNI ──
+   Ogni settimana dice le sue date e mostra i sette giorni: pieno viola = fatto, anello = da fare,
+   arancio = oggi, anello tratteggiato = saltato, puntino = riposo. Le sedute hanno il giorno con la data. */
+html body .week-row.pw{appearance:none;width:100%;border:0;border-bottom:1px solid rgba(255,214,196,.07);background:none;text-align:left;font:inherit;color:inherit;display:flex;align-items:center;gap:12px;padding:14px 16px 14px 18px;min-height:64px;cursor:pointer}
+html body .week-row.pw:last-of-type{border-bottom:0}
+html body .week-row.pw.current-week{background:rgba(255,106,46,.05)}
+.pw-t{flex:1;min-width:0}
+html body .pw .week-row-name{font:600 15px/1.25 var(--ff)!important;color:var(--ink8)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html body .pw.passata .week-row-name{color:var(--text)!important;font-weight:500!important}
+.pw-lb{font-weight:500;color:var(--mut8)}
+html body .pw .week-row-meta{font-size:13px!important;margin-top:3px;color:var(--mut8)!important;line-height:1.35}
+html body .pw .week-row-meta.tutte{color:var(--violet2)!important}
+.pw-ora{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(255,106,46,.14);color:var(--primary2);font:600 12px/1.4 var(--ff);vertical-align:1px}
+.pw-gg{display:grid;grid-template-columns:repeat(7,12px);gap:4px;flex:0 0 auto}
+.pw-gg i{position:relative;width:12px;height:12px;border-radius:50%;display:block}
+.pw-gg i em{position:absolute;top:-15px;left:0;width:12px;text-align:center;font:500 11px/1 var(--ff);font-style:normal;color:var(--mut8);opacity:0}
+.pw.current-week .pw-gg i em{opacity:1}
+.pw.current-week .pw-gg{margin-top:14px}
+.pw-gg i.r{transform:scale(.34);background:rgba(255,214,196,.22)}
+.pw-gg i.pr{border:1.5px solid rgba(255,214,196,.42)}
+.pw-gg i.ok{background:var(--violet2)}
+.pw-gg i.og{background:var(--primary);box-shadow:0 0 0 3px rgba(255,106,46,.22)}
+.pw-gg i.no{border:1.5px dashed rgba(255,154,107,.7)}
+html body .pc-chev{display:flex;align-items:center;justify-content:center;width:24px!important;height:24px;color:var(--mut8)!important}
+html body .pc-chev .rsi{width:16px;height:16px;transform:rotate(90deg);transition:transform .22s cubic-bezier(.23,1,.32,1)}
+html body .pc-chev.su .rsi{transform:rotate(-90deg)}
+@media (prefers-reduced-motion:reduce){html body .pc-chev .rsi{transition:none}}
+html body .week-sessions{background:rgba(0,0,0,.18)}
+html body .pc-giorno{width:34px!important;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
+html body .pc-giorno span{font:500 12px var(--ff);color:var(--mut8)}
+html body .pc-giorno b{font:600 18px/1 var(--ff);color:var(--ink8);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+html body .sess-start-btn{min-height:60px;padding:10px 16px 10px 18px!important}
+html body .ps7.ok{background:rgba(196,181,253,.12);color:var(--violet2)}
+html body .ps7.no{background:rgba(255,154,107,.08);color:#FF9A6B}
+html body .ps7.oggi{background:var(--primary);color:#1A0B05}
+
+/* ── CHECK-IN: ALLENAMENTO FUORI DALL'APP ──
+   Chiuso di base (serve qualche volta a settimana): una frase e due tasti. Si apre da solo
+   quando si arriva da "manca l'RPE" o da un file dell'orologio. */
+.fu-int{margin:0 0 14px;font-size:14px;line-height:1.45;color:var(--mut8)}
+.fu-az{display:flex;flex-direction:column;gap:8px}
+.fu-apri{appearance:none;border:0;border-radius:14px;min-height:50px;background:rgba(255,106,46,.14);color:var(--primary2);font:600 15px var(--ff);cursor:pointer;transition:transform .16s cubic-bezier(.23,1,.32,1)}
+.fu-apri:active{transform:scale(.97)}
+.fu-chiuso .orol-imp{min-height:46px}
+.fu-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.fu-top b{font:650 17px var(--ff);letter-spacing:-.02em;color:var(--ink8)}
+.fu-x{appearance:none;border:0;background:none;color:var(--mut8);font:500 14px var(--ff);min-height:44px;padding:0 4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -2695,7 +2743,16 @@ function renderCiFuori(){
   if(FU.cosa&&!op.some(o=>o.id===FU.cosa))FU.cosa=null;
   const sc=op.find(o=>o.id===FU.cosa),solo=!!(sc&&sc.solo);
   const manca=[!FU.cosa&&'cosa hai fatto',!solo&&!FU.min&&'i minuti',!FU.rpe&&'l\'RPE'].filter(Boolean);
-  el.innerHTML=(FU.corsa?orolRiepilogo(FU.corsa):`<button type="button" class="orol-imp" onclick="orolImporta(${FU.cosa?`'${FU.cosa}'`:'null'})">Hai l'orologio? Importa la corsa (.FIT o .GPX)</button>`)
+  // chiuso finche' non serve: due tasti al posto del modulo intero
+  if(!FU.aperto&&!FU.cosa&&!FU.corsa){
+    el.classList.add('fu-chiuso');
+    el.innerHTML=`<p class="fu-int">Una seduta senza app, la squadra, una partita o una corsa: segnala qui con minuti e RPE.</p>
+      <div class="fu-az"><button type="button" class="fu-apri" onclick="fuApri()">Registra un allenamento</button>
+      <button type="button" class="orol-imp" onclick="orolImporta(null)">Importa una corsa (.FIT o .GPX)</button></div>`;
+    return;
+  }
+  el.classList.remove('fu-chiuso');
+  el.innerHTML=`<div class="fu-top"><b>Nuovo allenamento</b><button type="button" class="fu-x" onclick="fuChiudi()">Annulla</button></div>`+(FU.corsa?orolRiepilogo(FU.corsa):`<button type="button" class="orol-imp" onclick="orolImporta(${FU.cosa?`'${FU.cosa}'`:'null'})">Hai l'orologio? Importa la corsa (.FIT o .GPX)</button>`)
     +(FU.ts?`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b><span>dal file</span></div><div class="ci7-zone"><button type="button" class="on" aria-pressed="true">${GG_LUNGHI[(new Date(FU.ts).getDay()+6)%7]+' '+new Date(FU.ts).toLocaleDateString('it-IT',{day:'numeric',month:'long'})}</button></div></div>`
     :`<div class="ci7-q"><div class="ci7-qh"><b>Quando</b></div><div class="ci7-zone">${[['oggi','Oggi'],['ieri','Ieri']].map(([k,t])=>`<button type="button" class="${FU.giorno===k?'on':''}" aria-pressed="${FU.giorno===k}" onclick="fuSet('giorno','${k}')">${t}</button>`).join('')}</div></div>`)+`
     <div class="ci7-q"><div class="ci7-qh"><b>Cosa hai fatto</b></div><div class="ci7-lista fu9">${op.map(o=>{const ic=o.tipo==='campo'||o.tipo==='match'?_ri('sport'):o.tipo==='altro'?_ri('conditioning'):(TICONS[o.tipo]||_ri('sedute'));return `<button type="button" class="${FU.cosa===o.id?'on':''}${o.solo?' solo':''}" aria-pressed="${FU.cosa===o.id}" onclick="fuSet('cosa','${o.id}')"><span class="fu9-ic">${ic}</span><span class="fu9-n">${escH(o.nome)}</span><span class="fu9-r"></span></button>`;}).join('')}</div></div>
@@ -2705,6 +2762,8 @@ function renderCiFuori(){
     <div class="ci7-q"><div class="ci7-qh"><b>Note</b><span>Facoltative</span></div><textarea id="fu-nota" rows="2" placeholder="Come e' andata?">${escH(FU.nota)}</textarea></div>
     <button type="button" class="ci7-invia" id="fu-invia" onclick="salvaFuori()"${manca.length?' disabled':''}>${manca.length?fuManca(manca):'Registra l\'allenamento'}</button>`;
 }
+window.fuApri=()=>{FU.aperto=true;renderCiFuori();};
+window.fuChiudi=()=>{Object.assign(FU,{aperto:false,cosa:null,min:null,rpe:null,nota:'',corsa:null,_a:null,extra:null,ts:null,km:null});renderCiFuori();};
 window.fuSet=(k,v)=>{const nt=document.getElementById('fu-nota');if(nt)FU.nota=nt.value;FU[k]=v;if(k==='giorno')FU.cosa=null;if(k==='cosa'&&FU._a&&FU.corsa)orolCorsa(FU._a,v);renderCiFuori();};
 window.fuMin=v=>{FU.min=+v||null;fuBtn();};
 window.fuBtn=()=>{const b=document.getElementById('fu-invia');if(!b)return;const sc=fuOpzioni().find(o=>o.id===FU.cosa),solo=!!(sc&&sc.solo);const manca=[!FU.cosa&&'cosa hai fatto',!solo&&!FU.min&&'i minuti',!FU.rpe&&'l\'RPE'].filter(Boolean);b.disabled=!!manca.length;b.textContent=manca.length?fuManca(manca):'Registra l\'allenamento';};
@@ -2739,7 +2798,7 @@ window.salvaFuori=async()=>{
     if(log&&FU.corsa&&FU._a&&FU._a.tr){const tid='imp'+ts;log.gmTraccia=tid;w.push(set(ref(db,`garmin_tracce/${aid}/${tid}`),FU._a.tr));}
     if(log)w.push(push(ref(db,`session_logs/${aid}`),log));
     await Promise.all(w);
-    Object.assign(FU,{cosa:null,min:null,rpe:null,nota:'',corsa:null,_a:null,extra:null,ts:null,km:null});
+    Object.assign(FU,{aperto:false,cosa:null,min:null,rpe:null,nota:'',corsa:null,_a:null,extra:null,ts:null,km:null});
     renderCiFuori();
     showToast(solo?'RPE registrato':'Allenamento registrato');
   }catch(e){console.error(e);if(b){b.disabled=false;b.textContent='Registra l\'allenamento';}showToast('Non registrato: controlla la connessione e riprova');}
@@ -4022,7 +4081,7 @@ function pcMeta(s){
   const ne=Object.keys(s.exercises||{}).length;
   const f=Array.isArray(s.corsaFasi)?s.corsaFasi:Object.values(s.corsaFasi||{});
   if(s.type==='match'||s.type==='squadra')return s.type==='match'?'registra minuti e RPE':'con la squadra';
-  if(!f.length)return ne+' esercizi';
+  if(!f.length)return ne?ne+(ne===1?' esercizio':' esercizi'):'';
   let km=0;
   f.forEach(x=>{if(!x)return;const d=/([\d.,]+)\s*km/i.exec(distNorm(x.dist));if(d)km+=parseFloat(d[1].replace(',','.'));
     const r=/([\d.,]+)\s*(km|m)\b/i.exec(distNorm(x.repDist));if(r){const v=parseFloat(r[1].replace(',','.'))/(r[2].toLowerCase()==='m'?1000:1),n=(parseInt(x.reps)||1)*(parseInt(x.serie)||1);km+=v*n;
@@ -4087,21 +4146,38 @@ function renderPrograms(progData){
         // fatte nella settimana del programma: per quella in corso e per quelle passate
         const nF=wi<=cur?sessions.filter(([sid])=>logProg(pid,wi,sid)).length:0;
         const metaW=wi<cur&&sessions.length&&nF===sessions.length?`${_ri('ok')} Completata`:wi<=cur&&sessions.length?`${nF} di ${sessions.length} ${sessions.length===1?'fatta':'fatte'}`:`${sessions.length} ${sessions.length===1?'seduta':'sedute'}`;
-        return `<div class="week-row${wi===cur?' current-week':''}${wi<cur?' passata':''}" onclick="toggleWeek('${wid}')">
-          <div><div class="week-row-name">Settimana ${wi+1}${w.label&&String(w.label).replace(/^S\d+\s*/,'')?' - '+String(w.label).replace(/^S\d+\s*/,''):''}${wi===cur?'<span class="pc-incorso">In corso</span>':''}</div>
-          <div class="week-row-meta${wi<=cur&&nF===sessions.length&&sessions.length?' tutte':''}">${metaW}</div></div>
-          <span class="pc-chev" id="wchev-${wid}">${aperta?'▴':'▾'}</span>
-        </div>
+        // le date vere della settimana, se il preparatore ha messo l'inizio del programma
+        const lw=ini?new Date(_lunedi(ini).getTime()+wi*7*864e5):null;
+        const per=lw?pcPeriodo(lw):'';
+        // i sette giorni: allenamento fatto, da fare, oggi, saltato o riposo
+        const gg=[0,1,2,3,4,5,6].map(d=>{
+          const qui=sessions.filter(([,x])=>x.dayOfWeek===d);if(!qui.length)return 'r';
+          if(wi<=cur&&qui.some(([sid])=>logProg(pid,wi,sid)))return 'ok';
+          if(wi<cur||(wi===cur&&d<oggiG))return 'no';
+          return wi===cur&&d===oggiG?'og':'pr';
+        });
+        const strip=sessions.some(([,x])=>x.dayOfWeek!=null)?`<div class="pw-gg" aria-hidden="true">${gg.map((x,d)=>`<i class="${x}"><em>${'LMMGVSD'[d]}</em></i>`).join('')}</div>`:'';
+        const nome=String(w.label||'').replace(/^S\d+\s*/,'');
+        return `<button type="button" class="week-row pw${wi===cur?' current-week':''}${wi<cur?' passata':''}" onclick="toggleWeek('${wid}')" aria-expanded="${aperta}" aria-controls="wsess-${wid}">
+          <div class="pw-t"><div class="week-row-name">Settimana ${wi+1}${nome?'<span class="pw-lb"> · '+escH(nome)+'</span>':''}${wi===cur?'<span class="pw-ora">in corso</span>':''}</div>
+          <div class="week-row-meta${wi<=cur&&nF===sessions.length&&sessions.length?' tutte':''}">${per?per+' · ':''}${metaW}</div></div>
+          ${strip}
+          <span class="pc-chev${aperta?' su':''}" id="wchev-${wid}">${_ri('destra')}</span>
+        </button>
         <div class="week-sessions${aperta?' open':''}" id="wsess-${wid}">${sessions.map(([sid,s])=>{
           // stato della seduta: fatta (con il giorno), oggi, da fare, non registrata
           const l=wi<=cur?logProg(pid,wi,sid):null;
           let st='';
-          if(l){const d=new Date(l.ts);st=`<span class="ps7 ok">${_ri('ok')}${GGL[(d.getDay()+6)%7]} ${d.getDate()}</span>`;}
-          else if(wi<cur||(wi===cur&&s.dayOfWeek!=null&&s.dayOfWeek<oggiG))st='<span class="ps7 no">non registrata</span>';
+          const giornoS=(lw&&s.dayOfWeek!=null)?new Date(lw.getTime()+s.dayOfWeek*864e5):null;
+          if(l){const d=new Date(l.ts);const altro=giornoS&&isoLoc(d)!==isoLoc(giornoS);
+            // fatta in un altro giorno: della stessa settimana basta il giorno, se no anche il mese
+            const fuori=lw&&(d<lw||d.getTime()>=lw.getTime()+7*864e5);
+            st=`<span class="ps7 ok">${_ri('ok')}${!altro?'fatta':fuori?'fatta '+d.getDate()+' '+d.toLocaleDateString('it-IT',{month:'short'}).replace('.',''):'fatta '+GGL[(d.getDay()+6)%7]+' '+d.getDate()}</span>`;}
+          else if(wi<cur||(wi===cur&&s.dayOfWeek!=null&&s.dayOfWeek<oggiG))st='<span class="ps7 no">non fatta</span>';
           else if(wi===cur&&s.dayOfWeek===oggiG)st='<span class="ps7 oggi">oggi</span>';
           return `
           <a class="sess-start-btn${l?' fatta':''}" href="#" onclick="apriSeduta('${pid}',${wi},'${sid}');return false;">
-            <div class="pc-giorno">${s.dayOfWeek!=null?GGB[s.dayOfWeek]:''}</div>
+            <div class="pc-giorno">${s.dayOfWeek!=null?`<span>${GGB[s.dayOfWeek]}</span>${giornoS?'<b>'+giornoS.getDate()+'</b>':''}`:''}</div>
             <div class="sess-icon" style="background:${SESS_BGS[s.type]||'rgba(255,214,196,.06)'};">${TICONS[s.type]||_ri('pesi')}</div>
             <div class="sess-info"><div class="sess-start-name">${escH(s.name||s.type||'Sessione')}</div><div class="sess-start-meta">${pcMeta(s)}${s.notes?' · '+escH(s.notes):''}</div></div>
             ${st||'<span class="start-arrow">'+_ri('destra')+'</span>'}
@@ -4164,7 +4240,9 @@ function settAttiva(pid,p,n){
   return Math.max(0,Math.min(n-1,parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0')));
 }
 window.setCurrentWeek=(pid,wi)=>{localStorage.setItem(`rsc_week_${aid}_${pid}`,wi);localStorage.setItem(`rsc_weekman_${aid}_${pid}`,JSON.stringify({wi:+wi,lun:_lunedi(new Date()).getTime()}));showToast(`Settimana ${parseInt(wi)+1} attiva`);};
-window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=document.getElementById('wchev-'+wid);const o=el.classList.toggle('open');if(ch)ch.textContent=o?'▴':'▾';};
+window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=document.getElementById('wchev-'+wid);const o=el.classList.toggle('open');if(ch){ch.classList.toggle('su',o);const b=ch.closest('.week-row');if(b)b.setAttribute('aria-expanded',String(o));}};
+// "12 - 18 ott", "28 set - 4 ott"
+function pcPeriodo(l){const e=new Date(l.getTime()+6*864e5),m=d=>d.toLocaleDateString('it-IT',{month:'short'}).replace('.','');return l.getMonth()===e.getMonth()?`${l.getDate()} - ${e.getDate()} ${m(e)}`:`${l.getDate()} ${m(l)} - ${e.getDate()} ${m(e)}`;}
 
 function renderQuickPlans(qpData){
   const wrap=document.getElementById('quick-plans-wrap'),el=document.getElementById('quick-plans-list');if(!wrap||!el)return;
