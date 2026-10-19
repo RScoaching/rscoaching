@@ -1587,6 +1587,9 @@ input,select,textarea{border-radius:10px}
 .dk-t b i{font:600 13.5px/1.35 Inter,sans-serif;font-style:normal;letter-spacing:0;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-top:4px}
 .dk-t em{font:500 11.5px Inter,sans-serif;font-style:normal;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dk-t.ok b{color:#86EFAC}.dk-t.warn b{color:#FCD34D}.dk-t.bad b{color:#FDA4AF}.dk-t.low b{color:#93C5FD}.dk-t.hot b{color:#FF8A57}
+.sp7{margin-top:6px}.sp7 p{margin:0;font-size:12.5px;line-height:1.45;color:var(--text)}
+.sp7-b{appearance:none;margin-top:6px;border:1px solid var(--border2,rgba(255,255,255,.1));background:transparent;color:var(--orange2,#FF8A57);font:600 12px inherit;font-family:inherit;border-radius:8px;padding:6px 10px;cursor:pointer}
+.sp7-img{display:block;margin-top:6px;max-width:260px;width:100%;border-radius:10px}
 </style>
 </head>
 <body>
@@ -4325,6 +4328,7 @@ function renderDetSessList(aid,aSess){
         <div class="sess-day">${wlog?.sessName||ci?.day||(wlog?.type?SLBL[wlog.type]||wlog.type:null)||'-'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${pills}</div>
         ${note?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">"${note.slice(0,80)}"</div>`:''}
+        ${wlog?.post&&(wlog.post.testo||wlog.post.foto)?`<div class="sp7">${wlog.post.testo?`<p>${athEsc(wlog.post.testo)}</p>`:''}${wlog.post.foto?`<button type="button" class="sp7-b" onclick="event.stopPropagation();spFoto('${aid}',${+wlog.ts},this)">Vedi la foto</button>`:''}</div>`:''}
         ${exHtml}
       </div>
     </div>`;
@@ -4333,6 +4337,14 @@ function renderDetSessList(aid,aSess){
   return prime+(altre.length?`<details class="all-det"><summary>Altre ${altre.length} sedute</summary>${altre.map(riga).join('')}</details>`:'');
 }
 
+// foto della seduta caricata dall'atleta a fine allenamento (session_posts): si legge solo quando si apre
+window.spFoto=async function(aid,ts,b){
+  const k=Object.entries(sessionLogsRaw[aid]||{}).find(([,l])=>l&&+l.ts===+ts)?.[0];if(!k)return;
+  b.disabled=true;b.textContent='Carico...';
+  try{const v=(await get(ref(db,`session_posts/${aid}/${k}`))).val();
+    if(v&&v.img){const f=document.createElement('img');f.src=v.img;f.alt='Foto della seduta';f.className='sp7-img';b.replaceWith(f);}else b.textContent='Foto non trovata';}
+  catch(e){b.disabled=false;b.textContent='Vedi la foto';}
+};
 // ── BENESSERE: andamento a 28 giorni e scarto dalla sua media
 function wbHTML(aid,aCi){
   const now=Date.now();
