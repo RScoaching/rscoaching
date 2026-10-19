@@ -239,6 +239,8 @@ window.SIDEBAR_CSS = `
   #sb-sidebar .sb-top{padding:20px 14px 14px}
   #sb-sidebar .nav-s{padding:10px 9px 0}
   #sb-sidebar .nav-item{white-space:nowrap}
+  /* barra ridotta: il logo sta dentro i 58 px (prima la scritta invisibile lo spostava e restava tagliato a meta') */
+  #sb-sidebar .rs-logo.rs-v2{align-items:flex-start}#sb-sidebar .rs-logo.rs-v2 .rs-img{margin:0}
   #sb-sidebar .rs-word,#sb-sidebar .logo-sub,#sb-sidebar .nav-lbl,#sb-sidebar .nav-lbl-text,#sb-sidebar .sb-switch span,#sb-sidebar .sb-cred{opacity:0;transition:opacity .12s ease;white-space:nowrap}
   #sb-sidebar:hover .rs-word,#sb-sidebar:hover .logo-sub,#sb-sidebar:hover .nav-lbl,#sb-sidebar:hover .nav-lbl-text,#sb-sidebar:hover .sb-switch span,#sb-sidebar:hover .sb-cred,
   #sb-sidebar:focus-within .rs-word,#sb-sidebar:focus-within .logo-sub,#sb-sidebar:focus-within .nav-lbl,#sb-sidebar:focus-within .nav-lbl-text,#sb-sidebar:focus-within .sb-switch span,#sb-sidebar:focus-within .sb-cred{opacity:1;transition-delay:.14s}

@@ -1225,6 +1225,35 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 .pz-mr em{display:block;font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
 .pz-mr.piu{color:var(--muted)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+/* Prevenzione: foto grandi, maniglia per trascinare, linea dove cade, foto a tutto schermo */
+.pzph-row{grid-template-columns:20px 96px 1fr auto!important;gap:12px!important;padding:8px 10px!important}
+.pzph-row.in{grid-template-columns:0 96px 1fr auto!important}
+.pzph-row img,.pzph-row>i{width:96px!important;height:72px!important;border-radius:9px!important;cursor:zoom-in}
+.pzph-li{grid-template-columns:84px 1fr auto!important;gap:12px!important;padding:8px 10px!important}
+.pzph-li img,.pzph-li>i{width:84px!important;height:63px!important;border-radius:8px!important;cursor:zoom-in}
+.pzph-li b{font-size:13.5px!important}.pzph-li em{font-size:12px!important}
+.pzph-grip{color:rgba(255,255,255,.35);cursor:grab;display:flex;align-items:center;justify-content:center}.pzph-grip svg{width:16px;height:16px}
+.pzph-row[draggable]:hover .pzph-grip{color:rgba(255,255,255,.75)}
+.pzph-row.trascina{opacity:.4}
+.pzph-row.sopra{box-shadow:0 -3px 0 0 #FF6A2E}.pzph-row.sotto{box-shadow:0 3px 0 0 #FF6A2E}
+.pzph-pills button{font-size:12px!important;padding:5px 11px!important}
+.pzph-sh b{font-size:15px!important}.pzph-sh span{font-size:13px!important}
+#pzph-righe{max-height:520px!important}.pzph-ll{max-height:560px!important}
+.pzph-zoom{position:fixed;inset:0;z-index:5;background:rgba(8,6,6,.86);display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:24px}
+.pzph-zoom figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(900px,92vw)}
+.pzph-zoom img{max-width:100%;max-height:78vh;border-radius:12px;display:block}
+.pzph-zoom figcaption{font:600 15px Inter,sans-serif;color:#F4F1EC}
+
+/* leggibilita' del Builder: niente testi sotto gli 11,5 px, intestazioni della tabella senza maiuscolo spaziato,
+   e l'ultima riga della tabella (campo rapido e tasti) va a capo invece di uscire dallo schermo a destra */
+.pz-t th{font-size:11.5px!important;letter-spacing:0!important;text-transform:none!important;font-weight:600!important}
+.pz-st{font-size:11.5px!important;letter-spacing:0!important;text-transform:none!important}
+.pz-gr-x{font-size:11.5px!important}
+.pz-chip2.pz-cal .pz-ft{font-size:11.5px!important}
+.pz-t tr.add td{white-space:normal!important}
+.pz-t tr.add td:last-child{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pz-t tr.add .pz-q{flex:1 1 320px;width:auto!important;min-width:0}
 </style>
 <script>
 // Inietta CSS sidebar prima del render
@@ -8662,10 +8691,11 @@ window.pzPrevProg=function(kSel){
   pzPhRender();
   if(typeof d.showModal==='function'&&!d.open)d.showModal();else d.setAttribute('open','');
 };
-function pzPhFoto(e){return e&&e.k?`<img src="prev/${stEsc(e.k)}.jpg" alt="" loading="lazy" onerror="this.replaceWith(document.createElement('i'))">`:'<i></i>';}
+function pzPhFoto(e){return e&&e.k?`<img src="prev/${stEsc(e.k)}.jpg" alt="${stEsc(e.n||'')}" loading="lazy" data-zoom="1" title="Clic per ingrandire" onerror="this.replaceWith(document.createElement('i'))">`:'<i></i>';}
 function pzPhRiga(e,i){
   const inp=(f,v,w,ph)=>`<input class="pz-in" data-ph-f="${f}" data-ph-i="${i}" value="${stEsc(v==null?'':v)}" placeholder="${ph}" style="${w?'width:'+w+'px':''}">`;
-  return `<div class="pzph-row${i==='intro'?' in':''}">${pzPhFoto(e)}<div class="pzph-rc">
+  const grip=i==='intro'?'<span></span>':`<span class="pzph-grip" title="Trascina per spostare" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>`;
+  return `<div class="pzph-row${i==='intro'?' in':''}"${i==='intro'?'':` draggable="true" data-row="${i}"`}>${grip}${pzPhFoto(e)}<div class="pzph-rc">
     <div class="pzph-l1">${inp('n',e.n,0,'esercizio')}</div>
     <div class="pzph-l2">${inp('s',e.s,46,'serie')}<span>x</span>${inp('r',e.r,96,'rip. o tempo')}${inp('c',e.c,0,'nota')}</div></div>
     <div class="pzph-bt">${i!=='intro'?`<button type="button" onclick="pzPhSposta(${i},-1)" aria-label="Su">&#8593;</button><button type="button" onclick="pzPhSposta(${i},1)" aria-label="Giu'">&#8595;</button>`:''}<button type="button" onclick="pzPhTogli('${i}')" aria-label="Togli">&#215;</button></div></div>`;
@@ -8705,7 +8735,31 @@ function pzPhRender(){
     if(f==='fine'){x.fine=el.value;return;}const e=i==='intro'?x.intro:x.es[+i];if(!e)return;e[f]=f==='s'?(parseInt(el.value)||el.value):el.value;
     if(f==='n'){const m=pzPhLib().find(l=>l.n.toLowerCase()===el.value.trim().toLowerCase());e.k=m?m.k:e.k;}
     const mn=document.getElementById('pzph-min');if(mn)mn.textContent="~"+window.RSPrehab.minuti(x)+"' · "+x.es.length+' esercizi';}));
-  pzPhLista();
+  pzPhLista();pzPhDnd(d);
+}
+/* Trascina e rilascia: le righe della scheda si spostano tenendo la maniglia (o la riga), gli esercizi
+   della libreria si portano nel punto giusto della scheda. Una linea arancio dice dove finiscono.
+   Un clic sulla foto la apre grande. */
+let pzPhDrag=null;
+function pzPhDove(box,y){const R=[...box.querySelectorAll('.pzph-row[data-row]')];for(let k=0;k<R.length;k++){const r=R[k].getBoundingClientRect();if(y<r.top+r.height/2)return k;}return R.length;}
+function pzPhSegna(box,k){box.querySelectorAll('.pzph-row').forEach(r=>r.classList.remove('sopra','sotto'));const R=[...box.querySelectorAll('.pzph-row[data-row]')];
+  if(!R.length)return;if(k<R.length)R[k].classList.add('sopra');else R[R.length-1].classList.add('sotto');}
+function pzPhDnd(d){
+  const box=d.querySelector('#pzph-righe');if(!box)return;
+  box.addEventListener('dragstart',ev=>{const r=ev.target.closest('.pzph-row[data-row]');if(!r||ev.target.closest('input'))return;pzPhDrag={da:'riga',i:+r.dataset.row};ev.dataTransfer.effectAllowed='move';try{ev.dataTransfer.setData('text/plain','riga');}catch(e){}r.classList.add('trascina');});
+  box.addEventListener('dragend',()=>{box.querySelectorAll('.pzph-row').forEach(r=>r.classList.remove('trascina','sopra','sotto'));});
+  box.addEventListener('dragover',ev=>{if(!pzPhDrag)return;ev.preventDefault();ev.dataTransfer.dropEffect=pzPhDrag.da==='riga'?'move':'copy';pzPhSegna(box,pzPhDove(box,ev.clientY));});
+  box.addEventListener('dragleave',ev=>{if(!box.contains(ev.relatedTarget))box.querySelectorAll('.pzph-row').forEach(r=>r.classList.remove('sopra','sotto'));});
+  box.addEventListener('drop',ev=>{if(!pzPhDrag)return;ev.preventDefault();const a=pzPh[pzPhT].es;let k=pzPhDove(box,ev.clientY);
+    if(pzPhDrag.da==='riga'){const [x]=a.splice(pzPhDrag.i,1);if(k>pzPhDrag.i)k--;a.splice(k,0,x);}
+    else if(pzPhDrag.e){const e=pzPhDrag.e;a.splice(k,0,{n:e.n,k:e.k||null,s:e.s||2,r:e.r||'',c:e.c||''});}
+    pzPhDrag=null;pzPhRender();});
+  const ll=d.querySelector('#pzph-ll');
+  if(ll&&!ll._dnd){ll._dnd=1;ll.addEventListener('dragstart',ev=>{const b=ev.target.closest('[data-li]');if(!b||!ll._L)return;pzPhDrag={da:'lib',e:ll._L[+b.dataset.li]};ev.dataTransfer.effectAllowed='copy';try{ev.dataTransfer.setData('text/plain','lib');}catch(e){}});
+    ll.addEventListener('dragend',()=>{pzPhDrag=null;});}
+  if(!d._zoom){d._zoom=1;d.addEventListener('click',ev=>{const im=ev.target.closest('img[data-zoom]');if(!im)return;ev.preventDefault();ev.stopPropagation();
+    let z=d.querySelector('.pzph-zoom');if(!z){z=document.createElement('div');z.className='pzph-zoom';z.addEventListener('click',()=>z.remove());}
+    z.innerHTML=`<figure><img src="${im.src}" alt="${stEsc(im.alt||'')}"><figcaption>${stEsc(im.alt||'')}</figcaption></figure>`;d.appendChild(z);},true);}
 }
 window.pzPhCerca=function(v){pzPhQ=v;pzPhLista();};
 window.pzPhFiltro=function(q,k){if(q==='z')pzPhZ=k;else pzPhTi=k;pzPhLibFiltri();};
@@ -8718,9 +8772,10 @@ window.pzPhLista=function(){
   const el=document.getElementById('pzph-ll');if(!el)return;const q=pzPhNorm(pzPhQ);
   const L=pzPhLib().filter(e=>(pzPhZ==='all'||(e.z||[]).includes(pzPhZ))&&(pzPhTi==='all'||e.t===pzPhTi)&&(!q||pzPhNorm(e.n).includes(q)));
   const gia=new Set(pzPh[pzPhT].es.map(e=>pzPhNorm(e.n)));
-  el.innerHTML=(L.length?'':'<p class="pzs-n">Nessun esercizio con questi filtri.</p>')+L.slice(0,120).map((e,i)=>`<button type="button" class="pzph-li${gia.has(pzPhNorm(e.n))?' gia':''}" data-li="${i}">${pzPhFoto(e)}<span><b>${stEsc(e.n)}</b><em>${e.cons?'consigliato':stEsc((e.z||[]).map(z=>PZ_PH_ZONE[z]||z).join(', '))}${e.t?' &#183; '+stEsc(PZ_PH_TIPO[e.t]||e.t):''}</em></span><i>${stEsc((e.s||2)+'x'+(e.r||''))}</i></button>`).join('')+(L.length>120?`<p class="pzs-n">e altri ${L.length-120}: cerca per nome</p>`:'');
+  el.innerHTML=(L.length?'':'<p class="pzs-n">Nessun esercizio con questi filtri.</p>')+L.slice(0,120).map((e,i)=>`<button type="button" class="pzph-li${gia.has(pzPhNorm(e.n))?' gia':''}" data-li="${i}" draggable="true" title="Clic per aggiungere in fondo, oppure trascina nel punto giusto">${pzPhFoto(e)}<span><b>${stEsc(e.n)}</b><em>${e.cons?'consigliato':stEsc((e.z||[]).map(z=>PZ_PH_ZONE[z]||z).join(', '))}${e.t?' &#183; '+stEsc(PZ_PH_TIPO[e.t]||e.t):''}</em></span><i>${stEsc((e.s||2)+'x'+(e.r||''))}</i></button>`).join('')+(L.length>120?`<p class="pzs-n">e altri ${L.length-120}: cerca per nome</p>`:'');
   el._L=L;
   el.onclick=ev=>{const b=ev.target.closest('[data-li]');if(!b)return;const e=el._L[+b.dataset.li];if(!e)return;
+    if(ev.target.closest('img[data-zoom]'))return;
     pzPh[pzPhT].es.push({n:e.n,k:e.k||null,s:e.s||2,r:e.r||'',c:e.c||''});pzPhRender();
     setTimeout(()=>{const r=document.getElementById('pzph-righe');if(r)r.scrollTop=r.scrollHeight;},30);};
 };
