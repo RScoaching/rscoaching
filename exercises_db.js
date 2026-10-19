@@ -840,6 +840,7 @@ if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWo
         return self.registration.showNotification('Recupero finito', {
           body: m.dopo ? 'Si riparte: ' + m.dopo : 'Si riparte',
           tag: 'rs-rec', renotify: true, vibrate: [220, 100, 220, 100, 320],
+          icon: m.icon || undefined, badge: m.icon || undefined,
           data: { url: m.url || '' }
         });
       });
