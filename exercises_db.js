@@ -10,6 +10,8 @@
 // ============================================================
 
 (function(){
+// lo stesso file fa anche da service worker dell'app atleta (vedi in fondo): li' non c'e' window
+var window = typeof document !== 'undefined' ? globalThis : self;
 
 var _db = [
 
@@ -812,3 +814,44 @@ window.getExBycat = function(cat){
 };
 
 })();
+
+// ============================================================
+// SERVICE WORKER DELL'APP ATLETA (recupero visibile a schermo bloccato)
+// La lista dei file pubblicati e' fissa, percio' il service worker vive in questo file, che e' gia'
+// online e sta nella cartella principale (scope di tutto il sito). Le pagine lo registrano con
+// navigator.serviceWorker.register('../exercises_db.js', {scope:'../'}). Non intercetta la rete
+// (niente fetch, niente cache): mostra le notifiche del recupero e riapre la seduta al tocco.
+// Messaggi dalla seduta: {tipo:'rec', fine:ms, dopo:testo, url} e {tipo:'stop'}.
+// ============================================================
+if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
+  var _recId = 0;
+  self.addEventListener('install', function(e){ self.skipWaiting(); });
+  self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
+  self.addEventListener('message', function(e){
+    var m = e.data || {};
+    if (m.tipo === 'stop') { _recId++; return; }
+    if (m.tipo !== 'rec' || !m.fine) return;
+    var id = ++_recId, attesa = Math.max(0, m.fine - Date.now());
+    // la fine del recupero: se la seduta e' in vista suona lei, se no arriva la notifica
+    e.waitUntil(new Promise(function(r){ setTimeout(r, attesa); }).then(function(){
+      if (id !== _recId) return;
+      return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
+        if (L.some(function(c){ return c.visibilityState === 'visible' && c.focused; })) return;
+        return self.registration.showNotification('Recupero finito', {
+          body: m.dopo ? 'Si riparte: ' + m.dopo : 'Si riparte',
+          tag: 'rs-rec', renotify: true, vibrate: [220, 100, 220, 100, 320],
+          data: { url: m.url || '' }
+        });
+      });
+    }));
+  });
+  self.addEventListener('notificationclick', function(e){
+    e.notification.close();
+    var url = e.notification.data && e.notification.data.url;
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
+      var c = L.find(function(x){ return /session\.html/.test(x.url); }) || L[0];
+      if (c) return c.focus();
+      if (url) return self.clients.openWindow(url);
+    }));
+  });
+}

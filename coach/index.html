@@ -1590,6 +1590,12 @@ input,select,textarea{border-radius:10px}
 .sp7{margin-top:6px}.sp7 p{margin:0;font-size:12.5px;line-height:1.45;color:var(--text)}
 .sp7-b{appearance:none;margin-top:6px;border:1px solid var(--border2,rgba(255,255,255,.1));background:transparent;color:var(--orange2,#FF8A57);font:600 12px inherit;font-family:inherit;border-radius:8px;padding:6px 10px;cursor:pointer}
 .sp7-img{display:block;margin-top:6px;max-width:260px;width:100%;border-radius:10px}
+.db-post{margin-top:6px}.db-post q{display:block;font-size:12.5px;line-height:1.45;color:var(--white);quotes:none}
+.db-post-az{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.db-post-az button{appearance:none;border:1px solid rgba(255,255,255,.12);background:transparent;color:var(--text);font:600 11.5px inherit;font-family:inherit;border-radius:999px;padding:5px 10px;cursor:pointer;transition:color .15s ease,border-color .15s ease}
+.db-post-az button:hover{color:var(--white);border-color:rgba(255,255,255,.25)}
+.db-post-az button.ok{color:#86EFAC;border-color:rgba(134,239,172,.4)}
+.db-post .sp7-img{max-width:220px}
 </style>
 </head>
 <body>
@@ -2303,7 +2309,7 @@ function dbFeed(ids){
   const el=document.getElementById('dash-feed');if(!el)return;const lim=Date.now()-48*3600e3,ev=[];
   ids.forEach(id=>{const n=String(athletes[id].name||'').split(' ')[0];
     const logs=Object.values(sessionLogs[id]||{}).filter(l=>l&&l.ts>lim);
-    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),go:`dbApri('${id}')`});});
+    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,post:l.post&&(l.post.testo||l.post.foto)?l.post:null,b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),go:`dbApri('${id}')`});});
     Object.values(checkins[id]||{}).forEach(c=>{if(!c||!c.ts||c.ts<lim)return;const basso=(+c.fatica>=7)||(+c.sonno&&+c.sonno<=4)||(+c.doms>=4);ev.push({ts:c.ts,t:'ci'+(basso?' basso':''),id,b:athletes[id].name,p:'Check-in'+(basso?': '+[+c.fatica>=7?'fatica '+c.fatica:'',+c.sonno<=4&&+c.sonno?'sonno '+c.sonno:'',+c.doms>=4?'dolori '+c.doms:''].filter(Boolean).join(', '):' nella norma'),go:`dbApri('${id}')`});});
     Object.entries(videoData[id]||{}).forEach(([vid,v])=>{if(v&&v.ts>lim)ev.push({ts:v.ts,t:'video',id,b:athletes[id].name,p:'Video: '+(v.esercizio||'esecuzione')+(v.stato==='visto'?' (corretto)':''),go:`dbApri('${id}');setTimeout(()=>vrApri('${id}','${vid}'),300)`});});
     Object.values((chatData[id]||{}).messages||{}).forEach(m=>{if(m&&m.ts>lim&&m.from==='athlete'&&!m.video)ev.push({ts:m.ts,t:'msg',id,b:athletes[id].name,p:m.text||'',go:`dbChat('${id}')`});});
@@ -2311,9 +2317,20 @@ function dbFeed(ids){
   ev.sort((a,b)=>b.ts-a.ts);
   const IC={seduta:'pesi',ci:'questionari',video:'video',msg:'chat'};
   const fa=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<60?m+' min':m<1440?Math.round(m/60)+' h':'ieri';};
-  el.innerHTML=ev.length?`<div class="db-feed">${ev.slice(0,12).map(e=>`<div class="db-fi t-${e.t}" role="button" tabindex="0" onclick="${e.go}"><span class="ic">${dIco(IC[e.t.split(' ')[0]])}</span><div><b>${dEsc(e.b)}</b><p>${dEsc(e.p)}</p></div><time>${fa(e.ts)}</time></div>`).join('')}</div>`
+  el.innerHTML=ev.length?`<div class="db-feed">${ev.slice(0,12).map(e=>`<div class="db-fi t-${e.t}" role="button" tabindex="0" onclick="${e.go}"><span class="ic">${dIco(IC[e.t.split(' ')[0]])}</span><div><b>${dEsc(e.b)}</b><p>${dEsc(e.p)}</p>${e.post?dbPostHtml(e):''}</div><time>${fa(e.ts)}</time></div>`).join('')}</div>`
     :`<div class="d-vuoto">${dIco('sedute')}<b>Niente nelle ultime 48 ore</b><span>Qui arrivano sedute, check-in, video e messaggi appena l'atleta li manda.</span></div>`;
 }
+/* Seduta con foto o commento dell'atleta (fine allenamento nell'app): il commento nel feed, la foto
+   a richiesta, e due risposte pronte che vanno in chat. Il tocco sulla riga resta quello di prima. */
+function dbPostHtml(e){
+  const st='event.stopPropagation()';
+  return `<div class="db-post">${e.post.testo?`<q>${dEsc(e.post.testo)}</q>`:''}<div class="db-post-az">${e.post.foto?`<button type="button" onclick="${st};spFoto('${e.id}',${+e.ts},this)">Vedi la foto</button>`:''}${['Ottimo lavoro','Bella seduta, continua cosi\''].map(t=>`<button type="button" onclick="${st};dbRisp('${e.id}',this)" data-t="${dEsc(t)}">${dEsc(t)}</button>`).join('')}<button type="button" onclick="${st};dbChat('${e.id}')">Scrivi</button></div></div>`;
+}
+window.dbRisp=async function(id,b){
+  const text=b.dataset.t;if(!text)return;b.disabled=true;
+  try{await push(ref(db,`chat/${id}/messages`),{ts:Date.now(),text,from:'coach',fromName:'Raoul (Coach)',read:false});b.textContent='Inviato';b.classList.add('ok');}
+  catch(e){b.disabled=false;showToast('Non inviato: controlla la connessione');}
+};
 // gare dei programmi assegnati nei prossimi 4 mesi, la piu' vicina prima
 function dbGare(ids){
   const el=document.getElementById('dash-gare'),card=document.getElementById('dash-gare-card');if(!el||!card)return;

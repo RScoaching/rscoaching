@@ -1218,6 +1218,11 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 #post7-t{width:100%;box-sizing:border-box;min-height:64px;border-radius:12px;border:1px solid rgba(255,214,196,.12);background:rgba(255,214,196,.05);color:var(--white,#F4F1EC);font:400 16px/1.4 var(--ff);padding:10px 12px;resize:vertical}
 .post7-salva{appearance:none;border:0;border-radius:12px;min-height:46px;background:rgba(255,106,46,.14);color:var(--primary2,#FF8A57);font:600 15px var(--ff);cursor:pointer}
 .riapri7{appearance:none;display:block;margin:14px auto 4px;border:0;background:none;color:var(--muted,#B5ABA4);font:500 14px var(--ff);text-decoration:underline;text-underline-offset:3px;min-height:44px;cursor:pointer}
+
+.rest-noti{margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;max-width:320px;text-align:center;font:400 13px/1.4 var(--ff);color:#C9B8AE}
+.rest-noti[hidden]{display:none}
+.rest-noti button{appearance:none;border:1px solid rgba(255,214,196,.18);background:transparent;color:var(--white,#F4F1EC);font:600 13px var(--ff);border-radius:999px;padding:0 14px;min-height:36px;cursor:pointer}
+.rest-noti button.si{background:var(--primary,#FF6A2E);border-color:var(--primary,#FF6A2E);color:#1A0B05}
 </style>
 </head>
 <body>
@@ -1259,6 +1264,7 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
     </div>
     <div class="rest-hint" id="rest-hint"></div>
     <button class="rest-skip" onclick="event.stopPropagation();skipRest()">Riprendi ora</button>
+    <div class="rest-noti" id="rest-noti" hidden></div>
   </div>
   <!-- Mini pill content -->
   <div class="rest-mini-cnt">
@@ -2642,6 +2648,41 @@ function checkPR(ex,ei,s){
   }
 }
 
+/* ── RECUPERO A SCHERMO BLOCCATO
+   Il service worker e' exercises_db.js (lista dei file pubblicati fissa: vedi in fondo a quel file).
+   All'inizio del recupero una notifica fissa con l'ora di ripresa (si legge a schermo bloccato e nella
+   tendina); alla fine, se la pagina non e' in vista, il service worker manda "Recupero finito" con
+   vibrazione anche quando il telefono ha messo in pausa la pagina. Su iPhone le notifiche delle pagine
+   web ci sono solo con l'app aggiunta alla schermata Home. */
+let _swReg=null,_recDopo='';
+if('serviceWorker' in navigator){navigator.serviceWorker.register('../exercises_db.js',{scope:'../'}).then(r=>{_swReg=r;}).catch(()=>{});}
+const _iosNoHome=/iPhone|iPad|iPod/.test(navigator.userAgent)&&!(window.navigator.standalone||matchMedia('(display-mode: standalone)').matches);
+function recHm(ms){const d=new Date(ms);return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function recProposta(){
+  const b=document.getElementById('rest-noti');if(!b)return;
+  const perm=typeof Notification!=='undefined'?Notification.permission:'no';
+  let rifiutato=false;try{rifiutato=localStorage.getItem('rs_rec_noti_no')==='1';}catch(e){}
+  if(perm==='granted'||rifiutato){b.hidden=true;return;}
+  b.hidden=false;
+  if(_iosNoHome||perm==='no'){b.innerHTML='<span>Per vedere il recupero a schermo bloccato aggiungi l\'app alla schermata Home (Condividi, Aggiungi alla schermata Home).</span><button type="button" onclick="event.stopPropagation();recNo()">Ok</button>';return;}
+  if(perm==='denied'){b.innerHTML='<span>Notifiche bloccate: si riattivano dalle impostazioni del browser.</span><button type="button" onclick="event.stopPropagation();recNo()">Ok</button>';return;}
+  b.innerHTML='<span>Vuoi il recupero anche a schermo bloccato?</span><button type="button" class="si" onclick="event.stopPropagation();recSi()">Attiva</button><button type="button" onclick="event.stopPropagation();recNo()">No</button>';
+}
+window.recNo=()=>{try{localStorage.setItem('rs_rec_noti_no','1');}catch(e){}const b=document.getElementById('rest-noti');if(b)b.hidden=true;};
+window.recSi=async()=>{try{const p=await Notification.requestPermission();if(p==='granted'){toast('Fatto: il recupero si vede anche a schermo bloccato');recNoti(_recDopo);}}catch(e){}recProposta();};
+async function recNoti(dopo){
+  _recDopo=dopo||'';recProposta();
+  if(!restFine||typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  try{const reg=_swReg||await navigator.serviceWorker.ready;if(!reg)return;
+    const corto=String(dopo||'').replace(/<[^>]+>/g,'').trim();
+    await reg.showNotification('Recupero: riprendi alle '+recHm(restFine),{body:(corto?'Dopo: '+corto:'Seduta in corso')+' · tocca per tornare',tag:'rs-rec',renotify:false,silent:true,requireInteraction:true,timestamp:restFine,data:{url:location.href}});
+    if(reg.active)reg.active.postMessage({tipo:'rec',fine:restFine,dopo:corto,url:location.href});
+  }catch(e){}
+}
+async function recStop(){
+  try{const reg=_swReg;if(!reg)return;if(reg.active)reg.active.postMessage({tipo:'stop'});
+    const L=await reg.getNotifications({tag:'rs-rec'});L.forEach(n=>n.close());}catch(e){}
+}
 /* Recupero sull'ora di fine: quando il telefono sospende la pagina (schermo spento, altra app) il tempo
    continua, e al rientro il conto e' giusto. Il tempo che manca sta anche nel titolo della scheda
    (si vede nel selettore delle app). Alla fine: tre bip e una vibrazione. */
@@ -2721,6 +2762,7 @@ function startRest(secs,hint){
   updateRest();
   clearInterval(restIv);
   restIv=setInterval(restTick,250);
+  recNoti(hint);
   // Auto-minimize after 3 seconds
   clearTimeout(restMinTmr);
   restMinTmr=setTimeout(()=>{
@@ -2754,10 +2796,10 @@ function expandRest(){
   }
 }
 // il recupero si allunga o si accorcia di 15 secondi senza ripartire da capo
-window.restAdd=d=>{restLeft=Math.max(5,restLeft+d);restFine=Date.now()+restLeft*1000;if(restLeft>restTotal)restTotal=restLeft;updateRest();
+window.restAdd=d=>{restLeft=Math.max(5,restLeft+d);restFine=Date.now()+restLeft*1000;if(restLeft>restTotal)restTotal=restLeft;updateRest();recNoti(_recDopo);
   clearTimeout(restMinTmr);restMinTmr=setTimeout(()=>{const o=document.getElementById('rest-ov');if(!o.classList.contains('h'))o.classList.add('mini');},6000);};
 window.skipRest=()=>{
-  clearInterval(restIv);clearTimeout(restMinTmr);restFine=0;document.title=_titolo0;
+  clearInterval(restIv);clearTimeout(restMinTmr);restFine=0;document.title=_titolo0;recStop();
   const ov=document.getElementById('rest-ov');
   ov.classList.add('h');ov.classList.remove('mini');
 };
