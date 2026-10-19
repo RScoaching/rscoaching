@@ -2875,7 +2875,7 @@ window.openModal=function(type,...args){
             <tbody id="sr-list"></tbody>
           </table>
         </div>
-        <button type="button" class="add-sr-btn" onclick="addSetRow()">+ Aggiungi riga set</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="add-sr-btn" onclick="addSetRow()">+ Aggiungi riga set</button><button type="button" class="add-sr-btn" onclick="addWarmRow()" title="Serie leggere prima di quelle di lavoro: l'atleta le vede col carico suggerito (50-80% del lavoro)">+ Serie di attivazione</button></div>
       </div>
       <div class="grid3">
         <div class="field"><label>% 1RM</label><input type="number" id="m-pct" value="${e.pct||''}" placeholder="80" min="0" max="120"></div>
@@ -3356,6 +3356,12 @@ function _attachSrNavigation(){
     }
   });
 }
+// serie di attivazione: un gruppo W davanti alle serie di lavoro (2 da 5); se c'e' gia', una serie in piu'
+window.addWarmRow=function(){
+  const R=window._setRows||[];
+  if(R[0]&&R[0].type==='W')R[0].sets=(+R[0].sets||1)+1;else R.unshift({type:'W',sets:2,reps:'5'});
+  window._setRows=R;renderSetRowsList();
+};
 window.addSetRow=function(){
   const last=window._setRows[window._setRows.length-1]||{};
   window._setRows.push({type:'',sets:last.sets||3,reps:''});
@@ -5430,7 +5436,7 @@ function stPrescr0(I,w,ruolo,name){
   const run=I.obiettivo==='gara';
   const fr=/Costruzione|Sviluppo/.test(f)?1:/Specifico|Consolidamento|Taper/.test(f)?2:0;
   if(ruolo==='pliom')return scarico?{sets:2,reps:'4',rest:'90"',cue:'massima qualita\', niente fatica'}:{sets:run&&fr===2&&avz?4:3,reps:L==='zero'?'6':'5',rest:'90"',cue:'contatti brevi, massima reattivita\''};
-  if(ruolo==='pow')return scarico?{sets:2,reps:'3',rest:'2\'',cue:'veloce'}:{sets:4,reps:'3',rest:'2\'',cue:'esplosivo, carico che non rallenta'};
+  if(ruolo==='pow')return scarico?{sets:2,reps:'3',rest:'2\''}:{sets:4,reps:'3',rest:'2\'',cue:'esplosivo, carico che non rallenta'};
   if(ruolo==='core')return {sets:scarico?2:3,reps:L==='zero'?'20-30"':'30-45"',rest:'45"'};
   // alzata principale a una gamba: ripetizioni e RPE, la percentuale del massimale non ha senso
   if(ruolo==='mainU'){
@@ -5470,8 +5476,8 @@ function stPrescr0(I,w,ruolo,name){
     // il rientro sale di carico nella fase finale: da 8-10 a 5-6 ripetizioni
     const rs=stRtpIdx(I,w);
     const reps=L==='zero'&&!rin?'10-12':rin&&rs>=2?'5-6':rin&&rs===1?'6-8':est&&fInt?'6-8':est&&fDef?'10-12':'8-10';
-    return scarico?{sets:2,reps,rpe:'5',rest:'90"',cue:'scarico: tecnica pulita'}
-      :{sets:L==='zero'?2+Math.min(1,pp):3,reps,rpe:String(Math.min(8,6+pp)),rest:'2\'',cue:rin?'dolore durante e il giorno dopo non oltre 3 su 10':'doppia progressione: arrivato in cima alle ripetizioni a questo RPE, aggiungi carico'};
+    return scarico?{sets:2,reps,rpe:'5',rest:'90"'}
+      :{sets:L==='zero'?2+Math.min(1,pp):3,reps,rpe:String(Math.min(8,6+pp)),rest:'2\'',cue:rin?'dolore durante e il giorno dopo non oltre 3 su 10':''};
   }
   if(est)return scarico?{sets:2,reps:'8',rpe:'6',rest:'2\''}:fInt?{sets:4,reps:'6-8',rpe:pp>=1?'9':'8',rest:'2-3\''}:fDef?{sets:3,reps:'8-10',rpe:'8',rest:'90"'}:{sets:3+Math.min(1,pp),reps:'8-10',rpe:String(7+Math.min(1,pp)),rest:'2\''};
   const piu=L==='avanz'?2.5:0;
@@ -5489,7 +5495,7 @@ function stPrescr0(I,w,ruolo,name){
   else if(/Mantenimento/.test(ff))tab=[[3,'4',80],[3,'3',82.5],[2,'3',82.5]];
   else if(/Potenza|Specifico/.test(ff))tab=[[4,'4',80],[4,'3',82.5],[3,'3',85]];
   else tab=[[4,'3',85],[3,'2',87.5],[3,'1-2',90]];
-  if(scarico)return {sets:3,reps:'5',pct:String(60+piu),rest:'2\'',cue:'scarico'};
+  if(scarico)return {sets:3,reps:'5',pct:String(60+piu),rest:'2\''};
   const r=tab[Math.min(tab.length-1,idx)];
   const pct=Math.min(92.5,Math.round((r[2]+piu+blk*1.25)/2.5)*2.5);
   return {sets:r[0],reps:r[1],pct:String(pct),rest:ruolo==='main'?'2-3\'':'2\''};
@@ -6014,7 +6020,7 @@ function stRtp(I,w,k0,nR){
       return {name:wk?'Corri e cammina':'Corsa continua',type:'corsa',notes:'Fase 2 di 4: '+nomi[1]+'. Si passa al gradino dopo solo se il giorno dopo il dolore non e\' salito.',
         corsaFasi:[stFase('Attivazione','Z1','5\'','','camminata veloce'),f,stFase('Defaticamento','Z1','5\'','','camminata')],exercises:{}};
     }
-    const e=[{name:'A-Skip',sets:2,reps:'20 m',cue:'tecnica di corsa'},{name:'B-Skip',sets:2,reps:'20 m',cue:'tecnica di corsa'},{name:stEs(I,'pogo'),sets:3,reps:'10',rest:'60"',cue:'a due piedi, atterraggi silenziosi'}];
+    const e=[{name:'A-Skip',sets:2,reps:'20 m'},{name:'B-Skip',sets:2,reps:'20 m'},{name:stEs(I,'pogo'),sets:3,reps:'10',rest:'60"',cue:'a due piedi, atterraggi silenziosi'}];
     if(p>=1)e.push({name:'Hop monopodale sul posto',sets:2,reps:'10 per lato',rest:'60"',cue:'prima la gamba sana, poi la lesa: stessa qualita\''});
     e.push({name:'Corsa progressiva 60m',sets:1,reps:String(4+Math.min(2,p)),rest:'camminata di ritorno',cue:(60+5*Math.min(2,p))+'% della velocita\' massima, sciolta'});
     return {name:'Tecnica di corsa e salti',type:'sprint',notes:'Fase 2 di 4: '+nomi[1]+'.',exercises:Object.fromEntries(e.map((x,i)=>['e'+i,Object.assign(x,{order:i})]))};
@@ -6669,6 +6675,12 @@ function stProposta(I){
    scendono e carico che sale; dall'87,5% anche una singola vicina al carico. Non stancano
    e preparano articolazioni e sistema nervoso al carico vero. */
 const ST_PESANTI=/squat|stacco|deadlift|bench|panca|press|thrust|clean|row|rematore|trazioni|pull ?up|chin|trap bar|rdl|good morning|split/i;
+/* L'avvicinamento diventa serie di attivazione vere (tipo W) davanti a quelle di lavoro: l'atleta le
+   vede nella scheda col carico suggerito (50, 65, 80% del lavoro) invece di leggerle in una nota. */
+function stAvvSerie(e){
+  const t=stAvvicinamento(e);if(!t)return [];
+  if(/1 all'80%/.test(t))return [5,3,1];if(/5 e 3|3 al 70%/.test(t))return [5,3];return [5];
+}
 function stAvvicinamento(e){
   const pct=parseFloat(String(e.pct||'').replace(',','.'))||0,rpe=parseFloat(String(e.rpe||'').split('-').pop().replace(',','.'))||0;
   const reps=Math.max(...String(e.reps||'').split(/[^\d]+/).map(Number).filter(x=>x>0),0);
@@ -6822,7 +6834,7 @@ function stCostruisci(I,P){
       // nella settimana del test finale le altre sedute di forza scaricano
       // la seduta che cade il giorno dopo la partita diventa di recupero: i salti il giorno dopo 90 minuti di gioco fanno solo danni
       if(g.md==='MD-6'&&g.ruolo==='SPORT_P')g=Object.assign({},g,{ruolo:'SPORT_R',nome:'Recupero e parte alta',mdNota:true});
-      const corpo=stCorpo(I,g,conTest&&fine&&w.tipo==='carico'?Object.assign({},w,{tipo:'scarico'}):w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;const av=stAvvicinamento(e);if(av)e.cue=av+(e.cue?'. '+e.cue:'');if(['main','main2','mainU','pow','pliom'].includes(x.ruolo))e._p=1;return e;});const sessNote=[];
+      const corpo=stCorpo(I,g,conTest&&fine&&w.tipo==='carico'?Object.assign({},w,{tipo:'scarico'}):w).map(x=>{const e={name:x.name,sets:x.pr.sets,reps:x.pr.reps};if(x.pr.pct)e.pct=x.pr.pct;if(x.pr.rpe)e.rpe=x.pr.rpe;if(x.pr.rest)e.rest=x.pr.rest;if(x.pr.cue)e.cue=x.pr.cue;const av=stAvvSerie(e);if(av.length)e.setRows=av.map(r=>({type:'W',sets:1,reps:String(r)})).concat([{type:'',sets:e.sets,reps:e.reps}]);if(['main','main2','mainU','pow','pliom'].includes(x.ruolo))e._p=1;return e;});const sessNote=[];
       if(['MD-2','MD-1'].includes(g.md)&&corpo.some(e=>e._p&&/jump|hop|bound|box|salt|skip/i.test(e.name))){corpo.forEach(e=>{if(/jump|hop|bound|box|salt/i.test(e.name)){e.sets=Math.min(+e.sets||3,3);const r=parseInt(e.reps);if(r>5)e.reps='5';}});sessNote.push('Vicino alla partita: pochi salti, freschi e di qualita\'.');}
       if(g.mdNota)sessNote.push('Il giorno dopo la partita: carichi moderati, niente salti. Chi ha giocato meno di 45 minuti aggiunge 3 x 5 salti e 4 allunghi.');
       const exs={};let i=0;
