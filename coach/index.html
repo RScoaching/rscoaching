@@ -2339,7 +2339,7 @@ function dbFeed(ids){
   });
   ev.sort((a,b)=>b.ts-a.ts);
   const IC={seduta:'pesi',ci:'questionari',video:'video',msg:'chat'};
-  const fa=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<60?m+' min':m<1440?Math.round(m/60)+' h':'ieri';};
+  const fa=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<1?'ora':m<60?m+' min':m<1440?Math.round(m/60)+' h':'ieri';};
   el.innerHTML=ev.length?`<div class="db-feed">${ev.slice(0,12).map(e=>`<div class="db-fi t-${e.t}" role="button" tabindex="0" onclick="${e.go}"><span class="ic">${dIco(IC[e.t.split(' ')[0]])}</span><div><b>${dEsc(e.b)}</b><p>${dEsc(e.p)}</p>${e.post?dbPostHtml(e):''}</div><time>${fa(e.ts)}</time></div>`).join('')}</div>`
     :`<div class="d-vuoto">${dIco('sedute')}<b>Niente nelle ultime 48 ore</b><span>Qui arrivano sedute, check-in, video e messaggi appena l'atleta li manda.</span></div>`;
 }
@@ -3614,14 +3614,18 @@ function athCalendario(aid){
       // il mattino dall'orologio: FC a riposo, HRV, sonno
       const wd=gd&&gd.days?gd.days[isoDay(d.getTime())]:null;
       const well=wd?[wd.restingHR?'<i class="fc">FC '+wd.restingHR+'</i>':'',wd.hrvLastNightAvg?'<i>HRV '+Math.round(wd.hrvLastNightAvg)+'</i>':'',wd.sleepSeconds?'<i>'+window.RSGarmin.oreTxt(wd.sleepSeconds).replace(' ','')+'</i>':''].filter(Boolean).join(''):'';
-      let c='';let usate=0;const Fc=L.length?Ls:[];
+      // registri del giorno senza collegamento al programma (es. dal check-in 'fuori dall'app'): se uno ha
+      // lo stesso nome della seduta in programma, vale come quella seduta fatta invece di comparire due volte
+      let c='';let usate=0;const liberi=L.length?Ls.slice():[];
+      const nome0=t=>String(t||'').trim().toLowerCase();
       Pv.forEach(x=>{
-        const lg=logDi(x,d),stesso=!lg&&!L.length&&usate<C.length?C[usate++]:null;
+        let lg=logDi(x,d);if(!lg){const i=liberi.findIndex(l=>nome0(l.sessName)&&nome0(l.sessName)===nome0(x.x.name));if(i>=0)lg=liberi.splice(i,1)[0];}
+        const stesso=!lg&&!L.length&&usate<C.length?C[usate++]:null;
         const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
         if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString();c+=scheda(lg,(x.x.name||'Seduta')+(altro?' ('+['dom','lun','mar','mer','gio','ven','sab'][dl.getDay()]+' '+dl.getDate()+')':''));return;}
         const txt=stesso?'fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:''):st==='saltata'?'non registrata':'in programma';
         c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}: apri nel programma"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
-      Fc.forEach(l=>{c+=scheda(l);});
+      liberi.forEach(l=>{c+=scheda(l);});
       if(!L.length)C.slice(usate).forEach(f=>{c+=`<div class="ac-s fuori"><b>${athEsc(f.day||'Seduta')}</b><span>fuori programma${f.rpe?' &#183; RPE '+f.rpe:''}</span></div>`;});
       const pf=Object.values(((prehabFatti||{})[aid]||{})[isoDay(d.getTime())]||{});
       if(pf.length)c+=pf.map(x=>`<div class="ac-ph${x.n>=x.tot?' tutta':''}" title="Prevenzione ${athEsc(x.nome||'')}: ${x.n} esercizi su ${x.tot}">Prevenzione ${x.n}/${x.tot}</div>`).join('');
@@ -4992,7 +4996,7 @@ function renderDetChat(aid){
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendCoachChat('${aid}')}"></textarea>
       <button onclick="sendCoachChat('${aid}')"
-        style="background:rgba(255,106,46,.15);border:1px solid rgba(255,106,46,.3);color:var(--orange);border-radius:20px;padding:8px 14px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.5px;">
+        style="background:rgba(255,106,46,.15);border:1px solid rgba(255,106,46,.3);color:var(--orange);border-radius:20px;padding:8px 14px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:650;letter-spacing:-.02em;font-size:14px;letter-spacing:.5px;">
         INVIA
       </button>
     </div>
@@ -5135,7 +5139,7 @@ function renderGlobalChatConv(aid){
         oninput="this.style.height='auto';this.style.height=Math.min(120,this.scrollHeight)+'px'"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendGlobalChat('${aid}');}"></textarea>
       <button type="button" class="gc-orab" onclick="gcProgApri('${aid}')" title="Programma l'invio" aria-label="Programma l'invio">${window.rsIcon?window.rsIcon('planner'):'Ora'}</button>
-      <button onclick="sendGlobalChat('${aid}')" style="background:linear-gradient(135deg,#FF8A57,#E2611C);border:none;color:#fff;border-radius:22px;padding:9px 20px;cursor:pointer;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.5px;box-shadow:0 3px 12px rgba(255,106,46,.3);transition:opacity .15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">INVIA</button>
+      <button onclick="sendGlobalChat('${aid}')" style="background:linear-gradient(135deg,#FF8A57,#E2611C);border:none;color:#fff;border-radius:22px;padding:9px 20px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:650;letter-spacing:-.02em;font-size:15px;letter-spacing:.5px;box-shadow:0 3px 12px rgba(255,106,46,.3);transition:opacity .15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">INVIA</button>
     </div>`;
   setTimeout(()=>{const m=document.getElementById(`gchat-msgs-${aid}`);if(m)m.scrollTop=m.scrollHeight;},50);
 }
@@ -5202,7 +5206,7 @@ function renderGroups(){
         <div style="font-weight:600;font-size:14px;color:var(--white);">${g.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">${members.length} atleti${g.notes?' · '+g.notes:''}</div>
         <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">
-          ${members.slice(0,6).map(a=>`<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,106,46,.1);border:1px solid rgba(255,106,46,.2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:10px;color:var(--orange);">${ini(a.name)}</div>`).join('')}
+          ${members.slice(0,6).map(a=>`<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,106,46,.1);border:1px solid rgba(255,106,46,.2);display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-weight:650;letter-spacing:-.02em;font-size:10px;color:var(--orange);">${ini(a.name)}</div>`).join('')}
           ${members.length>6?`<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);">+${members.length-6}</div>`:''}
         </div>
       </div>
