@@ -8553,5 +8553,56 @@ window.FORZA = window.FORZA || { roster:[] };
 
 })();
 </script>
+<script>
+/* Oggi e' lunga (tredici schede): un indice in alto per saltare alla scheda, e ogni scheda si chiude
+   toccando il titolo. La scelta resta su questo dispositivo. Ieri, ultima settimana, ultime settimane
+   e sedute salvate partono chiuse: si guardano ogni tanto, non ogni mattina. In stampa tutto aperto. */
+(function(){
+  var K='fio_oggi_chiuse', DEF=['yd-card','lw-card','wk-card','sv-card'];
+  function leggi(){try{var v=JSON.parse(localStorage.getItem(K)||'null');return Array.isArray(v)?v:DEF.slice();}catch(e){return DEF.slice();}}
+  function scrivi(a){try{localStorage.setItem(K,JSON.stringify(a));}catch(e){}}
+  function carte(){return [].slice.call(document.querySelectorAll('section.card[id]')).filter(function(c){return c.querySelector('.card-head h2');});}
+  function titolo(c){return (c.querySelector('.card-head h2').textContent||'').trim();}
+  function chiudi(c,si){c.classList.toggle('og-chiusa',si);var b=c.querySelector('.og-tog');if(b){b.setAttribute('aria-expanded',si?'false':'true');b.setAttribute('aria-label',(si?'Apri ':'Chiudi ')+titolo(c));}}
+  function giro(c){var a=leggi(),i=a.indexOf(c.id),si=i<0;if(si)a.push(c.id);else a.splice(i,1);scrivi(a);chiudi(c,si);}
+  function indice(){
+    var nav=document.getElementById('og-ind');if(!nav)return;
+    nav.innerHTML=carte().filter(function(c){return !c.hidden;}).map(function(c){return '<button type="button" data-c="'+c.id+'">'+titolo(c).replace(/[<>&]/g,'')+'</button>';}).join('');
+  }
+  function avvia(){
+    var cs=carte();if(!cs.length)return;var a=leggi();
+    cs.forEach(function(c){
+      var h=c.querySelector('.card-head');if(h.querySelector('.og-tog'))return;
+      var b=document.createElement('button');b.type='button';b.className='og-tog';
+      b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+      b.addEventListener('click',function(e){e.stopPropagation();giro(c);});h.appendChild(b);
+      var t=h.querySelector('h2');t.classList.add('og-t');t.addEventListener('click',function(){giro(c);});
+      chiudi(c,a.indexOf(c.id)>=0);
+      new MutationObserver(indice).observe(c,{attributes:true,attributeFilter:['hidden']});
+    });
+    var nav=document.createElement('nav');nav.id='og-ind';nav.setAttribute('aria-label','Sezioni della pagina');
+    cs[0].parentElement.insertBefore(nav,cs[0]);
+    nav.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;var c=document.getElementById(b.dataset.c);if(!c)return;
+      if(c.classList.contains('og-chiusa'))giro(c);c.scrollIntoView({behavior:'smooth',block:'start'});});
+    indice();
+  }
+  var st=document.createElement('style');
+  st.textContent='#og-ind{position:sticky;top:0;z-index:20;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 0;margin:-6px 0 8px;background:linear-gradient(var(--bg,#0A090A) 78%,transparent)}'
+   +'#og-ind::-webkit-scrollbar{display:none}'
+   +'#og-ind button{appearance:none;flex:0 0 auto;border:1px solid var(--border2,rgba(255,255,255,.1));background:var(--surface,#151314);color:var(--muted,#B8B0BE);font:600 12.5px inherit;font-family:inherit;border-radius:999px;padding:7px 12px;cursor:pointer;transition:color .15s ease,border-color .15s ease}'
+   +'#og-ind button:hover{color:var(--ink,#F4F1EC);border-color:var(--border3,rgba(255,255,255,.2))}'
+   +'.og-t{cursor:pointer}'
+   +'.og-tog{appearance:none;margin-left:auto;align-self:center;width:34px;height:34px;border-radius:9px;border:0;background:transparent;color:var(--muted,#B8B0BE);display:flex;align-items:center;justify-content:center;cursor:pointer}'
+   +'.og-tog:hover{background:rgba(255,255,255,.05);color:var(--ink,#F4F1EC)}'
+   +'.og-tog svg{width:18px;height:18px;transition:transform .22s cubic-bezier(.23,1,.32,1)}'
+   +'section.card.og-chiusa .og-tog svg{transform:rotate(-90deg)}'
+   +'@media screen{section.card.og-chiusa>:not(.card-head){display:none!important}}'
+   +'section.card.og-chiusa .card-head{padding-bottom:16px}'
+   +'@media (prefers-reduced-motion:reduce){.og-tog svg{transition:none}}'
+   +'@media print{#og-ind,.og-tog{display:none!important}}';
+  document.head.appendChild(st);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',avvia);else avvia();
+})();
+</script>
 </body>
 </html>

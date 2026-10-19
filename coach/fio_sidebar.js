@@ -637,6 +637,31 @@ window.setStagione = function(v) {
   try { localStorage.setItem('fio_stagione', v); } catch (e) {}
   document.dispatchEvent(new CustomEvent('fio:stagione', { detail: { stagione: v } }));
 };
+// Stagione diversa da quella in corso: una striscia in testa alla pagina lo dice e riporta a quella giusta.
+// Senza, scegliere la 2025/26 in una pagina cambiava tutte le altre e il Report mostrava settimane a zero.
+(function(){
+  function striscia(){
+    var st = window.getStagione(), oggi = window.fioStagioneOggi();
+    var vecchia = document.getElementById('fio-st-avviso'); if(vecchia) vecchia.remove();
+    if(st === oggi) return;
+    var main = document.querySelector('.main') || document.querySelector('main'); if(!main) return;
+    var d = document.createElement('div'); d.id = 'fio-st-avviso'; d.setAttribute('role','status');
+    d.innerHTML = '<span>Stai guardando la <b>' + window.stagioneLabel(st).toLowerCase() + '</b>, non quella in corso.</span>'
+      + '<button type="button">Torna alla ' + window.stagioneLabel(oggi).replace('Stagione ','') + '</button>';
+    d.querySelector('button').addEventListener('click', function(){ window.setStagione(oggi); location.reload(); });
+    main.insertBefore(d, main.firstChild);
+  }
+  if(!document.getElementById('fio-st-avviso-css')){
+    var c = document.createElement('style'); c.id = 'fio-st-avviso-css';
+    c.textContent = '#fio-st-avviso{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:rgba(255,154,107,.10);border:1px solid rgba(255,154,107,.35);color:#FFD9C7;font-size:13.5px}'
+      + '#fio-st-avviso b{color:#FFB48F;font-weight:600}'
+      + '#fio-st-avviso button{appearance:none;border:0;border-radius:9px;background:#FF6A2E;color:#1A0B05;font:600 13px inherit;font-family:inherit;padding:8px 12px;min-height:36px;cursor:pointer}'
+      + '@media print{#fio-st-avviso{display:none!important}}';
+    document.head.appendChild(c);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', striscia); else setTimeout(striscia, 0);
+  document.addEventListener('fio:stagione', function(){ setTimeout(striscia, 0); });
+})();
 window.stagioneLabel = function(v) {
   v = v || window.getStagione();
   return v === '26-27' ? 'Stagione 2026/27' : 'Stagione 2025/26';
