@@ -2657,7 +2657,6 @@ function checkPR(ex,ei,s){
 let _swReg=null,_recDopo='';
 if('serviceWorker' in navigator){navigator.serviceWorker.register('../exercises_db.js',{scope:'../'}).then(r=>{_swReg=r;}).catch(()=>{});}
 const _iosNoHome=/iPhone|iPad|iPod/.test(navigator.userAgent)&&!(window.navigator.standalone||matchMedia('(display-mode: standalone)').matches);
-function recHm(ms){const d=new Date(ms);return d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 function recProposta(){
   const b=document.getElementById('rest-noti');if(!b)return;
   const perm=typeof Notification!=='undefined'?Notification.permission:'no';
@@ -2670,18 +2669,25 @@ function recProposta(){
 }
 window.recNo=()=>{try{localStorage.setItem('rs_rec_noti_no','1');}catch(e){}const b=document.getElementById('rest-noti');if(b)b.hidden=true;};
 window.recSi=async()=>{try{const p=await Notification.requestPermission();if(p==='granted'){toast('Fatto: il recupero si vede anche a schermo bloccato');recNoti(_recDopo);}}catch(e){}recProposta();};
+// la notifica la disegna il service worker: qui solo l'inizio, i cambi e la fine del recupero
+let _recEco=false;
 async function recNoti(dopo){
   _recDopo=dopo||'';recProposta();
-  if(!restFine||typeof Notification==='undefined'||Notification.permission!=='granted')return;
-  try{const reg=_swReg||await navigator.serviceWorker.ready;if(!reg)return;
+  if(_recEco||!restFine||typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  try{const reg=_swReg||await navigator.serviceWorker.ready;if(!reg||!reg.active)return;
     const corto=String(dopo||'').replace(/<[^>]+>/g,'').trim();
-    await reg.showNotification('Recupero: riprendi alle '+recHm(restFine),{body:(corto?'Dopo: '+corto:'Seduta in corso')+' · tocca per tornare',tag:'rs-rec',renotify:false,silent:true,requireInteraction:true,timestamp:restFine,data:{url:location.href},...(window.RS_LOGO?{icon:window.RS_LOGO,badge:window.RS_LOGO}:{})});
-    if(reg.active)reg.active.postMessage({tipo:'rec',fine:restFine,dopo:corto,url:location.href,icon:window.RS_LOGO||''});
+    reg.active.postMessage({tipo:'rec',fine:restFine,dopo:corto,url:location.href,icon:window.RS_LOGO||''});
   }catch(e){}
 }
+// tasti della notifica (+15 s, Salta): il service worker dice la nuova fine, la pagina si allinea
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};
+  if(m.tipo==='rec-fine'&&m.fine&&restFine){restFine=m.fine;restTotal=Math.max(restTotal,Math.ceil((restFine-Date.now())/1000));restTick();}
+  else if(m.tipo==='rec-salta'&&restFine){_recEco=true;window.skipRest();_recEco=false;}});
 async function recStop(){
+  if(_recEco)return;
   try{const reg=_swReg;if(!reg)return;if(reg.active)reg.active.postMessage({tipo:'stop'});
-    const L=await reg.getNotifications({tag:'rs-rec'});L.forEach(n=>n.close());}catch(e){}
+    // in vista si chiude tutto (anche "Recupero finito"); in sottofondo ci pensa il service worker
+    if(document.visibilityState==='visible'){const L=await reg.getNotifications({tag:'rs-rec'});L.forEach(n=>n.close());}}catch(e){}
 }
 /* Recupero sull'ora di fine: quando il telefono sospende la pagina (schermo spento, altra app) il tempo
    continua, e al rientro il conto e' giusto. Il tempo che manca sta anche nel titolo della scheda
@@ -2693,7 +2699,7 @@ function restTick(){
   document.title=l>0?`${Math.floor(l/60)}:${String(l%60).padStart(2,'0')} recupero`:_titolo0;
   if(l<=0){clearInterval(restIv);restFine=0;suona(3);toast('Recupero finito: si riparte');skipRest();}
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){restTick();tmTick();}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){restTick();tmTick();if(!restFine&&_swReg)_swReg.getNotifications({tag:'rs-rec'}).then(L=>L.forEach(n=>n.close())).catch(()=>{});}});
 // suono: il contesto audio si sblocca al primo tocco (iPhone non suona senza un gesto dell'atleta)
 let _ac=null;
 function suonoSblocca(){try{if(!_ac){const AC=window.AudioContext||window.webkitAudioContext;if(AC)_ac=new AC();}if(_ac&&_ac.state==='suspended')_ac.resume();}catch(e){}}

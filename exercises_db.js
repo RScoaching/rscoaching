@@ -824,29 +824,76 @@ window.getExBycat = function(cat){
 // Messaggi dalla seduta: {tipo:'rec', fine:ms, dopo:testo, url} e {tipo:'stop'}.
 // ============================================================
 if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
-  var _recId = 0;
+  // Il recupero in corso: un timer che scala nella notifica (aggiornata ogni secondo, senza suono)
+  // quando la seduta non e' in vista; tasti +15 s e Salta; alla fine "Recupero finito" con vibrazione.
+  var R = { id: 0, fine: 0, dopo: '', url: '', icon: '' };
+  var TAG = 'rs-rec';
+  function mmss(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function inVista() {
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
+      return L.some(function(c){ return c.visibilityState === 'visible' && c.focused; });
+    });
+  }
+  function chiudi() {
+    return self.registration.getNotifications({ tag: TAG }).then(function(L){ L.forEach(function(n){ n.close(); }); });
+  }
+  function opz(extra) {
+    var o = { tag: TAG, data: { url: R.url }, icon: R.icon || undefined, badge: R.icon || undefined };
+    for (var k in extra) o[k] = extra[k];
+    return o;
+  }
+  function mostra(l) {
+    return self.registration.showNotification('Recupero ' + mmss(l), opz({
+      body: R.dopo ? 'Dopo: ' + R.dopo : '', silent: true, renotify: false, requireInteraction: true,
+      actions: [{ action: 'piu', title: '+15 s' }, { action: 'salta', title: 'Salta' }]
+    }));
+  }
+  function finito() {
+    return self.registration.showNotification('Recupero finito', opz({
+      body: R.dopo ? 'Si riparte: ' + R.dopo : 'Si riparte', silent: false, renotify: true,
+      vibrate: [220, 100, 220, 100, 320]
+    }));
+  }
+  function avvisa(msg) {
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){ L.forEach(function(c){ c.postMessage(msg); }); });
+  }
+  // un giro ogni secondo finche' il recupero e' quello in corso (il service worker resta sveglio col waitUntil)
+  function conta(id) {
+    return new Promise(function(fine){
+      function giro() {
+        if (id !== R.id) return fine();
+        var l = Math.ceil((R.fine - Date.now()) / 1000);
+        inVista().then(function(vis){
+          if (id !== R.id) return fine();
+          if (l <= 0) { R.id++; return (vis ? chiudi() : finito()).then(fine, fine); }
+          (vis ? chiudi() : mostra(l)).then(function(){ setTimeout(giro, 1000 - (Date.now() % 1000) + 20); }, function(){ setTimeout(giro, 1000); });
+        });
+      }
+      giro();
+    });
+  }
   self.addEventListener('install', function(e){ self.skipWaiting(); });
   self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
   self.addEventListener('message', function(e){
     var m = e.data || {};
-    if (m.tipo === 'stop') { _recId++; return; }
+    // stop dalla pagina: via il timer, ma l'avviso "Recupero finito" resta finche' l'atleta non lo vede
+    if (m.tipo === 'stop') { R.id++; e.waitUntil(self.registration.getNotifications({ tag: TAG }).then(function(L){ L.forEach(function(n){ if (n.title !== 'Recupero finito') n.close(); }); })); return; }
     if (m.tipo !== 'rec' || !m.fine) return;
-    var id = ++_recId, attesa = Math.max(0, m.fine - Date.now());
-    // la fine del recupero: se la seduta e' in vista suona lei, se no arriva la notifica
-    e.waitUntil(new Promise(function(r){ setTimeout(r, attesa); }).then(function(){
-      if (id !== _recId) return;
-      return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
-        if (L.some(function(c){ return c.visibilityState === 'visible' && c.focused; })) return;
-        return self.registration.showNotification('Recupero finito', {
-          body: m.dopo ? 'Si riparte: ' + m.dopo : 'Si riparte',
-          tag: 'rs-rec', renotify: true, vibrate: [220, 100, 220, 100, 320],
-          icon: m.icon || undefined, badge: m.icon || undefined,
-          data: { url: m.url || '' }
-        });
-      });
-    }));
+    R.id++; R.fine = m.fine; R.dopo = m.dopo || ''; R.url = m.url || R.url; R.icon = m.icon || R.icon;
+    e.waitUntil(conta(R.id));
   });
   self.addEventListener('notificationclick', function(e){
+    var a = e.action;
+    if (a === 'piu' && R.fine) {
+      R.fine += 15000; R.id++;
+      e.waitUntil(Promise.all([avvisa({ tipo: 'rec-fine', fine: R.fine }), conta(R.id)]));
+      return;
+    }
+    if (a === 'salta') {
+      R.id++; e.notification.close();
+      e.waitUntil(Promise.all([chiudi(), avvisa({ tipo: 'rec-salta' })]));
+      return;
+    }
     e.notification.close();
     var url = e.notification.data && e.notification.data.url;
     e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
