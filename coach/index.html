@@ -991,7 +991,8 @@ button.test-card{display:block;width:100%;text-align:left;font-family:inherit;co
   transition:transform .4s cubic-bezier(.34,1.56,.64,1);
   z-index:9999;white-space:nowrap;letter-spacing:.3px;
 }
-#toast.show{transform:translateX(-50%) translateY(0);}
+#toast{opacity:0;visibility:hidden;transition:transform .32s cubic-bezier(.23,1,.32,1),opacity .2s ease,visibility 0s linear .32s!important}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible;transition:transform .32s cubic-bezier(.23,1,.32,1),opacity .2s ease,visibility 0s!important}
 .empty{text-align:center;padding:36px;color:var(--muted);font-size:13px;}
 
 /* ── Quick links ── */
@@ -1323,6 +1324,7 @@ body::before,body::after{display:none;}
 .ac-s.fatta{border-color:rgba(139,92,246,.45);background:rgba(139,92,246,.10)}.ac-s.fatta span{color:var(--violet2)}
 .ac-s.saltata{border-color:rgba(244,63,94,.28)}.ac-s.saltata span{color:#FB7185}
 .ac-s.prog{border-style:dashed}
+.ac-s.spost{width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit;border-style:dashed}.ac-s.spost:hover{background:rgba(139,92,246,.16)}
 .ac-s.fuori{background:rgba(255,106,46,.08);border-color:rgba(255,106,46,.25)}.ac-s.fuori span{color:#FF9A6B}
 /* calendario come intervals.icu: colonna della settimana, mattino dell'orologio, schede delle attivita' */
 .ac-g8{grid-template-columns:minmax(84px,.9fr) repeat(7,minmax(0,1fr))}
@@ -1543,6 +1545,7 @@ input,select,textarea{border-radius:10px}
 .db-in.ok b{color:#86EFAC}
 @media (hover:hover){.db-in:hover{border-color:rgba(255,255,255,.18)}}
 .db-in:active{transform:scale(.98)}
+.db-col{display:flex;flex-direction:column;gap:16px;min-width:0}.db-col>.dcard{margin:0}.dm-piu{margin-top:10px}
 .db-wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start;margin-bottom:16px}
 .db-side{display:flex;flex-direction:column;gap:16px;position:sticky;top:16px}
 .db-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px}
@@ -1678,20 +1681,22 @@ input,select,textarea{border-radius:10px}
   </div>
   <div class="dash-sum db-inbox" id="dash-sum"></div>
   <div class="db-wrap">
+    <div class="db-col">
     <section class="dcard db-main">
       <div class="db-h"><div><h2>La squadra</h2><div class="dsub" id="db-sub">Oggi, prontezza, carico e settimana di ognuno: chi ha bisogno di te sta in cima</div></div>
         <div class="db-fil" role="tablist" aria-label="Filtra la squadra">
           <button type="button" class="on" data-f="tutti" onclick="dbFiltra('tutti')">Tutti</button><button type="button" data-f="guardare" onclick="dbFiltra('guardare')">Da guardare</button><button type="button" data-f="oggi" onclick="dbFiltra('oggi')">In programma oggi</button></div></div>
       <div id="dash-board"></div>
     </section>
+    <section class="dcard" id="dash-msg-card" hidden><h2>Messaggi da mandare</h2><div class="dsub">Suggeriti dai dati di oggi. Correggi il testo se vuoi, poi Invia o Salta.</div><div id="dash-msg"></div></section>
+    <section class="dcard"><h2>Check-in e RPE</h2><div class="dsub" id="dash-ci-sub">Check-in di oggi e RPE medio della squadra negli ultimi 21 giorni</div><div id="dash-ci"></div><div class="chart-wrap" style="height:150px;"><canvas id="rpe-chart"></canvas></div></section>
+      </div>
     <aside class="db-side">
       <section class="dcard"><h2>In arrivo</h2><div class="dsub">Sedute, check-in, video e messaggi delle ultime 48 ore</div><div id="dash-feed"></div></section>
       <section class="dcard" id="dash-gare-card" hidden><h2>Gare in arrivo</h2><div class="dsub">Dai programmi assegnati</div><div id="dash-gare"></div></section>
       <section class="dcard"><h2>Programmi</h2><div class="dsub">In scadenza, finiti e atleti senza programma</div><div id="dash-prog"></div></section>
     </aside>
   </div>
-  <section class="dcard" id="dash-msg-card" style="margin-bottom:16px;" hidden><h2>Messaggi da mandare</h2><div class="dsub">Suggeriti dai dati di oggi. Correggi il testo se vuoi, poi Invia o Salta.</div><div id="dash-msg"></div></section>
-  <section class="dcard"><h2>Check-in e RPE</h2><div class="dsub" id="dash-ci-sub">Check-in di oggi e RPE medio della squadra negli ultimi 21 giorni</div><div id="dash-ci"></div><div class="chart-wrap" style="height:150px;"><canvas id="rpe-chart"></canvas></div></section>
   <div hidden><div id="dash-att"></div><div id="dash-oggi"></div><div id="dash-sett-sub"></div><div id="dash-sett"></div><div id="activity-feed"></div></div>
 </div>
 
@@ -2154,11 +2159,13 @@ function dmLista(ids,st){
 }
 function renderDashMsg(ids,st){
   const card=document.getElementById('dash-msg-card'),el=document.getElementById('dash-msg');if(!card||!el)return;
-  const L=dmLista(ids,st);window._dmL=L;card.hidden=!L.length;if(!L.length)return;
-  el.innerHTML=L.slice(0,6).map((m,i)=>`<div class="dm-r"><div class="dm-h"><span class="dw-av">${dIni((athletes[m.aid]||{}).name)}</span><b>${dEsc((athletes[m.aid]||{}).name||'')}</b><em>${dEsc(m.motivo)}</em></div>
+  window._dmIds=ids;window._dmSt=st;const L=dmLista(ids,st);window._dmL=L;card.hidden=!L.length;if(!L.length)return;
+  const vis=window._dmTutti?Math.min(L.length,12):3;
+  el.innerHTML=L.slice(0,vis).map((m,i)=>`<div class="dm-r"><div class="dm-h"><span class="dw-av">${dIni((athletes[m.aid]||{}).name)}</span><b>${dEsc((athletes[m.aid]||{}).name||'')}</b><em>${dEsc(m.motivo)}</em></div>
     <textarea id="dm-t-${i}" rows="2" aria-label="Testo del messaggio">${dEsc(m.testo)}</textarea>
-    <div class="dm-a"><button type="button" class="btn btn-orange btn-sm" onclick="dmInvia(${i})">Invia</button><button type="button" class="btn btn-ghost btn-sm" onclick="dmSalta(${i})">Salta</button><button type="button" class="btn btn-ghost btn-sm" onclick="dmChat(${i})">Apri la chat</button></div></div>`).join('')+(L.length>6?`<p class="ld-nota">Altri ${L.length-6} dopo questi.</p>`:'');
+    <div class="dm-a"><button type="button" class="btn btn-orange btn-sm" onclick="dmInvia(${i})">Invia</button><button type="button" class="btn btn-ghost btn-sm" onclick="dmSalta(${i})">Salta</button><button type="button" class="btn btn-ghost btn-sm" onclick="dmChat(${i})">Apri la chat</button></div></div>`).join('')+(L.length>vis?`<button type="button" class="btn btn-ghost btn-sm dm-piu" onclick="window._dmTutti=1;renderDashMsg(window._dmIds,window._dmSt)">Mostra altri ${Math.min(L.length,12)-vis}</button>`:'');
 }
+window.renderDashMsg=renderDashMsg;
 window.dmInvia=async function(i){const m=(window._dmL||[])[i],t=document.getElementById('dm-t-'+i);if(!m||!t)return;const text=t.value.trim();if(!text)return;
   await push(ref(db,`chat/${m.aid}/messages`),{ts:Date.now(),text,from:'coach',fromName:'Raoul (Coach)',read:false,auto:m.id.split('_')[0]});
   const sl=dmSalti();sl[m.id]=Date.now();try{localStorage.setItem('rs_dm_salti',JSON.stringify(sl));}catch(e){}
@@ -3589,7 +3596,7 @@ function athCalendario(aid){
     const rpe=+l.avgRpe||(!l.gm&&rpeDel(l.ts))||null,rs=!rpe&&l.rpeStima?l.rpeStima:null,ua=Math.round((rpe||rs||0)*min);
     const zt=(l.gmZt||[]).slice(0,5),ztot=zt.reduce((t,x)=>t+(+x||0),0);
     return `<button type="button" class="ac-a t-${tipo}" onclick="athAttivita('${aid}','${l._k}')" title="Apri l'analisi">
-      <span class="ac-ah">${min?durTxt(min):''}${km?' &#183; '+f1(km)+' km':''}</span>
+      <span class="ac-ah">${min?durTxt(min):km?'':(tipo==='corsa'?'Corsa':tipo==='pesi'?'Forza':'Attivita\'')}${km?' &#183; '+f1(km)+' km':''}</span>
       <span class="ac-ab">${fc?`<i class="fc">${fc} bpm</i>`:''}${l.corsa&&l.corsa.passo?`<i class="ps">${P(l.corsa.passo)}/km</i>`:''}${ua?`<i>Carico ${ua}${rs?' ~':''}</i>`:''}${rpe?`<i class="rp">RPE ${rpe}</i>`:rs?`<i class="rp st">RPE ~${rs}</i>`:''}${l.corsa&&l.corsa.centrati?`<i>passo ${l.corsa.centrati.ok}/${l.corsa.centrati.n}</i>`:''}</span>
       ${ztot?`<span class="ac-az">${zt.map((x,k)=>`<u style="height:${Math.max(2,Math.round((+x||0)/ztot*26))}px;background:${ZC[k]}"></u>`).join('')}</span>`:''}
       <span class="ac-an">${athEsc(titolo||l.sessName||'Attivita\'')}</span></button>`;
@@ -3600,6 +3607,19 @@ function athCalendario(aid){
     // colonna della settimana: tempo, km di corsa, carico, forma e fatica
     const a0=new Date(lun);a0.setDate(a0.getDate()+w*7);const a1=new Date(a0);a1.setDate(a1.getDate()+7);
     const Lw=logs.filter(l=>l.ts>=a0.setHours(0,0,0,0)&&l.ts<a1.setHours(0,0,0,0));
+    // seduta spostata (come TrainingPeaks): un registro senza collegamento, nella stessa settimana e con lo
+    // stesso nome di una seduta in programma non fatta in un altro giorno, vale come quella seduta
+    const nm=t=>String(t||'').trim().toLowerCase(),gg=['dom','lun','mar','mer','gio','ven','sab'];
+    const sp=new Map(),spLog=new Map();{
+      const prev=[];for(let i=0;i<7;i++){const d=new Date(a0);d.setDate(d.getDate()+i);d.setHours(12,0,0,0);dPreviste(aid,d).forEach(x=>prev.push({x,d}));}
+      const libere=Lw.filter(l=>!(l.progId&&l.sessId!=null&&l.weekIdx!=null&&programs[l.progId]&&legati.has(l))&&nm(l.sessName));
+      prev.forEach(({x,d})=>{if(logDi(x,d))return;
+        // lo stesso giorno lo gestisce gia' il giro del giorno
+        if(libere.some(l=>new Date(l.ts).toDateString()===d.toDateString()&&nm(l.sessName)===nm(x.x.name)))return;
+        // il giorno piu' vicino a quello previsto
+        const l=libere.filter(l=>!spLog.has(l)&&nm(l.sessName)===nm(x.x.name)&&!prev.some(q=>nm(q.x.x.name)===nm(l.sessName)&&q.d.toDateString()===new Date(l.ts).toDateString())).sort((u,v)=>Math.abs(u.ts-d)-Math.abs(v.ts-d))[0];
+        if(l){sp.set(x.pid+'|'+x.k+'|'+x.sid+'|'+d.toDateString(),l);spLog.set(l,d);}});
+    }
     const min=Lw.reduce((t,l)=>t+(+l.duration||+l.minuti||0),0),km=Lw.reduce((t,l)=>t+(l.corsa&&+l.corsa.km||0),0);
     let ua=0;for(let i=0;i<7;i++){const d=new Date(a0);d.setDate(d.getDate()+i);ua+=loadDi(isoDay(d.getTime()));}
     let fo=null;if(gd&&gd.days)for(let i=6;i>=0&&!fo;i--){const d=new Date(a0);d.setDate(d.getDate()+i);if(d>oggi)continue;const x=gd.days[isoDay(d.getTime())];if(x&&x.ctl)fo=x;}
@@ -3619,13 +3639,15 @@ function athCalendario(aid){
       let c='';let usate=0;const liberi=L.length?Ls.slice():[];
       const nome0=t=>String(t||'').trim().toLowerCase();
       Pv.forEach(x=>{
-        let lg=logDi(x,d);if(!lg){const i=liberi.findIndex(l=>nome0(l.sessName)&&nome0(l.sessName)===nome0(x.x.name));if(i>=0)lg=liberi.splice(i,1)[0];}
+        let lg=logDi(x,d);if(!lg){const i=liberi.findIndex(l=>!spLog.has(l)&&nome0(l.sessName)&&nome0(l.sessName)===nome0(x.x.name));if(i>=0)lg=liberi.splice(i,1)[0];}
+        const ls=!lg&&sp.get(x.pid+'|'+x.k+'|'+x.sid+'|'+d.toDateString());
+        if(ls){const dl=new Date(ls.ts);nP++;nF++;c+=`<button type="button" class="ac-s fatta spost" onclick="athAttivita('${aid}','${ls._k}')" title="Fatta in un altro giorno: apri"><b>${athEsc(x.x.name||'Seduta')}</b><span>spostata, fatta ${gg[dl.getDay()]} ${dl.getDate()}</span></button>`;return;}
         const stesso=!lg&&!L.length&&usate<C.length?C[usate++]:null;
         const fatta=!!(lg||stesso),st=fatta?'fatta':pass?'saltata':'prog';if(pass||fatta){nP++;if(fatta)nF++;else nS++;}
         if(lg){const dl=new Date(lg.ts),altro=dl.toDateString()!==d.toDateString();c+=scheda(lg,(x.x.name||'Seduta')+(altro?' ('+['dom','lun','mar','mer','gio','ven','sab'][dl.getDay()]+' '+dl.getDate()+')':''));return;}
         const txt=stesso?'fatta'+(stesso.rpe?' &#183; RPE '+stesso.rpe:''):st==='saltata'?'non registrata':'in programma';
         c+=`<a class="ac-s ${st}" href="./builder.html?prog=${encodeURIComponent(x.pid)}" title="${athEsc((x.p.name||'')+', settimana '+(x.k+1))}: apri nel programma"><b>${athEsc(x.x.name||'Seduta')}</b><span>${txt}</span></a>`;});
-      liberi.forEach(l=>{c+=scheda(l);});
+      liberi.forEach(l=>{const dp=spLog.get(l);c+=scheda(l,dp?(l.sessName||'Seduta')+' (da '+gg[dp.getDay()]+' '+dp.getDate()+')':undefined);});
       if(!L.length)C.slice(usate).forEach(f=>{c+=`<div class="ac-s fuori"><b>${athEsc(f.day||'Seduta')}</b><span>fuori programma${f.rpe?' &#183; RPE '+f.rpe:''}</span></div>`;});
       const pf=Object.values(((prehabFatti||{})[aid]||{})[isoDay(d.getTime())]||{});
       if(pf.length)c+=pf.map(x=>`<div class="ac-ph${x.n>=x.tot?' tutta':''}" title="Prevenzione ${athEsc(x.nome||'')}: ${x.n} esercizi su ${x.tot}">Prevenzione ${x.n}/${x.tot}</div>`).join('');
