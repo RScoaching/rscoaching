@@ -1318,6 +1318,11 @@ body::before,body::after{display:none;}
 .ac-hd{font:600 11.5px Inter,sans-serif;color:var(--muted);padding:7px 8px;background:rgba(255,255,255,.02)}
 .ac-c{padding:5px;min-height:84px;min-width:0}.ac-c.vuoto{background:rgba(255,255,255,.01)}
 .ac-d{font-size:11px;color:var(--muted);margin:0 0 4px 2px}.ac-c.oggi .ac-d{color:var(--primary);font-weight:700}
+.db-cambio{color:#FBBF24!important;font-size:12.5px!important;margin-top:2px}
+.aa-cambi{display:flex;flex-direction:column;gap:4px;margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)}
+.aa-cambi b{font-size:12.5px;color:#FBBF24}.aa-cambi span{font-size:13.5px;color:var(--white)}
+.ts-cb{margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;color:#FBBF24;background:rgba(251,191,36,.12)}
+.ts-cbd{font-size:12.5px;color:#FCD34D;margin-top:2px}
 .ac-s{display:block;text-decoration:none;border-radius:7px;padding:5px 7px;margin-bottom:4px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
 .ac-s b{display:block;font:600 11.5px Inter,sans-serif;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ac-s span{display:block;font-size:10.5px;color:var(--muted)}
@@ -2350,12 +2355,19 @@ function dbRender(ids,st,oggi,giorni,fatteOggi){
     :`<div class="d-vuoto">${dIco('ok')}<b>${DB_F==='guardare'?'Nessuno da guardare':DB_F==='oggi'?'Nessuna seduta in programma oggi':'Nessun atleta attivo'}</b><span>${DB_F==='guardare'?'Carichi, check-in e aderenza sono nella norma per tutti.':'Gli atleti con un programma compaiono qui.'}</span></div>`;
   dbFeed(ids);dbGare(ids);
 }
+// esercizi cambiati o aggiunti dall'atleta nella seduta (macchina occupata, manca l'attrezzo, fastidio)
+const CAMBIO_MOT={occupato:'occupato',manca:'manca l\'attrezzo',fastidio:'fastidio o dolore',altro:'altro'};
+function cambiRighe(l){
+  const a=(l&&l.sostituzioni||[]).filter(x=>x&&x.da&&x.a).map(x=>`${x.da} \u2192 ${x.a}${x.mot&&CAMBIO_MOT[x.mot]?' ('+CAMBIO_MOT[x.mot]+')':''}`);
+  const b=(l&&l.aggiunti||[]).filter(Boolean).map(n=>'aggiunto '+n);
+  return a.concat(b);
+}
 // in arrivo: sedute, check-in, video e messaggi delle ultime 48 ore, uno sotto l'altro
 function dbFeed(ids){
   const el=document.getElementById('dash-feed');if(!el)return;const lim=Date.now()-48*3600e3,ev=[];
   ids.forEach(id=>{const n=String(athletes[id].name||'').split(' ')[0];
     const logs=Object.values(sessionLogs[id]||{}).filter(l=>l&&l.ts>lim);
-    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,post:l.post&&(l.post.testo||l.post.foto)?l.post:null,b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),go:`dbApri('${id}')`});});
+    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,post:l.post&&(l.post.testo||l.post.foto)?l.post:null,b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),cambi:cambiRighe(l),go:`dbApri('${id}')`});});
     Object.values(checkins[id]||{}).forEach(c=>{if(!c||!c.ts||c.ts<lim)return;const basso=(+c.fatica>=7)||(+c.sonno&&+c.sonno<=4)||(+c.doms>=4);ev.push({ts:c.ts,t:'ci'+(basso?' basso':''),id,b:athletes[id].name,p:'Check-in'+(basso?': '+[+c.fatica>=7?'fatica '+c.fatica:'',+c.sonno<=4&&+c.sonno?'sonno '+c.sonno:'',+c.doms>=4?'dolori '+c.doms:''].filter(Boolean).join(', '):' nella norma'),go:`dbApri('${id}')`});});
     Object.entries(videoData[id]||{}).forEach(([vid,v])=>{if(v&&v.ts>lim)ev.push({ts:v.ts,t:'video',id,b:athletes[id].name,p:'Video: '+(v.esercizio||'esecuzione')+(v.stato==='visto'?' (corretto)':''),go:`dbApri('${id}');setTimeout(()=>vrApri('${id}','${vid}'),300)`});});
     Object.values((chatData[id]||{}).messages||{}).forEach(m=>{if(m&&m.ts>lim&&m.from==='athlete'&&!m.video)ev.push({ts:m.ts,t:'msg',id,b:athletes[id].name,p:m.text||'',go:`dbChat('${id}')`});});
@@ -2363,7 +2375,7 @@ function dbFeed(ids){
   ev.sort((a,b)=>b.ts-a.ts);
   const IC={seduta:'pesi',ci:'questionari',video:'video',msg:'chat'};
   const fa=ts=>{const m=Math.round((Date.now()-ts)/60000);return m<1?'ora':m<60?m+' min':m<1440?Math.round(m/60)+' h':'ieri';};
-  el.innerHTML=ev.length?`<div class="db-feed">${ev.slice(0,12).map(e=>`<div class="db-fi t-${e.t}" role="button" tabindex="0" onclick="${e.go}"><span class="ic">${dIco(IC[e.t.split(' ')[0]])}</span><div><b>${dEsc(e.b)}</b><p>${dEsc(e.p)}</p>${e.post?dbPostHtml(e):''}</div><time>${fa(e.ts)}</time></div>`).join('')}</div>`
+  el.innerHTML=ev.length?`<div class="db-feed">${ev.slice(0,12).map(e=>`<div class="db-fi t-${e.t}" role="button" tabindex="0" onclick="${e.go}"><span class="ic">${dIco(IC[e.t.split(' ')[0]])}</span><div><b>${dEsc(e.b)}</b><p>${dEsc(e.p)}</p>${e.cambi&&e.cambi.length?`<p class="db-cambio">Ha cambiato: ${e.cambi.map(dEsc).join(', ')}</p>`:''}${e.post?dbPostHtml(e):''}</div><time>${fa(e.ts)}</time></div>`).join('')}</div>`
     :`<div class="d-vuoto">${dIco('sedute')}<b>Niente nelle ultime 48 ore</b><span>Qui arrivano sedute, check-in, video e messaggi appena l'atleta li manda.</span></div>`;
 }
 /* Seduta con foto o commento dell'atleta (fine allenamento nell'app): il commento nel feed, la foto
@@ -3695,7 +3707,7 @@ window.athAttivita=function(aid,k){
   const mb=document.getElementById('modal-body');
   document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
   mb.innerHTML=`<h3>${athEsc(tit)}</h3><div class="aa-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>
-    ${c.giri&&c.giri.length?gmGiriHtml(c.giri):''}${l.exerciseData?tsEsercizi(l,aid):''}${(l.cardio||[]).length?`<table class="ts-ex"><thead><tr><th>Cardio</th><th>Minuti</th><th>Km</th><th class="n">FC media</th></tr></thead><tbody>${l.cardio.map(c=>`<tr><td><b>${athEsc(c.macchina||c.name)}</b></td><td>${c.min||'-'}</td><td>${c.km?String(c.km).replace('.',','):'-'}</td><td class="n">${c.fc||'-'}</td></tr>`).join('')}</tbody></table>`:''}${l.note?`<p class="aa-n">"${athEsc(l.note)}"</p>`:''}
+    ${cambiRighe(l).length?`<div class="aa-cambi"><b>Cambiato dall'atleta</b>${cambiRighe(l).map(t=>`<span>${athEsc(t)}</span>`).join('')}</div>`:''}${c.giri&&c.giri.length?gmGiriHtml(c.giri):''}${l.exerciseData?tsEsercizi(l,aid):''}${(l.cardio||[]).length?`<table class="ts-ex"><thead><tr><th>Cardio</th><th>Minuti</th><th>Km</th><th class="n">FC media</th></tr></thead><tbody>${l.cardio.map(c=>`<tr><td><b>${athEsc(c.macchina||c.name)}</b></td><td>${c.min||'-'}</td><td>${c.km?String(c.km).replace('.',','):'-'}</td><td class="n">${c.fc||'-'}</td></tr>`).join('')}</tbody></table>`:''}${l.note?`<p class="aa-n">"${athEsc(l.note)}"</p>`:''}
     <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button>${l.progId&&programs[l.progId]?`<a class="btn btn-orange" href="./builder.html?prog=${encodeURIComponent(l.progId)}">Apri nel programma</a>`:''}</div>`;
   document.getElementById('modal-overlay').classList.add('open');
 };
@@ -4366,6 +4378,7 @@ function renderDetSessList(aid,aSess){
       if(wlog?.totalSets)pills+=`<span class="pill p-orange">${wlog.totalSets} set</span>`;
       (wlog?.cardio||[]).forEach(c=>{pills+=`<span class="pill p-blue">${athEsc(c.macchina||c.name)} ${[c.min?c.min+"'":'',c.km?String(c.km).replace('.',',')+' km':'',c.fc?'FC '+c.fc:''].filter(Boolean).join(' ')}</span>`;});
       if(wlog?.newPRs?.length)pills+=`<span class="pill p-gold">${wlog.newPRs.length} PR</span>`;
+      if(wlog&&cambiRighe(wlog).length)pills+=`<span class="pill p-warn" title="${athEsc(cambiRighe(wlog).join(', '))}">${athEsc(cambiRighe(wlog).join(', '))}</span>`;
     }
     // Build exercise details from wlog
     let exHtml='';
@@ -5698,8 +5711,8 @@ function renderAllSessions(){
       const rc=r>=9?'p-red':r>=7?'p-warn':'p-ok';
       return `<button type="button" class="ts-row" onclick="tsApri(${s.i})">
         <div class="live-av">${ini(a.name||'-')}</div>
-        <div class="ts-m"><div class="ts-n"><b>${athEsc(a.name||'-')}</b><span class="ts-t t-${s.tipo.replace(' ','')}">${TL[s.tipo]}</span>${l.gm||l.source==='orologio'?'<span class="ts-or">orologio</span>':''}${(l.newPRs||[]).length?'<span class="ts-pr">record</span>':''}</div>
-          <div class="ts-s">${athEsc(l.sessName||'Seduta')}${pr?' &#183; <i>'+athEsc(pr)+'</i>':''}</div>${det?`<div class="ts-d">${det}</div>`:''}${l.note?`<div class="ts-no">"${athEsc(l.note)}"</div>`:''}</div>
+        <div class="ts-m"><div class="ts-n"><b>${athEsc(a.name||'-')}</b><span class="ts-t t-${s.tipo.replace(' ','')}">${TL[s.tipo]}</span>${l.gm||l.source==='orologio'?'<span class="ts-or">orologio</span>':''}${(l.newPRs||[]).length?'<span class="ts-pr">record</span>':''}${cambiRighe(l).length?`<span class="ts-cb" title="${athEsc(cambiRighe(l).join(', '))}">${(l.sostituzioni||[]).length?'esercizio cambiato':'esercizio aggiunto'}</span>`:''}</div>
+          <div class="ts-s">${athEsc(l.sessName||'Seduta')}${pr?' &#183; <i>'+athEsc(pr)+'</i>':''}</div>${det?`<div class="ts-d">${det}</div>`:''}${cambiRighe(l).length?`<div class="ts-cbd">${athEsc(cambiRighe(l).join(', '))}</div>`:''}${l.note?`<div class="ts-no">"${athEsc(l.note)}"</div>`:''}</div>
         <div class="ts-v">${d?`<span><b>${d}'</b></span>`:''}${r?`<span class="pill ${rc}">RPE ${f1(r)}</span>`:l.rpeStima?`<span class="pill p-gray">RPE ~${l.rpeStima}</span>`:''}${d&&r?`<span class="ts-ua">${Math.round(d*r)} UA</span>`:''}</div></button>`;}).join('');
     const dateLabel=date!=='-'?new Date(date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):date;
     return `<div class="date-sep">${dateLabel} <span style="opacity:.6;font-weight:500;">(${rows.length})</span></div>${rowsHtml}`;
