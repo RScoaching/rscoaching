@@ -1263,6 +1263,15 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 @media(max-width:1180px){.pz-modes .pz-wt{display:none}.pz-modes .pz-kgsel>span,.pz-modes .pz-kgsel>label{display:none}.pz-modes .pz-kgsel select{max-width:150px}}
 
 /* cardio nella seduta */
+.pz-t td.pz-cdc{padding:4px 8px}
+.pz-cdrow{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:6px 12px;border:1px solid rgba(125,211,252,.22);border-radius:10px;background:rgba(125,211,252,.06);color:var(--text);font:500 14px Inter,system-ui,sans-serif;text-align:left;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.pz-cdrow:hover{background:rgba(125,211,252,.1);border-color:rgba(125,211,252,.4)}
+.pz-cdrow:active{transform:scale(.99)}
+.pz-cdrow .pz-cdtag{color:#7DD3FC;font-weight:600;font-size:12.5px}
+.pz-cdrow b{font-weight:600;font-variant-numeric:tabular-nums}
+.pz-cdrow span:not(.pz-cdtag){color:var(--text2,#c9c3bd);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pz-cdrow i{font-style:normal;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pz-cdrow em{margin-left:auto;font-style:normal;font-size:12.5px;color:#7DD3FC;flex:none}
 .pz-t tr.add .pz-cardb{color:#7DD3FC!important;border-color:rgba(125,211,252,.35)!important}
 .pzcd-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:6px 0 12px}
 .pzcd-g label,.pzcd-n{display:flex;flex-direction:column;gap:5px;font:600 12.5px Inter,sans-serif;color:var(--muted)}
@@ -7988,6 +7997,8 @@ function pzStatSess(s){
     o.min=+s.duration||null;
   }
   exs.forEach((e,i)=>{
+    // il cardio non e' una serie: conta i suoi minuti (o i km a circa 6' l'uno)
+    if(e.cardio){o.sec+=((+e.cardio.min||0)||(+e.cardio.km||0)*6)*60;return;}
     const sets=+e.sets||pzNum(e.sets)||0;o.serie+=sets;
     const g=pzGruppo(e);o.gr[g]=(o.gr[g]||0)+sets;
     const nx=exs[i+1];
@@ -8129,7 +8140,7 @@ function pzGriglia(wid,w){
         <select class="pz-sd" data-pz="sday" data-w="${wid}" data-s="${sid}" aria-label="Giorno">
           <option value="">Ogni giorno</option>${G.map((g,i)=>`<option value="${i}"${s.dayOfWeek===i?' selected':''}>${ST_GGL[i]}</option>`).join('')}</select>
         <span class="pz-st">${stEsc((SESS_TYPES[tipo]||{}).label||tipo)}</span>${s.opz?'<span class="pz-opzt" title="L\'atleta la fa se ha tempo">facoltativa</span>':''}
-        <span class="pz-ss${lungo?' warn':''}"${lungo?` title="Piu' lunga dei ${lim}' disponibili"`:''}>${st.es?st.es+' es · '+st.serie+' serie · ':''}${st.min?'~'+pzMinTxt(st.min):''}</span>
+        <span class="pz-ss${lungo?' warn':''}"${lungo?` title="Piu' lunga dei ${lim}' disponibili"`:''}>${st.es?st.es+' es · '+(st.serie?st.serie+' serie · ':''):''}${st.min?'~'+pzMinTxt(st.min):''}</span>
         ${conF?(log?`<span class="pz-done" title="${stEsc(athletes[pzKgAid]?.name||'')}">Fatta ${stEsc(log.date||'')}${log.duration?' · '+log.duration+'\'':''}${log.avgRpe?' · RPE '+String(log.avgRpe).replace('.',','):''}${log.totalSets?' · '+log.totalSets+' serie':''}</span>`:'<span class="pz-todo">Da fare</span>'):''}
         <span class="pz-sp"></span>
         ${tipo==='corsa'?`<button type="button" class="pz-b" onclick="openModal('edit-corsa','${wid}','${sid}')">Fasi corsa</button>`:''}
@@ -8152,10 +8163,10 @@ function pzGriglia(wid,w){
       const c=(f,t)=>`<td><input class="pz-c${t?' '+t:''}" value="${stEsc(e[f]==null?'':e[f])}" data-pz="ex" data-f="${f}" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" ${f==='name'?'list="pz-exlist"':''} aria-label="${f}"></td>`;
       const gr=e.complexGroup?' cx':'';
       const mi=window.RSMuscoli&&RSMuscoli.info(e.name),mg=mi&&mi.g&&!/^Prevenzione/.test(e.cue||'')?RSMuscoli.GR[mi.g]:null;
-      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}" data-w="${wid}" data-s="${sid}"><td class="n"><div class="pz-ncell"><span class="pz-grip" draggable="true" data-w="${wid}" data-s="${sid}" data-e="${eid}" title="Trascina per spostare (o Alt + frecce)" aria-hidden="true">&#8942;&#8942;</span><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"><span class="pz-mv"><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',-1)" aria-label="Sposta su"${i?'':' disabled'}>&#9650;</button><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',1)" aria-label="Sposta giu'"${i<exs.length-1?'':' disabled'}>&#9660;</button></span></div></td><td class="nmc"><div class="pz-nmw">${mg?`<span class="pz-gchip" style="--g:${mg.c}" title="${stEsc(mg.n)}${Object.keys(mi.s||{}).length?' (mezza serie: '+Object.keys(mi.s).map(k=>RSMuscoli.GR[k].n.toLowerCase()).join(', ')+')':''}${mi.att?' &#183; '+mi.att:''}">${stEsc(mg.n.slice(0,3))}</span>`:'<span class="pz-gchip vuoto"></span>'}<input class="pz-c nm" value="${stEsc(e.name==null?'':e.name)}" data-pz="ex" data-f="name" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" list="pz-exlist" aria-label="name"></div></td>${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}${conF?`<td class="fa">${pzFatto(e,log)}</td>`:''}
+      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}" data-w="${wid}" data-s="${sid}"><td class="n"><div class="pz-ncell"><span class="pz-grip" draggable="true" data-w="${wid}" data-s="${sid}" data-e="${eid}" title="Trascina per spostare (o Alt + frecce)" aria-hidden="true">&#8942;&#8942;</span><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"><span class="pz-mv"><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',-1)" aria-label="Sposta su"${i?'':' disabled'}>&#9650;</button><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',1)" aria-label="Sposta giu'"${i<exs.length-1?'':' disabled'}>&#9660;</button></span></div></td><td class="nmc"><div class="pz-nmw">${mg?`<span class="pz-gchip" style="--g:${mg.c}" title="${stEsc(mg.n)}${Object.keys(mi.s||{}).length?' (mezza serie: '+Object.keys(mi.s).map(k=>RSMuscoli.GR[k].n.toLowerCase()).join(', ')+')':''}${mi.att?' &#183; '+mi.att:''}">${stEsc(mg.n.slice(0,3))}</span>`:'<span class="pz-gchip vuoto"></span>'}<input class="pz-c nm" value="${stEsc(e.name==null?'':e.name)}" data-pz="ex" data-f="name" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" list="pz-exlist" aria-label="name"></div></td>${e.cardio?pzCardioCella(wid,sid,eid,e):`${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}`}${conF?`<td class="fa">${pzFatto(e,log)}</td>`:''}
         <td class="x"><button type="button" class="pz-x pz-xm" onclick="pzExMenu(event,'${wid}','${sid}','${eid}')" aria-label="Azioni dell'esercizio" title="Sostituisci, progredisci, RPE, elimina" tabindex="-1">&#8943;</button></td></tr>`;
     });
-    h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Esercizio o intenzione, poi Invio: A1 Squat 4x6 @75% r2', oppure schiena orizzontale, petto inclinato, gambe mono, accessori polpacci">${!exs.length&&tipo!=='corsa'&&tipo!=='match'&&tipo!=='squadra'?`<button type="button" class="pz-b pz-cardb" onclick="pzCardioApri('${wid}','${sid}')" title="Tapis roulant, cyclette, ellittica, vogatore... con minuti, velocita', pendenza o zona. Anche dalla riga: Tapis 20' 10 km/h 5%">Cardio</button><button type="button" class="pz-b pz-libb" onclick="pzComponiApri('${wid}','${sid}')" title="Scegli gruppi, stile e minuti: la seduta si riempie">Componi</button>`:''}<button type="button" class="pz-b pz-libb" onclick="pzLibApri('${wid}','${sid}')" title="Cerca con i filtri: gruppo, attrezzo, movimento">Libreria</button></td></tr></tbody></table></div>`;
+    h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Esercizio o intenzione, poi Invio: A1 Squat 4x6 @75% r2', oppure schiena orizzontale, petto inclinato, gambe mono, accessori polpacci">${tipo!=='corsa'&&tipo!=='match'&&tipo!=='squadra'?`<button type="button" class="pz-b pz-cardb" onclick="pzCardioApri('${wid}','${sid}')" title="Tapis roulant, cyclette, ellittica, vogatore... con minuti, velocita', pendenza o zona. Anche dalla riga: Tapis 20' 10 km/h 5%">Cardio</button>`:''}${!exs.length&&tipo!=='corsa'&&tipo!=='match'&&tipo!=='squadra'?`<button type="button" class="pz-b pz-libb" onclick="pzComponiApri('${wid}','${sid}')" title="Scegli gruppi, stile e minuti: la seduta si riempie">Componi</button>`:''}<button type="button" class="pz-b pz-libb" onclick="pzLibApri('${wid}','${sid}')" title="Cerca con i filtri: gruppo, attrezzo, movimento">Libreria</button></td></tr></tbody></table></div>`;
   });
   h+=`<div class="pz-addsess">Aggiungi seduta: ${Object.entries(SESS_TYPES).filter(([k])=>pzTipoOk(k)).map(([k,v])=>`<button type="button" class="pz-b" onclick="pzAddSess('${wid}','${k}')">${stEsc(v.label)}</button>`).join('')}<button type="button" class="pz-b" onclick="pzPalette('modello ')">Da modello</button></div></div>`;
   return h;
@@ -8895,7 +8906,15 @@ window.pzPrevSess=async function(wid,sid){
 /* Cardio nella seduta (finale o riscaldamento): macchina, minuti o km, velocita', pendenza,
    livello o watt, zona o RPE, oppure macchina a scelta dell'atleta. Diventa un esercizio con il
    campo cardio (vedi window.RSCardio in sidebar.js): l'app lo mostra con la sua scheda. */
-window.pzCardioApri=function(wid,sid){
+// riga cardio nella Tabella: un riassunto leggibile al posto di serie, %, kg e recupero; si modifica dalla finestra
+function pzCardioNota(e){const t=window.RSCardio?RSCardio.testo(e.cardio,true):'';return String(e.cue||'').replace(t,'').replace(/^\s*·\s*|\s*·\s*$/g,'').trim();}
+function pzCardioCella(wid,sid,eid,e){
+  const c=e.cardio||{},f=v=>String(v).replace('.',','),nota=pzCardioNota(e);
+  const qta=c.min?c.min+"'":c.km?f(c.km)+' km':'';
+  const det=window.RSCardio?RSCardio.testo(c,true):'';
+  return `<td colspan="7" class="pz-cdc"><button type="button" class="pz-cdrow" onclick="pzCardioApri('${wid}','${sid}','${eid}')" title="Modifica il cardio"><span class="pz-cdtag">Cardio</span>${qta?`<b>${qta}</b>`:''}${det?`<span>${stEsc(det)}</span>`:''}${nota?`<i>${stEsc(nota)}</i>`:''}<em>Modifica</em></button></td>`;
+}
+window.pzCardioApri=function(wid,sid,eid){
   let d=document.getElementById('pz-cardio-dlg');
   if(!d){d=document.createElement('dialog');d.id='pz-cardio-dlg';d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
   const M=(window.RSCardio?RSCardio.MACCHINE:[]).filter(m=>m.k!=='scelta');
@@ -8917,6 +8936,12 @@ window.pzCardioApri=function(wid,sid){
       <button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Annulla</button>
       <button type="button" class="btn btn-orange" onclick="pzCardioSalva('${wid}','${sid}')">Aggiungi</button></div></div>`;
   const ant=()=>{const c=pzCardioDa();const a=document.getElementById('cd-ant');if(a)a.textContent=(c.n||'')+(c.c.min?' '+c.c.min+"'":c.c.km?' '+String(c.c.km).replace('.',',')+' km':'')+(RSCardio.testo(c.c,true)?' · '+RSCardio.testo(c.c,true):'');};
+  const E=eid?(programs[currentProgId].weeks[wid].sessions[sid].exercises||{})[eid]:null;
+  if(E&&E.cardio){const c=E.cardio,put=(id,v)=>{const x=document.getElementById(id);if(x&&v!=null&&v!=='')x.value=String(v).replace('.',',');};
+    if(c.k&&c.k!=='scelta')put('cd-k',c.k);if(c.scelta||c.k==='scelta')document.getElementById('cd-scelta').checked=true;
+    put('cd-min',c.min);put('cd-km',c.km);put('cd-vel',c.vel);put('cd-pend',c.pend);put('cd-liv',c.liv);put('cd-watt',c.watt);put('cd-rpe',c.rpe);put('cd-zona',c.zona);put('cd-nota',pzCardioNota(E));
+    d.querySelector('h3').textContent='Modifica il cardio';d.querySelector('.btn-orange').textContent='Salva';
+    d.querySelector('.btn-orange').setAttribute('onclick',`pzCardioSalva('${wid}','${sid}','${eid}')`);}
   d.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',ant));ant();
   if(typeof d.showModal==='function'&&!d.open)d.showModal();else d.setAttribute('open','');
   setTimeout(()=>document.getElementById('cd-min')?.focus(),40);
@@ -8928,17 +8953,22 @@ function pzCardioDa(){
   if(v('cd-zona'))c.zona=v('cd-zona');if(sc)c.scelta=true;
   return {n:m,c};
 }
-window.pzCardioSalva=async function(wid,sid){
-  const {n,c}=pzCardioDa();if(!c.min&&!c.km){showToast('Metti i minuti o i km');return;}
+window.pzCardioSalva=async function(wid,sid,eid){
+  let {n,c}=pzCardioDa();if(!c.min&&!c.km){showToast('Metti i minuti o i km');return;}
   const s=programs[currentProgId].weeks[wid].sessions[sid];const nota=(document.getElementById('cd-nota')||{}).value||'';
-  const e={name:n,sets:'1',reps:c.min?c.min+"'":String(c.km).replace('.',',')+' km',cue:[RSCardio.testo(c,true),nota.trim()].filter(Boolean).join(' · '),cardio:c,order:pzExs(s).length};
+  const E=eid&&(s.exercises||{})[eid];
+  // in modifica resta il nome scritto (es. 'Cyclette o Tapis roulant') se la macchina non cambia
+  if(E&&E.cardio&&E.cardio.k===c.k){n=E.name||n;if(E.cardio.opz&&c.k==='scelta')c.opz=E.cardio.opz;}
+  const e={name:n,sets:'1',reps:c.min?c.min+"'":String(c.km).replace('.',',')+' km',cue:[RSCardio.testo(c,true),nota.trim()].filter(Boolean).join(' · '),cardio:c,order:E?(E.order||0):pzExs(s).length};
+  if(E){const path=pzBase(wid,sid)+'/exercises/'+eid;pzUndo.push({path,prima:JSON.parse(JSON.stringify(E))});
+    const x=Object.assign({},E,e);await set(ref(db,path),x);document.getElementById('pz-cardio-dlg')?.close();showToast('Cardio aggiornato. Ctrl+Z annulla');return;}
   const r=push(ref(db,pzBase(wid,sid)+'/exercises'));pzUndo.push({path:pzBase(wid,sid)+'/exercises/'+r.key,prima:null});
   await set(r,e);document.getElementById('pz-cardio-dlg')?.close();showToast(n+' aggiunto. Ctrl+Z annulla');
 };
 async function pzQuick(el){
   let righe=String(el.value||'').split(/\r?\n/).filter(x=>x.trim());
   // piu' intenzioni in una riga: "schiena orizzontale, petto inclinato, accessori polpacci"
-  if(righe.length===1&&/[,;+]/.test(righe[0])&&window.RSMuscoli){const pz=righe[0].split(/\s*[,;+]\s*/).filter(Boolean);
+  if(righe.length===1&&/[,;+]/.test(righe[0])&&window.RSMuscoli&&!(window.RSCardio&&RSCardio.leggi(righe[0]))){const pz=righe[0].split(/\s*[,;+]\s*/).filter(Boolean);
     if(pz.length>1&&pz.every(x=>RSMuscoli.intento(pzParse(x,true).name||x,pzNomiForza(),pzObiettivo())))righe=pz;}
   if(righe.length>1){el.value='';await pzBulk(el.dataset.w,el.dataset.s,righe);return;}
   const cd=window.RSCardio&&RSCardio.leggi(el.value);
@@ -8956,6 +8986,7 @@ async function pzQuick(el){
   pzUndo.push({path:pzBase(wid,sid)+'/exercises/'+r.key,prima:null});
   el.value='';
   await set(r,e);
+  if(cd)showToast('Cardio: '+e.name+' '+[e.reps,e.cue].filter(Boolean).join(' · '));
   setTimeout(()=>document.querySelector(`.pz-q[data-s="${sid}"]`)?.focus(),60);
 }
 // piu' righe in un colpo: scrittura veloce una per riga, oppure colonne da
