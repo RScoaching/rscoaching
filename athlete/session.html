@@ -1257,6 +1257,12 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 .pk7-f{padding-top:10px}.pk7-ok{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--primary);color:#1a0f0a;font:650 16px var(--ff);cursor:pointer}.pk7-ok[disabled]{opacity:.45}
 @media (prefers-reduced-motion:reduce){.pk7,.pk7-ov{transition:none}}
 .cx-add{display:flex;gap:8px;padding:6px 10px 10px}.cx-add button{flex:1;min-height:44px;border-radius:12px;border:1px dashed rgba(255,214,196,.2);background:transparent;color:var(--text);font:600 14px var(--ff);cursor:pointer}
+.sw7.tg{margin-left:0;color:#FB7185;border-color:rgba(251,113,133,.25)}
+.lib7-sc{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin-top:4px}
+.lib7-sc button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:60px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,214,196,.12);background:rgba(255,214,196,.04);color:var(--white);text-align:left;cursor:pointer}
+.lib7-sc button:active{transform:scale(.98)}.lib7-sc b{font:600 15px var(--ff)}.lib7-sc i{font:500 12.5px var(--ff);font-style:normal;color:var(--muted)}
+.lib7-v .lib7-go{width:100%;background:transparent;border:1px dashed rgba(255,214,196,.25);color:var(--primary2)}
+.pk7-tutti{display:block;width:100%;min-height:48px;margin:10px 0 4px;border-radius:12px;border:1px dashed rgba(255,214,196,.2);background:transparent;color:var(--primary2);font:600 14px var(--ff);cursor:pointer}
 .cd7-tt{display:flex;flex-direction:column;gap:2px;min-width:0}.cd7-tt small{font:500 13px var(--ff);color:var(--muted,#B5ABA4);min-height:1em}
 .cd7-sc{padding:4px 16px 10px}.cd7-sc span{display:block;font:500 13px var(--ff);color:var(--muted,#B5ABA4);margin-bottom:8px}
 .cd7-sc div{display:flex;flex-wrap:wrap;gap:6px}
@@ -1473,7 +1479,7 @@ function saveProgress(){
   // anche la forma degli esercizi (serie aggiunte, tolte, di attivazione): senza, riaprendo la seduta righe e dati non tornano
   const strutt=exs.map(e=>e&&e._type==='pesi'?{n:e.name,sets:e.sets||null,setRows:e.setRows||null}:null);
   const agg=exs.map((e,i)=>e&&e._agg?{i,e}:null).filter(Boolean),sost=exs.map(e=>e&&e._da&&!e._agg?{n:e.name,da:e._da,mot:e._mot||null}:null);
-  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt,cardioData,agg,sost,firma:FIRMA0}));}catch(e){}
+  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt,cardioData,agg,sost,firma:FIRMA0,nome:isQuick&&session?session.name:null}));}catch(e){}
 }
 let _saveTmr=null, _sessionFinished=false;
 function saveProgressDebounced(){
@@ -1537,6 +1543,7 @@ function loadProgress(){
     if(Array.isArray(saved.sost))saved.sost.forEach((x,i)=>{const e=exs[i];if(x&&e&&e.name===x.da){e._da=x.da;e._mot=x.mot;e.name=x.n;delete e.kg;}});
     if(Array.isArray(saved.agg)){if(exs.length===1&&exs[0]._type==='nota'&&!exs[0].note&&saved.agg.length)exs=[];saved.agg.forEach(({i,e})=>{if(e&&i>=exs.length)exs.push(e);});}
     if(saved.setData)setData=saved.setData;
+    if(saved.nome&&isQuick)setTimeout(()=>libNome(saved.nome),0);
     // salvataggi vecchi senza firma: almeno la forma dei superset deve tornare
     exs.forEach((e,i)=>{if(e._type==='complex'){if(!setData[i]||typeof setData[i]!=='object')setData[i]={};(e.items||[]).forEach((it,ci)=>{if(!setData[i][ci]||typeof setData[i][ci]!=='object'||'done' in setData[i][ci]){const c={};for(let k=0;k<(parseInt(it.sets)||4);k++)c[k]={kg:'',rpe:null,done:false};setData[i][ci]=c;}});}});
     if(Array.isArray(saved.strutt))saved.strutt.forEach((x,i)=>{const e=exs[i];if(x&&e&&e._type==='pesi'&&e.name===x.n){if(x.sets)e.sets=x.sets;e.setRows=x.setRows||undefined;}});
@@ -1635,7 +1642,7 @@ function setup(){
   document.getElementById('loading').style.display='none';
   document.getElementById('sapp').style.display='block';
   document.getElementById('hdr-name').textContent=session.name||'Sessione';
-  document.getElementById('hdr-meta').textContent=`${athlete.name}${PROG?' · Sett.'+(WEEK+1):' · Piano rapido'}`;
+  document.getElementById('hdr-meta').textContent=`${athlete.name}${PROG?' · Sett.'+(WEEK+1):p.get('libero')==='1'?' · scelto da te':''}`;
   document.getElementById('home-btn').onclick=()=>{location.href=`../athlete/?id=${AID}`;};
   // Elapsed session timer
   setInterval(function(){
@@ -1821,12 +1828,40 @@ function buildFromArray(type,arr){
    'Cambia' sostituisce un esercizio con uno simile (window.RSMuscoli.simili: stesso schema e
    gruppo, prima lo stesso movimento con un altro attrezzo): quando la macchina e' occupata o
    manca l'attrezzo. Il registro salva 'sostituzioni' e 'aggiunti': il preparatore lo vede. */
-const PK={modo:'agg',ei:null,q:'',g:'',a:'',scelti:new Set(),mot:'occupato'};
+const PK={modo:'agg',ei:null,q:'',g:'',a:'',scelti:new Set(),mot:'occupato',tutti:false};
+// gli esercizi di base della palestra (nomi del database, cosi' video, gruppi e 'Prec.' funzionano): si parte da qui,
+// tutto il database solo a richiesta
+const PK_BASE=['Panca Piana','Panca Piana Manubri','Panca Inclinata Manubri','Chest Press','Pec Deck','Croci Cavi Alti','Push Up','Dip',
+  'Lat Machine Presa Larga','Lat Machine Presa Neutra','Trazioni','Pulley Triangolo','Low Row','Rematore Bilanciere','Rematore Manubrio Singolo','Pulldown Braccia Tese',
+  'Military Press Bilanciere','Lento Avanti Manubri Seduto','Machine Shoulder Press','Alzate Laterali Manubri','Alzate Laterali Cavi','Alzate Posteriori Manubri','Face Pull Corda',
+  'Curl Bilanciere EZ','Curl Manubri','Hammer Curl','Curl Cavo','Pushdown Corda','French Press Bilanciere EZ','Overhead Tricipiti Estensione Cavo',
+  'Squat','Dumbbell Goblet Squat','Pressa 45°','Hack Squat','Leg Extension','Affondi','Squat Bulgaro','Step Up',
+  'Stacco da Terra','Romanian Deadlift','Stacchi Rumeni Manubri','Hip Thrust Bilanciere','Leg Curl Seduto','Leg Curl Prone','Hyperextension','Hip Abduction Machine','Hip Adduction Machine',
+  'Calf alla Pressa','Smith Machine Calf Raises','Seated Heel Raise',
+  'Plank','Plank Laterale','Crunch','Crunch Inverso','Dead Bug','Rollout Ab Wheel','Weighted Russian Twist'];
+// schemi per partire in un tocco: l'atleta poi toglie, cambia o aggiunge
+const PK_SCHEMI=[
+  ['Petto e tricipiti',['Panca Piana','Panca Inclinata Manubri','Croci Cavi Alti','Dip','Pushdown Corda','Overhead Tricipiti Estensione Cavo']],
+  ['Schiena e bicipiti',['Lat Machine Presa Larga','Pulley Triangolo','Rematore Manubrio Singolo','Face Pull Corda','Curl Bilanciere EZ','Hammer Curl']],
+  ['Gambe',['Squat','Pressa 45°','Romanian Deadlift','Leg Extension','Leg Curl Seduto','Calf alla Pressa']],
+  ['Spalle e braccia',['Military Press Bilanciere','Alzate Laterali Manubri','Alzate Posteriori Manubri','Curl Manubri','Pushdown Corda','Plank']],
+  ['Full body',['Squat','Panca Piana Manubri','Lat Machine Presa Larga','Romanian Deadlift','Alzate Laterali Manubri','Plank']],
+  ['Solo cardio',['c:tapis','c:cyclette']]];
 const PK_ATT=[['','Tutti'],['bilanciere','Bilanciere'],['manubri','Manubri'],['macchina','Macchina'],['cavi','Cavi'],['corpo libero','Corpo libero'],['kettlebell','Kettlebell'],['elastico','Elastico']];
 const PK_MOT=[['occupato','Occupato'],['manca','Manca l\'attrezzo'],['fastidio','Fastidio o dolore'],['altro','Altro']];
-function pkNomi(){
+function pkTutti(){
   const db=(window.EXERCISES_DB||[]).filter(e=>e&&e.name&&!/mobilita|recupero/.test(e.cat||'')).map(e=>e.name);
   return [...new Set(db)];
+}
+function pkNomi(){return PK.tutti?pkTutti():PK_BASE;}
+// serie, ripetizioni e recupero di partenza: multiarticolari 3 x 8-10 con 2', isolamento 3 x 12, core a tempo, polpacci 3 x 15
+function pkDose(n){
+  const l=String(n||'').toLowerCase(),i=pkInfo(n);
+  if(/plank|dead bug|wall sit|isometr|barchetta|hollow/.test(l))return {sets:'3',reps:'30"',rest:'60"'};
+  if(i.g==='core')return {sets:'3',reps:'15',rest:'60"'};
+  if(i.g==='polpacci')return {sets:'3',reps:'15',rest:'60"'};
+  if(i.sc==='isolamento'||/leg curl|leg extension|abduction|adduction|hyperext/.test(l))return {sets:'3',reps:'12',rest:'90"'};
+  return {sets:'3',reps:'8-10',rest:"2'"};
 }
 function pkInfo(n){const M=window.RSMuscoli;return M?M.info(n)||{}:{};}
 function pkLista(){
@@ -1851,13 +1886,14 @@ function pkDisegna(){
   const M=window.RSMuscoli,ex=PK.modo==='cambia'?exs[PK.ei]:null;
   let h='';
   if(ex){
-    const sim=M?M.simili(ex.name,pkNomi()).slice(0,8):[];
+    const sb=M?M.simili(ex.name,PK_BASE):[],sim=sb.concat(M&&sb.length<6?M.simili(ex.name,pkTutti()).filter(n=>!sb.includes(n)):[]).slice(0,8);
     h+=`<div class="pk7-l">Perche' lo cambi?</div><div class="pk7-ch">${PK_MOT.map(([k,l])=>`<button type="button" class="${PK.mot===k?'on':''}" onclick="pkMot('${k}')">${l}</button>`).join('')}</div>`;
     if(sim.length&&!PK.q&&!PK.g&&!PK.a)h+=`<div class="pk7-l">Simili a ${escH(ex.name)}</div>${sim.map(n=>pkRiga({n,i:pkInfo(n)},true)).join('')}<div class="pk7-l">Oppure cerca tra tutti</div>`;
   }
   const L=pkLista(),tot=L.length;
-  h+=L.slice(0,80).map(x=>pkRiga(x)).join('')||`<div class="pk7-vuoto">Nessun esercizio con questi filtri. Prova a togliere un filtro o a scrivere meno lettere.</div>`;
+  h+=L.slice(0,80).map(x=>pkRiga(x)).join('')||`<div class="pk7-vuoto">${PK.tutti?'Nessun esercizio con questi filtri. Prova a togliere un filtro o a scrivere meno lettere.':'Non e\' tra quelli di base.'}</div>`;
   if(tot>80)h+=`<div class="pk7-vuoto">Altri ${tot-80}: scrivi nella ricerca per trovarli.</div>`;
+  if(PK.g!=='cardio')h+=PK.tutti?`<button type="button" class="pk7-tutti" onclick="pkTuttiSi(false)">Torna agli esercizi di base</button>`:`<button type="button" class="pk7-tutti" onclick="pkTuttiSi(true)">Non lo trovi? Cerca tra tutti gli esercizi (${pkTutti().length})</button>`;
   b.innerHTML=h;
   const f=document.getElementById('pk7-ok');if(f){f.hidden=PK.modo==='cambia';f.disabled=!PK.scelti.size;f.textContent=PK.scelti.size?`Aggiungi ${PK.scelti.size} ${PK.scelti.size===1?'esercizio':'esercizi'}`:'Scegli gli esercizi';}
 }
@@ -1867,7 +1903,7 @@ function pkFiltri(){
     ${PK.g==='cardio'?'':`<div class="pk7-ch" role="group" aria-label="Attrezzo">${PK_ATT.map(([k,l])=>`<button type="button" class="${PK.a===k?'on':''}" onclick="pkA('${k}')">${l}</button>`).join('')}</div>`}`;
 }
 window.pkApri=(modo,ei)=>{
-  PK.modo=modo||'agg';PK.ei=ei??null;PK.q='';PK.g='';PK.a='';PK.scelti=new Set();PK.mot='occupato';
+  PK.modo=modo||'agg';PK.ei=ei??null;PK.q='';PK.g='';PK.a='';PK.scelti=new Set();PK.mot='occupato';PK.tutti=false;
   let ov=document.getElementById('pk7-ov');
   if(!ov){ov=document.createElement('div');ov.id='pk7-ov';ov.className='pk7-ov';document.body.appendChild(ov);ov.addEventListener('click',e=>{if(e.target===ov)pkChiudi();});}
   const ex=PK.modo==='cambia'?exs[PK.ei]:null;
@@ -1881,6 +1917,7 @@ window.pkApri=(modo,ei)=>{
 };
 window.pkChiudi=()=>{const ov=document.getElementById('pk7-ov');if(ov)ov.classList.remove('open');document.body.style.overflow='';};
 window.pkQ=v=>{PK.q=v;pkDisegna();};
+window.pkTuttiSi=v=>{PK.tutti=!!v;pkDisegna();const b=document.getElementById('pk7-b');if(b)b.scrollTop=0;};
 window.pkG=k=>{PK.g=k;if(k==='cardio')PK.a='';document.getElementById('pk7-f').innerHTML=pkFiltri();pkDisegna();};
 window.pkA=k=>{PK.a=k;document.getElementById('pk7-f').innerHTML=pkFiltri();pkDisegna();};
 window.pkMot=k=>{PK.mot=k;pkDisegna();};
@@ -1894,7 +1931,7 @@ function pkSerie(i){const ex=exs[i];if(!ex||ex._type!=='pesi')return;const vec=s
   setData[i]=out;}
 function pkNuovo(n,c){
   if(c){const m=(window.RSCardio?RSCardio.MACCHINE:[]).find(x=>x.k===c);return {name:n,sets:'1',reps:"10'",cue:'',cardio:{k:c,min:10},_type:'cardio',_agg:true};}
-  return {name:n,sets:'3',reps:'10',rest:"90\"",_type:'pesi',_agg:true};
+  return Object.assign({name:n,_type:'pesi',_agg:true},pkDose(n));
 }
 window.pkAggiungi=()=>{
   if(!PK.scelti.size)return;const da=exs.length;
@@ -1912,6 +1949,22 @@ function pkCambia(ei,n,c){
   pkChiudi();saveProgress();renderCard(ei);toast('Cambiato: lo vede anche il preparatore');
 }
 window.pkCambiaApri=ei=>window.pkApri('cambia',ei);
+// allenamento libero: uno schema riempie la seduta e le da' il nome
+window.pkSchema=i=>{const [nome,L]=PK_SCHEMI[i]||[];if(!L)return;
+  if(exs.length===1&&exs[0]._type==='nota'&&!exs[0].note)exs=[];
+  L.forEach(n=>{if(n.startsWith('c:')){const m=(window.RSCardio?RSCardio.MACCHINE:[]).find(x=>x.k===n.slice(2));if(m){const e=pkNuovo(m.n,m.k);if(nome==='Solo cardio')e.cardio.min=20,e.reps="20'";exs.push(e);}}else{exs.push(pkNuovo(n,null));pkSerie(exs.length-1);}});
+  libNome(nome);saveProgress();render();if(window.jumpTo)setTimeout(()=>window.jumpTo(0),60);toast(nome+': cambia, togli o aggiungi quello che vuoi');};
+// il nome dell'allenamento libero (in testa e nel registro)
+function libNome(n){if(!isQuick||!n)return;session.name=n;const h=document.getElementById('hdr-name');if(h)h.textContent=n;}
+// togliere un esercizio aggiunto per sbaglio: gli indici dopo scalano di uno (serie, spunte, cardio)
+window.pkTogli=ei=>{const ex=exs[ei];if(!ex||!ex._agg)return;
+  const fatte=ex._type==='pesi'&&Object.values(setData[ei]||{}).some(d=>d&&d.done);
+  if(fatte&&!confirm('Togliere '+ex.name+'? Le serie segnate si perdono.'))return;
+  if(CDT&&CDT.ei===ei)cdFerma(ei);
+  const sposta=o=>{const n={};Object.keys(o||{}).forEach(k=>{const i=+k;if(i<ei)n[i]=o[k];else if(i>ei)n[i-1]=o[k];});return n;};
+  exs.splice(ei,1);setData=sposta(setData);campoChecked=sposta(campoChecked);const cd=sposta(cardioData);Object.keys(cardioData).forEach(k=>delete cardioData[k]);Object.assign(cardioData,cd);
+  if(CDT&&CDT.ei>ei)CDT.ei--;if(cur>=exs.length)cur=Math.max(0,exs.length-1);
+  saveProgress();render();toast(ex.name+' tolto');};
 
 // ── VIDEO DENTRO LA SEDUTA
 /* Il video si apre sopra la seduta e si chiude tornando allo stesso punto: prima il link
@@ -2201,7 +2254,11 @@ function render(){
   document.getElementById('pfill').style.width=`${(cur/Math.max(exs.length,1))*100}%`;
   renderExNav();
 
-  if(!exs.length){document.getElementById('content').innerHTML=`<div class="lib7-v"><b>Allenamento libero</b><span>Scegli gli esercizi: cerca per nome o filtra per gruppo e attrezzo. Serie e kg li segni come sempre.</span><button type="button" class="lib7-go" onclick="pkApri('agg')">Scegli gli esercizi</button></div>`;return;}
+  // senza esercizi la barra in basso (Prossimo, Completa) non serve
+  {const nb2=document.getElementById('next-btn'),bar=nb2&&nb2.parentElement;if(bar)bar.style.display=exs.length?'':'none';}
+  if(!exs.length){document.getElementById('content').innerHTML=`<div class="lib7-v"><b>Allenamento libero</b><span>Parti da uno schema e cambialo come vuoi, oppure scegli tu gli esercizi. Serie e kg li segni come sempre.</span>
+    <div class="lib7-sc">${PK_SCHEMI.map(([n,L],i)=>`<button type="button" onclick="pkSchema(${i})"><b>${n}</b><i>${L.length} ${n==='Solo cardio'?'macchine':'esercizi'}</i></button>`).join('')}</div>
+    <button type="button" class="lib7-go" onclick="pkApri('agg')">Scegli tu gli esercizi</button></div>`;return;}
 
   const html=exs.map((ex,i)=>{
     let inner='';
@@ -2376,7 +2433,7 @@ function renderPesi(ex,ei){
     <div class="ex-card-head">
       <div class="ex-num-badge">${ei+1} di ${exs.length}</div>
       <span class="ex-type-pill tp-pesi">Pesi</span>
-      <div class="ex-nm-row"><div class="ex-card-name">${ex.name}</div>${vidMini(ex.name)}<button type="button" class="sw7" onclick="pkCambiaApri(${ei})" aria-label="Cambia esercizio">Cambia</button></div>${ex._da?`<div class="sw7-da">Al posto di ${escH(ex._da)}</div>`:''}
+      <div class="ex-nm-row"><div class="ex-card-name">${ex.name}</div>${vidMini(ex.name)}<button type="button" class="sw7" onclick="pkCambiaApri(${ei})" aria-label="Cambia esercizio">Cambia</button>${ex._agg?`<button type="button" class="sw7 tg" onclick="pkTogli(${ei})" aria-label="Togli ${escH(ex.name)}">Togli</button>`:''}</div>${ex._da?`<div class="sw7-da">Al posto di ${escH(ex._da)}</div>`:''}
       <div class="tg7">${rows.filter(r=>r.type!=='W').map(r=>`<span><b>${parseInt(r.sets)||1} × ${escH(repTxt(r.reps||ex.reps||'-'))}</b>${tempo?'':(/^\d+$/.test(String(r.reps||ex.reps||''))?' rip.':'')}</span>`).join('')}${pct>0&&rm===0?`<span><b>${pct}%</b> 1RM</span>`:(!pct&&ex.carico?`<span><b>${escH(ex.carico)}</b></span>`:'')}${ex.rpe?`<span>RPE <b>${escH(ex.rpe)}</b></span>`:''}${ex.rest?`<span>recupero <b>${escH(ex.rest)}</b></span>`:''}${rows.some(r=>r.type==='W')?`<span class="w">+ ${rows.filter(r=>r.type==='W').reduce((t,r)=>t+(parseInt(r.sets)||1),0)} di attivazione</span>`:''}</div>
       ${exTagsHtml(ex.name)}
       ${cueHtml(ex.cue)}
@@ -2468,7 +2525,7 @@ function renderCardio(ex,ei){
   const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,el=run?(Date.now()-CDT.t0)/1000:(+d.fatto||0),vt=cdVista(c,el,run);
   return `<div class="ex-card cd7${ck?' all-done':''}">
     <div class="ex-card-head">
-      <div class="ex-nm-row"><div class="ex-card-name">${escH(ex.name)}</div><button type="button" class="sw7" onclick="pkCambiaApri(${ei})" aria-label="Cambia esercizio">Cambia</button></div>${ex._da?`<div class="sw7-da">Al posto di ${escH(ex._da)}</div>`:''}
+      <div class="ex-nm-row"><div class="ex-card-name">${escH(ex.name)}</div><button type="button" class="sw7" onclick="pkCambiaApri(${ei})" aria-label="Cambia esercizio">Cambia</button>${ex._agg?`<button type="button" class="sw7 tg" onclick="pkTogli(${ei})" aria-label="Togli ${escH(ex.name)}">Togli</button>`:''}</div>${ex._da?`<div class="sw7-da">Al posto di ${escH(ex._da)}</div>`:''}
       <div class="tg7">${chips}</div>
       ${cueHtml(ex.cue&&ex.cue!==(window.RSCardio?RSCardio.testo(c,true):'')?ex.cue.replace(window.RSCardio?RSCardio.testo(c,true):'','').replace(/^\s*·\s*/,''):'')}
     </div>

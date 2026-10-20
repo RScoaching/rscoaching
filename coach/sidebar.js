@@ -1362,7 +1362,7 @@ window.RSMuscoli=(function(){
   // [regola sul nome, gruppo, secondari, schema]; la prima che combacia vince
   const R=[
     [/clean|snatch|jerk|girata|strappo|slancio|swing|med ?ball|lancio|slam|throw|toss/,'esplosivo',{},'olimpico'],
-    [/jump|salt|hop|bound|balz|pogo|pliom|drop|hurdle|ostacol|skip|corda/,'esplosivo',{},'pliometria'],
+    [/jump|salt|hop|bound|balz|pogo|pliom|drop|hurdle|ostacol|skip|corda per saltare|jump rope/,'esplosivo',{},'pliometria'],
     [/copenhagen|adduct|addutt/,'gambe',{core:.5},'isolamento'],
     [/abduct|abdutt|band walk|lateral walk|clam|monster walk/,'glutei',{},'isolamento'],
     [/heel raise|calf|polpacc|soleo|tibial/,'polpacci',{},'isolamento'],
