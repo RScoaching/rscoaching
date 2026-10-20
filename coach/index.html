@@ -1318,6 +1318,9 @@ body::before,body::after{display:none;}
 .ac-hd{font:600 11.5px Inter,sans-serif;color:var(--muted);padding:7px 8px;background:rgba(255,255,255,.02)}
 .ac-c{padding:5px;min-height:84px;min-width:0}.ac-c.vuoto{background:rgba(255,255,255,.01)}
 .ac-d{font-size:11px;color:var(--muted);margin:0 0 4px 2px}.ac-c.oggi .ac-d{color:var(--primary);font-weight:700}
+.aa-or{font-size:13px;color:var(--muted);margin:8px 0 2px}
+.aa-z{margin:10px 0 6px}.aa-zb{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden}.aa-zb u{display:block;min-width:3px}
+.aa-zl{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--muted)}.aa-zl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
 .db-cambio{color:#FBBF24!important;font-size:12.5px!important;margin-top:2px}
 .aa-cambi{display:flex;flex-direction:column;gap:4px;margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)}
 .aa-cambi b{font-size:12.5px;color:#FBBF24}.aa-cambi span{font-size:13.5px;color:var(--white)}
@@ -2355,6 +2358,9 @@ function dbRender(ids,st,oggi,giorni,fatteOggi){
     :`<div class="d-vuoto">${dIco('ok')}<b>${DB_F==='guardare'?'Nessuno da guardare':DB_F==='oggi'?'Nessuna seduta in programma oggi':'Nessun atleta attivo'}</b><span>${DB_F==='guardare'?'Carichi, check-in e aderenza sono nella norma per tutti.':'Gli atleti con un programma compaiono qui.'}</span></div>`;
   dbFeed(ids);dbGare(ids);
 }
+// tempo nelle zone di FC dell'orologio, in una barra con i minuti sotto
+function aaZone(zt){const Z=['#94A3B8','#60A5FA','#4ADE80','#FB923C','#F43F5E'],v=(zt||[]).slice(0,5).map(x=>+x||0),t=v.reduce((a,b)=>a+b,0);if(!t)return '';
+  return `<div class="aa-z"><div class="aa-zb">${v.map((x,k)=>x?`<u style="flex:${x};background:${Z[k]}"></u>`:'').join('')}</div><div class="aa-zl">${v.map((x,k)=>x>=60?`<span><i style="background:${Z[k]}"></i>Z${k+1} ${Math.round(x/60)}'</span>`:'').join('')}</div></div>`;}
 // esercizi cambiati o aggiunti dall'atleta nella seduta (macchina occupata, manca l'attrezzo, fastidio)
 const CAMBIO_MOT={occupato:'occupato',manca:'manca l\'attrezzo',fastidio:'fastidio o dolore',altro:'altro'};
 function cambiRighe(l){
@@ -3703,11 +3709,11 @@ window.athAttivita=function(aid,k){
   const tit=(l.sessName||'Attivita\'')+' '+(l.date||'');
   if(l.gmTraccia){gmApriTraccia(aid,String(l.gmTraccia),tit);return;}
   const P=window.RSRitmi?window.RSRitmi.passo:(x=>x),c=l.corsa||{},min=+l.duration||+l.minuti||0,rpe=+l.avgRpe||null;
-  const num=[[min?min+'\'':null,'durata'],[c.km?String(c.km).replace('.',',')+' km':(l.km?String(l.km).replace('.',',')+' km':null),'distanza'],[c.passo?P(c.passo)+'/km':null,'passo'],[c.fc||l.gmFc||null,'FC media'],[rpe||(l.rpeStima?'~'+l.rpeStima:null),'RPE'],[l.totalSets||null,'serie']].filter(x=>x[0]);
+  const num=[[min?min+'\'':null,'durata'],[c.km?String(c.km).replace('.',',')+' km':(l.km?String(l.km).replace('.',',')+' km':null),'distanza'],[c.passo?P(c.passo)+'/km':null,'passo'],[c.fc||l.gmFc||null,'FC media'],[l.gmFcMax||c.fcMax||null,'FC max'],[l.gmKcal||null,'kcal'],[l.gmTe?String(l.gmTe).replace('.',','):null,'effetto aerobico'],[rpe||(l.rpeStima?'~'+l.rpeStima:null),'RPE'],[l.totalSets||null,'serie']].filter(x=>x[0]);
   const mb=document.getElementById('modal-body');
   document.querySelector('#modal-overlay .modal')?.classList.add('modal-wide');
   mb.innerHTML=`<h3>${athEsc(tit)}</h3><div class="aa-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>
-    ${cambiRighe(l).length?`<div class="aa-cambi"><b>Cambiato dall'atleta</b>${cambiRighe(l).map(t=>`<span>${athEsc(t)}</span>`).join('')}</div>`:''}${c.giri&&c.giri.length?gmGiriHtml(c.giri):''}${l.exerciseData?tsEsercizi(l,aid):''}${(l.cardio||[]).length?`<table class="ts-ex"><thead><tr><th>Cardio</th><th>Minuti</th><th>Km</th><th class="n">FC media</th></tr></thead><tbody>${l.cardio.map(c=>`<tr><td><b>${athEsc(c.macchina||c.name)}</b></td><td>${c.min||'-'}</td><td>${c.km?String(c.km).replace('.',','):'-'}</td><td class="n">${c.fc||'-'}</td></tr>`).join('')}</tbody></table>`:''}${l.note?`<p class="aa-n">"${athEsc(l.note)}"</p>`:''}
+    ${l.gmId&&!l.gm&&!l.corsa?`<p class="aa-or">Seduta registrata nell'app, con i dati dell'orologio${l.gmSec?' ('+Math.round(l.gmSec/60)+' minuti registrati)':''}.</p>`:''}${(l.gmZt||[]).some(x=>+x)?aaZone(l.gmZt):''}${cambiRighe(l).length?`<div class="aa-cambi"><b>Cambiato dall'atleta</b>${cambiRighe(l).map(t=>`<span>${athEsc(t)}</span>`).join('')}</div>`:''}${c.giri&&c.giri.length?gmGiriHtml(c.giri):''}${l.exerciseData?tsEsercizi(l,aid):''}${(l.cardio||[]).length?`<table class="ts-ex"><thead><tr><th>Cardio</th><th>Minuti</th><th>Km</th><th class="n">FC media</th></tr></thead><tbody>${l.cardio.map(c=>`<tr><td><b>${athEsc(c.macchina||c.name)}</b></td><td>${c.min||'-'}</td><td>${c.km?String(c.km).replace('.',','):'-'}</td><td class="n">${c.fc||'-'}</td></tr>`).join('')}</tbody></table>`:''}${l.note?`<p class="aa-n">"${athEsc(l.note)}"</p>`:''}
     <div class="mactions"><button class="btn btn-outline" onclick="closeModal()">Chiudi</button>${l.progId&&programs[l.progId]?`<a class="btn btn-orange" href="./builder.html?prog=${encodeURIComponent(l.progId)}">Apri nel programma</a>`:''}</div>`;
   document.getElementById('modal-overlay').classList.add('open');
 };
@@ -5711,7 +5717,7 @@ function renderAllSessions(){
       const rc=r>=9?'p-red':r>=7?'p-warn':'p-ok';
       return `<button type="button" class="ts-row" onclick="tsApri(${s.i})">
         <div class="live-av">${ini(a.name||'-')}</div>
-        <div class="ts-m"><div class="ts-n"><b>${athEsc(a.name||'-')}</b><span class="ts-t t-${s.tipo.replace(' ','')}">${TL[s.tipo]}</span>${l.gm||l.source==='orologio'?'<span class="ts-or">orologio</span>':''}${(l.newPRs||[]).length?'<span class="ts-pr">record</span>':''}${cambiRighe(l).length?`<span class="ts-cb" title="${athEsc(cambiRighe(l).join(', '))}">${(l.sostituzioni||[]).length?'esercizio cambiato':'esercizio aggiunto'}</span>`:''}</div>
+        <div class="ts-m"><div class="ts-n"><b>${athEsc(a.name||'-')}</b><span class="ts-t t-${s.tipo.replace(' ','')}">${TL[s.tipo]}</span>${l.gm||l.source==='orologio'?'<span class="ts-or">orologio</span>':l.gmId?`<span class="ts-or">con orologio${l.gmFc?' &#183; FC '+l.gmFc:''}</span>`:''}${(l.newPRs||[]).length?'<span class="ts-pr">record</span>':''}${cambiRighe(l).length?`<span class="ts-cb" title="${athEsc(cambiRighe(l).join(', '))}">${(l.sostituzioni||[]).length?'esercizio cambiato':'esercizio aggiunto'}</span>`:''}</div>
           <div class="ts-s">${athEsc(l.sessName||'Seduta')}${pr?' &#183; <i>'+athEsc(pr)+'</i>':''}</div>${det?`<div class="ts-d">${det}</div>`:''}${cambiRighe(l).length?`<div class="ts-cbd">${athEsc(cambiRighe(l).join(', '))}</div>`:''}${l.note?`<div class="ts-no">"${athEsc(l.note)}"</div>`:''}</div>
         <div class="ts-v">${d?`<span><b>${d}'</b></span>`:''}${r?`<span class="pill ${rc}">RPE ${f1(r)}</span>`:l.rpeStima?`<span class="pill p-gray">RPE ~${l.rpeStima}</span>`:''}${d&&r?`<span class="ts-ua">${Math.round(d*r)} UA</span>`:''}</div></button>`;}).join('');
     const dateLabel=date!=='-'?new Date(date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):date;

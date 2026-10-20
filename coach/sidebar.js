@@ -42,6 +42,7 @@ window.RSI = {
   test:'<path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/>',
   play:'<path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.4-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/>',
   foto:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  orologio:'<circle cx="12" cy="12" r="6"/><path d="M12 9.5V12l1.5 1.5M9 6.6 9.6 3h4.8l.6 3.6M9 17.4l.6 3.6h4.8l.6-3.6"/>',
   modifica:'<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
   filtro:'<path d="M3 6h18M7 12h10M10 18h4"/>'
 };
@@ -819,6 +820,8 @@ window.RSGarmin = (function(){
   // logs: i registri veri {chiave: log}; pianificate(iso) -> [{pid,wi,sid,tipo,nome}] le sedute in programma quel giorno.
   // Una corsa dell'orologio arricchisce la corsa registrata a mano lo stesso giorno; se non c'e' diventa una seduta
   // fatta, agganciata alla corsa in programma quel giorno. Il registro vero vale sempre (RPE, note).
+  // i numeri dell'orologio che servono anche fuori dalla corsa (palestra, calcio): FC, calorie, effetto allenamento
+  function orologio(a){const o={gmInizio:a.ts};if(a.sec)o.gmSec=a.sec;if(a.fcMax)o.gmFcMax=a.fcMax;if(a.kcal)o.gmKcal=Math.round(a.kcal);if(a.te)o.gmTe=Math.round(a.te*10)/10;if(a.teA)o.gmTeA=Math.round(a.teA*10)/10;if(a.nome)o.gmNome=a.nome;return o;}
   function fondi(logs,gd,pianificate){
     const out={};Object.entries(logs||{}).forEach(([k,l])=>{if(l)out[k]=l;});
     const A=attivita(gd);if(!A.length)return out;
@@ -828,7 +831,15 @@ window.RSGarmin = (function(){
     const compat=(l,a)=>{const t=l.type||(l.totalSets?'pesi':'');if(a.tipo==='corsa')return t==='corsa'||!!l.corsa;if(a.tipo==='pesi')return t==='pesi'||(!t&&!l.corsa);return !['corsa','pesi'].includes(t)&&!l.corsa;};
     A.slice().sort((x,y)=>x.ts-y.ts).forEach(a=>{
       // prima il registro gia' legato a questa attivita' (RPE dato dall'atleta), poi uno dello stesso giorno
-      const k=Object.keys(out).find(k=>!usati.has(k)&&out[k].gmId!=null&&String(out[k].gmId)===String(a.id))||Object.keys(out).find(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&l.gmId==null&&iso(l.ts)===a.giorno&&compat(l,a);});
+      // poi la seduta registrata nell'app alla stessa ora: il registro si chiude a fine seduta (ts) e dura 'duration'
+      // minuti, l'orologio parte a.ts e dura a.sec. Si prende la piu' vicina; per la palestra deve sovrapporsi o
+      // stare entro 90 minuti (la mattina in palestra e la sera un'altra attivita' restano due cose diverse).
+      // Un registro senza minuti (scritto a mano) vale per tutto il giorno.
+      const gap=l=>{const f=l.ts,i=f-(+l.duration||0)*60000,aI=a.ts,aF=a.ts+(a.sec||0)*1000;return f>=aI&&i<=aF?0:Math.min(Math.abs(i-aF),Math.abs(aI-f));};
+      // a pari distanza (tutte e due si sovrappongono) vince quella che si sovrappone di piu'
+      const sopra=l=>{const f=l.ts,i=f-(+l.duration||0)*60000;return Math.max(0,Math.min(f,a.ts+(a.sec||0)*1000)-Math.max(i,a.ts));};
+      const cand=Object.keys(out).filter(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&l.gmId==null&&iso(l.ts)===a.giorno&&compat(l,a);}).sort((x,y)=>gap(out[x])-gap(out[y])||sopra(out[y])-sopra(out[x])||(+out[y].duration?1:0)-(+out[x].duration?1:0));
+      const k=Object.keys(out).find(k=>!usati.has(k)&&out[k].gmId!=null&&String(out[k].gmId)===String(a.id))||cand.find(k=>a.tipo==='corsa'||!(+out[k].duration)||gap(out[k])<=90*60000);
       const corsa=a.tipo==='corsa'?{fonte:a.fonti.join('+'),km:a.km,sec:a.sec,fc:a.fc,fcMax:a.fcMax,dsl:a.dsl,passo:a.passo,load:a.load,te:a.te}:null;
       // senza seduta in programma restano i tratti corsi (per km o per cambio di ritmo)
       const giriDi=(c,ps)=>{if(!c||!a.laps||!window.RSOrologio)return c;try{const r=ps?window.RSOrologio.confrontaGiri(ps,a.laps,null):{blocchi:window.RSOrologio.blocchi(a.laps),giri:[],centrati:null};if(!r||!r.blocchi.length)return c;
@@ -837,7 +848,7 @@ window.RSGarmin = (function(){
       if(k){usati.add(k);const l=out[k];
         const pl=l.progId&&pianificate?pianificate(a.giorno).find(x=>x.pid===l.progId&&x.sid===l.sessId):null;
         if(corsa&&!l.corsa)Object.assign(corsa,giriDi(corsa,pl&&pl.s));
-        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
+        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},orologio(a),a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
       const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
       let p=(pianificate?pianificate(a.giorno):[]).filter(adatta)[0];
@@ -849,7 +860,7 @@ window.RSGarmin = (function(){
       const d=new Date(a.ts);
       out['gm_'+a.id]=Object.assign({ts:a.ts,date:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(),
         type:a.tipo==='corsa'?'corsa':a.tipo==='pesi'?'pesi':'altro',sessName:p?p.nome:(a.nome||NOMI[a.tipo]),duration:a.sec?Math.round(a.sec/60):null,
-        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},
+        avgRpe:a.rpe||null,source:'orologio',gm:true,gmId:a.id,gmFonte:a.fonti.join('+'),gmTipo:a.tipo},orologio(a),a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},
         !a.rpe&&rpeDaFc(a.fc,lthr)?{rpeStima:rpeDaFc(a.fc,lthr)}:{},
         corsa?{corsa}:{},a.tipo!=='corsa'&&a.km&&CON_KM[a.tipo]?{km:a.km}:{},p?{progId:p.pid,weekIdx:p.wi,sessId:p.sid}:{});
     });

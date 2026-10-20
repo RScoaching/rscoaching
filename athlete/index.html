@@ -1109,6 +1109,11 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .lib7 em{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:rgba(255,106,46,.14);color:var(--primary2,#FF8A57);font:600 20px/1 var(--ff);font-style:normal}
 .lib7:active{transform:scale(.99)}
 .f7-sw{display:flex;flex-direction:column;gap:4px;margin:12px 16px 2px;font-size:13.5px;color:var(--mut8,#A39389)}.f7-sw b{color:var(--ink8,#F4F1EC);font-weight:600}
+.f7-or{margin:12px 16px 2px;padding:12px;border-radius:14px;background:rgba(244,63,94,.06);border:1px solid rgba(244,63,94,.18)}
+.f7-or-h{display:flex;align-items:center;gap:6px;font:600 13px var(--ff);color:#FDA4AF;margin-bottom:8px}.f7-or-h svg{width:16px;height:16px}
+.f7-or-n{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px}.f7-or-n div{display:flex;flex-direction:column}.f7-or-n b{font:650 18px var(--ff);color:var(--ink8,#F4F1EC);font-variant-numeric:tabular-nums}.f7-or-n i{font:500 12px var(--ff);font-style:normal;color:var(--mut8,#A39389)}
+.f7-or-z{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:10px;gap:2px}.f7-or-z u{display:block;min-width:3px}
+.f7-or-zl{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;font:500 12px var(--ff);color:var(--mut8,#A39389)}.f7-or-zl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
 .f7-cd{display:grid;gap:6px;margin:12px 16px 2px}.f7-cd>div{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(125,211,252,.08);font-size:14px}.f7-cd b{font-weight:600}.f7-cd span{color:var(--muted);font-variant-numeric:tabular-nums}
 .f7-ok{display:flex;align-items:center;gap:8px;font:600 13px var(--ff);color:var(--primary2);margin:2px 0 10px}
 .f7-ok .rsi{width:16px;height:16px;padding:3px;border-radius:50%;background:var(--primary);color:#fff;box-sizing:content-box}
@@ -2920,6 +2925,7 @@ function renderWorkoutLogs(logs){
     if(l.corsa&&+l.corsa.km>0){bits.splice(min?1:0,0,nfIt(l.corsa.km,1)+' km');if(l.corsa.passo&&window.RSRitmi)bits.push(window.RSRitmi.passo(l.corsa.passo)+'/km');}
     if((l.newPRs||[]).length)bits.push(l.newPRs.length===1?'1 record':l.newPRs.length+' record');
     if((l.cardio||[]).length)bits.push(cardioBreve(l.cardio));
+    if(!(l.corsa&&+l.corsa.km>0)&&l.gmId&&!l.gm&&l.gmFc)bits.push('FC '+l.gmFc);
     const trk=l.gmTraccia&&window.RSTraccia?` role="button" tabindex="0" style="cursor:pointer" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')"`:'';
     if(trk)bits.push('<u>mappa e grafici</u>');
     const apri=trk||` role="button" tabindex="0" style="cursor:pointer" onclick="apriLog(${l.ts})"`;
@@ -4046,6 +4052,14 @@ function renderNoPlan(title,sub){
 // perche' senza RPE il preparatore non ha il carico di quella seduta
 // cardio a fine seduta (tapis, cyclette...): minuti totali in una parola
 function cardioBreve(cd){const m=cd.reduce((a,c)=>a+(+c.min||0),0);return 'cardio'+(m?' '+nfIt(m)+"'":'');}
+// seduta di palestra (o altro) registrata nell'app con l'orologio acceso: i numeri dell'orologio accanto alle serie
+const ZC7=['#94A3B8','#60A5FA','#4ADE80','#FB923C','#F43F5E'];
+function orolBlocco(l,C){
+  if(C||!l.gmId||!(l.gmFc||l.gmKcal||l.gmSec))return '';
+  const n=[[l.gmFc,'FC media'],[l.gmFcMax,'FC max'],[l.gmKcal,'kcal'],[l.gmSec?Math.round(l.gmSec/60)+"'":null,'sull\'orologio'],[l.gmTe?nfIt(l.gmTe,1):null,'effetto aerobico']].filter(x=>x[0]);
+  const zt=(l.gmZt||[]).slice(0,5).map(x=>+x||0),tot=zt.reduce((t,x)=>t+x,0);
+  return `<div class="f7-or"><div class="f7-or-h">${_ri('orologio')||''}<span>Dall'orologio</span></div><div class="f7-or-n">${n.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>${tot?`<div class="f7-or-z" role="img" aria-label="Tempo nelle zone di frequenza cardiaca">${zt.map((x,k)=>x?`<u style="flex:${x};background:${ZC7[k]}" title="Z${k+1}: ${Math.round(x/60)}'"></u>`:'').join('')}</div><div class="f7-or-zl">${zt.map((x,k)=>x>=60?`<span><i style="background:${ZC7[k]}"></i>Z${k+1} ${Math.round(x/60)}'</span>`:'').join('')}</div>`:''}</div>`;
+}
 function sedutaFattaHtml(l,m){
   const d=new Date(l.ts),k=isoLoc(l.ts);
   const quando=k===isoLoc(new Date())?'oggi alle '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):GG_LUNGHI[(d.getDay()+6)%7]+' '+d.getDate();
@@ -4060,6 +4074,7 @@ function sedutaFattaHtml(l,m){
     <div class="f7-ok">${_ri('ok')}<span>Fatta ${quando}</span></div>
     ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>`:''}
     ${m.dettaglio&&(l.sostituzioni||[]).length?`<div class="f7-sw">${l.sostituzioni.map(x=>`<span>${escH(x.da)} &#8594; <b>${escH(x.a)}</b></span>`).join('')}</div>`:''}
+    ${orolBlocco(l,C)}
     ${(l.cardio||[]).length?`<div class="f7-cd">${l.cardio.map(c=>`<div><b>${escH(c.macchina||c.name)}</b><span>${[c.min?nfIt(+c.min)+"'":null,c.km?nfIt(+c.km,1)+' km':null,c.fc?'FC '+c.fc:null].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>`:''}
     ${l.corsa&&l.corsa.centrati?`<div class="f7-run">Nel passo in <b>${l.corsa.centrati.ok} tratti su ${l.corsa.centrati.n}</b></div>`:''}
     ${l.gmTraccia&&window.RSTraccia?`<div class="f7-giri"><button type="button" class="f7-trk" onclick="apriTraccia('${String(l.gmTraccia).replace(/'/g,'')}','${escH(String(l.sessName||'Corsa').replace(/'/g,''))}')">Dettagli della corsa</button></div>`:''}
