@@ -1223,6 +1223,23 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 .rest-noti[hidden]{display:none}
 .rest-noti button{appearance:none;border:1px solid rgba(255,214,196,.18);background:transparent;color:var(--white,#F4F1EC);font:600 13px var(--ff);border-radius:999px;padding:0 14px;min-height:36px;cursor:pointer}
 .rest-noti button.si{background:var(--primary,#FF6A2E);border-color:var(--primary,#FF6A2E);color:#1A0B05}
+
+/* cardio nella seduta */
+.cd7 .ex-card-head{padding-bottom:8px}
+.cd7-sc{padding:4px 16px 10px}.cd7-sc span{display:block;font:500 13px var(--ff);color:var(--muted,#B5ABA4);margin-bottom:8px}
+.cd7-sc div{display:flex;flex-wrap:wrap;gap:6px}
+.cd7-sc button{appearance:none;border:1px solid rgba(255,214,196,.14);background:none;color:var(--white,#F4F1EC);font:500 14px var(--ff);border-radius:999px;padding:0 13px;min-height:40px;cursor:pointer}
+.cd7-sc button.on{background:rgba(125,211,252,.14);border-color:rgba(125,211,252,.5);color:#7DD3FC}
+.cd7-t{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 16px 12px;padding:14px 16px;border-radius:16px;background:rgba(125,211,252,.07);border:1px solid rgba(125,211,252,.18)}
+.cd7-t b{font:650 40px/1 var(--ff);letter-spacing:-.03em;color:var(--white,#F4F1EC);font-variant-numeric:tabular-nums}
+.cd7-go{appearance:none;border:0;border-radius:999px;min-height:48px;padding:0 22px;background:#7DD3FC;color:#06222E;font:650 16px var(--ff);cursor:pointer}
+.cd7-go.on{background:rgba(255,255,255,.12);color:var(--white,#F4F1EC)}
+.cd7-in{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 16px 12px}
+.cd7-in label{display:flex;flex-direction:column;gap:5px;font:500 12px var(--ff);color:var(--muted,#B5ABA4)}
+.cd7-in input{min-height:46px;border-radius:12px;border:1px solid rgba(255,214,196,.12);background:rgba(255,214,196,.05);color:var(--white,#F4F1EC);font:600 17px var(--ff);text-align:center;font-variant-numeric:tabular-nums;width:100%;box-sizing:border-box}
+.cd7-ok{appearance:none;display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 32px);margin:0 16px 16px;min-height:50px;border-radius:14px;border:1.5px solid rgba(125,211,252,.4);background:none;color:#7DD3FC;font:600 15px var(--ff);cursor:pointer}
+.cd7-ok.ck{background:rgba(125,211,252,.16);border-color:#7DD3FC}
+.cd7-ok .rsi{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -1413,7 +1430,7 @@ function sessionHasData(){
 function saveProgress(){
   // anche la forma degli esercizi (serie aggiunte, tolte, di attivazione): senza, riaprendo la seduta righe e dati non tornano
   const strutt=exs.map(e=>e&&e._type==='pesi'?{n:e.name,sets:e.sets||null,setRows:e.setRows||null}:null);
-  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt}));}catch(e){}
+  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt,cardioData}));}catch(e){}
 }
 let _saveTmr=null, _sessionFinished=false;
 function saveProgressDebounced(){
@@ -1433,6 +1450,7 @@ function loadProgress(){
     if(saved.setData)setData=saved.setData;
     if(Array.isArray(saved.strutt))saved.strutt.forEach((x,i)=>{const e=exs[i];if(x&&e&&e._type==='pesi'&&e.name===x.n){if(x.sets)e.sets=x.sets;e.setRows=x.setRows||undefined;}});
     if(saved.campoChecked)campoChecked=saved.campoChecked;
+    if(saved.cardioData)Object.assign(cardioData,saved.cardioData);
     // Ripristina il cronometro solo se la sessione è recente (< 6h); altrimenti riparte da adesso
     // così un vecchio startTs rimasto in memoria non gonfia il tempo trascorso e la durata finale.
     if(saved.startTs){
@@ -1692,7 +1710,7 @@ function buildFromArray(type,arr){
   arr.forEach(e=>{if(e.complexGroup){if(!cgroups[e.complexGroup])cgroups[e.complexGroup]=[];cgroups[e.complexGroup].push(e);}});
   const seen=new Set();exs=[];
   arr.forEach(e=>{
-    if(!e.complexGroup){exs.push({...e,_type:'pesi'});}
+    if(!e.complexGroup){exs.push({...e,_type:e.cardio?'cardio':'pesi'});}
     else if(!seen.has(e.complexGroup)){
       seen.add(e.complexGroup);
       const items=cgroups[e.complexGroup];
@@ -1889,7 +1907,7 @@ function renderExNav(){
 
 function checkAllDone(i){
   const ex=exs[i];if(!ex)return false;
-  if(ex._type==='campo')return !!(campoChecked[i]);
+  if(ex._type==='campo'||ex._type==='cardio')return !!(campoChecked[i]);
   if(ex._type==='cond'||ex._type==='nota')return false;
   const sd=setData[i]||{};
   if(ex._type==='complex')return ex.items.every((_,ci)=>Object.values(sd[ci]||{}).every(s=>s.done));
@@ -1965,6 +1983,7 @@ function renderCard(ei){
   if(ex._type==='nota')inner=renderNota(ex);
   else if(ex._type==='cond')inner=renderCond(ex,ei);
   else if(ex._type==='campo')inner=renderCampo(ex,ei);
+  else if(ex._type==='cardio')inner=renderCardio(ex,ei);
   else if(ex._type==='complex')inner=renderComplex(ex,ei);
   else inner=renderPesi(ex,ei);
   wrap.innerHTML=inner;
@@ -1996,6 +2015,7 @@ function render(){
     if(ex._type==='nota')inner=renderNota(ex);
     else if(ex._type==='cond')inner=renderCond(ex,i);
     else if(ex._type==='campo')inner=renderCampo(ex,i);
+    else if(ex._type==='cardio')inner=renderCardio(ex,i);
     else if(ex._type==='complex')inner=renderComplex(ex,i);
     else inner=renderPesi(ex,i);
     return `<div id="ex-card-${i}" class="ex-card-wrap" data-ei="${i}">${inner}</div>`;
@@ -2237,6 +2257,43 @@ function renderComplex(ex,ei){
   return html+'</div>';
 }
 
+/* ── CARDIO NELLA SEDUTA (tapis roulant, cyclette...): dati da seguire, timer, minuti/km/FC fatti */
+const cardioData={};let CDT=null;
+function cdMmss(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function renderCardio(ex,ei){
+  const c=ex.cardio||{},d=cardioData[ei]||{},ck=!!campoChecked[ei],f=v=>String(v).replace('.',',');
+  const chip=(v,l)=>`<span><b>${v}</b>${l?' '+l:''}</span>`;
+  const chips=[c.min?chip(c.min+"'",''):'',c.km?chip(f(c.km),'km'):'',c.vel?chip(f(c.vel),'km/h'):'',c.pend!=null&&c.pend!==''?chip(f(c.pend)+'%','pendenza'):'',c.liv?chip('livello '+c.liv,''):'',c.watt?chip(c.watt,'W'):'',c.zona?chip(c.zona,'zona'):'',c.rpe?chip('RPE '+f(c.rpe),''):''].join('');
+  const M=window.RSCardio?RSCardio.MACCHINE.filter(m=>m.k!=='scelta'&&m.k!=='salita'):[];
+  const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,rest=run?Math.max(0,(CDT.fine-Date.now())/1000):(d.resto!=null?d.resto:sec);
+  return `<div class="ex-card cd7${ck?' all-done':''}">
+    <div class="ex-card-head">
+      <div class="ex-nm-row"><div class="ex-card-name">${escH(ex.name)}</div></div>
+      <div class="tg7">${chips}</div>
+      ${cueHtml(ex.cue&&ex.cue!==(window.RSCardio?RSCardio.testo(c,true):'')?ex.cue.replace(window.RSCardio?RSCardio.testo(c,true):'','').replace(/^\s*·\s*/,''):'')}
+    </div>
+    ${c.scelta?`<div class="cd7-sc"><span>Scegli la macchina</span><div>${M.map(m=>`<button type="button" class="${d.macchina===m.n?'on':''}" onclick="cdMacchina(${ei},'${m.n.replace(/'/g,'')}')">${escH(m.n)}</button>`).join('')}</div></div>`:''}
+    ${sec?`<div class="cd7-t"><b id="cd-t-${ei}">${cdMmss(rest)}</b><button type="button" class="cd7-go${run?' on':''}" onclick="cdTimer(${ei})">${run?'Pausa':rest<sec?'Riprendi':'Avvia'}</button></div>`:''}
+    <div class="cd7-in">
+      <label>Minuti<input inputmode="numeric" value="${d.min??''}" placeholder="${c.min||'-'}" oninput="cdSet(${ei},'min',this.value)"></label>
+      <label>Km<input inputmode="decimal" value="${d.km??''}" placeholder="${c.km?f(c.km):'-'}" oninput="cdSet(${ei},'km',this.value)"></label>
+      <label>FC media<input inputmode="numeric" value="${d.fc??''}" placeholder="-" oninput="cdSet(${ei},'fc',this.value)"></label>
+    </div>
+    <button type="button" class="cd7-ok${ck?' ck':''}" onclick="cdFatto(${ei})">${ck?(window.rsIcon?window.rsIcon('ok'):'')+' Fatto':'Segna come fatto'}</button>
+  </div>`;
+}
+window.cdSet=(ei,k,v)=>{cardioData[ei]=cardioData[ei]||{};const x=parseFloat(String(v).replace(',','.'));if(isFinite(x)&&x>0)cardioData[ei][k]=x;else delete cardioData[ei][k];saveProgressDebounced();};
+window.cdMacchina=(ei,n)=>{cardioData[ei]=cardioData[ei]||{};cardioData[ei].macchina=n;renderCard(ei);};
+window.cdFatto=ei=>{campoChecked[ei]=!campoChecked[ei];if(campoChecked[ei]&&CDT&&CDT.ei===ei)cdTimer(ei);renderCard(ei);
+  if(campoChecked[ei]&&ei<exs.length-1)setTimeout(()=>{if(cur===ei&&window.jumpTo)window.jumpTo(ei+1);},700);};
+// timer a scalare sui minuti scritti: pausa e ripresa, alla fine suona e segna fatto con i minuti
+window.cdTimer=ei=>{suonoSblocca();const ex=exs[ei],sec=(ex.cardio&&ex.cardio.min||0)*60;cardioData[ei]=cardioData[ei]||{};
+  if(CDT&&CDT.ei===ei){cardioData[ei].resto=Math.max(0,(CDT.fine-Date.now())/1000);clearInterval(CDT.iv);CDT=null;renderCard(ei);return;}
+  if(CDT){const o=CDT.ei;cardioData[o]=cardioData[o]||{};cardioData[o].resto=Math.max(0,(CDT.fine-Date.now())/1000);clearInterval(CDT.iv);CDT=null;renderCard(o);}
+  const r=cardioData[ei].resto!=null?cardioData[ei].resto:sec;CDT={ei,fine:Date.now()+r*1000};
+  CDT.iv=setInterval(()=>{const l=(CDT.fine-Date.now())/1000,el=document.getElementById('cd-t-'+ei);if(el)el.textContent=cdMmss(l);
+    if(l<=0){clearInterval(CDT.iv);CDT=null;cardioData[ei].resto=0;if(!cardioData[ei].min)cardioData[ei].min=ex.cardio.min;suona(3);campoChecked[ei]=true;renderCard(ei);}},250);
+  renderCard(ei);};
 function renderCampo(ex,ei){
   const ck=campoChecked[ei]||false;
   const intCls={BASSA:'ib-b',MEDIA:'ib-m',ALTA:'ib-a',MAX:'ib-x'};
@@ -2843,7 +2900,7 @@ let _sessionStats=null;
 function chiediFine(){
   let prev=0,fatte=0;
   exs.forEach((ex,i)=>{const sd=setData[i]||{};if(ex._type==='complex')(ex.items||[]).forEach((_,ci)=>Object.values(sd[ci]||{}).forEach(x=>{prev++;if(x&&x.done)fatte++;}));
-    else if(ex._type==='pesi')Object.values(sd).forEach(x=>{prev++;if(x&&x.done)fatte++;});else if(ex._type==='campo'){prev++;if(campoChecked[i])fatte++;}});
+    else if(ex._type==='pesi')Object.values(sd).forEach(x=>{prev++;if(x&&x.done)fatte++;});else if(ex._type==='campo'||ex._type==='cardio'){prev++;if(campoChecked[i])fatte++;}});
   let ov=document.getElementById('fine-ov');if(!ov){ov=document.createElement('div');ov.id='fine-ov';ov.className='fine-ov';document.body.appendChild(ov);}
   ov.innerHTML=`<div class="fine-box" role="dialog" aria-modal="true" aria-labelledby="fine-t"><b id="fine-t">Chiudere la seduta?</b>
     <p>${prev&&fatte<prev?`Hai fatto <strong>${fatte} serie su ${prev}</strong>. Quelle non spuntate non vengono salvate.`:'Tutte le serie sono fatte.'}</p>
@@ -2898,7 +2955,8 @@ async function finish(){
       Object.values(sd).forEach(s=>{if(s.done){totalSets++;if(s.rpe)rpeVals.push(s.rpe);}});
     }
   });
-  totalSets+=Object.values(campoChecked).filter(Boolean).length;
+  // il cardio a fine seduta non e' una serie: va nel suo campo (minuti, km, FC)
+  totalSets+=Object.entries(campoChecked).filter(([i,v])=>v&&exs[+i]&&exs[+i]._type!=='cardio').length;
   const avgRpe=rpeVals.length?Math.round(rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length*10)/10:null;
   const now=new Date();
   _sessionStats={dur,totalSets,avgRpe,newPRs,sessName:session.name||'Sessione'};
@@ -2925,6 +2983,7 @@ async function finish(){
     ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
     condSecs,condRounds,isQuick,avgRpe,exerciseData,
+    cardio:exs.map((ex,i)=>ex._type==='cardio'&&campoChecked[i]?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
     date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
   }));
   {const c=codaLeggi();c[_r.key]=_dati;codaScrivi(c);}
@@ -2965,7 +3024,7 @@ function showDoneScreen(dur,totalSets,avgRpe){
   exs.forEach((ex,i)=>{const sd=setData[i]||{};
     if(ex._type==='complex')(ex.items||[]).forEach((_,ci)=>Object.values(sd[ci]||{}).forEach(x=>{prev++;if(x&&x.done)fatte++;}));
     else if(ex._type==='pesi')Object.values(sd).forEach(x=>{prev++;if(x&&x.done)fatte++;});
-    else if(ex._type==='campo'){prev++;if(campoChecked[i])fatte++;}});
+    else if(ex._type==='campo'||ex._type==='cardio'){prev++;if(campoChecked[i])fatte++;}});
   const pct=prev?Math.round(fatte/prev*100):100;
   const pe=document.querySelector('.done-ring-pct');if(pe)pe.textContent=pct+'%';
   setTimeout(()=>{const rf=document.getElementById('done-ring-fill');if(rf){rf.classList.add('animate');if(pct<100)rf.style.strokeDashoffset=String(345.6*(1-pct/100));}},100);

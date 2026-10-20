@@ -1739,3 +1739,53 @@ window.RS_LOGO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADCCAYAAAB350
   const add=()=>{if(document.getElementById('rs-logo-css'))return;const st=document.createElement('style');st.id='rs-logo-css';st.textContent=css;(document.head||document.documentElement).appendChild(st);};
   if(document.head)add();else document.addEventListener('DOMContentLoaded',add);
 })();
+
+/* ── CARDIO DENTRO LE SEDUTE (tapis roulant, cyclette, ellittica...) ─────────
+   Un esercizio di cardio si scrive come gli altri nella riga veloce del Builder:
+   "Tapis 20' 10 km/h 5%", "Cyclette 15' Z2 livello 8", "Vogatore 2 km", "Cardio 20' a scelta".
+   Diventa un esercizio normale (1 serie, ripetizioni = minuti o km, nota leggibile) con in piu'
+   il campo cardio {k, min, km, vel, pend, liv, watt, zona, rpe, scelta}: l'app lo mostra con la
+   sua scheda (dati, timer, minuti/km/FC fatti) e il resto del sito lo legge come sempre. */
+window.RSCardio = (function(){
+  const M=[
+    ['tapis','Tapis roulant',/\b(tapis|treadmill|tapis roulant)\b/i],
+    ['salita','Camminata in salita',/camminata in salita|incline walk|salita sul tapis/i],
+    ['assault','Air bike',/assault|air ?bike|echo bike/i],
+    ['cyclette','Cyclette',/\b(cyclette|bike|bici( statica)?|spin(ning)?)\b/i],
+    ['ellittica','Ellittica',/ellittic|elliptical|cross ?trainer/i],
+    ['vogatore','Vogatore',/vogator|rower|row(ing)?\b|concept ?2/i],
+    ['skierg','SkiErg',/ski ?erg/i],
+    ['stepper','Stepper',/stepper|scale mobili|stair/i],
+    ['scelta','Cardio a scelta',/^\s*cardio\b|a scelta|libero/i]
+  ];
+  const num=s=>parseFloat(String(s).replace(',','.'));
+  function macchina(t){t=String(t||'');for(const [k,n,re] of M){if(k!=='scelta'&&re.test(t))return {k,n};}return /cardio|a scelta/i.test(t)?{k:'scelta',n:'Cardio a scelta'}:null;}
+  // "Tapis 20' 10 km/h 5% Z2" -> esercizio del Builder; null se non e' cardio
+  function leggi(t){
+    t=String(t||'').trim();const m=macchina(t);if(!m)return null;
+    const c={k:m.k};let x;
+    if((x=/(\d+(?:[.,]\d+)?)\s*km\/h/i.exec(t)))c.vel=num(x[1]);
+    if((x=/(\d+(?:[.,]\d+)?)\s*km(?!\/)/i.exec(t)))c.km=num(x[1]);
+    else if((x=/(\d{3,5})\s*m\b(?!in)/i.exec(t)))c.km=num(x[1])/1000;
+    if((x=/(\d+)\s*(?:'|min\b|minuti|′)/i.exec(t)))c.min=+x[1];
+    if((x=/(?:pendenza\s*)?(\d+(?:[.,]\d+)?)\s*%/i.exec(t)))c.pend=num(x[1]);
+    if((x=/(?:livello|liv\.?|lv|\bL)\s*(\d+)/i.exec(t)))c.liv=+x[1];
+    if((x=/(\d{2,4})\s*w(?:att)?\b/i.exec(t)))c.watt=+x[1];
+    if((x=/\b(Z[1-5])\b/i.exec(t)))c.zona=x[1].toUpperCase();
+    if((x=/rpe\s*(\d+(?:[.,]\d)?)/i.exec(t)))c.rpe=num(x[1]);
+    if(/a scelta|libero|scegli/i.test(t))c.scelta=true;
+    // nome: quello scritto se non e' solo la macchina, se no il nome della macchina
+    let nome=t.split(/\s+\d|\s+Z[1-5]\b|\s+a scelta|\s+rpe/i)[0].trim();
+    if(!nome||/^cardio$/i.test(nome)||m.re&&false)nome=m.n;
+    if(/^(tapis|bike|cyclette|vogatore|ellittica|rower|treadmill)$/i.test(nome))nome=m.n;
+    return {name:nome,sets:'1',reps:c.min?c.min+"'":c.km?String(c.km).replace('.',',')+' km':'',cue:testo(c,true),cardio:c};
+  }
+  // riga leggibile: "20' · 10 km/h · pendenza 5% · Z2"
+  function testo(c,nota){
+    if(!c)return '';const f=v=>String(v).replace('.',',');
+    const a=[c.min&&!nota?c.min+"'":'',c.km&&!nota?f(c.km)+' km':'',c.vel?f(c.vel)+' km/h':'',c.pend!=null&&c.pend!==''?'pendenza '+f(c.pend)+'%':'',c.liv?'livello '+c.liv:'',c.watt?c.watt+' W':'',c.zona?'zona '+c.zona:'',c.rpe?'RPE '+f(c.rpe):'',c.scelta?'macchina a scelta':''].filter(Boolean);
+    return a.join(' · ');
+  }
+  const MACCHINE=M.map(([k,n])=>({k,n}));
+  return {leggi,testo,macchina,MACCHINE};
+})();
