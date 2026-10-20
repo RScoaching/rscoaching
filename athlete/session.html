@@ -1226,6 +1226,7 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 
 /* cardio nella seduta */
 .cd7 .ex-card-head{padding-bottom:8px}
+.cd7-tt{display:flex;flex-direction:column;gap:2px;min-width:0}.cd7-tt small{font:500 13px var(--ff);color:var(--muted,#B5ABA4);min-height:1em}
 .cd7-sc{padding:4px 16px 10px}.cd7-sc span{display:block;font:500 13px var(--ff);color:var(--muted,#B5ABA4);margin-bottom:8px}
 .cd7-sc div{display:flex;flex-wrap:wrap;gap:6px}
 .cd7-sc button{appearance:none;border:1px solid rgba(255,214,196,.14);background:none;color:var(--white,#F4F1EC);font:500 14px var(--ff);border-radius:999px;padding:0 13px;min-height:40px;cursor:pointer}
@@ -2263,10 +2264,11 @@ function cdMmss(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+Strin
 function renderCardio(ex,ei){
   const c=ex.cardio||{},d=cardioData[ei]||{},ck=!!campoChecked[ei],f=v=>String(v).replace('.',',');
   const chip=(v,l)=>`<span><b>${v}</b>${l?' '+l:''}</span>`;
-  const chips=[c.min?chip(c.min+"'",''):'',c.km?chip(f(c.km),'km'):'',c.vel?chip(f(c.vel),'km/h'):'',c.pend!=null&&c.pend!==''?chip(f(c.pend)+'%','pendenza'):'',c.liv?chip('livello '+c.liv,''):'',c.watt?chip(c.watt,'W'):'',c.zona?chip(c.zona,'zona'):'',c.rpe?chip('RPE '+f(c.rpe),''):''].join('');
+  const fr=(a,b)=>b!=null&&+b>+a?f(a)+'-'+f(b):f(a);
+  const chips=[c.min?chip(fr(c.min,c.minMax)+"'",''):'',c.km?chip(fr(c.km,c.kmMax),'km'):'',c.vel?chip(fr(c.vel,c.velMax),'km/h'):'',c.pend!=null&&c.pend!==''?chip(f(c.pend)+'%','pendenza'):'',c.liv?chip('livello '+c.liv,''):'',c.watt?chip(c.watt,'W'):'',c.zona?chip(c.zona,'zona'):'',c.rpe?chip('RPE '+f(c.rpe),''):''].join('');
   // 'cyclette o tapis': solo quelle scritte dal coach, se no tutte
   const M=window.RSCardio?RSCardio.MACCHINE.filter(m=>(c.opz&&c.opz.length?c.opz.includes(m.k):m.k!=='scelta'&&m.k!=='salita')):[];
-  const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,rest=run?Math.max(0,(CDT.fine-Date.now())/1000):(d.resto!=null?d.resto:sec);
+  const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,el=run?(Date.now()-CDT.t0)/1000:(+d.fatto||0),vt=cdVista(c,el);
   return `<div class="ex-card cd7${ck?' all-done':''}">
     <div class="ex-card-head">
       <div class="ex-nm-row"><div class="ex-card-name">${escH(ex.name)}</div></div>
@@ -2274,10 +2276,10 @@ function renderCardio(ex,ei){
       ${cueHtml(ex.cue&&ex.cue!==(window.RSCardio?RSCardio.testo(c,true):'')?ex.cue.replace(window.RSCardio?RSCardio.testo(c,true):'','').replace(/^\s*·\s*/,''):'')}
     </div>
     ${c.scelta?`<div class="cd7-sc"><span>Scegli la macchina</span><div>${M.map(m=>`<button type="button" class="${d.macchina===m.n?'on':''}" onclick="cdMacchina(${ei},'${m.n.replace(/'/g,'')}')">${escH(m.n)}</button>`).join('')}</div></div>`:''}
-    ${sec?`<div class="cd7-t"><b id="cd-t-${ei}">${cdMmss(rest)}</b><button type="button" class="cd7-go${run?' on':''}" onclick="cdTimer(${ei})">${run?'Pausa':rest<sec?'Riprendi':'Avvia'}</button></div>`:''}
+    ${sec?`<div class="cd7-t"><div class="cd7-tt"><b id="cd-t-${ei}">${vt.t}</b><small id="cd-s-${ei}">${vt.s}</small></div><button type="button" class="cd7-go${run?' on':''}" onclick="cdTimer(${ei})">${run?'Pausa':el>0?'Riprendi':'Avvia'}</button></div>`:''}
     <div class="cd7-in">
-      <label>Minuti<input inputmode="numeric" value="${d.min??''}" placeholder="${c.min||'-'}" oninput="cdSet(${ei},'min',this.value)"></label>
-      <label>Km<input inputmode="decimal" value="${d.km??''}" placeholder="${c.km?f(c.km):'-'}" oninput="cdSet(${ei},'km',this.value)"></label>
+      <label>Minuti<input inputmode="numeric" value="${d.min??''}" placeholder="${c.min?fr(c.min,c.minMax):'-'}" oninput="cdSet(${ei},'min',this.value)"></label>
+      <label>Km<input inputmode="decimal" value="${d.km!=null?f(d.km):''}" placeholder="${c.km?fr(c.km,c.kmMax):'-'}" oninput="cdSet(${ei},'km',this.value)"></label>
       <label>FC media<input inputmode="numeric" value="${d.fc??''}" placeholder="-" oninput="cdSet(${ei},'fc',this.value)"></label>
     </div>
     <button type="button" class="cd7-ok${ck?' ck':''}" onclick="cdFatto(${ei})">${ck?(window.rsIcon?window.rsIcon('ok'):'')+' Fatto':'Segna come fatto'}</button>
@@ -2285,15 +2287,27 @@ function renderCardio(ex,ei){
 }
 window.cdSet=(ei,k,v)=>{cardioData[ei]=cardioData[ei]||{};const x=parseFloat(String(v).replace(',','.'));if(isFinite(x)&&x>0)cardioData[ei][k]=x;else delete cardioData[ei][k];saveProgressDebounced();};
 window.cdMacchina=(ei,n)=>{cardioData[ei]=cardioData[ei]||{};cardioData[ei].macchina=n;renderCard(ei);};
-window.cdFatto=ei=>{campoChecked[ei]=!campoChecked[ei];if(campoChecked[ei]&&CDT&&CDT.ei===ei)cdTimer(ei);renderCard(ei);
+window.cdFatto=ei=>{campoChecked[ei]=!campoChecked[ei];if(campoChecked[ei]&&CDT&&CDT.ei===ei)cdFerma(ei,true);renderCard(ei);
   if(campoChecked[ei]&&ei<exs.length-1)setTimeout(()=>{if(cur===ei&&window.jumpTo)window.jumpTo(ei+1);},700);};
-// timer a scalare sui minuti scritti: pausa e ripresa, alla fine suona e segna fatto con i minuti
-window.cdTimer=ei=>{suonoSblocca();const ex=exs[ei],sec=(ex.cardio&&ex.cardio.min||0)*60;cardioData[ei]=cardioData[ei]||{};
-  if(CDT&&CDT.ei===ei){cardioData[ei].resto=Math.max(0,(CDT.fine-Date.now())/1000);clearInterval(CDT.iv);CDT=null;renderCard(ei);return;}
-  if(CDT){const o=CDT.ei;cardioData[o]=cardioData[o]||{};cardioData[o].resto=Math.max(0,(CDT.fine-Date.now())/1000);clearInterval(CDT.iv);CDT=null;renderCard(o);}
-  const r=cardioData[ei].resto!=null?cardioData[ei].resto:sec;CDT={ei,fine:Date.now()+r*1000};
-  CDT.iv=setInterval(()=>{const l=(CDT.fine-Date.now())/1000,el=document.getElementById('cd-t-'+ei);if(el)el.textContent=cdMmss(l);
-    if(l<=0){clearInterval(CDT.iv);CDT=null;cardioData[ei].resto=0;if(!cardioData[ei].min)cardioData[ei].min=ex.cardio.min;suona(3);campoChecked[ei]=true;renderCard(ei);}},250);
+// timer a scalare sui minuti scritti, pausa e ripresa. Con la forbice (30-40') scala fino al
+// minimo, suona, poi continua fino al massimo; 'Segna come fatto' lo ferma quando l'atleta vuole
+function cdVista(c,el){
+  const lo=(+c.min||0)*60,hi=(+(c.minMax||c.min)||0)*60,R=hi>lo;
+  if(el<lo)return {t:cdMmss(lo-el),s:R?"minimo, poi fino a "+c.minMax+"'":''};
+  if(R&&el<hi)return {t:cdMmss(hi-el),s:'Minimo fatto: puoi arrivare a '+c.minMax+"'"};
+  return {t:'0:00',s:'Fatto'};
+}
+function cdFerma(ei,conMin){const d=cardioData[ei]=cardioData[ei]||{};if(CDT&&CDT.ei===ei){d.fatto=(Date.now()-CDT.t0)/1000;clearInterval(CDT.iv);CDT=null;}
+  if(conMin&&!d.min&&d.fatto>=30)d.min=Math.max(1,Math.round(d.fatto/60));saveProgressDebounced();}
+window.cdTimer=ei=>{suonoSblocca();const ex=exs[ei],c=ex.cardio||{};cardioData[ei]=cardioData[ei]||{};
+  if(CDT&&CDT.ei===ei){cdFerma(ei,false);renderCard(ei);return;}
+  if(CDT){const o=CDT.ei;cdFerma(o,false);renderCard(o);}
+  const lo=(+c.min||0)*60,hi=(+(c.minMax||c.min)||0)*60;let suonatoMin=(+cardioData[ei].fatto||0)>=lo;
+  CDT={ei,t0:Date.now()-(+cardioData[ei].fatto||0)*1000};
+  CDT.iv=setInterval(()=>{const el=(Date.now()-CDT.t0)/1000,v=cdVista(c,el),t=document.getElementById('cd-t-'+ei),sb=document.getElementById('cd-s-'+ei);
+    if(t)t.textContent=v.t;if(sb)sb.textContent=v.s;
+    if(hi>lo&&!suonatoMin&&el>=lo){suonatoMin=true;suona(2);}
+    if(el>=hi){clearInterval(CDT.iv);CDT=null;cardioData[ei].fatto=hi;if(!cardioData[ei].min)cardioData[ei].min=Math.round(hi/60);suona(3);campoChecked[ei]=true;saveProgressDebounced();renderCard(ei);}},250);
   renderCard(ei);};
 function renderCampo(ex,ei){
   const ck=campoChecked[ei]||false;
@@ -2984,7 +2998,7 @@ async function finish(){
     ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
     condSecs,condRounds,isQuick,avgRpe,exerciseData,
-    cardio:exs.map((ex,i)=>ex._type==='cardio'&&campoChecked[i]?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
+    cardio:exs.map((ex,i)=>ex._type==='cardio'&&campoChecked[i]?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||(+(cardioData[i]||{}).fatto>=30?Math.round(cardioData[i].fatto/60):null)||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
     date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
   }));
   {const c=codaLeggi();c[_r.key]=_dati;codaScrivi(c);}

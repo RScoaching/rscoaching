@@ -1760,6 +1760,8 @@ window.RSCardio = (function(){
     ['scelta','Cardio a scelta',/\bcardio\b/i]
   ];
   const num=s=>parseFloat(String(s).replace(',','.'));
+  // un valore o una forbice, con la virgola: 10,5 oppure 30-40
+  const fr=(a,b)=>{const f=v=>String(v).replace('.',',');return b!=null&&b!==''&&+b>+a?f(a)+'-'+f(b):f(a);};
   // macchine scritte, nell'ordine in cui compaiono (la salita e' gia' tapis, l'air bike non e' la cyclette)
   function tutte(t){const a=M.filter(([k,,re])=>k!=='scelta'&&re.test(t)).filter(([k],i,a)=>!(k==='tapis'&&a.some(x=>x[0]==='salita'))&&!(k==='cyclette'&&a.some(x=>x[0]==='assault')));
     return a.sort((x,y)=>t.search(x[2])-t.search(y[2]));}
@@ -1772,12 +1774,15 @@ window.RSCardio = (function(){
     const c={k:m.k};let x,nome=m.n;const N='(\\d+(?:[.,]\\d+)?)';
     // due macchine ("cyclette o tapis"): sceglie l'atleta
     const due=tutte(t);if(due.length>1){c.k='scelta';c.scelta=true;c.opz=due.map(d=>d[0]);nome=due.map(d=>d[1]).join(' o ');}
-    if((x=new RegExp(N+'\\s*km\\s*\\/?\\s*h\\b|'+N+'\\s*kmh','i').exec(t)))c.vel=num(x[1]||x[2]);
-    else if((x=new RegExp('vel(?:ocit[a\u00e0]\'?)?\\.?\\s*'+N,'i').exec(t)))c.vel=num(x[1]);
-    if((x=new RegExp(N+'\\s*km(?!\\s*\\/?\\s*h)(?!h)\\b','i').exec(t)))c.km=num(x[1]);
+    // anche a forbice: "30-40 min", "da 30 a 40'", "10-11 km/h", "3-4 km"
+    const R=N+"(?:'|\\u2032)?(?:\\s*(?:-|a|\\u2013)\\s*"+N+')?';
+    const due2=(x,i,k,f)=>{const a=f(num(x[i])),b=x[i+1]!=null?f(num(x[i+1])):null;c[k]=a;if(b!=null&&b>a)c[k+'Max']=b;};
+    if((x=new RegExp(R+'\\s*km\\s*\\/?\\s*h\\b|'+R+'\\s*kmh','i').exec(t)))due2(x,x[1]!=null?1:3,'vel',v=>v);
+    else if((x=new RegExp('vel(?:ocit[a\u00e0]\'?)?\\.?\\s*'+R,'i').exec(t)))due2(x,1,'vel',v=>v);
+    if((x=new RegExp(R+'\\s*km(?!\\s*\\/?\\s*h)(?!h)\\b','i').exec(t)))due2(x,1,'km',v=>v);
     else if((x=/(\d{3,5})\s*m(?:etri)?\b(?!in)/i.exec(t)))c.km=num(x[1])/1000;
     if((x=/(\d+(?:[.,]\d+)?)\s*(?:h\b|ora\b|ore\b)/i.exec(t)))c.min=Math.round(num(x[1])*60);
-    if((x=/(\d+)\s*(?:'|\u2032|min\b|mins?\b|minuti\b)/i.exec(t)))c.min=+x[1];
+    if((x=new RegExp('(\\d+)(?:\'|\\u2032)?(?:\\s*(?:-|a|\\u2013)\\s*(\\d+))?\\s*(?:\'|\\u2032|min\\b|mins?\\b|minuti\\b)','i').exec(t)))due2(x,1,'min',v=>Math.round(v));
     if((x=new RegExp(N+'\\s*%','i').exec(t)))c.pend=num(x[1]);
     else if((x=new RegExp('(?:pend(?:enza)?|inclinazione|incl)\\.?\\s*'+N,'i').exec(t)))c.pend=num(x[1]);
     if((x=/(?:livello|liv\.?|lv|\bL)\s*(\d+)/i.exec(t)))c.liv=+x[1];
@@ -1788,14 +1793,18 @@ window.RSCardio = (function(){
     if(c.k==='scelta')c.scelta=true;
     // un minuto o km scritto senza unita' ("tapis 20") vale come minuti
     if(!c.min&&!c.km&&(x=/^\D*?(\d+)\s*$/.exec(t.replace(/\b(Z[1-5])\b/i,''))))c.min=+x[1];
-    return {name:nome,sets:'1',reps:c.min?c.min+"'":c.km?String(c.km).replace('.',',')+' km':'',cue:testo(c,true),cardio:c};
+    return {name:nome,sets:'1',reps:qta(c),cue:testo(c,true),cardio:c};
   }
   // riga leggibile: "20' · 10 km/h · pendenza 5% · Z2"
   function testo(c,nota){
     if(!c)return '';const f=v=>String(v).replace('.',',');
-    const a=[c.min&&!nota?c.min+"'":'',c.km&&!nota?f(c.km)+' km':'',c.vel?f(c.vel)+' km/h':'',c.pend!=null&&c.pend!==''?'pendenza '+f(c.pend)+'%':'',c.liv?'livello '+c.liv:'',c.watt?c.watt+' W':'',c.zona?'zona '+c.zona:'',c.rpe?'RPE '+f(c.rpe):'',c.scelta?'macchina a scelta':''].filter(Boolean);
+    const a=[c.min&&!nota?fr(c.min,c.minMax)+"'":'',c.km&&!nota?fr(c.km,c.kmMax)+' km':'',c.vel?fr(c.vel,c.velMax)+' km/h':'',c.pend!=null&&c.pend!==''?'pendenza '+f(c.pend)+'%':'',c.liv?'livello '+c.liv:'',c.watt?c.watt+' W':'',c.zona?'zona '+c.zona:'',c.rpe?'RPE '+f(c.rpe):'',c.scelta?'macchina a scelta':''].filter(Boolean);
     return a.join(' · ');
   }
   const MACCHINE=M.map(([k,n])=>({k,n}));
-  return {leggi,testo,macchina,MACCHINE};
+  // quanto: "30'", "30-40'", "3 km", "3-4 km"
+  function qta(c){if(!c)return '';return c.min?fr(c.min,c.minMax)+"'":c.km?fr(c.km,c.kmMax)+' km':'';}
+  // minuti per le stime (con la forbice il valore piu' alto)
+  function minuti(c){if(!c)return 0;return +(c.minMax||c.min)||(+(c.kmMax||c.km)||0)*6;}
+  return {leggi,testo,qta,minuti,fr,macchina,MACCHINE};
 })();

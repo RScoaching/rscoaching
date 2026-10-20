@@ -7998,7 +7998,7 @@ function pzStatSess(s){
   }
   exs.forEach((e,i)=>{
     // il cardio non e' una serie: conta i suoi minuti (o i km a circa 6' l'uno)
-    if(e.cardio){o.sec+=((+e.cardio.min||0)||(+e.cardio.km||0)*6)*60;return;}
+    if(e.cardio){o.sec+=(window.RSCardio?RSCardio.minuti(e.cardio):(+e.cardio.min||0))*60;return;}
     const sets=+e.sets||pzNum(e.sets)||0;o.serie+=sets;
     const g=pzGruppo(e);o.gr[g]=(o.gr[g]||0)+sets;
     const nx=exs[i+1];
@@ -8910,7 +8910,7 @@ window.pzPrevSess=async function(wid,sid){
 function pzCardioNota(e){const t=window.RSCardio?RSCardio.testo(e.cardio,true):'';return String(e.cue||'').replace(t,'').replace(/^\s*·\s*|\s*·\s*$/g,'').trim();}
 function pzCardioCella(wid,sid,eid,e){
   const c=e.cardio||{},f=v=>String(v).replace('.',','),nota=pzCardioNota(e);
-  const qta=c.min?c.min+"'":c.km?f(c.km)+' km':'';
+  const qta=window.RSCardio?RSCardio.qta(c):'';
   const det=window.RSCardio?RSCardio.testo(c,true):'';
   return `<td colspan="7" class="pz-cdc"><button type="button" class="pz-cdrow" onclick="pzCardioApri('${wid}','${sid}','${eid}')" title="Modifica il cardio"><span class="pz-cdtag">Cardio</span>${qta?`<b>${qta}</b>`:''}${det?`<span>${stEsc(det)}</span>`:''}${nota?`<i>${stEsc(nota)}</i>`:''}<em>Modifica</em></button></td>`;
 }
@@ -8918,15 +8918,15 @@ window.pzCardioApri=function(wid,sid,eid){
   let d=document.getElementById('pz-cardio-dlg');
   if(!d){d=document.createElement('dialog');d.id='pz-cardio-dlg';d.className='pzs';document.body.appendChild(d);d.addEventListener('click',e=>{if(e.target===d)d.close();});}
   const M=(window.RSCardio?RSCardio.MACCHINE:[]).filter(m=>m.k!=='scelta');
-  const inp=(id,ph,w)=>`<input class="pz-in" id="${id}" inputmode="decimal" placeholder="${ph}" style="width:${w||90}px">`;
+  const inp=(id,ph,w)=>`<input class="pz-in" id="${id}" inputmode="${/min|km|vel/.test(id)?'text':'decimal'}" placeholder="${ph}" style="width:${w||100}px">`;
   d.innerHTML=`<div class="pzs-b" style="max-width:560px">
     <div class="pzs-h"><div><h3>Cardio nella seduta</h3><p>Finale o riscaldamento su una macchina. Lascia vuoto quello che non serve.</p></div>
       <button type="button" class="pzs-x" onclick="this.closest('dialog').close()" aria-label="Chiudi">&#215;</button></div>
     <div class="pzcd-g">
       <label>Macchina<select class="pz-in" id="cd-k">${M.map(m=>`<option value="${m.k}">${stEsc(m.n)}</option>`).join('')}</select></label>
       <label class="pzcd-ck"><input type="checkbox" id="cd-scelta"> sceglie l'atleta</label>
-      <label>Minuti${inp('cd-min','20')}</label><label>oppure km${inp('cd-km','3')}</label>
-      <label>Velocita' km/h${inp('cd-vel','10')}</label><label>Pendenza %${inp('cd-pend','5')}</label>
+      <label>Minuti${inp('cd-min','20 o 30-40')}</label><label>oppure km${inp('cd-km','3 o 3-4')}</label>
+      <label>Velocita' km/h${inp('cd-vel','10 o 10-11')}</label><label>Pendenza %${inp('cd-pend','5')}</label>
       <label>Livello${inp('cd-liv','8')}</label><label>Watt${inp('cd-watt','150')}</label>
       <label>Intensita'<select class="pz-in" id="cd-zona"><option value="">-</option><option>Z1</option><option>Z2</option><option>Z3</option><option>Z4</option><option>Z5</option></select></label>
       <label>oppure RPE${inp('cd-rpe','6')}</label>
@@ -8935,11 +8935,11 @@ window.pzCardioApri=function(wid,sid,eid){
     <div class="pzs-f"><span id="cd-ant" class="pzs-n" style="margin:0"></span>
       <button type="button" class="btn btn-outline" onclick="this.closest('dialog').close()">Annulla</button>
       <button type="button" class="btn btn-orange" onclick="pzCardioSalva('${wid}','${sid}')">Aggiungi</button></div></div>`;
-  const ant=()=>{const c=pzCardioDa();const a=document.getElementById('cd-ant');if(a)a.textContent=(c.n||'')+(c.c.min?' '+c.c.min+"'":c.c.km?' '+String(c.c.km).replace('.',',')+' km':'')+(RSCardio.testo(c.c,true)?' · '+RSCardio.testo(c.c,true):'');};
+  const ant=()=>{const c=pzCardioDa();const a=document.getElementById('cd-ant');if(a)a.textContent=(c.n||'')+(RSCardio.qta(c.c)?' '+RSCardio.qta(c.c):'')+(RSCardio.testo(c.c,true)?' · '+RSCardio.testo(c.c,true):'');};
   const E=eid?(programs[currentProgId].weeks[wid].sessions[sid].exercises||{})[eid]:null;
   if(E&&E.cardio){const c=E.cardio,put=(id,v)=>{const x=document.getElementById(id);if(x&&v!=null&&v!=='')x.value=String(v).replace('.',',');};
     if(c.k&&c.k!=='scelta')put('cd-k',c.k);if(c.scelta||c.k==='scelta')document.getElementById('cd-scelta').checked=true;
-    put('cd-min',c.min);put('cd-km',c.km);put('cd-vel',c.vel);put('cd-pend',c.pend);put('cd-liv',c.liv);put('cd-watt',c.watt);put('cd-rpe',c.rpe);put('cd-zona',c.zona);put('cd-nota',pzCardioNota(E));
+    put('cd-min',c.min&&RSCardio.fr(c.min,c.minMax));put('cd-km',c.km&&RSCardio.fr(c.km,c.kmMax));put('cd-vel',c.vel&&RSCardio.fr(c.vel,c.velMax));put('cd-pend',c.pend);put('cd-liv',c.liv);put('cd-watt',c.watt);put('cd-rpe',c.rpe);put('cd-zona',c.zona);put('cd-nota',pzCardioNota(E));
     d.querySelector('h3').textContent='Modifica il cardio';d.querySelector('.btn-orange').textContent='Salva';
     d.querySelector('.btn-orange').setAttribute('onclick',`pzCardioSalva('${wid}','${sid}','${eid}')`);}
   d.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',ant));ant();
@@ -8950,6 +8950,8 @@ function pzCardioDa(){
   const v=id=>(document.getElementById(id)||{}).value||'',n=id=>{const x=parseFloat(v(id).replace(',','.'));return isFinite(x)&&x>0?x:null;};
   const sc=document.getElementById('cd-scelta')?.checked,k=sc?'scelta':v('cd-k'),m=(RSCardio.MACCHINE.find(x=>x.k===k)||{}).n||'Cardio';
   const c={k};[['min','cd-min'],['km','cd-km'],['vel','cd-vel'],['pend','cd-pend'],['liv','cd-liv'],['watt','cd-watt'],['rpe','cd-rpe']].forEach(([f,id])=>{const x=n(id);if(x!=null)c[f]=f==='min'||f==='liv'||f==='watt'?Math.round(x):x;});
+  // forbice "30-40": il primo e' il minimo, il secondo il massimo
+  ['min','km','vel'].forEach(f=>{const m=/^\s*\d+(?:[.,]\d+)?\s*(?:-|a)\s*(\d+(?:[.,]\d+)?)/.exec(v('cd-'+f));const b=m?parseFloat(m[1].replace(',','.')):null;if(b!=null&&c[f]!=null&&b>c[f])c[f+'Max']=f==='min'?Math.round(b):b;});
   if(v('cd-zona'))c.zona=v('cd-zona');if(sc)c.scelta=true;
   return {n:m,c};
 }
@@ -8959,7 +8961,7 @@ window.pzCardioSalva=async function(wid,sid,eid){
   const E=eid&&(s.exercises||{})[eid];
   // in modifica resta il nome scritto (es. 'Cyclette o Tapis roulant') se la macchina non cambia
   if(E&&E.cardio&&E.cardio.k===c.k){n=E.name||n;if(E.cardio.opz&&c.k==='scelta')c.opz=E.cardio.opz;}
-  const e={name:n,sets:'1',reps:c.min?c.min+"'":String(c.km).replace('.',',')+' km',cue:[RSCardio.testo(c,true),nota.trim()].filter(Boolean).join(' · '),cardio:c,order:E?(E.order||0):pzExs(s).length};
+  const e={name:n,sets:'1',reps:RSCardio.qta(c),cue:[RSCardio.testo(c,true),nota.trim()].filter(Boolean).join(' · '),cardio:c,order:E?(E.order||0):pzExs(s).length};
   if(E){const path=pzBase(wid,sid)+'/exercises/'+eid;pzUndo.push({path,prima:JSON.parse(JSON.stringify(E))});
     const x=Object.assign({},E,e);await set(ref(db,path),x);document.getElementById('pz-cardio-dlg')?.close();showToast('Cardio aggiornato. Ctrl+Z annulla');return;}
   const r=push(ref(db,pzBase(wid,sid)+'/exercises'));pzUndo.push({path:pzBase(wid,sid)+'/exercises/'+r.key,prima:null});
