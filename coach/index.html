@@ -1321,6 +1321,7 @@ body::before,body::after{display:none;}
 .aa-or{font-size:13px;color:var(--muted);margin:8px 0 2px}
 .aa-z{margin:10px 0 6px}.aa-zb{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden}.aa-zb u{display:block;min-width:3px}
 .aa-zl{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--muted)}.aa-zl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.dor-r em{font-style:normal;font-size:12.5px;color:#FBBF24}.dor-r em.err{color:#FB7185}
 .dor-r{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}.dor-r:first-child{border-top:0}.dor-r>div{flex:1;min-width:0;display:flex;flex-direction:column}.dor-r b{color:var(--white);font-size:13.5px}.dor-r span{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .dor-c{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.dor-c span{font-size:12.5px;color:var(--muted)}.dor-c code{font:500 12.5px ui-monospace,Menlo,monospace;color:var(--white);word-break:break-all}.dor-c .btn{align-self:flex-start}
 .db-cambio{color:#FBBF24!important;font-size:12.5px!important;margin-top:2px}
@@ -2371,18 +2372,18 @@ function cambiRighe(l){
   const b=(l&&l.aggiunti||[]).filter(Boolean).map(n=>'aggiunto '+n);
   return a.concat(b);
 }
-// orologi da attivare: l'atleta ha mandato dall'app il suo codice intervals.icu (athletes/{aid}/intervals) e i dati
-// non arrivano ancora. La riga va aggiunta ad ATHLETES in IMPOSTAZIONI.txt (cartella garmin), poi 'Fatto'.
+// orologi da attivare: l'atleta ha mandato dall'app il suo codice intervals.icu (athletes/{aid}/intervals).
+// intervals_sync.py lo prende da solo dal sito; qui resta finche' i dati non arrivano: di solito manca solo
+// che il preparatore accetti la richiesta di coach su intervals.icu (esito 'da_accettare' scritto dallo script).
 function dbOrologi(){
   const card=document.getElementById('dash-or-card'),el=document.getElementById('dash-or');if(!card||!el)return;
-  const L=Object.entries(athletes||{}).filter(([id,a])=>a&&!a.archived&&a.intervals&&a.intervals.id&&a.intervals.stato!=='attivo'&&!(garminData[id]&&(garminData[id].activities||garminData[id].days)));
+  const L=Object.entries(athletes||{}).filter(([id,a])=>a&&!a.archived&&a.intervals&&a.intervals.id&&a.intervals.esito!=='ok'&&a.intervals.stato!=='attivo'&&!(garminData[id]&&(garminData[id].activities||garminData[id].days)));
   card.hidden=!L.length;if(!L.length)return;
-  const riga=L.map(([id,a])=>id+':'+a.intervals.id).join(',');
-  el.innerHTML=L.map(([id,a])=>`<div class="dor-r"><div><b>${dEsc(a.name||id)}</b><span>${dEsc(a.intervals.id)}${a.intervals.disp?' &#183; '+dEsc({garmin:'Garmin',apple:'Apple Watch',altri:'altro orologio',android:'Android'}[a.intervals.disp]||''):''}</span></div><button type="button" class="btn btn-ghost btn-sm" onclick="dorFatto('${id}')">Fatto</button></div>`).join('')
-    +`<div class="dor-c"><span>Da aggiungere alla riga ATHLETES in IMPOSTAZIONI.txt (separata da una virgola da quelle che ci sono):</span><code id="dor-riga">${dEsc(riga)}</code><button type="button" class="btn btn-orange btn-sm" onclick="dorCopia()">Copia</button></div>`;
+  const DISP={garmin:'Garmin',apple:'Apple Watch',altri:'altro orologio',android:'Android'};
+  el.innerHTML=L.map(([id,a])=>{const iv=a.intervals,st=iv.esito==='da_accettare'?'Accetta la sua richiesta di coach':iv.esito==='errore'?'Errore: '+(iv.msg||'controlla il codice'):'Nuovo: accetta la richiesta, i dati arrivano al prossimo aggiornamento';
+    return `<div class="dor-r"><div><b>${dEsc(a.name||id)}</b><span>${dEsc(iv.id)}${iv.disp&&DISP[iv.disp]?' &#183; '+DISP[iv.disp]:''}</span><em class="${iv.esito==='errore'?'err':''}">${dEsc(st)}</em></div></div>`;}).join('')
+    +`<div class="dor-c"><span>Il codice arriva da solo allo script: devi solo accettare la richiesta su intervals.icu, nella pagina Athletes.</span><a class="btn btn-orange btn-sm" href="https://intervals.icu/athletes" target="_blank" rel="noopener">Apri intervals.icu</a></div>`;
 }
-window.dorCopia=async()=>{const t=(document.getElementById('dor-riga')||{}).textContent||'';try{await navigator.clipboard.writeText(t);showToast('Copiato: incollalo in IMPOSTAZIONI.txt');}catch(e){showToast('Seleziona il testo e copialo a mano');}};
-window.dorFatto=async id=>{try{await update(ref(db,`athletes/${id}/intervals`),{stato:'attivo',attivo:Date.now()});showToast('Segnato come attivo');}catch(e){showToast('Non salvato: controlla la connessione');}};
 // in arrivo: sedute, check-in, video e messaggi delle ultime 48 ore, uno sotto l'altro
 function dbFeed(ids){
   const el=document.getElementById('dash-feed');if(!el)return;const lim=Date.now()-48*3600e3,ev=[];

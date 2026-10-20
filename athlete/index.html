@@ -2453,6 +2453,8 @@ if(!aid){
 
     // Store globally for day switching
     window._ath=athlete;try{orScheda();}catch(e){}
+    // lo stato dell'orologio lo scrive anche lo script (esito dopo ogni giro): la scheda si aggiorna da sola
+    onValue(ref(db,`athletes/${aid}/intervals`),x=>{window._ath=Object.assign({},window._ath,{intervals:x.val()||undefined});try{orScheda();}catch(e){}},()=>{});
     window._athRecs={};window._athBest1rm={};
     const _now=new Date();
     window._todayIdx=_now.getDay()===0?6:_now.getDay()-1;
@@ -4164,7 +4166,7 @@ window.apriLog=ts=>{const l=ST.logs.find(x=>x.ts===+ts);if(!l)return;svApri(sedu
    arriva con HealthFit, Android (Samsung, Fitbit) con Health Sync. L'atleta crea l'account gratuito, collega
    l'orologio, aggiunge il preparatore come coach e incolla qui il suo codice (i123456): va in athletes/{aid}/
    intervals e in chat. Il preparatore lo aggiunge alla riga ATHLETES di IMPOSTAZIONI.txt (intervals_sync.py). */
-const OR_COACH='Raoul Simon';
+const OR_COACH='raoulsimon';
 const OR_DISP={
   garmin:{n:'Garmin',t:'Su intervals.icu apri Settings (le impostazioni) e, tra i collegamenti, tocca <b>Garmin</b>: accedi con il tuo account Garmin Connect e consenti. Attiva anche i dati di benessere (sonno, HRV, FC a riposo).'},
   apple:{n:'Apple Watch',t:'Scarica <b>HealthFit</b> dall\'App Store (si paga una volta). Aprila, consenti l\'accesso a Salute, poi nelle sue impostazioni collega <b>Intervals.icu</b> e attiva la sincronizzazione automatica degli allenamenti e dei dati di salute.'},
@@ -4175,11 +4177,13 @@ let OR_D='garmin';
 // il codice si accetta come lo incollano: i123456, 123456 o tutto l'indirizzo della pagina
 function orCodice(v){const m=/(?:^|[^a-z0-9])i?(\d{3,10})(?![0-9])/i.exec(String(v||'').trim());return m?'i'+m[1]:null;}
 function orStato(){const a=window._ath||{},iv=a.intervals||{},dati=!!(ST.gd&&((ST.gd.activities&&Object.keys(ST.gd.activities).length)||(ST.gd.days&&Object.keys(ST.gd.days).length)));
-  return dati?'attivo':iv.id?'inviato':'no';}
+  // esito scritto da intervals_sync.py dopo ogni giro: ok, da_accettare (il preparatore non ha ancora accettato), errore
+  return dati||iv.esito==='ok'?'attivo':iv.id?(iv.esito==='da_accettare'?'attesa':iv.esito==='errore'?'errore':'inviato'):'no';}
 function orScheda(){
   const el=document.getElementById('or7');if(!el)return;const st=orStato(),iv=((window._ath||{}).intervals)||{};
   el.innerHTML=st==='attivo'?`<div class="or7-r"><span class="or7-i ok">${_ri('orologio')}</span><div><b>Orologio collegato</b><span>I dati arrivano da soli: allenamenti, FC, sonno e HRV.</span></div></div>`
-    :st==='inviato'?`<div class="or7-r"><span class="or7-i">${_ri('orologio')}</span><div><b>Codice inviato: ${escH(iv.id)}</b><span>Il preparatore lo attiva: i dati arrivano dal prossimo aggiornamento.</span></div><button type="button" class="or7-b" onclick="orApri()">Rivedi</button></div>`
+    :st==='inviato'||st==='attesa'?`<div class="or7-r"><span class="or7-i">${_ri('orologio')}</span><div><b>Codice inviato: ${escH(iv.id)}</b><span>${st==='attesa'?'Manca un passo: il preparatore deve accettare la tua richiesta su intervals.icu. Gliel\'abbiamo segnalato.':'I dati arrivano da soli al prossimo aggiornamento, appena il preparatore accetta la richiesta.'}</span></div><button type="button" class="or7-b" onclick="orApri()">Rivedi</button></div>`
+    :st==='errore'?`<div class="or7-r"><span class="or7-i">${_ri('orologio')}</span><div><b>Il collegamento non va</b><span>Controlla il codice (${escH(iv.id)}) e di aver aggiunto ${OR_COACH} come coach su intervals.icu.</span></div><button type="button" class="or7-b go" onclick="orApri()">Controlla</button></div>`
     :`<div class="or7-r"><span class="or7-i">${_ri('orologio')}</span><div><b>Collega il tuo orologio</b><span>Garmin, Apple Watch, Polar, Coros e altri: allenamenti, FC e sonno arrivano da soli.</span></div><button type="button" class="or7-b go" onclick="orApri()">Collega</button></div>`;
 }
 window.orApri=()=>{
@@ -4189,7 +4193,7 @@ window.orApri=()=>{
       <li><b>Crea l'account</b><span>Registrati gratis su intervals.icu (anche con Google o Apple).</span><a class="or7s-a" href="https://intervals.icu" target="_blank" rel="noopener">Apri intervals.icu</a></li>
       <li><b>Collega l'orologio</b><div class="or7s-ch" role="group" aria-label="Il tuo orologio">${Object.entries(OR_DISP).map(([k,d])=>`<button type="button" class="${k===OR_D?'on':''}" onclick="orDisp('${k}')">${d.n}</button>`).join('')}</div><span id="or7s-t">${OR_DISP[OR_D].t}</span></li>
       <li><b>Aggiungi il preparatore</b><span>Su intervals.icu apri la pagina Athletes, tocca <b>Add a coach</b>, cerca <b>${OR_COACH}</b> e manda la richiesta.</span><a class="or7s-a" href="https://intervals.icu/athletes" target="_blank" rel="noopener">Apri la pagina Athletes</a></li>
-      <li><b>Mandami il tuo codice</b><span>Apri il tuo profilo su intervals.icu: nell'indirizzo della pagina c'e' un codice come <b>i123456</b> (lo trovi anche in Settings, in fondo, alla voce Athlete ID). Incollalo qui, va bene anche tutto l'indirizzo.</span>
+      <li><b>Manda il tuo codice</b><span>Apri il tuo profilo su intervals.icu: nell'indirizzo della pagina c'e' un codice come <b>i123456</b> (lo trovi anche in Settings, in fondo, alla voce Athlete ID). Incollalo qui, va bene anche tutto l'indirizzo.</span>
         <div class="or7s-in"><input id="or7-cod" autocomplete="off" inputmode="text" placeholder="i123456" value="${escH(iv.id||'')}" aria-label="Codice intervals.icu"><button type="button" onclick="orInvia()">Invia</button></div><em id="or7-err" class="or7s-err" role="alert"></em></li>
     </ol></div>`);
 };
@@ -4199,9 +4203,9 @@ window.orInvia=async()=>{
   if(!c){if(er)er.textContent='Non trovo il codice: deve contenere dei numeri, come i123456.';inp&&inp.focus();return;}
   const nome=(window._ath||{}).name||'Atleta',prima=(((window._ath||{}).intervals)||{}).id;
   try{
-    await update(ref(db,`athletes/${aid}/intervals`),{id:c,ts:Date.now(),stato:'inviato',disp:OR_D});
-    if(prima!==c)await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),text:`Ho collegato l'orologio (${OR_DISP[OR_D].n}) a intervals.icu. Il mio codice: ${c}`,from:'athlete',fromName:nome,read:false,intervals:c});
-    window._ath=Object.assign({},window._ath,{intervals:{id:c,ts:Date.now(),stato:'inviato',disp:OR_D}});
+    await update(ref(db,`athletes/${aid}/intervals`),prima!==c?{id:c,ts:Date.now(),stato:'inviato',disp:OR_D,esito:null,msg:null,esitoTs:null}:{disp:OR_D,ts:Date.now()});
+    if(prima!==c)await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),text:`Ho collegato l'orologio (${OR_DISP[OR_D].n}) a intervals.icu e ti ho mandato la richiesta di coach: accettala dalla pagina Athletes. Il mio codice: ${c}`,from:'athlete',fromName:nome,read:false,intervals:c});
+    window._ath=Object.assign({},window._ath,{intervals:prima!==c?{id:c,ts:Date.now(),stato:'inviato',disp:OR_D}:Object.assign({},(window._ath||{}).intervals,{disp:OR_D})});
     orScheda();document.getElementById('sv-overlay')?.click();showToast('Codice inviato al preparatore');
   }catch(e){console.error(e);if(er)er.textContent='Non inviato: controlla la connessione e riprova.';}
 };
