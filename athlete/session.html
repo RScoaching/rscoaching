@@ -1256,6 +1256,7 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 .pk7-vuoto{padding:18px 4px;color:var(--muted);font-size:14px}
 .pk7-f{padding-top:10px}.pk7-ok{width:100%;min-height:52px;border:0;border-radius:14px;background:var(--primary);color:#1a0f0a;font:650 16px var(--ff);cursor:pointer}.pk7-ok[disabled]{opacity:.45}
 @media (prefers-reduced-motion:reduce){.pk7,.pk7-ov{transition:none}}
+.cx-add{display:flex;gap:8px;padding:6px 10px 10px}.cx-add button{flex:1;min-height:44px;border-radius:12px;border:1px dashed rgba(255,214,196,.2);background:transparent;color:var(--text);font:600 14px var(--ff);cursor:pointer}
 .cd7-tt{display:flex;flex-direction:column;gap:2px;min-width:0}.cd7-tt small{font:500 13px var(--ff);color:var(--muted,#B5ABA4);min-height:1em}
 .cd7-sc{padding:4px 16px 10px}.cd7-sc span{display:block;font:500 13px var(--ff);color:var(--muted,#B5ABA4);margin-bottom:8px}
 .cd7-sc div{display:flex;flex-wrap:wrap;gap:6px}
@@ -1472,7 +1473,7 @@ function saveProgress(){
   // anche la forma degli esercizi (serie aggiunte, tolte, di attivazione): senza, riaprendo la seduta righe e dati non tornano
   const strutt=exs.map(e=>e&&e._type==='pesi'?{n:e.name,sets:e.sets||null,setRows:e.setRows||null}:null);
   const agg=exs.map((e,i)=>e&&e._agg?{i,e}:null).filter(Boolean),sost=exs.map(e=>e&&e._da&&!e._agg?{n:e.name,da:e._da,mot:e._mot||null}:null);
-  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt,cardioData,agg,sost}));}catch(e){}
+  try{localStorage.setItem(_sessKey,JSON.stringify({setData,campoChecked,startTs,strutt,cardioData,agg,sost,firma:FIRMA0}));}catch(e){}
 }
 let _saveTmr=null, _sessionFinished=false;
 function saveProgressDebounced(){
@@ -1487,14 +1488,31 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 // modifica: serie, kg, ripetizioni e cardio salvati tornano spuntati; il cronometro riparte dai minuti gia' fatti
 function modPrecompila(L){
   const arr=v=>(Array.isArray(v)?v:Object.values(v||{})).filter(Boolean);
+  // prima la forma della seduta com'era: esercizi cambiati e aggiunti dall'atleta
+  arr(L.sostituzioni).forEach(x=>{const e=exs.find(e=>e&&e.name===x.da&&!e._da);if(!e)return;
+    const cd=arr(L.cardio).find(c=>c.name===x.a);
+    if(cd&&e._type!=='cardio'){const i=exs.indexOf(e);exs[i]=Object.assign(pkNuovo(x.a,cd.k),{_agg:false,_da:x.da,_mot:x.mot||null});delete exs[i]._agg;}
+    else{e._da=x.da;e._mot=x.mot||null;e.name=x.a;delete e.kg;}});
+  const ag=arr(L.aggiunti);
+  if(ag.length&&exs.length===1&&exs[0]._type==='nota'&&!exs[0].note)exs=[];
+  ag.forEach(n=>{const cd=arr(L.cardio).find(c=>c.name===n);const ed=L.exerciseData&&L.exerciseData[n];const e=pkNuovo(n,cd?cd.k:null);if(!cd&&ed)e.sets=String(Math.max(3,arr(ed).length));exs.push(e);});
+  if(ag.length)initSets();
+  const usoNome={};
   exs.forEach((ex,i)=>{
     if(ex._type==='pesi'&&L.exerciseData&&L.exerciseData[ex.name]){
-      const A=arr(L.exerciseData[ex.name]);setData[i]=setData[i]||{};
+      // con lo stesso nome due volte: a ognuno le sue serie, in ordine; all'ultimo quelle che restano
+      const tutte=arr(L.exerciseData[ex.name]),usate=(usoNome[ex.name]||0),altri=exs.slice(i+1).some(e=>e&&e._type==='pesi'&&e.name===ex.name);
+      const A=altri?tutte.slice(usate,usate+(parseInt(ex.sets)||tutte.length)):tutte.slice(usate);usoNome[ex.name]=usate+A.length;
+      if(!A.length)return;setData[i]=setData[i]||{};
       A.forEach((x,si)=>{setData[i][si]=Object.assign({},setData[i][si]||{},{kg:x.kg!=null?String(x.kg):'',reps:x.reps!=null?String(x.reps):'',rpe:x.rpe||null,done:true,suggested:false});});
       if(!ex.setRows&&A.length>(parseInt(ex.sets)||0))ex.sets=String(A.length);
     }
     if(ex._type==='cardio'){const c=arr(L.cardio).find(c=>c.name===ex.name);if(c){campoChecked[i]=true;cardioData[i]={};['min','km','fc','macchina'].forEach(k=>{if(c[k]!=null&&c[k]!=='')cardioData[i][k]=c[k];});if(c.min)cardioData[i].fatto=c.min*60;}}
     if(ex._type==='campo'&&arr(L.campo).includes(ex.name))campoChecked[i]=true;
+    if(ex._type==='complex'&&L.exerciseData)(ex.items||[]).forEach((it,ci)=>{const tutte=arr(L.exerciseData[it.name]);if(!tutte.length)return;
+      const usate=usoNome[it.name]||0,A=tutte.slice(usate,usate+Math.max(parseInt(it.sets)||0,tutte.length-usate));usoNome[it.name]=usate+A.length;
+      setData[i]=setData[i]||{};const c=setData[i][ci]=setData[i][ci]||{};
+      A.forEach((x,si)=>{c[si]=Object.assign({},c[si]||{},{kg:x.kg!=null?String(x.kg):'',reps:x.reps!=null?String(x.reps):'',rpe:x.rpe||null,done:true});});});
   });
   startTs=Date.now()-(+L.duration||0)*60000;
 }
@@ -1504,15 +1522,23 @@ function modBanner(){
   const h=document.getElementById('sapp');if(!h||document.getElementById('mod7'))return;
   h.insertAdjacentHTML('afterbegin',`<div class="mod7" id="mod7" role="status">Stai modificando la seduta di ${escH(gg)}. Correggi quello che serve, poi Completa: si salva sopra.</div>`);
 }
+// forma della seduta com'e' nel programma: se il preparatore la cambia mentre l'atleta ha dei progressi
+// salvati, quelli vecchi non si rimettono sugli esercizi nuovi (indici sfasati, superset che si rompono)
+let FIRMA0='';
+const firmaEx=()=>exs.map(e=>e._type+':'+(e.name||(e.items||[]).map(x=>x.name).join('+'))+':'+(e._type==='complex'?(e.items||[]).length:'')).join('|');
 function loadProgress(){
+  if(!FIRMA0)FIRMA0=firmaEx();
   try{
     const raw=localStorage.getItem(_sessKey);
     if(!raw)return;
     const saved=JSON.parse(raw);
+    if(saved.firma&&saved.firma!==FIRMA0){try{localStorage.removeItem(_sessKey);}catch(e){}return;}
     // prima gli esercizi cambiati e aggiunti, poi i dati: gli indici devono tornare
     if(Array.isArray(saved.sost))saved.sost.forEach((x,i)=>{const e=exs[i];if(x&&e&&e.name===x.da){e._da=x.da;e._mot=x.mot;e.name=x.n;delete e.kg;}});
     if(Array.isArray(saved.agg)){if(exs.length===1&&exs[0]._type==='nota'&&!exs[0].note&&saved.agg.length)exs=[];saved.agg.forEach(({i,e})=>{if(e&&i>=exs.length)exs.push(e);});}
     if(saved.setData)setData=saved.setData;
+    // salvataggi vecchi senza firma: almeno la forma dei superset deve tornare
+    exs.forEach((e,i)=>{if(e._type==='complex'){if(!setData[i]||typeof setData[i]!=='object')setData[i]={};(e.items||[]).forEach((it,ci)=>{if(!setData[i][ci]||typeof setData[i][ci]!=='object'||'done' in setData[i][ci]){const c={};for(let k=0;k<(parseInt(it.sets)||4);k++)c[k]={kg:'',rpe:null,done:false};setData[i][ci]=c;}});}});
     if(Array.isArray(saved.strutt))saved.strutt.forEach((x,i)=>{const e=exs[i];if(x&&e&&e._type==='pesi'&&e.name===x.n){if(x.sets)e.sets=x.sets;e.setRows=x.setRows||undefined;}});
     if(saved.campoChecked)campoChecked=saved.campoChecked;
     if(saved.cardioData)Object.assign(cardioData,saved.cardioData);
@@ -1811,7 +1837,9 @@ function pkLista(){
   if(PK.a)L=L.filter(x=>x.i.att===PK.a);
   if(q)L=L.filter(x=>x.n.toLowerCase().includes(q));
   if(!PK.g&&!PK.a&&!q&&window.RSCardio)L=L.concat(RSCardio.MACCHINE.filter(m=>m.k!=='scelta').map(m=>({n:m.n,cardio:m.k})));
-  return L.sort((a,b)=>a.n.localeCompare(b.n));
+  // con la ricerca: prima i nomi che iniziano con la parola, poi quelli con una parola che inizia cosi', poi il resto
+  const rk=n=>{if(!q)return 0;const l=n.toLowerCase();return l.startsWith(q)?0:new RegExp('\\b'+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(l)?1:2;};
+  return L.sort((a,b)=>rk(a.n)-rk(b.n)||(q?a.n.length-b.n.length:0)||a.n.localeCompare(b.n));
 }
 function pkRiga(x,simile){
   const M=window.RSMuscoli,gr=x.cardio?'Cardio':(M&&x.i&&x.i.g&&M.GR[x.i.g]?M.GR[x.i.g].n:''),at=x.i&&x.i.att?x.i.att:'';
@@ -2311,7 +2339,7 @@ function renderPesi(ex,ei){
         <div class="set-row-inner">
           <div class="set-row-main">
             <span class="sn${d.done?' d':''}">${s+1}</span>
-            ${tempo&&!d.done?`<button type="button" class="tm7" id="tm-${ei}-${s}" onclick="tmAvvia(${ei},${s},'${escH(String(targetReps)).replace(/'/g,'')}')" aria-label="Avvia il timer della serie">${window.rsIcon?window.rsIcon('play'):'Via'}</button>`:`<div class="prev-col">
+            ${tempo&&!d.done?`<button type="button" class="tm7" id="tm-${ei}-${s}" data-t="${escH(String(targetReps))}" onclick="tmAvvia(${ei},${s},this.dataset.t)" aria-label="Avvia il timer della serie">${window.rsIcon?window.rsIcon('play'):'Via'}</button>`:`<div class="prev-col">
               <span class="prev-col-val">${prevText}</span>
               ${prevSub?`<span class="prev-col-sub">${prevSub}</span>`:''}
             </div>`}
@@ -2369,7 +2397,9 @@ function renderPesi(ex,ei){
 }
 
 function renderComplex(ex,ei){
-  const sets=parseInt(ex.items[0]?.sets)||4;
+  // ogni esercizio del superset con le sue serie: prima si mostravano per tutti quelle del primo e una serie in piu' restava nascosta
+  const nSerie=ci=>Math.max(Object.keys((setData[ei]||{})[ci]||{}).length,parseInt(ex.items[ci]?.sets)||0)||4;
+  const sets=Math.max(...ex.items.map((_,ci)=>nSerie(ci)));
   let html=`<div class="ex-card cx-card"><div class="ex-card-head">
     <div class="ex-num-badge">${ei+1} di ${exs.length}</div>
     <span class="ex-type-pill tp-complex">Superset</span>
@@ -2397,7 +2427,7 @@ function renderComplex(ex,ei){
     ${kgSug>0?`<div class="sug-kg-bar"><div><div class="sug-kg-lbl">${item.name}</div><div class="sug-kg-pct">Sugg.</div></div><div><span class="sug-kg-val">${kgSug}</span><span class="sug-kg-unit"> kg</span></div></div>`:''}
     <div class="sets-wrap" style="padding-top:6px;">
       <div class="sets-head"><span style="text-align:center;">Rd</span><span style="text-align:center;">Prec.</span><span style="text-align:center;">Reps</span><span style="text-align:center;">Kg</span><span></span></div>
-      ${Array.from({length:sets},(_,s)=>{
+      ${Array.from({length:nSerie(ci)},(_,s)=>{
         const d=csd[s]||{kg:'',rpe:null,done:false};
         const cPrevKg=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].kg:null;
         const cPrevReps=_prevKg[item.name]&&_prevKg[item.name][s]?_prevKg[item.name][s].reps:null;
@@ -2417,10 +2447,13 @@ function renderComplex(ex,ei){
           ${d.done&&d.rpe?`<div style="padding:3px 10px 5px;font-size:11px;color:var(--muted);text-align:right;">RPE ${d.rpe}</div>`:''}
         </div>`;
       }).join('')}
+      <div class="cx-add"><button type="button" onclick="addCxSet(${ei},${ci})">+ Serie</button>${nSerie(ci)>1?`<button type="button" onclick="delCxSet(${ei},${ci})">- Serie</button>`:''}</div>
     </div>`;
   });
   return html+'</div>';
 }
+window.addCxSet=(ei,ci)=>{setData[ei]=setData[ei]||{};const c=setData[ei][ci]=setData[ei][ci]||{};c[Object.keys(c).length]={kg:'',rpe:null,done:false};renderCard(ei);};
+window.delCxSet=(ei,ci)=>{const c=(setData[ei]||{})[ci];if(!c)return;const k=Object.keys(c).map(Number).sort((a,b)=>b-a)[0];if(k>0&&!c[k].done){delete c[k];renderCard(ei);}else if(k>0){toast('Togli prima la spunta');}};
 
 /* ── CARDIO NELLA SEDUTA (tapis roulant, cyclette...): dati da seguire, timer, minuti/km/FC fatti */
 const cardioData={};let CDT=null;
@@ -2811,6 +2844,11 @@ window.setCxReps=(ei,ci,s,v)=>{if(!setData[ei][ci])setData[ei][ci]={};if(!setDat
 window.setCxRpe=(ei,ci,s,r)=>{if(!setData[ei][ci][s])setData[ei][ci][s]={};setData[ei][ci][s].rpe=r;renderCard(ei);};
 window.toggleCxDone=function(ei,ci,s){
   if(!setData[ei][ci][s])setData[ei][ci][s]={};
+  const d0=setData[ei][ci][s],it=exs[ei].items[ci]||{};
+  if(!d0.done){
+    if(d0.kg==null||d0.kg===''){const pk=_prevKg[it.name]&&_prevKg[it.name][s]?_prevKg[it.name][s].kg:null;const k=kgSugFor(it)||pk;if(k)d0.kg=String(k);}
+    if(d0.reps==null||d0.reps===''){const m=/^\s*(\d+)/.exec(String(it.reps||''));if(m&&!/["'\u2032\u2033]/.test(String(it.reps)))d0.reps=+m[1];}
+  }
   setData[ei][ci][s].done=!setData[ei][ci][s].done;
   if(setData[ei][ci][s].done){
     const ex=exs[ei];
@@ -3028,6 +3066,7 @@ function updateRest(){
   if(pf)pf.style.width=`${Math.max(0,restLeft/restTotal*100)}%`;
   if(rf){const pct=restTotal>0?restLeft/restTotal:1;rf.setAttribute('stroke-dashoffset',String(314*(1-pct)));rf.style.stroke=restLeft<=10?'#FF9A6B':'#FF6A2E';}
 }
+window.expandRest=()=>expandRest();
 function expandRest(){
   const ov=document.getElementById('rest-ov');
   if(ov.classList.contains('mini')){
@@ -3092,6 +3131,8 @@ function chiediFine(){
 }
 window.fineNo=()=>{const ov=document.getElementById('fine-ov');if(ov)ov.hidden=true;};
 window.fineOk=async()=>{window.fineNo();await finish();};
+// sola lettura, per le prove automatiche (_prove/anteprima/giro.mjs)
+window.__rsStato=()=>({exs,setData,campoChecked,cardioData,cur,MODK,isQuick});
 // riaprire una seduta chiusa per sbaglio: toglie il registro appena scritto (e i record) e torna agli esercizi
 let _prRefs=[];
 /* Foto e commento della seduta: la foto si rimpicciolisce sul telefono (lato lungo 1080 px, JPEG)
@@ -3146,6 +3187,9 @@ async function finish(){
 
   // Build exerciseData for history (kg + rpe per set per exercise)
   const exerciseData={};
+  // superset: le serie fatte di ogni esercizio, come quelle singole (prima non si salvavano)
+  const cxFatte=c=>Object.entries(c||{}).sort((a,b)=>+a[0]-+b[0]).filter(([,x])=>x&&x.done).map(([,x])=>({kg:x.kg?parseFloat(String(x.kg).replace(',','.')):null,reps:x.reps||null,rpe:x.rpe||null})).filter(x=>x.kg!=null||x.reps!=null);
+  exs.forEach((ex,i)=>{if(ex._type==='complex')(ex.items||[]).forEach((it,ci)=>{const f=cxFatte((setData[i]||{})[ci]);if(it&&it.name&&f.length)exerciseData[it.name]=(exerciseData[it.name]||[]).concat(f);});});
   exs.forEach((ex,i)=>{
     if(ex._type==='pesi'&&ex.name){
       const sd2=setData[i]||{};
@@ -3160,7 +3204,8 @@ async function finish(){
           rpe:s.rpe||null
         }))
         .filter(s=>s.kg!=null||s.reps!=null);
-      if(fatte.length)exerciseData[ex.name]=fatte;
+      // lo stesso esercizio due volte (aggiunto o cambiato con uno gia' in seduta): le serie si sommano, non si perdono
+      if(fatte.length)exerciseData[ex.name]=(exerciseData[ex.name]||[]).concat(fatte);
     }
   });
   // la seduta finita va prima nella coda del telefono: senza rete non si perde e non si resta

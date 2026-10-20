@@ -2088,8 +2088,8 @@ html body .ps7.oggi{background:var(--primary);color:#1A0B05}
       <div class="card" style="margin-bottom:12px;">
         <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:8px;">Aggiungi un esercizio</div>
         <div style="display:flex;gap:8px;">
-          <input type="text" id="new-ex-name" placeholder="Nome esercizio personalizzato" style="flex:1;">
-          <button onclick="addCustomEx()" style="padding:9px 14px;background:rgba(255,106,46,.1);border:1px solid rgba(255,106,46,.22);color:var(--primary2);border-radius:9px;cursor:pointer;font-family:var(--ff);font-size:13px;font-weight:600;">+</button>
+          <input type="text" id="new-ex-name" placeholder="Nome esercizio personalizzato" style="flex:1;" aria-label="Nome dell'esercizio" onkeydown="if(event.key==='Enter')addCustomEx()">
+          <button type="button" onclick="addCustomEx()" style="min-height:44px;padding:0 16px;background:rgba(255,106,46,.1);border:1px solid rgba(255,106,46,.22);color:var(--primary2);border-radius:10px;cursor:pointer;font-family:var(--ff);font-size:14px;font-weight:600;">Aggiungi</button>
         </div>
       </div>
     </div>
@@ -4865,6 +4865,15 @@ window.calcDaniels=()=>{
     }).join('');
 };
 
+// massimali: un esercizio scritto dall'atleta entra nella lista (se c'e' gia', non si duplica)
+window.addCustomEx=async()=>{
+  const inp=document.getElementById('new-ex-name'),n=(inp&&inp.value||'').trim();
+  if(!n){showToast('Scrivi il nome dell\'esercizio');inp&&inp.focus();return;}
+  try{const m=(await get(ref(db,`rm_exercises/${aid}`))).val()||{};
+    if(Object.values(m).some(v=>v&&String(v.name||'').toLowerCase()===n.toLowerCase())){showToast(n+' e\' gia\' nella lista');return;}
+    await push(ref(db,`rm_exercises/${aid}`),{name:n,order:999,custom:true});inp.value='';showToast(n+' aggiunto ai massimali');}
+  catch(e){console.error(e);showToast('Non aggiunto: controlla la connessione');}
+};
 // ── QUICK SESSION (no program)
 // allenamento libero: si parte vuoti e gli esercizi si scelgono nella seduta (ricerca, gruppo, attrezzo)
 window.apriLibera=()=>{
