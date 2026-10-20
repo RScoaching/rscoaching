@@ -2937,7 +2937,7 @@ function renderWorkoutStorico(logs){
   const cats={};logs.forEach(l=>{const c=catLog(l);cats[c]=(cats[c]||0)+1;});
   const fil=WS.f&&cats[WS.f]?WS.f:'';const LL=fil?logs.filter(l=>catLog(l)===fil):logs;
   const chips=Object.keys(cats).length>1?`<div class="ws-fil" role="tablist" aria-label="Tipo di seduta"><button type="button" class="${fil?'':'on'}" onclick="wsFiltro('')">Tutte <i>${logs.length}</i></button>${CAT_ORD.filter(c=>cats[c]).map(c=>`<button type="button" class="${fil===c?'on':''}" onclick="wsFiltro('${c}')">${c} <i>${cats[c]}</i></button>`).join('')}</div>`:'';
-  const gest=`<div class="ws-gest">${WS.sel?`<span>${WS.scelte.size} ${WS.scelte.size===1?'scelta':'scelte'}</span><button type="button" class="ws-del" onclick="wsElimina()"${WS.scelte.size?'':' disabled'}>Elimina</button><button type="button" onclick="wsSel(false)">Fine</button>`:`<button type="button" onclick="wsSel(true)">Seleziona</button>`}</div>`;
+  const gest=`<div class="ws-gest">${WS.sel?`<span>${WS.scelte.size} ${WS.scelte.size===1?'scelta':'scelte'}</span>${WS.scelte.size===1?`<button type="button" class="ws-mod" onclick="wsModifica()">Modifica</button>`:''}<button type="button" class="ws-del" onclick="wsElimina()"${WS.scelte.size?'':' disabled'}>Elimina</button><button type="button" onclick="wsSel(false)">Fine</button>`:`<button type="button" onclick="wsSel(true)">Seleziona</button>`}</div>`;
   // righe compatte raggruppate per mese: data, seduta, minuti, serie, RPE, record
   const tutti=el.dataset.tutti==='1'||!!fil,L=tutti?LL:LL.slice(0,12);
   let mese='',h='';
@@ -2971,6 +2971,7 @@ const wsRidisegna=()=>renderWorkoutStorico(window._weekLogs||[]);
 window.wsTutte=()=>{document.getElementById('wstorico-list').dataset.tutti='1';wsRidisegna();};
 window.wsFiltro=f=>{WS.f=f;wsRidisegna();};
 window.wsSel=on=>{WS.sel=on;WS.scelte.clear();wsRidisegna();};
+window.wsModifica=()=>{const k=[...WS.scelte][0];if(k)window.modificaLog(k);};
 window.wsScegli=k=>{if(WS.scelte.has(k))WS.scelte.delete(k);else WS.scelte.add(k);wsRidisegna();};
 window.wsElimina=async()=>{const n=WS.scelte.size;if(!n||!confirm(`Eliminare ${n} ${n===1?'registrazione':'registrazioni'}? Non si puo' annullare.`))return;
   try{for(const k of WS.scelte){await remove(ref(db,`session_logs/${aid}/${k}`));if(ST.logsRaw)delete ST.logsRaw[k];}
@@ -4069,7 +4070,11 @@ async function f7Foto(l){if(!l||!l._k||!l.post||!l.post.foto)return;try{const v=
    Il registro si corregge; se il giorno ha l'RPE di questa seduta, si corregge anche quello. */
 let MOD=null;
 window.modificaLog=k=>{
-  const l=ST.logs.find(x=>x._k===k);if(!l)return;MOD={k,rpe:+l.avgRpe||rpeLog(l)||null};
+  const l=ST.logs.find(x=>x._k===k);if(!l)return;
+  // seduta del programma: si riapre la seduta vera, con serie, kg e cardio gia' segnati e il tempo da dove era
+  if(l.progId&&l.sessId!=null&&l.weekIdx!=null&&!l.isQuick){location.href=`./session.html?id=${aid}&prog=${encodeURIComponent(l.progId)}&week=${l.weekIdx}&sess=${encodeURIComponent(l.sessId)}&mod=${encodeURIComponent(k)}`;return;}
+  // seduta libera o registrata a mano: si corregge qui
+  MOD={k,rpe:+l.avgRpe||rpeLog(l)||null};
   const ed=l.exerciseData?Object.entries(l.exerciseData).map(([n,a],ei)=>{const A=(Array.isArray(a)?a:Object.values(a||{})).filter(Boolean);
     return `<div class="md-ex" data-n="${escH(n)}"><b>${escH(n)}</b>${A.map((x,si)=>`<div class="md-set"><span>${si+1}</span><input inputmode="numeric" value="${escH(x.reps??'')}" aria-label="Ripetizioni serie ${si+1}" data-c="reps"><input inputmode="decimal" value="${x.kg!=null?String(x.kg).replace('.',','):''}" aria-label="Kg serie ${si+1}" data-c="kg"><i>kg</i></div>`).join('')}</div>`;}).join(''):'';
   svApri(`<div class="md"><div class="md-t">Modifica la seduta</div>

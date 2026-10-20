@@ -1226,6 +1226,7 @@ html body .ex-nav .ex-dot{width:30px!important;height:30px!important;min-width:3
 
 /* cardio nella seduta */
 .cd7 .ex-card-head{padding-bottom:8px}
+.mod7{margin:8px 16px 0;padding:10px 14px;border-radius:12px;background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.28);color:#DDD6FE;font:500 13.5px/1.4 var(--ff)}
 .cd7-tt{display:flex;flex-direction:column;gap:2px;min-width:0}.cd7-tt small{font:500 13px var(--ff);color:var(--muted,#B5ABA4);min-height:1em}
 .cd7-sc{padding:4px 16px 10px}.cd7-sc span{display:block;font:500 13px var(--ff);color:var(--muted,#B5ABA4);margin-bottom:8px}
 .cd7-sc div{display:flex;flex-wrap:wrap;gap:6px}
@@ -1393,6 +1394,8 @@ let QDEFS={};get(ref(db,'questionnaire_defs')).then(x=>{QDEFS=x.val()||{};}).cat
 
 const p=new URLSearchParams(window.location.search);
 const AID=p.get('id'), PROG=p.get('prog'), WEEK=parseInt(p.get('week')||'0'), SESS=p.get('sess');
+// ?mod=<chiave del registro>: si riapre una seduta gia' fatta per correggerla (serie, kg, cardio, tempo)
+const MODK=p.get('mod')||null;let MODLOG=null;
 const isoLoc=d=>{d=new Date(d);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const isQuick=p.get('quick')==='1';
 
@@ -1400,11 +1403,19 @@ let athlete={}, session={};
 let exs=[], setData={}, best1rm={}, newPRs=[], campoChecked={};
 let cur=0, startTs=Date.now();
 // localStorage key for this session
-const _sessKey=`rsc_prog_${AID}_${PROG||'quick'}_${WEEK}_${SESS||'0'}`;
+const _sessKey=`rsc_prog_${AID}_${PROG||'quick'}_${WEEK}_${SESS||'0'}`+(MODK?'_m'+MODK:'');
 
 // Esci dalla sessione. Se ci sono dati inseriti li salva (diventano "Prec." la prossima volta),
 // altrimenti pulisce i progressi locali e torna indietro.
 window.exitSession=async function(){
+  // in modifica: si salva sopra la seduta, oppure si esce lasciandola com'era
+  if(MODLOG){
+    if(confirm('Salvare le modifiche a questa seduta?')){await finish();return;}
+    if(!confirm('Uscire senza salvare? La seduta resta com\'era.'))return;
+    _sessionFinished=true;if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}
+    try{localStorage.removeItem(_sessKey);}catch(e){}
+    location.href=`../athlete/?id=${AID}`;return;
+  }
   if(sessionHasData()){
     if(confirm('Terminare l\'allenamento? I dati inseriti verranno salvati.')){
       await finish();
@@ -1443,6 +1454,26 @@ function saveProgressDebounced(){
 function flushProgress(){if(_sessionFinished)return;if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}saveProgress();}
 window.addEventListener('pagehide',flushProgress);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushProgress();});
+// modifica: serie, kg, ripetizioni e cardio salvati tornano spuntati; il cronometro riparte dai minuti gia' fatti
+function modPrecompila(L){
+  const arr=v=>(Array.isArray(v)?v:Object.values(v||{})).filter(Boolean);
+  exs.forEach((ex,i)=>{
+    if(ex._type==='pesi'&&L.exerciseData&&L.exerciseData[ex.name]){
+      const A=arr(L.exerciseData[ex.name]);setData[i]=setData[i]||{};
+      A.forEach((x,si)=>{setData[i][si]=Object.assign({},setData[i][si]||{},{kg:x.kg!=null?String(x.kg):'',reps:x.reps!=null?String(x.reps):'',rpe:x.rpe||null,done:true,suggested:false});});
+      if(!ex.setRows&&A.length>(parseInt(ex.sets)||0))ex.sets=String(A.length);
+    }
+    if(ex._type==='cardio'){const c=arr(L.cardio).find(c=>c.name===ex.name);if(c){campoChecked[i]=true;cardioData[i]={};['min','km','fc','macchina'].forEach(k=>{if(c[k]!=null&&c[k]!=='')cardioData[i][k]=c[k];});if(c.min)cardioData[i].fatto=c.min*60;}}
+    if(ex._type==='campo'&&arr(L.campo).includes(ex.name))campoChecked[i]=true;
+  });
+  startTs=Date.now()-(+L.duration||0)*60000;
+}
+// in alto: si sta correggendo una seduta gia' salvata
+function modBanner(){
+  const d=new Date(MODLOG.ts||Date.now()),gg=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
+  const h=document.getElementById('sapp');if(!h||document.getElementById('mod7'))return;
+  h.insertAdjacentHTML('afterbegin',`<div class="mod7" id="mod7" role="status">Stai modificando la seduta di ${escH(gg)}. Correggi quello che serve, poi Completa: si salva sopra.</div>`);
+}
 function loadProgress(){
   try{
     const raw=localStorage.getItem(_sessKey);
@@ -1498,7 +1529,8 @@ async function init(){
     });
     // Build _prevKg: most recent kg/reps per exercise from past sessions
     _prevKg={};
-    const logs=Object.values(logsS.val()||{}).sort((a,b)=>(b.ts||0)-(a.ts||0));
+    if(MODK)MODLOG=(logsS.val()||{})[MODK]||null;
+    const logs=Object.entries(logsS.val()||{}).filter(([k])=>k!==MODK).map(([,l])=>l).sort((a,b)=>(b.ts||0)-(a.ts||0));
     for(const log of logs){
       if(!log.exerciseData)continue;
       for(const [exName,setsArr] of Object.entries(log.exerciseData)){
@@ -1554,11 +1586,14 @@ function setup(){
     const m=Math.floor(secs/60),sc=secs%60;
     el.textContent=m+':'+(sc<10?'0':'')+sc;
   },1000);
+  const _locale=(()=>{try{return !!localStorage.getItem(_sessKey);}catch(e){return false;}})();
   loadProgress();
+  if(MODLOG&&!_locale)modPrecompila(MODLOG);
+  if(MODLOG)modBanner();
   renderExNav();render();
   initExObserver();updateVolumeTracker();
   // la prontezza si chiede solo quando c'e' una seduta da fare in palestra: una corsa o una nota no
-  if(!(exs.length===1&&exs[0]._type==='nota')&&!['corsa','rec','recupero'].includes(session&&session.type))showReadinessSheet();
+  if(!MODLOG&&!(exs.length===1&&exs[0]._type==='nota')&&!['corsa','rec','recupero'].includes(session&&session.type))showReadinessSheet();
 }
 
 // Add a set to an exercise
@@ -2955,6 +2990,7 @@ window.postSalva=async()=>{
   }catch(e){if(b){b.disabled=false;b.textContent='Salva nel diario';}toast('Non salvato: controlla la connessione e riprova');}
 };
 window.riapriSeduta=async()=>{
+  if(MODLOG){_sessionFinished=false;saveProgress();document.getElementById('done-screen').classList.remove('show');document.getElementById('sapp').style.display='';toast('Continua a correggere');return;}
   try{if(window._logRef){const k=window._logRef.key;await set(window._logRef,null);const c=codaLeggi();delete c[k];codaScrivi(c);}
     for(const r of _prRefs)await set(r,null);}catch(e){toast('Non riesco a riaprire: controlla la connessione');return;}
   _prRefs=[];window._logRef=null;_sessionFinished=false;saveProgress();
@@ -2996,20 +3032,23 @@ async function finish(){
   });
   // la seduta finita va prima nella coda del telefono: senza rete non si perde e non si resta
   // fermi su 'Completa'; si manda con la stessa chiave appena il server risponde (niente doppioni)
-  const _r=push(ref(db,`session_logs/${AID}`));window._logRef=_r;
+  const _r=MODLOG?ref(db,`session_logs/${AID}/${MODK}`):push(ref(db,`session_logs/${AID}`));window._logRef=_r;
   const _dati=JSON.parse(JSON.stringify({
-    ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
+    ...(MODLOG||{}),modificata:MODLOG?Date.now():undefined,
+    ts:MODLOG&&MODLOG.ts?MODLOG.ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
     condSecs,condRounds,isQuick,avgRpe,exerciseData,
     cardio:exs.map((ex,i)=>ex._type==='cardio'&&(campoChecked[i]||+(cardioData[i]||{}).fatto>=60)?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||(+(cardioData[i]||{}).fatto>=30?Math.round(cardioData[i].fatto/60):null)||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
-    date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
+    campo:exs.map((ex,i)=>ex._type==='campo'&&campoChecked[i]?ex.name:null).filter(Boolean),
+    date:(MODLOG&&MODLOG.date)||now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
   }));
+  if(MODLOG){if(!_dati.avgRpe&&MODLOG.avgRpe)_dati.avgRpe=MODLOG.avgRpe;_dati.newPRs=MODLOG.newPRs||[];}
   {const c=codaLeggi();c[_r.key]=_dati;codaScrivi(c);}
   let _inviata=true;
   try{await conTempo(set(_r,_dati),8000);const c=codaLeggi();delete c[_r.key];codaScrivi(c);}catch(e){_inviata=false;}
   window._logInAttesa=!_inviata;
 
-  if(newPRs.length&&_inviata){
+  if(newPRs.length&&_inviata&&!MODLOG){
     const exSnap=await get(ref(db,`rm_exercises/${AID}`));
     const exObj=exSnap.val()||{};
     for(const pr of newPRs){
@@ -3027,7 +3066,11 @@ async function finish(){
   if(_saveTmr){clearTimeout(_saveTmr);_saveTmr=null;}
   try{localStorage.removeItem(_sessKey);}catch(e){}
 
-  showDoneScreen(dur,totalSets,avgRpe);
+  showDoneScreen(dur,totalSets,_dati.avgRpe||avgRpe);
+  if(MODLOG){const dt=document.querySelector('.done-title');if(dt)dt.textContent='Modifiche salvate';
+    const ds=document.getElementById('done-sub');if(ds)ds.textContent='La seduta e\' aggiornata. Se vuoi, cambia anche RPE e commento.';
+    const pt=document.getElementById('post7-t');if(pt&&!pt.value&&MODLOG.post&&MODLOG.post.testo)pt.value=MODLOG.post.testo;
+    const rb=document.getElementById('riapri7');if(rb)rb.textContent='Correggi ancora';}
   if(!_inviata){const h=document.querySelector('#done-screen .done-hero');if(h)h.insertAdjacentHTML('afterbegin','<div class="coda-av">Niente rete: la seduta e\' salvata sul telefono e si invia da sola appena torna la connessione.</div>');}
 }
 
@@ -3201,7 +3244,7 @@ window.saveSessionCheckin=async function(){
   if(!CI.rpe)return;
   const btn=document.getElementById('ci-submit-btn');
   btn.textContent='Invio...';btn.disabled=true;
-  const now=new Date();
+  const now=MODLOG&&MODLOG.ts?new Date(MODLOG.ts):new Date();
   const rpe=CI.rpe;
   const pains=[...CI.zone];
   const nt=document.getElementById('ci-note');
