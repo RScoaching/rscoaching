@@ -4322,6 +4322,8 @@ function pdfSchedeHTML(p,wi,fio){
   const dose=e=>{if(e&&e.cardio&&window.RSCardio)return RSCardio.dose(e);const r=[e.sets&&e.reps?e.sets+' x '+String(e.reps).replace(' per lato',' per lato'):(e.reps||e.sets||'')];return r.join(' ');};
   const carico=e=>{const r=[];if(e.pct)r.push(String(e.pct).replace('.',',')+'%');const kg=B.kgOf(e);if(kg)r.push('<b>'+kg+'</b>');if(e.rpe)r.push('RPE '+esc(e.rpe));if(e.rest)r.push('rec '+esc(e.rest));return r.join('<br>');};
   const caselle=e=>{
+    // cardio: minuti, km e FC fatti
+    if(e.cardio)return ['minuti','km','FC'].map(l=>'<span class="bx" style="width:46px"><i>'+l+'</i></span>').join('');
     // sprint, accelerazioni e cambi di direzione: una casella per prova, per il tempo
     const nr=parseInt(e.reps,10);if(/sprint|accelerazion|volante|change of direction|5-10-5|cambio di direzione/i.test(e.name)&&(parseInt(e.sets,10)||1)===1&&nr>1&&nr<=10)return Array.from({length:nr},(_,i)=>'<span class="bx" style="width:28px"><i>'+(i===0?'tempo':'')+'</i></span>').join('');
     const n=Math.max(1,Math.min(8,parseInt(e.sets,10)||1));if(/test/i.test(String(e.reps)))return '<span class="bx" style="width:70px"><i>risultato</i></span>';const lbl=/["'”]/.test(String(e.reps))&&!/x/.test(String(e.reps))?'':(e.pct||e.rpe||/kg/i.test(e.name)?'kg x rip':'');return Array.from({length:n},(_,i)=>'<span class="bx"><i>'+(i===0?lbl:'')+'</i></span>').join('');};
@@ -4340,7 +4342,7 @@ function pdfSchedeHTML(p,wi,fio){
       h+='<table><tr><th>Lavoro</th><th style="width:30%">Fatto</th></tr><tr><td>'+esc((x.duration?x.duration+': ':'')+String(x.condContent||'')).replace(/\n/g,'<br>')+'</td><td><span class="bx" style="width:90px"><i>serie, metri, note</i></span></td></tr></table>';
     }else{
       h+='<table><tr><th style="width:4%">#</th><th>Esercizio</th><th class="n" style="width:15%">Serie x rip</th><th class="n" style="width:14%">Carico</th><th style="width:36%">Scrivi quello che fai</th></tr>'
-        +lav.map((e,i)=>'<tr><td class="n">'+(i+1)+'</td><td><b>'+esc(e.name)+'</b>'+(e.cue?'<span class="cue">'+esc(e.cue)+'</span>':'')+'</td><td class="n">'+esc(dose(e))+'</td><td class="n">'+carico(e)+'</td><td>'+caselle(e)+'</td></tr>').join('')+'</table>';
+        +lav.map((e,i)=>{const cue=e.cardio?pzCardioNota(e):e.cue;return '<tr><td class="n">'+(i+1)+'</td><td><b>'+esc(e.name)+'</b>'+(cue?'<span class="cue">'+esc(cue)+'</span>':'')+'</td><td class="n">'+esc(dose(e))+'</td><td class="n">'+carico(e)+'</td><td>'+caselle(e)+'</td></tr>';}).join('')+'</table>';
     }
     if(pv.length)h+='<div class="pv"><b>Prevenzione</b>'+pv.map(e=>'<span><i class="ck"></i> '+esc(e.name)+' <em>'+esc(dose(e))+'</em></span>').join('')+'</div>';
     h+='<div class="fine"><div>RPE della seduta<span class="bx" style="width:44px"><i>1-10</i></span></div><div>Durata<span class="bx" style="width:44px"><i>min</i></span></div><div>Dolore<span class="bx" style="width:44px"><i>0-10</i></span></div><div class="nt">Note<div class="ln"></div></div></div></section>';
