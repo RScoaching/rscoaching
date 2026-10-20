@@ -1264,6 +1264,7 @@ dialog.pzs::backdrop{background:rgba(0,0,0,.7)}
 
 /* cardio nella seduta */
 .pz-t td.pz-cdc{padding:4px 8px}
+button.pz-pc.pz-pccd{color:#7DD3FC;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pz-cdrow{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:6px 12px;border:1px solid rgba(125,211,252,.22);border-radius:10px;background:rgba(125,211,252,.06);color:var(--text);font:500 14px Inter,system-ui,sans-serif;text-align:left;cursor:pointer;transition:background .15s ease,border-color .15s ease}
 .pz-cdrow:hover{background:rgba(125,211,252,.1);border-color:rgba(125,211,252,.4)}
 .pz-cdrow:active{transform:scale(.99)}
@@ -2297,8 +2298,9 @@ function renderExBlock(wid,sid,eid,e,inComplex){
   _exCounter++;
   const num=_exCounter;
   const params=[];
-  if(e.sets!=null&&e.sets!==undefined)params.push(`${e.sets}×`);
-  if(e.reps)params.push(`${e.reps} reps`);
+  if(e.cardio&&window.RSCardio)params.push(RSCardio.dose(e));
+  else{if(e.sets!=null&&e.sets!==undefined)params.push(`${e.sets}×`);
+  if(e.reps)params.push(`${e.reps} reps`);}
   if(e.pct)params.push(`@${e.pct}%`);
   if(e.rpe)params.push(`RPE ${e.rpe}`);
   if(e.rest)params.push(`rec ${e.rest}`);
@@ -3838,7 +3840,7 @@ ${s.condContent||''}
       } else {
         exs.forEach(e=>{
           const groups=e.complexGroup?`[${e.complexLabel||'A'}] `:'';
-          txt+=`${groups}${e.name} - ${e.sets||3}×${e.reps||'-'}${e.pct?' @'+e.pct+'%':''}${e.rpe?' RPE'+e.rpe:''}${e.rest?' rec '+e.rest:''}
+          txt+=`${groups}${e.name} - ${e.cardio&&window.RSCardio?RSCardio.dose(e):(e.sets||3)+'×'+(e.reps||'-')}${e.pct?' @'+e.pct+'%':''}${e.rpe?' RPE'+e.rpe:''}${e.rest?' rec '+e.rest:''}
 `;
           if(e.cue)txt+=`  Cue: ${e.cue}
 `;
@@ -3946,7 +3948,7 @@ function pdfCompattoHTML(p,fio){
   const leg='<div class="c-read"><b>Come si legge</b> '+(forza?'<span><i>4x8</i> serie per ripetizioni</span><span><i>@75%</i> del massimale</span><span><i>RPE 8</i> fatica da 1 a 10, a 8 restano 2 ripetizioni</span><span><i class="cb">arancio</i> quello che cambia rispetto alla settimana prima</span>':'')+(C.ha?'<span><i>E</i> facile <i>M</i> medio <i>T</i> soglia <i>I</i> intervalli <i>R</i> ripetute brevi <i>RG</i> passo gara; tra parentesi il recupero</span><span>km e tempo stimati, recuperi compresi</span>':'')+'<span>in grigio le settimane di scarico e taper</span>'+(kgAid&&W.some(w=>Object.values(w.sessions||{}).some(s=>Object.values(s.exercises||{}).some(e=>kgOf(e))))?'<span><i>kg</i> calcolati sui massimali di '+esc((athletes[kgAid]||{}).name||'')+'</span>':'')+'</div>';
   // celle
   const doseTxt=e=>e?[e.sets,e.reps,e.pct,e.rpe].join('|'):'';
-  const dose=e=>{if(!e)return '<span class="na">-</span>';const r=[e.sets&&e.reps?esc(e.sets)+'x'+esc(String(e.reps).replace(' per lato','/lato')):esc(e.reps||e.sets||'')];if(e.pct){const kg=kgOf(e);r.push('<b>'+esc(String(e.pct).replace('.',','))+'%</b>'+(kg?'<u>'+kg+'</u>':''));}if(e.rpe)r.push('<em>RPE '+esc(e.rpe)+'</em>');return r.join(' ');};
+  const dose=e=>{if(!e)return '<span class="na">-</span>';if(e&&e.cardio&&window.RSCardio)return esc(RSCardio.dose(e));const r=[e.sets&&e.reps?esc(e.sets)+'x'+esc(String(e.reps).replace(' per lato','/lato')):esc(e.reps||e.sets||'')];if(e.pct){const kg=kgOf(e);r.push('<b>'+esc(String(e.pct).replace('.',','))+'%</b>'+(kg?'<u>'+kg+'</u>':''));}if(e.rpe)r.push('<em>RPE '+esc(e.rpe)+'</em>');return r.join(' ');};
   const chiave=s=>{const f=(s.corsaFasi||[]);const m=f.find(x=>/Z[345]/.test(x.zona||'')&&!/Riscaldamento|Defaticamento|Attivazione/.test(x.tipo))||f.find(x=>!/Riscaldamento|Defaticamento|Attivazione/.test(x.tipo))||f[0];const km=/Circa (\d+(?:,\d)?) km/.exec(s.notes||'');const tx=stCorsaTesto(m)||m.note||'';return m?'<b>'+esc(s.name)+'</b><span>'+esc((m.zona?m.zona+' ':'')+tx)+'</span>'+(km?'<i>'+km[1]+' km</i>':''):'<b>'+esc(s.name)+'</b>';};
   // blocchi da 4 settimane
   let corpo='';
@@ -4085,7 +4087,7 @@ function pdfSettimanaHTML(p,fio){
   const TIPO={pesi:'Forza',corsa:'Corsa',sprint:'Velocita\'',conditioning:'Condizionamento',recupero:'Mobilita\'',rtp:'Campo',squadra:'Squadra',match:'Partita'};
   const kgAid=pzKgAid&&(p.assignedTo||{})[pzKgAid]?pzKgAid:null;
   const kgOf=e=>{if(!kgAid||!e||!e.pct)return '';const mx=pzMax(e.name);const pc=pzNum(e.pct);return mx&&isFinite(pc)?String(pzR25(mx.v*pc/100)).replace('.',',')+' kg':'';};
-  const dose=e=>{const d=[/test/i.test(String(e.reps||''))?'test':e.sets&&e.reps?e.sets+'x'+String(e.reps).replace(' per lato','/lato'):(e.reps||e.sets||'')];if(e.pct)d.push(String(e.pct).replace('.',',')+'%'+(kgOf(e)?' ('+kgOf(e)+')':''));if(e.rpe)d.push('RPE '+e.rpe);return d.filter(Boolean).join(' ');};
+  const dose=e=>{if(e&&e.cardio&&window.RSCardio)return RSCardio.dose(e);const d=[/test/i.test(String(e.reps||''))?'test':e.sets&&e.reps?e.sets+'x'+String(e.reps).replace(' per lato','/lato'):(e.reps||e.sets||'')];if(e.pct)d.push(String(e.pct).replace('.',',')+'%'+(kgOf(e)?' ('+kgOf(e)+')':''));if(e.rpe)d.push('RPE '+e.rpe);return d.filter(Boolean).join(' ');};
   const C=pdfCorsa(W,sessOf);
   const fase=w=>String(w.label||'').replace(/^S\d+\s*/,'');
   const corpoSess=s=>{
@@ -4317,7 +4319,7 @@ function pdfTesta(B,p,tit,sub,dx,fio){
 function pdfSchedeHTML(p,wi,fio){
   const B=pdfBase(p),{esc}=B;const w=B.W[wi];if(!w)return '';
   const ss=B.sessOf(w);
-  const dose=e=>{const r=[e.sets&&e.reps?e.sets+' x '+String(e.reps).replace(' per lato',' per lato'):(e.reps||e.sets||'')];return r.join(' ');};
+  const dose=e=>{if(e&&e.cardio&&window.RSCardio)return RSCardio.dose(e);const r=[e.sets&&e.reps?e.sets+' x '+String(e.reps).replace(' per lato',' per lato'):(e.reps||e.sets||'')];return r.join(' ');};
   const carico=e=>{const r=[];if(e.pct)r.push(String(e.pct).replace('.',',')+'%');const kg=B.kgOf(e);if(kg)r.push('<b>'+kg+'</b>');if(e.rpe)r.push('RPE '+esc(e.rpe));if(e.rest)r.push('rec '+esc(e.rest));return r.join('<br>');};
   const caselle=e=>{
     // sprint, accelerazioni e cambi di direzione: una casella per prova, per il tempo
@@ -4405,7 +4407,7 @@ function pdfRientroHTML(p,fio){
   const ctrl=x=>/^Controllo/i.test(x.name||'');
   const riga=x=>{if(x.type==='corsa')return (x.corsaFasi||[]).filter(y=>!/Riscaldamento|Defaticamento/.test(y.tipo)).map(y=>'<b>'+esc(y.tipo||'')+'</b> '+esc(stCorsaTesto(y)||'')+(y.note?' <em>('+esc(y.note)+')</em>':'')).join('; ');
     if(x.type==='conditioning'&&!B.exOf(x).length)return esc((x.duration?x.duration+': ':'')+String(x.condContent||'').replace(/\n/g,'; '));
-    return B.exOf(x).filter(e=>!B.prev(e)).map(e=>esc(e.name)+' <em>'+esc((e.sets?e.sets+'x':'')+(e.reps||''))+'</em>').join(', ');};
+    return B.exOf(x).filter(e=>!B.prev(e)).map(e=>esc(e.name)+' <em>'+esc(e.cardio&&window.RSCardio?RSCardio.qta(e.cardio):(e.sets?e.sets+'x':'')+(e.reps||''))+'</em>').join(', ');};
   const tl='<div class="fs">'+fasi.map((f,k)=>{const a=B.giorno(f.w[0],0),z=B.giorno(f.w[f.w.length-1],6);return '<div class="'+(k===corr?'on':'')+'"><b>'+(k+1)+' '+esc(f.n)+'</b><span>settimane '+(f.w[0]+1)+(f.w.length>1?'-'+(f.w[f.w.length-1]+1):'')+(a?' &#183; '+B.dm(a)+'-'+B.dm(z):'')+'</span>'+(k===corr?'<em>fase in corso</em>':'')+'</div>';}).join('')+'</div>';
   const corpo=fasi.map((f,k)=>{
     // settimana tipo della fase: la prima senza test d'ingresso o di fine
@@ -4587,7 +4589,8 @@ window.exportBuilderPDF=function(modo){
             if(e.setRows&&e.setRows.length){
               sd=e.setRows.map(r=>(r.type?'<span style="color:'+(STC[r.type]||'#94a3b8')+';font-size:6px;font-weight:700">['+esc(r.type)+']</span> ':'')+esc(r.sets)).join('<br>');
               rd=e.setRows.map(r=>esc(r.reps||'-')).join('<br>');
-            } else {sd=esc(e.sets||'-');rd=esc(e.reps||'-');}
+            } else if(e.cardio&&window.RSCardio){sd='Cardio';rd=esc(RSCardio.qta(e.cardio)||'-');}
+            else {sd=esc(e.sets||'-');rd=esc(e.reps||'-');}
             const nt=String(e.cue||e.notes||e.note||'').replace(/^Prevenzione, attivazione: /,'attivazione ').replace(/^Prevenzione: /,'prevenzione ');
             const noteCell=hasNotes?'<td class="note-cell">'+esc(nt)+'</td>':'';
             rows+='<tr><td class="en">'+cxB+esc(e.name)+'</td><td class="nu">'+sd+'</td><td class="nu">'+rd+'</td><td class="nu">'+(load||'-')+'</td><td class="nu">'+esc(e.rest||'-')+'</td>'+noteCell+'</tr>';
@@ -7882,6 +7885,7 @@ function pzGruppoCx(s,label){
 }
 function pzFmt(e){
   if(!e)return '';
+  if(e.cardio&&window.RSCardio)return RSCardio.dose(e);
   return [e.sets||e.reps?(e.sets||'')+'x'+(e.reps||''):'',e.pct?'@'+e.pct+'%':'',e.rpe?'RPE'+e.rpe:'',e.rest?'r'+e.rest:''].filter(Boolean).join(' ');
 }
 async function pzUpdate(path,val,prima){
@@ -9280,19 +9284,21 @@ function pzProgressione(){
     <span>Riadattamento: dopo un fermo, le prime settimane 6-8 ripetizioni a RPE 7-8 senza percentuali, poi parte lo schema. Si parte da come e' scritta la prima settimana.</span></div>`;
   h+=`<div class="pz-pwrap"><table class="pz-pt"><thead><tr><th class="nm">Esercizio</th><th class="an">Andamento</th>${W.map(([wid,w],i)=>`<th class="${pzIsDl(w)?'dl':''}${i===currentWeekIdx?' cur':''}" title="${stEsc(w.label||'')}">S${i+1}<i>${stEsc(String(w.label||'').replace(/^S\d+\s*/,''))}</i></th>`).join('')}<th></th></tr></thead><tbody>`;
   for(let r=0;r<righe;r++){
-    let nome='',prec=null;const serie=[];
+    let nome='',prec=null,cdr=false;const serie=[];
     const celle=W.map(([wid,w],wi)=>{
       const s=pzSlotSess(w,pzSlotK);if(!s){serie.push(null);prec=null;return '<td class="na">-</td>';}
       const ex=pzExs(s[1])[r];if(!ex){serie.push(null);prec=null;return '<td class="na">-</td>';}
       if(!nome)nome=ex[1].name||'';
       const v=pzFmt(ex[1]),cambia=prec!=null&&v!==prec,dl=pzIsDl(w);prec=v;
+      // il cardio si cambia dalla sua finestra (minuti, velocita', pendenza), non come serie x ripetizioni
+      if(ex[1].cardio){cdr=true;serie.push(+ex[1].cardio.min||null);return `<td><button type="button" class="pz-pc pz-pccd${cambia?(dl?' dlc':' chg'):''}" onclick="pzCardioApri('${wid}','${s[0]}','${ex[0]}')" title="Modifica il cardio">${stEsc(v)}</button></td>`;}
       // l'andamento segue la percentuale, se no l'RPE, se no le ripetizioni
       serie.push(pzNum(ex[1].pct)||null);
       return `<td><input class="pz-pc${cambia?(dl?' dlc':' chg'):''}" value="${stEsc(v)}" data-pz="pcell" data-w="${wid}" data-s="${s[0]}" data-e="${ex[0]}" data-wi="${wi}" data-r="${r}" title="${stEsc(ex[1].name||'')}${cambia?': cambia rispetto alla settimana prima':''}" aria-label="${stEsc(ex[1].name||'')} settimana ${wi+1}"></td>`;
     }).join('');
     let sp=pzSpark(serie);
     if(!sp){const alt=W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);const ex=s&&pzExs(s[1])[r];return ex?(pzNum(ex[1].rpe)||null):null;});sp=pzSpark(alt);}
-    h+=`<tr><td class="nm">${stEsc(nome)}</td><td class="an">${sp}</td>${celle}<td class="act"><select class="pz-prsel" onchange="if(this.value)pzAvanti(${r},this.value);this.value=''" aria-label="Come progredisce ${stEsc(nome)}" title="Parte dalla prima settimana e la porta nelle altre; gli scarichi si alleggeriscono da soli"><option value="">Progressione...</option>${PZ_PR_MODI.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></td></tr>`;
+    h+=`<tr><td class="nm">${stEsc(nome)}</td><td class="an">${sp}</td>${celle}<td class="act"><select class="pz-prsel" onchange="if(this.value)pzAvanti(${r},this.value);this.value=''" aria-label="Come progredisce ${stEsc(nome)}" title="Parte dalla prima settimana e la porta nelle altre; gli scarichi si alleggeriscono da soli"><option value="">Progressione...</option>${(cdr?PZ_PR_CARDIO:PZ_PR_MODI).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></td></tr>`;
   }
   // in fondo i conti della seduta settimana per settimana
   const stS=W.map(([,w])=>{const s=pzSlotSess(w,pzSlotK);return s?pzStatSess(s[1]):null;});
@@ -9325,6 +9331,16 @@ async function pzCella(el,avanti){
 }
 // progressione di un esercizio dalla prima settimana: copia, carico, RPE, ripetizioni, serie o doppia
 const PZ_PR_MODI=[['uguale','Uguale in tutte'],['pct','Carico +2,5% a settimana'],['rpe','RPE +0,5 a settimana'],['rip','+1 ripetizione a settimana'],['serie','+1 serie ogni 2 settimane'],['doppia','Doppia progressione (range fisso)']];
+// cardio: dalla prima settimana in avanti, +5 minuti, +0,5 km/h o +1% di pendenza (gli scarichi restano come la prima)
+const PZ_PR_CARDIO=[['uguale','Uguale in tutte'],['cmin','+5 minuti a settimana'],['cvel','+0,5 km/h a settimana'],['cpend','+1% pendenza a settimana']];
+function pzCardioAvanti(base,k,modo){
+  const c=JSON.parse(JSON.stringify(base.cardio)),sp=(f,d,max)=>{if(c[f]!=null)c[f]=Math.min(max,Math.round((+c[f]+d)*10)/10);if(c[f+'Max']!=null)c[f+'Max']=Math.min(max,Math.round((+c[f+'Max']+d)*10)/10);};
+  if(modo==='cmin'){if(c.min!=null)sp('min',5*k,180);else sp('km',0.5*k,50);}
+  if(modo==='cvel')sp('vel',0.5*k,30);
+  if(modo==='cpend'){if(c.pend==null)c.pend=0;sp('pend',k,15);}
+  const nota=pzCardioNota(base);
+  return {name:base.name,sets:'1',reps:RSCardio.qta(c),cue:[RSCardio.testo(c,true),nota].filter(Boolean).join(' · '),cardio:c};
+}
 window.pzAvanti=async function(r,modo){
   if(modo===0)modo='uguale';if(modo===2.5)modo='pct';
   const W=pzWeeks();const up={};let base=null,k=0;
@@ -9332,6 +9348,7 @@ window.pzAvanti=async function(r,modo){
     const s=pzSlotSess(w,pzSlotK);const ex=s&&pzExs(s[1])[r];if(!ex)return;
     if(base==null){base=ex[1];return;}
     const dl=pzIsDl(w);if(!dl)k++;
+    if(base.cardio){if(!ex[1].cardio||!window.RSCardio)return;up[pzBase(wid,s[0])+'/exercises/'+ex[0]]=Object.assign({},ex[1],pzCardioAvanti(base,dl?0:k,modo));return;}
     let v={sets:base.sets||null,reps:base.reps||'',rpe:base.rpe||null,rest:base.rest||null,pct:base.pct||null,prog:modo==='doppia'?'doppia':null};
     const p=parseFloat(String(base.pct||'').replace(',','.'));
     if(!dl){
@@ -9346,7 +9363,7 @@ window.pzAvanti=async function(r,modo){
   if(!Object.keys(up).length){showToast('Niente da portare avanti: l\'esercizio e\' solo nella prima settimana');return;}
   Object.keys(up).forEach(k2=>{if(up[k2].prog==null)delete up[k2].prog;});
   pzUndo.push({multi:pzPrima(up)});
-  await update(ref(db),up);showToast((PZ_PR_MODI.find(x=>x[0]===modo)||['',''])[1]+': fatto su '+Object.keys(up).length+' settimane (Ctrl+Z annulla)');
+  await update(ref(db),up);showToast((PZ_PR_MODI.concat(PZ_PR_CARDIO).find(x=>x[0]===modo)||['',''])[1]+': fatto su '+Object.keys(up).length+' settimane (Ctrl+Z annulla)');
 };
 
 // ── PORTA AVANTI: la settimana nelle seguenti, con la progressione ──
@@ -9525,7 +9542,7 @@ function pzGgRighe(s){
   if(t==='corsa')return (s.corsaFasi||[]).filter(f=>!/Riscaldamento|Defaticamento|Attivazione/.test(f.tipo||'')||(s.corsaFasi||[]).length===1).map(f=>(f.tipo?f.tipo+' ':'')+stCorsaTesto(f));
   if(t==='conditioning')return String(s.condContent||'').split('\n').filter(Boolean);
   return pzExs(s).map(([,e])=>e).filter(e=>!/^Prevenzione/.test(e.cue||'')).map(e=>{
-    const d=[e.sets&&e.reps?e.sets+'x'+e.reps:'',e.pct?e.pct+'%':'',e.rpe?'RPE '+e.rpe:''].filter(Boolean).join(' ');
+    const d=e.cardio&&window.RSCardio?RSCardio.dose(e):[e.sets&&e.reps?e.sets+'x'+e.reps:'',e.pct?e.pct+'%':'',e.rpe?'RPE '+e.rpe:''].filter(Boolean).join(' ');
     return e.name+(d?'  '+d:'');
   });
 }

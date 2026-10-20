@@ -1806,5 +1806,7 @@ window.RSCardio = (function(){
   function qta(c){if(!c)return '';return c.min?fr(c.min,c.minMax)+"'":c.km?fr(c.km,c.kmMax)+' km':'';}
   // minuti per le stime (con la forbice il valore piu' alto)
   function minuti(c){if(!c)return 0;return +(c.minMax||c.min)||(+(c.kmMax||c.km)||0)*6;}
-  return {leggi,testo,qta,minuti,fr,macchina,MACCHINE};
+  // la dose di un esercizio cardio in una riga: "30-40' · 10-11 km/h · pendenza 5%" (null se non e' cardio)
+  function dose(e){if(!e||!e.cardio)return null;return [qta(e.cardio),testo(e.cardio,true)].filter(Boolean).join(' · ');}
+  return {leggi,testo,qta,minuti,fr,dose,macchina,MACCHINE};
 })();
