@@ -1321,6 +1321,8 @@ body::before,body::after{display:none;}
 .aa-or{font-size:13px;color:var(--muted);margin:8px 0 2px}
 .aa-z{margin:10px 0 6px}.aa-zb{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden}.aa-zb u{display:block;min-width:3px}
 .aa-zl{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--muted)}.aa-zl i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.dor-r{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}.dor-r:first-child{border-top:0}.dor-r>div{flex:1;min-width:0;display:flex;flex-direction:column}.dor-r b{color:var(--white);font-size:13.5px}.dor-r span{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dor-c{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.dor-c span{font-size:12.5px;color:var(--muted)}.dor-c code{font:500 12.5px ui-monospace,Menlo,monospace;color:var(--white);word-break:break-all}.dor-c .btn{align-self:flex-start}
 .db-cambio{color:#FBBF24!important;font-size:12.5px!important;margin-top:2px}
 .aa-cambi{display:flex;flex-direction:column;gap:4px;margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)}
 .aa-cambi b{font-size:12.5px;color:#FBBF24}.aa-cambi span{font-size:13.5px;color:var(--white)}
@@ -1700,6 +1702,7 @@ input,select,textarea{border-radius:10px}
     <section class="dcard"><h2>Check-in e RPE</h2><div class="dsub" id="dash-ci-sub">Check-in di oggi e RPE medio della squadra negli ultimi 21 giorni</div><div id="dash-ci"></div><div class="chart-wrap" style="height:150px;"><canvas id="rpe-chart"></canvas></div></section>
       </div>
     <aside class="db-side">
+      <section class="dcard" id="dash-or-card" hidden><h2>Orologi da attivare</h2><div class="dsub">Codici intervals.icu mandati dagli atleti dall'app</div><div id="dash-or"></div></section>
       <section class="dcard"><h2>In arrivo</h2><div class="dsub">Sedute, check-in, video e messaggi delle ultime 48 ore</div><div id="dash-feed"></div></section>
       <section class="dcard" id="dash-gare-card" hidden><h2>Gare in arrivo</h2><div class="dsub">Dai programmi assegnati</div><div id="dash-gare"></div></section>
       <section class="dcard"><h2>Programmi</h2><div class="dsub">In scadenza, finiti e atleti senza programma</div><div id="dash-prog"></div></section>
@@ -2356,7 +2359,7 @@ function dbRender(ids,st,oggi,giorni,fatteOggi){
         <td class="c-last" style="color:var(--muted);white-space:nowrap">${x.lastAny?ggFa(x.lastAny):'mai'}</td>
         <td class="db-act"><button type="button" class="db-ch" aria-label="Chat con ${dEsc(x.a.name)}" title="Chat" onclick="event.stopPropagation();dbChat('${r.id}')">${dIco('chat')}</button></td></tr>`;}).join('')}</tbody></table>`
     :`<div class="d-vuoto">${dIco('ok')}<b>${DB_F==='guardare'?'Nessuno da guardare':DB_F==='oggi'?'Nessuna seduta in programma oggi':'Nessun atleta attivo'}</b><span>${DB_F==='guardare'?'Carichi, check-in e aderenza sono nella norma per tutti.':'Gli atleti con un programma compaiono qui.'}</span></div>`;
-  dbFeed(ids);dbGare(ids);
+  dbFeed(ids);dbGare(ids);dbOrologi();
 }
 // tempo nelle zone di FC dell'orologio, in una barra con i minuti sotto
 function aaZone(zt){const Z=['#94A3B8','#60A5FA','#4ADE80','#FB923C','#F43F5E'],v=(zt||[]).slice(0,5).map(x=>+x||0),t=v.reduce((a,b)=>a+b,0);if(!t)return '';
@@ -2368,6 +2371,18 @@ function cambiRighe(l){
   const b=(l&&l.aggiunti||[]).filter(Boolean).map(n=>'aggiunto '+n);
   return a.concat(b);
 }
+// orologi da attivare: l'atleta ha mandato dall'app il suo codice intervals.icu (athletes/{aid}/intervals) e i dati
+// non arrivano ancora. La riga va aggiunta ad ATHLETES in IMPOSTAZIONI.txt (cartella garmin), poi 'Fatto'.
+function dbOrologi(){
+  const card=document.getElementById('dash-or-card'),el=document.getElementById('dash-or');if(!card||!el)return;
+  const L=Object.entries(athletes||{}).filter(([id,a])=>a&&!a.archived&&a.intervals&&a.intervals.id&&a.intervals.stato!=='attivo'&&!(garminData[id]&&(garminData[id].activities||garminData[id].days)));
+  card.hidden=!L.length;if(!L.length)return;
+  const riga=L.map(([id,a])=>id+':'+a.intervals.id).join(',');
+  el.innerHTML=L.map(([id,a])=>`<div class="dor-r"><div><b>${dEsc(a.name||id)}</b><span>${dEsc(a.intervals.id)}${a.intervals.disp?' &#183; '+dEsc({garmin:'Garmin',apple:'Apple Watch',altri:'altro orologio',android:'Android'}[a.intervals.disp]||''):''}</span></div><button type="button" class="btn btn-ghost btn-sm" onclick="dorFatto('${id}')">Fatto</button></div>`).join('')
+    +`<div class="dor-c"><span>Da aggiungere alla riga ATHLETES in IMPOSTAZIONI.txt (separata da una virgola da quelle che ci sono):</span><code id="dor-riga">${dEsc(riga)}</code><button type="button" class="btn btn-orange btn-sm" onclick="dorCopia()">Copia</button></div>`;
+}
+window.dorCopia=async()=>{const t=(document.getElementById('dor-riga')||{}).textContent||'';try{await navigator.clipboard.writeText(t);showToast('Copiato: incollalo in IMPOSTAZIONI.txt');}catch(e){showToast('Seleziona il testo e copialo a mano');}};
+window.dorFatto=async id=>{try{await update(ref(db,`athletes/${id}/intervals`),{stato:'attivo',attivo:Date.now()});showToast('Segnato come attivo');}catch(e){showToast('Non salvato: controlla la connessione');}};
 // in arrivo: sedute, check-in, video e messaggi delle ultime 48 ore, uno sotto l'altro
 function dbFeed(ids){
   const el=document.getElementById('dash-feed');if(!el)return;const lim=Date.now()-48*3600e3,ev=[];
