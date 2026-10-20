@@ -2268,7 +2268,7 @@ function renderCardio(ex,ei){
   const chips=[c.min?chip(fr(c.min,c.minMax)+"'",''):'',c.km?chip(fr(c.km,c.kmMax),'km'):'',c.vel?chip(fr(c.vel,c.velMax),'km/h'):'',c.pend!=null&&c.pend!==''?chip(f(c.pend)+'%','pendenza'):'',c.liv?chip('livello '+c.liv,''):'',c.watt?chip(c.watt,'W'):'',c.zona?chip(c.zona,'zona'):'',c.rpe?chip('RPE '+f(c.rpe),''):''].join('');
   // 'cyclette o tapis': solo quelle scritte dal coach, se no tutte
   const M=window.RSCardio?RSCardio.MACCHINE.filter(m=>(c.opz&&c.opz.length?c.opz.includes(m.k):m.k!=='scelta'&&m.k!=='salita')):[];
-  const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,el=run?(Date.now()-CDT.t0)/1000:(+d.fatto||0),vt=cdVista(c,el);
+  const sec=c.min?c.min*60:0,run=CDT&&CDT.ei===ei,el=run?(Date.now()-CDT.t0)/1000:(+d.fatto||0),vt=cdVista(c,el,run);
   return `<div class="ex-card cd7${ck?' all-done':''}">
     <div class="ex-card-head">
       <div class="ex-nm-row"><div class="ex-card-name">${escH(ex.name)}</div></div>
@@ -2278,7 +2278,7 @@ function renderCardio(ex,ei){
     ${c.scelta?`<div class="cd7-sc"><span>Scegli la macchina</span><div>${M.map(m=>`<button type="button" class="${d.macchina===m.n?'on':''}" onclick="cdMacchina(${ei},'${m.n.replace(/'/g,'')}')">${escH(m.n)}</button>`).join('')}</div></div>`:''}
     ${sec?`<div class="cd7-t"><div class="cd7-tt"><b id="cd-t-${ei}">${vt.t}</b><small id="cd-s-${ei}">${vt.s}</small></div><button type="button" class="cd7-go${run?' on':''}" onclick="cdTimer(${ei})">${run?'Pausa':el>0?'Riprendi':'Avvia'}</button></div>`:''}
     <div class="cd7-in">
-      <label>Minuti<input inputmode="numeric" value="${d.min??''}" placeholder="${c.min?fr(c.min,c.minMax):'-'}" oninput="cdSet(${ei},'min',this.value)"></label>
+      <label>Minuti<input id="cd-m-${ei}" inputmode="numeric" value="${d.min??''}" placeholder="${el>=30?cdMinFatti(el):c.min?fr(c.min,c.minMax):'-'}" aria-label="Minuti fatti, se diversi dal timer" oninput="cdSet(${ei},'min',this.value)"></label>
       <label>Km<input inputmode="decimal" value="${d.km!=null?f(d.km):''}" placeholder="${c.km?fr(c.km,c.kmMax):'-'}" oninput="cdSet(${ei},'km',this.value)"></label>
       <label>FC media<input inputmode="numeric" value="${d.fc??''}" placeholder="-" oninput="cdSet(${ei},'fc',this.value)"></label>
     </div>
@@ -2287,27 +2287,30 @@ function renderCardio(ex,ei){
 }
 window.cdSet=(ei,k,v)=>{cardioData[ei]=cardioData[ei]||{};const x=parseFloat(String(v).replace(',','.'));if(isFinite(x)&&x>0)cardioData[ei][k]=x;else delete cardioData[ei][k];saveProgressDebounced();};
 window.cdMacchina=(ei,n)=>{cardioData[ei]=cardioData[ei]||{};cardioData[ei].macchina=n;renderCard(ei);};
-window.cdFatto=ei=>{campoChecked[ei]=!campoChecked[ei];if(campoChecked[ei]&&CDT&&CDT.ei===ei)cdFerma(ei,true);renderCard(ei);
+// 'Segna come fatto': se il timer gira lo ferma e tiene il tempo fatto (non toglie la spunta)
+window.cdFatto=ei=>{if(CDT&&CDT.ei===ei){cdFerma(ei);campoChecked[ei]=true;}else campoChecked[ei]=!campoChecked[ei];renderCard(ei);
   if(campoChecked[ei]&&ei<exs.length-1)setTimeout(()=>{if(cur===ei&&window.jumpTo)window.jumpTo(ei+1);},700);};
 // timer a scalare sui minuti scritti, pausa e ripresa. Con la forbice (30-40') scala fino al
-// minimo, suona, poi continua fino al massimo; 'Segna come fatto' lo ferma quando l'atleta vuole
-function cdVista(c,el){
+// minimo, suona, poi fino al massimo; al massimo suona e segna fatto ma continua a contare il
+// di piu' (+2:10), finche' l'atleta non lo ferma. I minuti salvati sono quelli scritti a mano
+// nel campo Minuti, se no il tempo del timer
+function cdVista(c,el,run){
   const lo=(+c.min||0)*60,hi=(+(c.minMax||c.min)||0)*60,R=hi>lo;
   if(el<lo)return {t:cdMmss(lo-el),s:R?"minimo, poi fino a "+c.minMax+"'":''};
   if(R&&el<hi)return {t:cdMmss(hi-el),s:'Minimo fatto: puoi arrivare a '+c.minMax+"'"};
-  return {t:'0:00',s:'Fatto'};
+  return run?{t:'+'+cdMmss(el-hi),s:'Oltre '+(c.minMax||c.min)+"': ferma quando hai finito"}:{t:cdMmss(el),s:'Fatto: '+cdMinFatti(el)+' minuti'};
 }
-function cdFerma(ei,conMin){const d=cardioData[ei]=cardioData[ei]||{};if(CDT&&CDT.ei===ei){d.fatto=(Date.now()-CDT.t0)/1000;clearInterval(CDT.iv);CDT=null;}
-  if(conMin&&!d.min&&d.fatto>=30)d.min=Math.max(1,Math.round(d.fatto/60));saveProgressDebounced();}
+function cdMinFatti(el){return Math.max(1,Math.round(el/60));}
+function cdFerma(ei){const d=cardioData[ei]=cardioData[ei]||{};if(CDT&&CDT.ei===ei){d.fatto=(Date.now()-CDT.t0)/1000;clearInterval(CDT.iv);CDT=null;}saveProgressDebounced();}
 window.cdTimer=ei=>{suonoSblocca();const ex=exs[ei],c=ex.cardio||{};cardioData[ei]=cardioData[ei]||{};
-  if(CDT&&CDT.ei===ei){cdFerma(ei,false);renderCard(ei);return;}
-  if(CDT){const o=CDT.ei;cdFerma(o,false);renderCard(o);}
-  const lo=(+c.min||0)*60,hi=(+(c.minMax||c.min)||0)*60;let suonatoMin=(+cardioData[ei].fatto||0)>=lo;
-  CDT={ei,t0:Date.now()-(+cardioData[ei].fatto||0)*1000};
-  CDT.iv=setInterval(()=>{const el=(Date.now()-CDT.t0)/1000,v=cdVista(c,el),t=document.getElementById('cd-t-'+ei),sb=document.getElementById('cd-s-'+ei);
-    if(t)t.textContent=v.t;if(sb)sb.textContent=v.s;
+  if(CDT&&CDT.ei===ei){cdFerma(ei);renderCard(ei);return;}
+  if(CDT){const o=CDT.ei;cdFerma(o);renderCard(o);}
+  const lo=(+c.min||0)*60,hi=(+(c.minMax||c.min)||0)*60,f0=+cardioData[ei].fatto||0;let suonatoMin=f0>=lo,suonatoMax=f0>=hi;
+  CDT={ei,t0:Date.now()-f0*1000};
+  CDT.iv=setInterval(()=>{const el=(Date.now()-CDT.t0)/1000,v=cdVista(c,el,true),t=document.getElementById('cd-t-'+ei),sb=document.getElementById('cd-s-'+ei),mi=document.getElementById('cd-m-'+ei);
+    if(t)t.textContent=v.t;if(sb)sb.textContent=v.s;if(mi&&el>=30)mi.placeholder=cdMinFatti(el);
     if(hi>lo&&!suonatoMin&&el>=lo){suonatoMin=true;suona(2);}
-    if(el>=hi){clearInterval(CDT.iv);CDT=null;cardioData[ei].fatto=hi;if(!cardioData[ei].min)cardioData[ei].min=Math.round(hi/60);suona(3);campoChecked[ei]=true;saveProgressDebounced();renderCard(ei);}},250);
+    if(!suonatoMax&&el>=hi){suonatoMax=true;suona(3);campoChecked[ei]=true;cardioData[ei].fatto=el;saveProgressDebounced();renderCard(ei);}},250);
   renderCard(ei);};
 function renderCampo(ex,ei){
   const ck=campoChecked[ei]||false;
@@ -2959,7 +2962,7 @@ window.riapriSeduta=async()=>{
   toast('Seduta riaperta: continua da dove eri');
 };
 async function finish(){
-  clearInterval(condIv);clearInterval(tabIv);try{window.skipRest();if(TM)tmFine(true);}catch(e){}
+  clearInterval(condIv);clearInterval(tabIv);try{window.skipRest();if(TM)tmFine(true);if(CDT)cdFerma(CDT.ei);}catch(e){}
   const dur=Math.round((Date.now()-startTs)/60000);
   let totalSets=0,rpeVals=[];
   Object.entries(setData).forEach(([ei,sd])=>{
@@ -2998,7 +3001,7 @@ async function finish(){
     ts:Date.now(),progId:PROG,weekIdx:WEEK,sessId:SESS,
     sessName:session.name||'Sessione',duration:dur,totalSets,newPRs,
     condSecs,condRounds,isQuick,avgRpe,exerciseData,
-    cardio:exs.map((ex,i)=>ex._type==='cardio'&&campoChecked[i]?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||(+(cardioData[i]||{}).fatto>=30?Math.round(cardioData[i].fatto/60):null)||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
+    cardio:exs.map((ex,i)=>ex._type==='cardio'&&(campoChecked[i]||+(cardioData[i]||{}).fatto>=60)?{name:ex.name,k:ex.cardio.k,min:+(cardioData[i]||{}).min||(+(cardioData[i]||{}).fatto>=30?Math.round(cardioData[i].fatto/60):null)||ex.cardio.min||null,km:+(cardioData[i]||{}).km||ex.cardio.km||null,fc:+(cardioData[i]||{}).fc||null,macchina:(cardioData[i]||{}).macchina||null}:null).filter(Boolean),
     date:now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})
   }));
   {const c=codaLeggi();c[_r.key]=_dati;codaScrivi(c);}
