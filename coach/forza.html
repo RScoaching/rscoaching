@@ -573,6 +573,8 @@ table.rmtbl tr:first-child td.grp{ padding-top:4px; }
 .rm-src{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--violet2); white-space:nowrap; }
 /* la prova c'e' ma la velocita' e' fuori dalla banda buona: si dice perche' */
 .rm-src.fuori{ color:var(--muted); white-space:normal; max-width:96px; text-align:center; line-height:1.3; cursor:help; }
+.rm-in.auto,.fmx-in.auto{ border-color:rgba(74,222,128,.55); color:#4ADE80; font-weight:700; }
+.rm-src.auto{ color:#4ADE80; text-transform:none; letter-spacing:0; cursor:help; }
 .rm-undo{ appearance:none; border:0; background:none; padding:0; margin:0; font-family:inherit;
   font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
   cursor:pointer; border-bottom:1px solid currentColor; white-space:nowrap; }
@@ -1096,6 +1098,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
   <div class="fbdlg-head">
     <h3>Massimali 1RM</h3>
     <p>Squat e hip thrust partono dalla stima del test VBT, con il bordo tratteggiato; lo stacco non ha una prova VBT e si scrive a mano. Scrivendo un numero quello vince sul test, e il pulsantino sotto la casella riporta alla stima. I carichi della seduta escono da qui, arrotondati a 2,5 kg.</p>
+    <p>Il massimale si aggiorna da solo: se in una seduta fatta dopo il tuo numero i kg veri dicono di piu' (formula di Epley, fino a 10 ripetizioni), la casella diventa verde con la freccia e le percentuali delle sedute nuove si calcolano su quello. Le sedute gia' fatte restano sui conti di allora. Per tenere il tuo numero riscrivilo.</p>
     <p>La stima nasce dal profilo carico-velocita': dalla velocita' media propulsiva si ricava a che percentuale del massimale e' andata la ripetizione, poi 1RM = carico / (percentuale / 100). Squat: % = -5,961 v&#178; - 50,71 v + 117. Hip thrust: v = 1,1003 - 0,0078 p - 0,000009 p&#178;, letta al contrario. Sotto il 50% e sopra il 97% la curva e' troppo piatta e il numero non regge: li' la stima non esce e sotto la casella si legge perche'.</p>
   </div>
   <div class="rm-top">
@@ -1365,7 +1368,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const list = loadSess();
     if(!list.length) return [];
     const MANO = rmMano(), TEST = rmTest(), tutte = ROSTER.map(r=> r.name);
-    function rmDi(name, key){
+    function rmDi(name, key, data){
+      if(typeof window.fioRmAt === 'function'){ const w = window.fioRmAt(name, key, data); if(w!=null) return w; }
       const v = parseFloat((MANO[name]||{})[key]);
       if(Number.isFinite(v) && v>0) return v;
       const t = (TEST[name]||{})[key];
@@ -1389,7 +1393,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           else if(ultParola(r.pct)){ ult.push({ data, name, r, si, ri }); return; }
           else if(fixKg(r.pct)!=null) kg = fixKg(r.pct);
           else {
-            const k = liftOf(r), m = k ? rmDi(name, k) : null;
+            const k = liftOf(r), m = k ? rmDi(name, k, data) : null;
             if(m!=null && pct!=null) kg = Math.round(m*pct/100/2.5)*2.5;
           }
           const rec = parseFloat(r.rec);
@@ -2430,41 +2434,65 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           var kg = indKg(s, name, r); if(!kg) return;
           var v = Math.round(kg * (1 + rip / 30) * 10) / 10;
           if(!out[name]) out[name] = {};
-          var old = out[name][key];
-          /* si tiene il piu' alto della stagione: un massimale e' il meglio che
-             si e' visto fare, non l'ultima cosa fatta in una giornata leggera */
-          if(old && old.v >= v) return;
-          out[name][key] = { v:v, d:fmtDay(s.date), src:'formula indiretta', lab:'form.' };
+          /* si tengono tutte, con la data: il massimale di un giorno e' il meglio
+             visto fino a quel giorno, e una seduta vecchia non deve prendere i
+             kg di un massimale arrivato dopo */
+          (out[name][key] = out[name][key] || []).push({ v:v, iso:String(s.date).slice(0,10), d:fmtDay(s.date), src:'formula indiretta', lab:'form.' });
         });
       });
     });
     return out;
   }
-  function indGet(name, key){
+  /* la stima piu' alta fra le sedute fatte prima di `prima` (esclusa) e da `dal` (compreso) */
+  function indGet(name, key, prima, dal){
     if(!IND) IND = indBuild();
-    var o = IND[name];
-    return (o && o[key]) ? o[key] : null;
+    var o = IND[name], l = (o && o[key]) ? o[key] : null;
+    if(!l) return null;
+    var best = null;
+    l.forEach(function(e){
+      if(prima && e.iso >= prima) return;
+      if(dal && e.iso < dal) return;
+      if(!best || e.v > best.v) best = e;
+    });
+    return best;
   }
   /* La stima migliore fra le due: se la seduta fatta dice piu' della prova, la
      prova e' vecchia e il numero vero e' quello alzato in palestra. */
-  function rmEst(name, key){
+  function rmEst(name, key, prima){
     var t = vbtGet(name, key);
-    var f = indGet(name, key);
+    var f = indGet(name, key, prima);
     if(t && (!f || f.v <= t.v)) return { v:t.v, d:t.d, src:'test VBT', lab:'test' };
     return f;
   }
-  /* il massimale che conta: quello a mano, altrimenti la stima migliore */
-  function rmGet(name, key){
+  /* il giorno in cui il numero a mano e' stato scritto (vuoto per quelli di prima) */
+  function rmManD(name, key){ var o = RM[name]; return (o && o['_' + key]) ? String(o['_' + key]) : ''; }
+  /* Il massimale che conta in un certo giorno (`prima`: si guardano solo le
+     sedute fatte prima di quel giorno; senza, oggi).
+     Il numero a mano vale finche' una seduta fatta dopo averlo scritto non
+     dice di piu': se con i carichi veri la formula di Epley da' un massimale
+     piu' alto, quello prende il posto del numero vecchio, e l'80% di domani
+     si calcola sul massimale nuovo. Le sedute gia' fatte restano sui conti di
+     allora, perche' guardano solo quello che c'era prima di loro. */
+  function rmInfo(name, key, prima){
     var m = rmMan(name, key);
-    if(m != null) return m;
-    var t = rmEst(name, key);
-    return t ? t.v : null;
+    if(m != null){
+      var f = indGet(name, key, prima, rmManD(name, key) || null);
+      if(f && f.v > m) return { v:f.v, auto:true, era:m, d:f.d, src:f.src };
+      return { v:m, man:true };
+    }
+    var t = rmEst(name, key, prima);
+    return t ? { v:t.v, est:true, d:t.d, src:t.src, lab:t.lab } : null;
   }
+  function rmGet(name, key, prima){
+    var i = rmInfo(name, key, prima);
+    return i ? i.v : null;
+  }
+  window.fioRmAt = function(name, key, iso){ return rmGet(name, key, iso ? String(iso).slice(0, 10) : null); };
   function rmSet(name, key, val){
     var v = parseFloat(String(val).replace(',', '.'));
     if(!RM[name]) RM[name] = {};
-    if(isFinite(v) && v > 0) RM[name][key] = Math.round(v * 10) / 10;
-    else delete RM[name][key];
+    if(isFinite(v) && v > 0){ RM[name][key] = Math.round(v * 10) / 10; RM[name]['_' + key] = todayISO(); }
+    else { delete RM[name][key]; delete RM[name]['_' + key]; }
     var left = 0;
     RM_LIFTS.forEach(function(L){ if(RM[name][L.key] != null) left++; });
     if(!left) delete RM[name];
@@ -2515,7 +2543,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if((q && q.k === 'ult') || (!q && vuotaPct(r))){ var u = ultDi(name, r, src); return u ? u.kg : null; }
     if(!q || q.k !== 'pct') return null;
     var k = liftOf(r); if(!k) return null;
-    var m = rmGet(name, k); if(m == null) return null;
+    var m = rmGet(name, k, (src && src.date) ? String(src.date).slice(0, 10) : null); if(m == null) return null;
     return round25(m * q.p / 100);
   }
   function audience(src){ return isAll(src.players) ? NAMES.slice() : (src.players || []).slice(); }
@@ -2929,7 +2957,20 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      la stima del test VBT o il conto sulla seduta fatta (formula indiretta); se
      invece il numero e' stato scritto a mano resta un pulsantino che riporta
      alla stima. */
+  /* la riga sotto la casella quando la seduta ha superato il numero a mano */
+  function rmAutoHtml(info, srcCls){
+    return '<span class="'+srcCls+' auto" title="Scritto a mano '+esc(kgTxt(info.era))+' kg: con i carichi della seduta del '+esc(info.d)+' la formula dice di piu\'. Per tenere il tuo numero riscrivilo.">'
+      + '&#8593; da '+esc(kgTxt(info.era))+' &#183; '+esc(info.d)+'</span>';
+  }
   function rmCell(name, L, inCls, boxCls, srcCls, undoCls, numerico){
+    var info = rmInfo(name, L.key);
+    if(info && info.auto){
+      var tv = numerico ? String(info.v) : kgTxt(info.v);
+      return '<div class="'+boxCls+'"><input class="'+inCls+' auto" '
+        + (numerico ? 'type="number" min="10" max="300" step="0.1"' : 'type="text" inputmode="decimal"')
+        + ' data-n="'+esc(name)+'" data-k="'+L.key+'" value="'+esc(tv)+'" placeholder="-" aria-label="'+esc(L.label+' '+disp(name))+'">'
+        + rmAutoHtml(info, srcCls) + '</div>';
+    }
     var man = rmMan(name, L.key);
     var est = rmEst(name, L.key);
     var v = (man != null) ? man : (est ? est.v : null);
@@ -2958,14 +2999,17 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      cambia il bordo e riscrive la riga sotto con la provenienza aggiornata. */
   function rmSync(inp){
     var name = inp.getAttribute('data-n'), key = inp.getAttribute('data-k');
-    var man = rmMan(name, key), est = rmEst(name, key);
-    inp.classList.toggle('set', man != null);
+    var man = rmMan(name, key), est = rmEst(name, key), info = rmInfo(name, key);
+    var auto = !!(info && info.auto);
+    inp.classList.toggle('auto', auto);
+    inp.classList.toggle('set', man != null && !auto);
     inp.classList.toggle('vbt', man == null && !!est);
     var box = inp.parentNode;
     if(!box || !box.classList) return;
     if(!box.classList.contains('rm-cell') && !box.classList.contains('fmx-cell')) return;
     var vecchio = box.querySelector('.rm-src, .rm-undo');
     if(vecchio) box.removeChild(vecchio);
+    if(auto){ box.insertAdjacentHTML('beforeend', rmAutoHtml(info, 'rm-src')); return; }
     if(!est){
       var fu = (man == null) ? vbtFuori(name, key) : null;
       if(fu){
@@ -4628,6 +4672,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       });
     }
     renderSched();
+    /* la parte alta si e' disegnata prima che ci fossero i massimali aggiornati
+       dalle sedute: ora ci sono, quindi si rifa' con gli stessi numeri del costruttore */
+    try{ if(typeof window.fioForzaRicarica === 'function') window.fioForzaRicarica(); }catch(e){}
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
