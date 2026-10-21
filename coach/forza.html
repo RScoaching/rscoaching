@@ -652,6 +652,20 @@ dialog.fbdlg::backdrop{ background:oklch(0% 0 0 / 0.55); }
 .fstor-lg em{ font-style:normal; font-weight:700; font-size:12px; padding:1px 6px; border-radius:999px; }
 .fstor-lg em.up{ color:#4ADE80; background:rgba(74,222,128,.12); } .fstor-lg em.dn{ color:#FB7185; background:rgba(251,113,133,.12); } .fstor-lg em.eq{ color:var(--muted); background:var(--surface2); }
 .fstor-lg i{ display:inline-block; width:10px; height:10px; border-radius:3px; }
+.fstor-kpi{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin:2px 0 14px; }
+.fk{ background:var(--surface2); border:1px solid var(--border2); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.fk-t{ font-size:11.5px; color:var(--muted); font-weight:600; }
+.fk-v{ font-size:20px; font-weight:700; color:var(--ink); line-height:1.15; }
+.fk-s{ font-size:11.5px; color:var(--muted); line-height:1.35; }
+.fk-s em{ font-style:normal; font-weight:700; padding:0 5px; border-radius:999px; }
+.fk-s em.up{ color:#4ADE80; background:rgba(74,222,128,.12); } .fk-s em.dn{ color:#FB7185; background:rgba(251,113,133,.12); } .fk-s em.eq{ color:var(--text); background:var(--surface3); }
+.fstor-bar rect{ transition:opacity .15s ease; } .fstor-bar{ opacity:.82; } .fstor-bar.last{ opacity:1; }
+@media (hover:hover){ .fstor-bar:hover{ opacity:1; } }
+.fk-up{ color:#4ADE80; } .fk-dn{ color:#FB7185; }
+.fstor-vuota{ fill:var(--border2); }
+.fstor-val{ fill:var(--muted); font-size:10px; font-weight:600; } .fstor-val.last{ fill:var(--ink); font-size:11px; }
+.fstor-med{ fill:none; stroke:var(--ink); stroke-width:1.6; stroke-dasharray:4 3; opacity:.75; stroke-linejoin:round; }
+.fstor-lg i.med{ width:14px; height:0; border-top:2px dashed var(--ink); border-radius:0; opacity:.75; }
 .fstor-none{ padding:22px 0; text-align:center; font-size:12px; color:var(--faint); }
 .fstor-note{ font-size:11.5px; color:var(--muted); margin:10px 0 0; }
 .fstor-note b{ color:var(--text); font-weight:600; }
@@ -3451,7 +3465,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return Object.keys(cnt).sort(function(a, b){ return cnt[b] - cnt[a]; }).map(function(k){ return { k:k, lab:lab[k] }; });
   }
   function storNum(v, m){
-    if(m === 'ton') return (v >= 1000) ? (Math.round(v / 100) / 10 + 't') : (Math.round(v) + '');
+    if(m === 'ton') return (v >= 1000) ? ((Math.round(v / 100) / 10 + 't').replace('.', ',')) : (Math.round(v) + '');
     return Math.round(v) + '';
   }
   function storExList(list){
@@ -3480,8 +3494,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      stessa pendenza, se no la linea racconta una progressione che non c'e'
      stata. La scala parte da zero perche' e' un carico: partire dal minimo
      farebbe sembrare un raddoppio quello che e' un ritocco. */
-  function storChart(seq, lines, m, join){
-    var W = 720, H = 200, PL = 48, PR = 14, PT = 14, PB = 32;
+  function storW(){ return (window.innerWidth || 1000) < 640 ? 380 : 720; }
+  function storChart(seq, lines, m, join, delta){
+    var W = storW(), H = W < 500 ? 190 : 200, PL = 44, PR = 14, PT = 14, PB = 32;
     var xs = seq.map(function(s){ var d = parseISO(s.date); return d ? Math.floor(d.getTime()/86400000) : null; });
     var okx = true;
     for(var q = 0; q < xs.length; q++){ if(xs[q] == null){ okx = false; break; } }
@@ -3503,7 +3518,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     /* le date sotto: se sono tante se ne scrive una ogni tot, se no i giorni
        si sovrappongono e non si legge piu' niente */
-    var step = Math.ceil(seq.length / 8);
+    var step = Math.ceil(seq.length / (W < 500 ? 5 : 8));
     seq.forEach(function(s, i){
       if(i % step !== 0 && i !== seq.length - 1) return;
       var d = parseISO(s.date);
@@ -3524,9 +3539,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       });
       if(d) body += '<path class="fstor-ln" d="'+d.trim()+'" stroke="'+col+'"></path>' + pts;
       var dl = '';
-      if(m === 'kg'){
+      if(m === 'kg' || delta){
         var a0 = null, a1 = null, na = 0; L.v.forEach(function(v){ if(v != null && v > 0){ if(a0 == null) a0 = v; a1 = v; na++; } });
-        if(na >= 2 && a0 > 0){ var pc = Math.round((a1 - a0) / a0 * 100); dl = ' <b class="tnum">' + kgTxt(Math.round(a0*10)/10) + ' &#8594; ' + kgTxt(Math.round(a1*10)/10) + '</b><em class="' + (pc > 2 ? 'up' : pc < -2 ? 'dn' : 'eq') + '">' + (pc > 0 ? '+' : '') + pc + '%</em>'; }
+        if(na >= 2 && a0 > 0){ var pc = Math.round((a1 - a0) / a0 * 100); dl = ' <b class="tnum">' + (m === 'kg' ? (kgTxt(Math.round(a0*10)/10) + ' &#8594; ' + kgTxt(Math.round(a1*10)/10)) : (storNum(a0, m) + ' &#8594; ' + storNum(a1, m))) + '</b><em class="' + (pc > 2 ? 'up' : pc < -2 ? 'dn' : 'eq') + '">' + (pc > 0 ? '+' : '') + pc + '%</em>'; }
       }
       leg += '<span class="fstor-lg"><i style="background:'+col+'"></i>'+esc(L.lab)+dl+'</span>';
     });
@@ -3534,6 +3549,162 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return '<svg class="fstor-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Andamento del carico nel tempo">'
       + g + body + '</svg>'
       + '<div class="fstor-leg">' + leg + '</div>';
+  }
+
+  /* ---- la vista per settimana ---------------------------------------------
+     Tonnellaggio, volume e serie seduta per seduta fanno un dente di sega:
+     la seduta A pesa il doppio della B e la linea sale e scende ogni volta,
+     e "dalla prima all'ultima" confronta una B con una A. Il lavoro si legge
+     per settimana: si sommano le sedute di quella settimana (a testa, per la
+     squadra), le colonne sono divise per esercizio e sopra corre la media
+     delle ultime tre settimane, che e' la tendenza vera. */
+  function storParts(s, m, name){
+    var rows = storRows(s); if(!rows.length) return null;
+    if(m === 'ton' && isAlta(s)) return null;
+    if(!name && isInd(s)) return null;
+    var team = name ? [name] : audience(s);
+    if(m === 'ton' && !team.length) return null;
+    var out = {}, lab = {}, tot = 0;
+    rows.forEach(function(r){
+      var k = exKey(r.ex), se = parseFloat(r.serie) || 0, rp = parseFloat(r.rip) || 0, v = 0;
+      if(m === 'serie') v = se;
+      else if(m === 'vol') v = se * rp;
+      else {
+        if(se > 0 && rp > 0) team.forEach(function(n){ var kg = tonKg(s, n, r); if(kg) v += se * rp * kg; });
+        v = v / team.length;
+      }
+      if(v > 0){ out[k] = (out[k] || 0) + v; lab[k] = String(r.ex).trim(); tot += v; }
+    });
+    return tot > 0 ? { v:out, lab:lab, tot:tot } : null;
+  }
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  function lunedi(iso){
+    var d = parseISO(iso); if(!d) return null;
+    var g = (d.getDay() + 6) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - g);
+  }
+  function isoD(d){ return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); }
+  /* le settimane dalla prima all'ultima, comprese quelle vuote: una pausa di
+     due settimane deve vedersi come un buco, non sparire */
+  function storWeeks(seq, m, name){
+    var map = {}, first = null, last = null;
+    seq.forEach(function(s){
+      if(name && !inSess(s, name)) return;
+      var w = lunedi(s.date); if(!w) return;
+      var k = isoD(w), pr = storParts(s, m, name);
+      if(!map[k]) map[k] = { k:k, d:w, tot:0, n:0, v:{}, lab:{} };
+      if(!pr) return;
+      var W = map[k]; W.n++; W.tot += pr.tot;
+      Object.keys(pr.v).forEach(function(e){ W.v[e] = (W.v[e] || 0) + pr.v[e]; W.lab[e] = pr.lab[e]; });
+      if(!first || w < first) first = w;
+      if(!last || w > last) last = w;
+    });
+    if(!first) return [];
+    var out = [];
+    for(var d = new Date(first); d <= last; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)){
+      var k = isoD(d);
+      out.push(map[k] || { k:k, d:new Date(d), tot:0, n:0, v:{}, lab:{} });
+    }
+    return out;
+  }
+  /* media mobile su tre settimane, solo su quelle in cui si e' lavorato */
+  function storMedia(weeks){
+    return weeks.map(function(w, i){
+      var som = 0, n = 0;
+      for(var j = Math.max(0, i - 2); j <= i; j++){ if(weeks[j].tot > 0){ som += weeks[j].tot; n++; } }
+      return (w.tot > 0 && n) ? som / n : null;
+    });
+  }
+  function dLab(d){ return d.getDate() + ' ' + MON3.format(d).replace('.', ''); }
+  function storBars(weeks, m){
+    var W = storW(), small = W < 500, H = small ? 210 : 230, PL = 44, PR = 10, PT = 22, PB = 30;
+    var hi = 0; weeks.forEach(function(w){ if(w.tot > hi) hi = w.tot; });
+    if(hi <= 0) return '';
+    /* gli esercizi che pesano di piu' nel periodo hanno un colore loro, il resto va in "Altri" */
+    var som = {}, lab = {};
+    weeks.forEach(function(w){ Object.keys(w.v).forEach(function(e){ som[e] = (som[e] || 0) + w.v[e]; lab[e] = w.lab[e]; }); });
+    var ord = Object.keys(som).sort(function(a, b){ return som[b] - som[a]; });
+    var maxC = 5, top = ord.slice(0, ord.length > maxC + 1 ? maxC : maxC + 1), altri = ord.slice(top.length);
+    var tutto = 0; ord.forEach(function(e){ tutto += som[e]; });
+    var cima = hi * 1.12;
+    var n = weeks.length, slot = (W - PL - PR) / n, bw = Math.max(6, Math.min(44, slot * 0.62));
+    var py = function(v){ return H - PB - v * (H - PT - PB) / cima; };
+    var cx = function(i){ return PL + slot * i + slot / 2; };
+    var g = '';
+    [0, 0.5, 1].forEach(function(f){
+      var y = sxn(py(cima * f));
+      g += '<line class="fstor-gr" x1="'+PL+'" y1="'+y+'" x2="'+(W-PR)+'" y2="'+y+'"></line>'
+        + '<text class="fstor-ax" x="'+(PL-6)+'" y="'+(y+3.5)+'" text-anchor="end">'+esc(storNum(cima*f, m))+'</text>';
+    });
+    var step = Math.ceil(n / (small ? 5 : 9));
+    var body = '', ultimo = -1;
+    weeks.forEach(function(w, i){ if(w.tot > 0) ultimo = i; });
+    weeks.forEach(function(w, i){
+      if(i % step === 0 || i === n - 1)
+        g += '<text class="fstor-ax" x="'+sxn(cx(i))+'" y="'+(H-PB+16)+'" text-anchor="middle">'+esc(dLab(w.d))+'</text>';
+      if(!(w.tot > 0)){
+        body += '<rect class="fstor-vuota" x="'+sxn(cx(i)-bw/2)+'" y="'+sxn(H-PB-2)+'" width="'+sxn(bw)+'" height="2" rx="1"><title>Settimana dal '+esc(dLab(w.d))+': nessuna seduta</title></rect>';
+        return;
+      }
+      var y0 = H - PB, segs = '';
+      var pezzi = top.map(function(e, ci){ return { v:w.v[e] || 0, col:STOR_COL[ci % STOR_COL.length], lab:lab[e] }; });
+      var va = 0; altri.forEach(function(e){ va += w.v[e] || 0; });
+      if(va > 0) pezzi.push({ v:va, col:'var(--faint)', lab:'Altri' });
+      var tit = 'Settimana dal ' + dLab(w.d) + ': ' + storNum(w.tot, m) + ' (' + w.n + (w.n === 1 ? ' seduta' : ' sedute') + ')';
+      pezzi.forEach(function(p){
+        if(!(p.v > 0)) return;
+        var hgt = p.v * (H - PT - PB) / cima, y = y0 - hgt;
+        segs += '<rect x="'+sxn(cx(i)-bw/2)+'" y="'+sxn(y)+'" width="'+sxn(bw)+'" height="'+sxn(Math.max(0.5, hgt - 1))+'" fill="'+p.col+'"></rect>';
+        tit += '\n' + p.lab + ': ' + storNum(p.v, m);
+        y0 = y;
+      });
+      body += '<g class="fstor-bar'+(i === ultimo ? ' last' : '')+'"><title>'+esc(tit)+'</title>'+segs+'</g>';
+      if(!small || i === ultimo)
+        body += '<text class="fstor-val'+(i === ultimo ? ' last' : '')+'" x="'+sxn(cx(i))+'" y="'+sxn(y0 - 5)+'" text-anchor="middle">'+esc(storNum(w.tot, m))+'</text>';
+    });
+    var med = storMedia(weeks), d = '', aperto = false;
+    med.forEach(function(v, i){
+      if(v == null) return;
+      d += (aperto ? 'L' : 'M') + sxn(cx(i)) + ' ' + sxn(py(v)) + ' '; aperto = true;
+    });
+    if(d) body += '<path class="fstor-med" d="'+d.trim()+'"></path>';
+    var leg = '';
+    top.forEach(function(e, ci){
+      leg += '<span class="fstor-lg"><i style="background:'+STOR_COL[ci % STOR_COL.length]+'"></i>'+esc(lab[e])+' <b class="tnum">'+Math.round(som[e] / tutto * 100)+'%</b></span>';
+    });
+    if(altri.length) {
+      var sa = 0; altri.forEach(function(e){ sa += som[e]; });
+      leg += '<span class="fstor-lg"><i style="background:var(--faint)"></i>Altri ('+altri.length+') <b class="tnum">'+Math.round(sa / tutto * 100)+'%</b></span>';
+    }
+    leg += '<span class="fstor-lg"><i class="med"></i>Media 3 settimane</span>';
+    return '<svg class="fstor-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Lavoro per settimana, diviso per esercizio">'
+      + g + body + '</svg><div class="fstor-leg">' + leg + '</div>';
+  }
+  /* i quattro numeri sopra il grafico */
+  function pct(a, b){ return (b > 0) ? Math.round((a - b) / b * 100) : null; }
+  function storKpi(weeks, m){
+    var piene = weeks.filter(function(w){ return w.tot > 0; });
+    if(!piene.length) return '';
+    var ul = piene[piene.length - 1], pr = piene.length > 1 ? piene[piene.length - 2] : null;
+    var quattro = piene.slice(-5, -1), m4 = 0;
+    quattro.forEach(function(w){ m4 += w.tot; }); m4 = quattro.length ? m4 / quattro.length : 0;
+    var k = Math.min(3, Math.floor(piene.length / 2)), ini = 0, fin = 0;
+    for(var i = 0; i < k; i++){ ini += piene[i].tot; fin += piene[piene.length - 1 - i].tot; }
+    var picco = piene.reduce(function(a, w){ return w.tot > a.tot ? w : a; }, piene[0]);
+    var chip = function(p, testo){
+      if(p == null) return '<span class="fk-s">'+testo+'</span>';
+      var c = p > 5 ? 'up' : p < -5 ? 'dn' : 'eq';
+      return '<span class="fk-s"><em class="'+c+'">'+(p > 0 ? '+' : '')+p+'%</em> '+testo+'</span>';
+    };
+    var un = m === 'ton' ? '' : m === 'vol' ? ' rip' : ' serie';
+    var box = function(t, v, sub){ return '<div class="fk"><span class="fk-t">'+t+'</span><b class="fk-v tnum">'+v+'</b>'+sub+'</div>'; };
+    var oggi = new Date(), lun = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - (oggi.getDay() + 6) % 7);
+    var inCorso = ul.k === isoD(lun);
+    var h = box(inCorso ? 'Settimana in corso' : 'Ultima settimana', esc(storNum(ul.tot, m)) + un, chip(pr && !inCorso ? pct(ul.tot, pr.tot) : null, inCorso ? ('finora, ' + ul.n + (ul.n === 1 ? ' seduta' : ' sedute')) : pr ? 'sulla precedente' : 'dal ' + esc(dLab(ul.d))));
+    if(quattro.length >= 2) h += box('Media 4 settimane prima', esc(storNum(m4, m)) + un, (inCorso ? '<span class="fk-s">sulle settimane complete</span>' : chip(pct(ul.tot, m4), 'l\'ultima rispetto a questa')));
+    if(k >= 1) h += box('Dall\'inizio', (function(p){ return '<span class="'+(p > 5 ? 'fk-up' : p < -5 ? 'fk-dn' : '')+'">'+(p > 0 ? '+' : '') + p + '%</span>'; })(pct(fin / k, ini / k)), '<span class="fk-s">media delle ultime '+k+' settimane sulle prime '+k+'</span>');
+    h += box('Settimana piu\' alta', esc(storNum(picco.tot, m)) + un, '<span class="fk-s">dal '+esc(dLab(picco.d))+', '+picco.n+(picco.n === 1 ? ' seduta' : ' sedute')+'</span>');
+    return '<div class="fstor-kpi">' + h + '</div>';
   }
 
   function fbStorico(list){
@@ -3584,14 +3755,19 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(exs.length > 6) kgNota = 'Si vedono i sei esercizi piu\' frequenti: sceglili qui sopra per vederne altri.';
       }
       if(!lines.length) lines.push({ lab:'', v: seq.map(function(){ return null; }) });
-    } else if(plSel.length){
+    } else if(plSel.length >= 2){
+      /* piu' atlete: una linea a testa sui totali di settimana */
+      var wk = null;
+      plSel.forEach(function(n){ var ws = storWeeks(seq, m, n); if(!wk || ws.length > wk.length) wk = ws; });
+      var asse = wk || [];
       plSel.forEach(function(n){
-        lines.push({ lab: disp(n), v: seq.map(function(s){
-          return inSess(s, n) ? storVal(s, m, n) : null;
-        }) });
+        var ws = storWeeks(seq, m, n), byk = {};
+        ws.forEach(function(w){ byk[w.k] = w.tot; });
+        lines.push({ lab: disp(n), v: asse.map(function(w){ return byk[w.k] > 0 ? byk[w.k] : null; }) });
       });
+      var settSeq = asse.map(function(w){ return { date: w.k }; });
     } else {
-      lines.push({ lab:'Squadra', v: seq.map(function(s){ return storVal(s, m, null); }) });
+      var settimane = storWeeks(seq, m, plSel.length ? plSel[0] : null);
     }
 
     /* quante sedute restano fuori dal tonnellaggio perche' sono di parte alta */
@@ -3603,7 +3779,10 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var nInd = 0;
     if(!plSel.length) seq.forEach(function(s){ if(isInd(s)) nInd++; });
 
-    var plot = storChart(seq, lines, m, m === 'kg');
+    var plot, kpi = '';
+    if(m === 'kg') plot = storChart(seq, lines, m, true);
+    else if(plSel.length >= 2) plot = (settSeq.length >= 2) ? storChart(settSeq, lines, m, false, true) : '';
+    else { plot = storBars(settimane, m); kpi = plot ? storKpi(settimane, m) : ''; }
     if(!plot){
       plot = '<div class="fstor-none">'
         + ((nInd === seq.length)
@@ -3617,8 +3796,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     /* la direzione complessiva della prima linea: dalla prima all'ultima
        seduta in cui c'e' un numero */
     var dir = '', v0 = null, v1 = null;
-    lines[0].v.forEach(function(v){ if(v != null && v > 0){ if(v0 == null) v0 = v; v1 = v; } });
-    if(m === 'kg') v0 = null;
+    /* la direzione ora la dicono i numeri sopra il grafico e la legenda */
     if(v0 != null && v1 != null && v0 > 0){
       var tot = Math.round((v1 - v0) / v0 * 100);
       var chi = lines.length > 1 ? (lines[0].lab + ': dalla') : 'Dalla';
@@ -3635,17 +3813,22 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       ? (' Fuori dalla linea di squadra ' + (nInd === 1 ? 'una seduta individuale' : (nInd + ' sedute individuali'))
          + ': quel lavoro non e\' della squadra, si vede scegliendo l\'atleta che l\'ha fatto.')
       : '';
+    var perSett = (m !== 'kg')
+      ? (' Ogni colonna e\' una settimana (da lunedi\'), divisa per esercizio' + (plSel.length ? '' : ', a testa') + '; la linea chiara e\' la media delle ultime tre settimane. Tocca una colonna per i numeri.')
+      : '';
+    if(m !== 'kg' && plSel.length >= 2) perSett = ' Una linea per atleta, un punto per settimana.';
     var spieg = (m === 'kg')
       ? ('Carico: il kg piu\' alto della seduta su quell\'esercizio, in media fra le atlete presenti (o della singola atleta). Ogni linea unisce le sedute in cui c\'era quell\'esercizio. ' + kgNota + fuoriInd)
       : (m === 'ton')
-      ? ('Tonnellaggio: kg sollevati nella seduta, serie per ripetizioni per carico. Contano sia le percentuali del massimale sia i carichi scritti a mano, e di un ventaglio tipo "30-35-40 kg" si prende la media.' + fuori + fuoriInd)
+      ? ('Tonnellaggio: serie per ripetizioni per kg, con le percentuali del massimale e i carichi scritti a mano.' + perSett + fuori + fuoriInd)
       : (m === 'vol'
-        ? ('Volume: serie di lavoro per ripetizioni, senza contare le serie di avvicinamento.' + fuoriInd)
-        : ('Serie di lavoro della seduta, senza contare le serie di avvicinamento.' + fuoriInd));
+        ? ('Volume: serie di lavoro per ripetizioni, senza le serie di avvicinamento.' + perSett + fuoriInd)
+        : ('Serie di lavoro, senza le serie di avvicinamento.' + perSett + fuoriInd));
     return '<div class="fstor">'
-      + '<div class="fstor-top"><span class="fstor-cap">Andamento del carico</span>'
+      + '<div class="fstor-top"><span class="fstor-cap">'+(m === 'kg' ? 'Andamento del carico' : 'Lavoro per settimana')+'</span>'
       +   '<span class="fstor-sw" role="group" aria-label="Cosa mostrare nell\'andamento">'+sw+'</span></div>'
       + fil
+      + kpi
       + plot
       + '<p class="fstor-note">'+spieg+' '+dir+'</p>'
       + '</div>';
