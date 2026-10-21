@@ -827,7 +827,7 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fb-head">
           <div>
             <div class="fb-title">Costruttore seduta</div>
-            <div class="fb-sub">Costruisci la seduta di palestra, assegna la data e le atlete, poi salvala nel programma. Stampa la scheda o proiettala in sala. Nella colonna %1RM scrivi 80 per la percentuale del massimale, 40kg o 40-50 per un carico uguale per tutte, manuale per avere la colonna vuota nel foglio dei carichi.</div>
+            <div class="fb-sub">Costruisci la seduta di palestra, assegna la data e le atlete, poi salvala nel programma. Stampa la scheda o proiettala in sala. Nella colonna %1RM scrivi 80 per la percentuale del massimale, 40kg o 40-50 per un carico uguale per tutte, ultima per il carico che ognuna ha usato la volta prima, manuale per avere la colonna vuota nel foglio dei carichi.</div>
           </div>
           <span class="spacer"></span>
           <div class="fb-state" id="fb-state"></div>
@@ -870,8 +870,8 @@ table.fmxtbl td.nm{ font-size:13px; color:var(--text); font-weight:600; white-sp
         <div class="fb-tags" id="fb-tags"></div>
         <div class="fb-body">
           <table class="fbtbl">
-            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n" title="A sinistra le serie di avvicinamento, a destra quelle di lavoro">Avv. + Serie</th><th class="n">Rip</th><th class="n" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi">%1RM o kg</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
-            <tbody id="fb-rows"></tbody>
+            <thead><tr><th class="n">#</th><th>Esercizio</th><th class="n" title="A sinistra le serie di avvicinamento, a destra quelle di lavoro">Avv. + Serie</th><th class="n">Rip</th><th class="n" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, ultima per il carico della volta prima, manuale per la colonna vuota nei carichi">%1RM o kg</th><th>Zona</th><th class="n">Rif. 1RM</th><th class="n">Rec s</th><th>Note</th><th class="n"></th></tr></thead>
+            <tbody id="fb-rows"></tbody><datalist id="fb-pct-opz"><option value="ultima">carico della volta prima, atleta per atleta</option><option value="manuale">colonna vuota, i kg a mano</option><option value="80">percentuale del massimale</option><option value="70kg">uguale per tutte</option><option value="40-50">ventaglio uguale per tutte</option></datalist>
           </table>
           <button class="btn fb-add" id="fb-add" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Aggiungi esercizio</button>
         </div>
@@ -1276,6 +1276,15 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const n = parseFloat(s);
     return (isFinite(n) && n>0) ? n : null;
   }
+  /* carico uguale per tutte scritto nella casella: "70kg", "70 kg", "40-50" (si prende la media del
+     ventaglio, come nel costruttore). Prima queste righe finivano nello storico senza kg. */
+  function fixKg(v){
+    const s = String(v==null ? '' : v).trim().toLowerCase().replace(/\s+/g,'').replace(/,/g,'.');
+    const num = s.replace(/kg/g,'');
+    if(/^\d+(\.\d+)?(-\d+(\.\d+)?)+$/.test(num)){ const p = num.split('-').map(parseFloat); if(p.every(x=>x>0)) return p.reduce((a,b)=>a+b,0)/p.length; return null; }
+    if(s.indexOf('kg')!==-1 && /^\d+(\.\d+)?$/.test(num)){ const n = parseFloat(num); return n>0 ? n : null; }
+    return null;
+  }
   /* stessa chiave del costruttore per i kg corretti a mano nell'anteprima */
   function ovKey(r, name){
     return String(r.ex||'').trim().toLowerCase()+'|'+String(r.pct||'').trim()+'|'+name;
@@ -1283,6 +1292,22 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function loadSess(){
     try{ const a = JSON.parse(localStorage.getItem(SESS_KEY)||'[]'); return Array.isArray(a)?a:[]; }
     catch(e){ return []; }
+  }
+  /* "ultima" nella casella della percentuale: per ogni atleta il carico dell'ultima volta che ha fatto
+     quell'esercizio, prima della data della seduta. Lo stesso esercizio si riconosce dal nome, senza
+     maiuscole, accenti e spazi doppi. Fra le righe dello stesso giorno vale il carico piu' alto. */
+  function ultParola(v){ return /^(ultima|ultimo|ult|u|last|come ?prima|come l'ultima)$/i.test(String(v==null?'':v).trim()); }
+  function exNorm(v){ return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
+  function ultimoDa(list, name, ex, prima){
+    const k = exNorm(ex), lim = String(prima||'9999');
+    let best = null;
+    list.forEach(e=>{
+      if(!e || e.atleta!==name || exNorm(e.esercizio)!==k) return;
+      const d = String(e.data||'').slice(0,10), kg = Number(e.carico_kg);
+      if(!d || !(d < lim) || !Number.isFinite(kg) || kg<=0) return;
+      if(!best || d > best.data || (d===best.data && kg > best.kg)) best = { kg, data:d, serie:e.serie, rip:e.ripetizioni };
+    });
+    return best;
   }
   /* una riga per atleta e per esercizio: e' il lavoro che quel giorno hanno fatto */
   function sessEntries(){
@@ -1295,7 +1320,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const t = (TEST[name]||{})[key];
       return (t==null) ? null : t;
     }
-    const out = [];
+    const out = [], ult = [];
     list.forEach((s, si)=>{
       const data = String((s && s.date) || '').slice(0,10);
       if(!/^\d{4}-\d{2}-\d{2}$/.test(data)) return;   // senza data non e' una seduta fatta
@@ -1310,6 +1335,8 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           let kg = null;
           const ov = parseFloat(kgov[ovKey(r, name)]);
           if(Number.isFinite(ov) && ov>0) kg = ov;
+          else if(ultParola(r.pct)){ ult.push({ data, name, r, si, ri }); return; }
+          else if(fixKg(r.pct)!=null) kg = fixKg(r.pct);
           else {
             const k = liftOf(r), m = k ? rmDi(name, k) : null;
             if(m!=null && pct!=null) kg = Math.round(m*pct/100/2.5)*2.5;
@@ -1326,8 +1353,26 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         });
       });
     });
+    /* le righe "ultima" dopo, in ordine di data: prendono il carico dalle sedute di prima, dal foglio
+       importato e dalle voci a mano, anche da un'altra riga "ultima" gia' risolta */
+    if(ult.length){
+      const pool = (F.entries||[]).concat(loadManual()).concat(out);
+      ult.sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0).forEach(u=>{
+        const b = ultimoDa(pool, u.name, u.r.ex, u.data);
+        const rec = parseFloat(u.r.rec);
+        const n = normalize({
+          data: u.data, atleta: u.name, esercizio: String(u.r.ex).trim(),
+          serie: u.r.serie, ripetizioni: u.r.rip,
+          carico_kg: b ? b.kg : '', pct1rm: '',
+          recupero_s: (Number.isFinite(rec) && rec>0) ? rec : '',
+          note: u.r.note || ''
+        }, false, 'fs'+u.si+'-'+u.ri+'-'+u.name, true);
+        out.push(n); pool.push(n);
+      });
+    }
     return out;
   }
+  window.fioForzaUltimo = function(name, ex, prima){ try{ return ultimoDa(buildEntries(), name, ex, prima); }catch(e){ return null; } };
 
   // ---------- normalizza entry ----------
   function normalize(e, manual, id, seduta){
@@ -2056,6 +2101,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var s = String(v == null ? '' : v).trim().toLowerCase();
     if(!s) return null;
     if(s === 'm' || s === 'man' || s === 'manu' || s === 'manuale' || s === '?') return { k:'man' };
+    if(/^(ultima|ultimo|ult|u|last|come ?prima|come l'ultima)$/.test(s)) return { k:'ult' };
     s = s.replace(/\s+/g, '').replace(/,/g, '.');
     var kg = s.indexOf('kg') !== -1;
     var num = s.replace(/kg/g, '').replace(/%/g, '');
@@ -2078,7 +2124,14 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(kg) return { k:'fix', txt: kgTxt(n) + ' kg', v:n };
     return { k:'pct', p:n };
   }
-  function isManRow(r){ var q = pctInfo(r && r.pct); return !!q && q.k === 'man'; }
+  function isManRow(r){ var q = pctInfo(r && r.pct); return !!q && (q.k === 'man' || q.k === 'ult'); }
+  function isUltRow(r){ var q = pctInfo(r && r.pct); return !!q && q.k === 'ult'; }
+  /* carico dell'ultima volta di quell'atleta su quell'esercizio, prima della data della seduta */
+  function ultDi(name, r, src){
+    if(typeof window.fioForzaUltimo !== 'function') return null;
+    var d = (src && src.date) || (FB && FB.date) || '';
+    return window.fioForzaUltimo(name, r && r.ex, d ? String(d).slice(0,10) : '9999');
+  }
   function fixTxt(r){ var q = pctInfo(r && r.pct); return (q && q.k === 'fix') ? q.txt : ''; }
 
   function zinfo(pct){
@@ -2093,6 +2146,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function zcell(pct){
     var q = pctInfo(pct);
     if(q && q.k === 'man') return '<span class="fb-z z-none">A mano</span>';
+    if(q && q.k === 'ult') return '<span class="fb-z z-none">Ultima volta</span>';
     if(q && q.k === 'fix') return '<span class="fb-z z-none">'+esc(q.txt)+'</span>';
     var z = zinfo(pct);
     if(!z) return '<span class="fb-z z-none">-</span>';
@@ -2410,12 +2464,13 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return (rows || []).filter(hasEx).filter(function(r){
       var q = pctInfo(r.pct);
       if(!q) return false;
-      if(q.k === 'man') return true;
+      if(q.k === 'man' || q.k === 'ult') return true;
       return q.k === 'pct' && !!liftOf(r);
     });
   }
-  function kgFor(name, r){
+  function kgFor(name, r, src){
     var q = pctInfo(r && r.pct);
+    if(q && q.k === 'ult'){ var u = ultDi(name, r, src); return u ? u.kg : null; }
     if(!q || q.k !== 'pct') return null;
     var k = liftOf(r); if(!k) return null;
     var m = rmGet(name, k); if(m == null) return null;
@@ -2722,6 +2777,11 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       bit.push('uguale per tutte'); kgm = q.v || 0;
     }else if(q && q.k === 'man'){
       bit.push('carico scritto a mano sul foglio');
+    }else if(q && q.k === 'ult'){
+      var tu = audience(FB), ulo = 0, uhi = 0, un = 0, usom = 0;
+      tu.forEach(function(nm){ var u = ultDi(nm, r, FB); if(!u) return; if(!un || u.kg < ulo) ulo = u.kg; if(!un || u.kg > uhi) uhi = u.kg; usom += u.kg; un++; });
+      bit.push(!un ? 'come la volta prima: nessuna l\'ha ancora fatto' : ('come la volta prima: ' + (ulo === uhi ? kgTxt(ulo) + ' kg' : 'da ' + kgTxt(ulo) + ' a ' + kgTxt(uhi) + ' kg') + (un < tu.length ? ' (' + un + ' su ' + tu.length + ', le altre a mano)' : '')));
+      if(un) kgm = usom / un;
     }else if(q && q.k === 'pct'){
       var team = audience(FB), lo = 0, hi = 0, n = 0, som = 0;
       team.forEach(function(nm){
@@ -2777,7 +2837,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         +   '<input class="fb-in num" data-i="'+i+'" data-f="serie" value="'+esc(r.serie)+'" inputmode="numeric" aria-label="Serie di lavoro">'
         + '</span></td>'
         + '<td class="n"><input class="fb-in num" data-i="'+i+'" data-f="rip" value="'+esc(r.rip)+'" inputmode="numeric"></td>'
-        + '<td class="n"><input class="fb-in num pct" data-i="'+i+'" data-f="pct" value="'+esc(r.pct)+'" placeholder="-" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, manuale per la colonna vuota nei carichi"></td>'
+        + '<td class="n"><input class="fb-in num pct" list="fb-pct-opz" autocomplete="off" data-i="'+i+'" data-f="pct" value="'+esc(r.pct)+'" placeholder="-" title="80 per la percentuale, 40kg o 40-50 per un carico uguale per tutte, ultima per il carico della volta prima, manuale per la colonna vuota nei carichi"></td>'
         + '<td data-z="'+i+'">'+zcell(r.pct)+'</td>'
         + '<td class="n">'+liftSelect(r, i)+'</td>'
         + '<td class="n"><input class="fb-in rec" data-i="'+i+'" data-f="rec" value="'+esc(r.rec)+'" inputmode="numeric"></td>'
@@ -3275,7 +3335,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var q = pctInfo(r && r.pct);
     if(!q) return 0;
     if(q.k === 'fix') return q.v || 0;
-    if(q.k !== 'pct') return 0;
+    if(q.k !== 'pct' && q.k !== 'ult') return 0;
     var kg = fzKg(s, name, r);
     return kg ? kg.v : 0;
   }
@@ -3657,7 +3717,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     var ov = (src.kgov || {})[fzKey(r, name)];
     var o = parseFloat(ov);
     if(isFinite(o) && o > 0) return { v:o, ov:true };
-    var v = kgFor(name, r);
+    var v = kgFor(name, r, src);
     return (v == null) ? null : { v:v, ov:false };
   }
 
@@ -3777,7 +3837,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       body = '<div class="fz-in"><div class="fz-void" style="font-size:16px">'
         + (cols.length
             ? 'Nessun massimale registrato per le atlete di questa seduta. Apri Massimali per inserirli.'
-            : 'Nel campo %1RM metti una percentuale (80) oppure la parola manuale, per avere la colonna con le caselle vuote.')
+            : 'Nel campo %1RM metti una percentuale (80), la parola ultima per il carico della volta prima, oppure manuale per avere la colonna con le caselle vuote.')
         + '</div></div>';
     } else {
       /* altezza utile sotto l'intestazione, meno il bordo e il respiro laterale */
@@ -3793,7 +3853,7 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         var q = pctInfo(r.pct);
         var sub = (q && q.k === 'pct')
           ? '<span class="p">'+esc(kgTxt(q.p))+'% di '+esc(RM_LAB[liftOf(r)])+'</span>'
-          : '';
+          : (q && q.k === 'ult') ? '<span class="p">ultima volta</span>' : '';
         head += '<th>'+esc(r.ex)+sub+'</th>';
       });
       head += '</tr>';
@@ -3808,7 +3868,9 @@ window.FORZA = window.FORZA || {generato:'',stagione:'2025-26',squadra:'Fiorenti
              per scrivere il carico in palestra, quindi niente trattino */
           if(kg == null && !mn){ cells += '<td class="miss" style="'+tds+'">-</td>'; return; }
           if(edit){
+            var ut = (!kg || kg.ov || !isUltRow(r)) ? null : ultDi(n, r, src);
             cells += '<td style="'+tds+'"><input class="fz-kgin'+(kg && kg.ov ? ' ov' : '')+'" type="number"'
+              + (ut ? ' title="Ultima volta: '+esc(fmtDay(ut.data))+(ut.serie && ut.rip ? ', '+esc(ut.serie+' x '+ut.rip) : '')+'"' : (isUltRow(r) && !kg ? ' title="Mai fatto prima: scrivilo a mano" placeholder="?"' : ''))
               + ' step="0.5" min="0" inputmode="decimal" value="'+(kg ? kg.v : '')+'"'
               + ' data-k="'+esc(fzKey(r, n))+'" aria-label="'+esc(disp(n)+' '+r.ex)+'"></td>';
           } else {
