@@ -358,6 +358,8 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .ac-val{ font-family:'Bebas Neue',sans-serif; font-size:29px; letter-spacing:.5px; color:var(--ink); line-height:1.05; margin-top:3px; }
 .ac-sub{ font-size:11px; color:var(--faint); margin-top:1px; }
 .ac-spark{ display:block; width:100%; height:38px; margin-top:8px; }
+.seg.acwr-mode button{ padding:8px 14px; min-height:40px; }
+.acwr-ewma-note{ margin:0 0 14px; font-size:12.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
 .acwr-charts{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 .acwr-block{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px 8px; }
 .acwr-block.full{ grid-column:1 / -1; }
@@ -1335,12 +1337,17 @@ table.bulk td.bulk-no{ color:var(--faint); }
           <span class="hint">quanto e' salito il carico rispetto alla media delle ultime quattro settimane: sotto 0,8 si e' scarichi, sopra 1,5 il rischio cresce</span>
           <span class="spacer"></span>
           <div class="chart-tools">
+            <div class="seg acwr-mode" id="acwr-mode" role="group" aria-label="Come si calcola il rapporto">
+              <button type="button" data-m="roll" class="on" aria-pressed="true" title="Ultima settimana sulla media delle ultime quattro">Media 4 sett.</button>
+              <button type="button" data-m="ewma" aria-pressed="false" title="Medie esponenziali giorno per giorno: 7 giorni su 28 giorni">EWMA</button>
+            </div>
             <div class="field">
               <select class="picker" id="acwr-metric" aria-label="Metrica del carico"></select>
             </div>
           </div>
         </div>
         <div class="card-body" style="padding-top:6px">
+          <p class="acwr-ewma-note" id="acwr-ewma-note" hidden>EWMA: il carico di ogni giorno entra con un peso che cala nel tempo (acuto 7 giorni, cronico 28), quindi il rapporto segue meglio i salti recenti e non cambia di colpo quando una settimana esce dalla finestra. E' un segnale da leggere insieme a RPE, benessere e occhio del preparatore, non una previsione degli infortuni: gli studi dicono che segnala prima i picchi di carico, non che li evita.</p>
           <div class="acwr-stats" id="acwr-stats"></div>
           <div id="vmax-box"></div>
           <div class="agrid-head">
@@ -1363,7 +1370,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
             <div class="acwr-block">
               <div class="acwr-blk-head"><h3>Scarto dalla media</h3><span>settimana per settimana</span></div>
               <div class="legend acwr-legend">
-                <span><span class="lg-mid"></span>media 4 settimane</span>
+                <span><span class="lg-mid"></span><span id="acwr-lg-mid">media 4 settimane</span></span>
                 <span><span class="lg-dot ok"></span>sopra o sotto, col colore della zona</span>
               </div>
               <div class="chart-wrap" id="acwr-chart2"></div>
@@ -2133,6 +2140,17 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   (function(){
     const sel = document.getElementById('acwr-metric'); if(!sel) return;
     sel.addEventListener('change', ()=>{ state.acwrIdx = +sel.value; renderAnalytics(); });
+  })();
+  /* media mobile o EWMA: la scelta resta per la prossima volta su questo browser */
+  try{ if(localStorage.getItem('rs_fio_acwr_mode')==='ewma') state.acwrMode = 'ewma'; }catch(e){}
+  (function(){
+    const box = document.getElementById('acwr-mode'); if(!box) return;
+    box.addEventListener('click', ev=>{
+      const b = ev.target.closest('button[data-m]'); if(!b) return;
+      state.acwrMode = b.getAttribute('data-m');
+      try{ localStorage.setItem('rs_fio_acwr_mode', state.acwrMode); }catch(e){}
+      renderAnalytics();
+    });
   })();
   // primo riempimento delle due tendine, con la sinottica gia' caricata dal browser
   syncMetLists();
@@ -3416,7 +3434,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const out=[];
     currentMonths().forEach(m=>{
       const code = monthCode(m.title); let cur=null;
-      const flush = ()=>{ if(cur && cur.has){ const load = cur.tot!=null ? cur.tot : cur.sum; out.push({ code:code, title:m.title, week:cur.week, load:(load==null?0:load) }); } cur=null; };
+      const flush = ()=>{ if(cur && cur.has){ const load = cur.tot!=null ? cur.tot : cur.sum; out.push({ code:code, title:m.title, week:cur.week, load:(load==null?0:load), start:weekStart(cur.week, m.key) }); } cur=null; };
       (m.rows||[]).forEach(r=>{
         if(r.type==='wk_header'){ flush(); cur={ week:r.label, tot:null, sum:0, has:false }; return; }
         if(!cur) cur={ week:'', tot:null, sum:0, has:false };
@@ -3436,6 +3454,52 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return { acute:ld, chronic:chronic, ratio:(chronic>0? ld/chronic : null), full:i>=3 };
     });
   }
+  /* ---------- EWMA (Williams 2017, Murray 2017) ----------
+     La media di quattro settimane da' lo stesso peso alla settimana di un mese fa
+     e a quella appena finita, e il giorno in cui una settimana esce dalla finestra
+     il rapporto salta anche se non e' cambiato niente. L'EWMA lavora giorno per
+     giorno: ogni giorno il carico entra con un peso, e i giorni prima pesano via
+     via meno. Acuto su 7 giorni (lambda 2/8 = 0,25), cronico su 28 (lambda 2/29),
+     i giorni senza seduta contano zero. Si parte dalla media dei primi sette giorni
+     per non far nascere il cronico da zero, e il numero vale pieno dopo 28 giorni.
+     Acuto e cronico si mostrano moltiplicati per sette, cosi' si leggono come una
+     settimana di carico e si confrontano con il resto della pagina. */
+  const EWMA_A = 2/(7+1), EWMA_C = 2/(28+1);
+  function acwrMode(){ return state.acwrMode === 'ewma' ? 'ewma' : 'roll'; }
+  function computeEWMA(weeks, idx){
+    const per = {};
+    dayRows().forEach(x=>{
+      const v = vAt(x.row, idx); if(v==null || !isFinite(v)) return;
+      const k = x.d.getFullYear()*10000 + (x.d.getMonth()+1)*100 + x.d.getDate();
+      per[k] = (per[k]||0) + (+v);
+    });
+    const dk = d=> d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate();
+    const keys = Object.keys(per).map(Number).sort((a,b)=>a-b);
+    const none = weeks.map(()=>({ acute:0, chronic:0, ratio:null, full:false }));
+    if(!keys.length) return none;
+    const kd = k=> new Date(Math.floor(k/10000), Math.floor(k/100)%100 - 1, k%100);
+    const d0 = kd(keys[0]), dl = kd(keys[keys.length-1]);
+    let s7 = 0; for(let i=0;i<7;i++){ const d=new Date(d0); d.setDate(d.getDate()+i); s7 += per[dk(d)]||0; }
+    let a = s7/7, c = s7/7, n = 0;
+    const byDay = {};
+    for(let d=new Date(d0); d<=dl; d.setDate(d.getDate()+1)){
+      const v = per[dk(d)]||0;
+      a = v*EWMA_A + (1-EWMA_A)*a;
+      c = v*EWMA_C + (1-EWMA_C)*c;
+      n++;
+      byDay[dk(d)] = { a:a, c:c, n:n };
+    }
+    return weeks.map(w=>{
+      if(!w.start) return { acute:0, chronic:0, ratio:null, full:false };
+      /* il valore della settimana e' quello della domenica, o dell'ultimo giorno con dati */
+      let e = new Date(w.start); e.setDate(e.getDate()+6);
+      if(e > dl) e = new Date(dl);
+      const x = byDay[dk(e)];
+      if(!x) return { acute:0, chronic:0, ratio:null, full:false };
+      return { acute:x.a*7, chronic:x.c*7, ratio:(x.c>0 ? x.a/x.c : null), full:x.n>=28 };
+    });
+  }
+  function acwrOf(weeks, idx){ return acwrMode()==='ewma' ? computeEWMA(weeks, idx) : computeACWR(weeks); }
   function acwrZone(r){
     if(r==null) return { key:'none', label:'-', color:'var(--muted)' };
     if(r<0.8)  return { key:'low',  label:'Sottocarico', color:'oklch(72% 0.13 230)' };
@@ -3466,7 +3530,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   }
   function acwrCell(i){
     const weeks = seasonWeeks(i);
-    const acwr = computeACWR(weeks);
+    const acwr = acwrOf(weeks, i);
     let li = -1;
     for(let k=acwr.length-1;k>=0;k--){ if(acwr[k].full && acwr[k].ratio!=null){ li=k; break; } }
     if(li<0) for(let k=acwr.length-1;k>=0;k--){ if(acwr[k].ratio!=null){ li=k; break; } }
@@ -3496,7 +3560,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function renderAcwrGrid(){
     const host = document.getElementById('acwr-grid'); if(!host) return;
     const hint = document.getElementById('acwr-grid-hint');
-    if(hint) hint.textContent = 'i parametri col pallino arancione, ultima settimana su media 4 settimane, '+
+    if(hint) hint.textContent = 'i parametri col pallino arancione, '+(acwrMode()==='ewma' ? 'EWMA 7 giorni su 28 giorni' : 'ultima settimana su media 4 settimane')+', '+
       'tocca un parametro per portarlo nei grafici sotto';
     const list = acwrChoice();
     let html = '';
@@ -3525,10 +3589,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<div class="acwr-hero z-'+z.key+'">'+
         '<div class="ah-top"><span class="ah-lbl">ACWR attuale</span><span class="ah-pill z-'+z.key+'">'+esc(z.label)+'</span></div>'+
         '<div class="ah-val tnum">'+(a.ratio==null?'-':NF.format(round2(a.ratio)))+'</div>'+
-        '<div class="ah-sub">carico ultima settimana vs media 4 settimane</div>'+
+        '<div class="ah-sub">'+(acwrMode()==='ewma' ? 'EWMA acuto 7 giorni su cronico 28 giorni' : 'carico ultima settimana vs media 4 settimane')+'</div>'+
       '</div>'+
-      '<div class="acwr-tile"><div class="at-lbl">Carico acuto</div><div class="at-val tnum">'+fmtLoad(a.acute, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">ultima settimana</div></div>'+
-      '<div class="acwr-tile"><div class="at-lbl">Carico cronico</div><div class="at-val tnum">'+fmtLoad(a.chronic, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">media 4 settimane</div></div>'+
+      '<div class="acwr-tile"><div class="at-lbl">Carico acuto</div><div class="at-val tnum">'+fmtLoad(a.acute, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">'+(acwrMode()==='ewma' ? 'EWMA 7 giorni, in settimana' : 'ultima settimana')+'</div></div>'+
+      '<div class="acwr-tile"><div class="at-lbl">Carico cronico</div><div class="at-val tnum">'+fmtLoad(a.chronic, idx)+(unit?'<small>'+esc(unit)+'</small>':'')+'</div><div class="at-sub">'+(acwrMode()==='ewma' ? 'EWMA 28 giorni, in settimana' : 'media 4 settimane')+'</div></div>'+
       '<div class="acwr-tile"><div class="at-lbl">Variazione</div><div class="at-val tnum '+varCls+'">'+varTxt+'</div><div class="at-sub">vs settimana prec.</div></div>';
   }
   function renderAcwrRatio(weeks, acwr, idx){
@@ -3651,7 +3715,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           '<div class="tt-w" style="color:'+z.color+'">'+esc(z.label)+'</div>'+
           '<div class="tt-v tnum">'+(d>=0?'+':'-')+NF0.format(Math.abs(Math.round(d)))+'<small>% sulla media</small></div>'+
           '<div class="tt-x"><span>settimana</span><b>'+fmtLoad(x.acute, idx)+(unit?' '+esc(unit):'')+'</b></div>'+
-          '<div class="tt-x"><span>media 4 sett.</span><b>'+fmtLoad(x.chronic, idx)+'</b></div>';
+          '<div class="tt-x"><span>'+(acwrMode()==='ewma' ? 'cronico EWMA' : 'media 4 sett.')+'</span><b>'+fmtLoad(x.chronic, idx)+'</b></div>';
         tip.style.left=ev.clientX+'px'; tip.style.top=ev.clientY+'px'; tip.classList.add('show');
       });
     });
@@ -3780,7 +3844,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     renderVmax();
     const idx = state.acwrIdx;
     const weeks = seasonWeeks(idx);
-    const acwr = computeACWR(weeks);
+    const acwr = acwrOf(weeks, idx);
+    const ew = acwrMode()==='ewma';
+    document.querySelectorAll('#acwr-mode button').forEach(b=>{ const on = b.getAttribute('data-m')===acwrMode(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on?'true':'false'); });
+    const lm = document.getElementById('acwr-lg-mid'); if(lm) lm.textContent = ew ? 'cronico EWMA 28 giorni' : 'media 4 settimane';
+    const nt = document.getElementById('acwr-ewma-note'); if(nt) nt.hidden = !ew;
     renderAcwrStats(weeks, acwr, idx);
     renderAcwrGrid();
     renderAcwrRatio(weeks, acwr, idx);
