@@ -581,6 +581,11 @@ window.SIDEBAR_HTML = `
       <svg class="sb-sync-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.6-4.2"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.6 4.2"/><path d="M20 3v5h-5"/><path d="M4 21v-5h5"/></svg>
       <span class="sb-sync-txt"><b>Aggiorna dati</b><em id="fio-sync-when">--</em></span>
     </button>
+    <button class="sb-switch sb-tema" id="fio-tema-btn" type="button" aria-pressed="false" title="Passa dal tema scuro a quello chiaro e indietro. La scelta resta su questo browser.">
+      <svg class="t-sole" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="t-luna" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <span id="fio-tema-txt">Tema chiaro</span>
+    </button>
     <a class="sb-switch" href="../index.html" aria-label="Torna alla scelta dell'area">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       <span>Cambia area</span>
@@ -2196,6 +2201,27 @@ window.initSidebarToggle = function() {
   if (esci) esci.addEventListener('click', function() {
     if (window.fioEsci) window.fioEsci();
   });
+  /* tema chiaro o scuro: lo script in testa alla pagina lo ha gia' messo prima del
+     disegno, qui il pulsante lo cambia, lo ricorda e avvisa la pagina (i grafici
+     disegnati a mano si rifanno sull'evento fio:tema) */
+  const temaBtn = document.getElementById('fio-tema-btn');
+  if (temaBtn) {
+    const temaPaint = function() {
+      const chiaro = document.documentElement.getAttribute('data-tema') === 'chiaro';
+      temaBtn.setAttribute('aria-pressed', chiaro ? 'true' : 'false');
+      const t = document.getElementById('fio-tema-txt');
+      if (t) t.textContent = chiaro ? 'Tema scuro' : 'Tema chiaro';
+    };
+    if (!document.documentElement.getAttribute('data-tema')) document.documentElement.setAttribute('data-tema', 'scuro');
+    temaPaint();
+    temaBtn.addEventListener('click', function() {
+      const nuovo = document.documentElement.getAttribute('data-tema') === 'chiaro' ? 'scuro' : 'chiaro';
+      document.documentElement.setAttribute('data-tema', nuovo);
+      try { localStorage.setItem('rs_fio_tema', nuovo); } catch (e) {}
+      temaPaint();
+      try { document.dispatchEvent(new CustomEvent('fio:tema', { detail: nuovo })); } catch (e) {}
+    });
+  }
   const sync = document.getElementById('fio-sync-btn');
   if (sync) {
     window.fioPaintStamp();
@@ -2425,6 +2451,10 @@ window.SIDEBAR_CSS = `
 .sb-switch svg{width:16px;height:16px;opacity:.8;flex-shrink:0;}
 .sb-switch:hover{color:#F4F1EC;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);}
 .sb-switch:active{transform:scale(.98);}
+.sb-tema{width:100%;font-family:inherit;cursor:pointer;text-align:left;margin-bottom:6px;min-height:40px;}
+.sb-tema .t-luna{display:none;}
+html[data-tema="chiaro"] .sb-tema .t-sole{display:none;}
+html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
 .sb-who{display:flex;align-items:center;gap:8px;}
 .sb-cred{font-size:10px;color:rgba(248,250,255,.18);line-height:1.7;padding:0 4px;min-width:0;flex:1;}
 .sb-cred strong{color:rgba(248,250,255,.34);display:block;font-size:11px;font-weight:600;
