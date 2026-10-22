@@ -359,6 +359,24 @@ svg.chart text{ font-family:'Inter',sans-serif; }
 .ac-sub{ font-size:11px; color:var(--faint); margin-top:1px; }
 .ac-spark{ display:block; width:100%; height:38px; margin-top:8px; }
 .seg.acwr-mode button{ padding:8px 14px; min-height:40px; }
+.aath{ margin:0 0 18px; }
+.aath-head{ display:flex; align-items:baseline; gap:6px 12px; flex-wrap:wrap; margin-bottom:8px; }
+.aath-head h3{ margin:0; font-size:15px; font-weight:650; color:var(--ink); }
+.aath-head span{ font-size:12px; color:var(--muted); }
+.aath-head b.z-high{ color:oklch(76% 0.19 28); } .aath-head b.z-warn{ color:oklch(84% 0.14 75); }
+.aath-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px; }
+.aath-b{ appearance:none; font-family:inherit; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  min-height:44px; padding:6px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface2); color:var(--text);
+  transition:border-color .15s var(--ease), transform .1s var(--ease); text-align:left; }
+.aath-b:active{ transform:scale(.97); }
+.aath-n{ font-size:12.5px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.aath-b b{ font-size:14px; font-weight:700; }
+.aath-b.z-ok b{ color:oklch(76% 0.16 152); } .aath-b.z-low b{ color:oklch(78% 0.12 230); }
+.aath-b.z-warn{ background:oklch(80% 0.15 75 / 0.10); border-color:oklch(80% 0.15 75 / 0.35); } .aath-b.z-warn b{ color:oklch(84% 0.14 75); }
+.aath-b.z-high{ background:oklch(64% 0.22 25 / 0.12); border-color:oklch(64% 0.22 25 / 0.40); } .aath-b.z-high b{ color:oklch(76% 0.19 28); }
+.aath-b.corto{ opacity:.6; }
+@media (hover:hover){ .aath-b:hover{ border-color:var(--border3, var(--border2)); } }
+.aath-fuori{ margin:8px 0 0; font-size:11.5px; color:var(--faint); }
 .acwr-ewma-note{ margin:0 0 14px; font-size:12.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
 .acwr-charts{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 .acwr-block{ background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px 8px; }
@@ -1349,6 +1367,7 @@ table.bulk td.bulk-no{ color:var(--faint); }
         <div class="card-body" style="padding-top:6px">
           <p class="acwr-ewma-note" id="acwr-ewma-note" hidden>EWMA: il carico di ogni giorno entra con un peso che cala nel tempo (acuto 7 giorni, cronico 28), quindi il rapporto segue meglio i salti recenti e non cambia di colpo quando una settimana esce dalla finestra. E' un segnale da leggere insieme a RPE, benessere e occhio del preparatore, non una previsione degli infortuni: gli studi dicono che segnala prima i picchi di carico, non che li evita.</p>
           <div class="acwr-stats" id="acwr-stats"></div>
+          <div id="acwr-ath"></div>
           <div id="vmax-box"></div>
           <div class="agrid-head">
             <h3>ACWR per parametro</h3>
@@ -3840,6 +3859,66 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '</div>'+
       (alto ? '<p class="vmax-warn">Sono '+NF0.format(o.s90.gg)+' giorni che in allenamento non tocca il 90% della sua punta. Prima di uno sprint massimale serve una giornata di richiamo.</p>' : '');
   }
+  /* ---------- il rapporto atleta per atleta ----------
+     La squadra puo' stare a 1,0 mentre due ragazze sono a 1,6: la media le
+     nasconde. Qui, guardando la squadra, ogni atleta ha il suo rapporto sullo
+     stesso parametro e con lo stesso metodo (media o EWMA), dalla piu' alta alla
+     piu' bassa. Conta solo chi ha dati nell'ultima settimana della squadra: chi
+     e' ferma da tempo finisce in fondo, a parte. Si calcola girando lo stato
+     sull'atleta e rimettendolo com'era, come fa gia' la stampa per gruppo. */
+  function acwrAtlete(idx, lastStart){
+    const keep = { level:state.level, player:state.player };
+    const out = [];
+    try{
+      Object.keys(S.players||{}).forEach(n=>{
+        state.level = 'player'; state.player = n;
+        const weeks = seasonWeeks(idx);
+        if(!weeks.length) return;
+        const acwr = acwrOf(weeks, idx);
+        let li = -1;
+        for(let k=acwr.length-1;k>=0;k--){ if(acwr[k].ratio!=null){ li=k; break; } }
+        if(li<0) return;
+        const w = weeks[li], recente = !lastStart || !w.start || (+w.start === +lastStart);
+        out.push({ n:n, r:acwr[li].ratio, full:acwr[li].full, recente:recente, acute:acwr[li].acute, chronic:acwr[li].chronic });
+      });
+    } finally { state.level = keep.level; state.player = keep.player; }
+    return out;
+  }
+  function renderAcwrAth(weeks, idx){
+    const host = document.getElementById('acwr-ath'); if(!host) return;
+    if(state.level !== 'team' || !weeks.length){ host.innerHTML = ''; return; }
+    const lastStart = weeks[weeks.length-1].start;
+    const list = acwrAtlete(idx, lastStart);
+    const att = list.filter(x=> x.recente).sort((a,b)=> b.r - a.r);
+    const ferme = list.filter(x=> !x.recente);
+    if(!att.length){ host.innerHTML = ''; return; }
+    const conta = { high:0, warn:0, ok:0, low:0 };
+    att.forEach(x=>{ const z = acwrZone(x.r).key; if(conta[z]!=null) conta[z]++; });
+    const u = metUnit(idx);
+    let h = '<div class="aath"><div class="aath-head"><h3>Atleta per atleta</h3>'+
+      '<span>'+esc(metShort(idx))+', '+(acwrMode()==='ewma' ? 'EWMA' : 'media 4 settimane')+': '+
+      (conta.high ? '<b class="z-high">'+conta.high+' a rischio</b>, ' : '')+
+      (conta.warn ? '<b class="z-warn">'+conta.warn+' carico alto</b>, ' : '')+
+      conta.ok+' in zona, '+conta.low+' sotto. Tocca un nome per aprire l\'atleta.</span></div><div class="aath-list">';
+    att.forEach(x=>{
+      const z = acwrZone(x.r);
+      h += '<button type="button" class="aath-b z-'+z.key+(x.full?'':' corto')+'" data-n="'+esc(x.n)+'" title="'+esc(disp(x.n))+': acuto '+esc(fmtLoad(x.acute, idx))+(u?' '+esc(u):'')+' su cronico '+esc(fmtLoad(x.chronic, idx))+(x.full?'':', storico ancora corto')+'">'+
+        '<span class="aath-n">'+esc(disp(x.n))+'</span><b class="tnum">'+NF.format(round2(x.r))+'</b></button>';
+    });
+    h += '</div>';
+    if(ferme.length) h += '<p class="aath-fuori">Senza dati nell\'ultima settimana: '+ferme.map(x=> esc(disp(x.n))).join(', ')+'.</p>';
+    h += '</div>';
+    host.innerHTML = h;
+    host.querySelectorAll('.aath-b').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const n = b.getAttribute('data-n');
+        const seg = document.getElementById('seg-player'); if(seg) seg.click();
+        const sel = document.getElementById('player-select');
+        if(sel){ sel.value = n; sel.dispatchEvent(new Event('change')); }
+        const c = document.getElementById('acwr-card'); if(c) c.scrollIntoView({ block:'start' });
+      });
+    });
+  }
   function renderAnalytics(){
     renderVmax();
     const idx = state.acwrIdx;
@@ -3850,6 +3929,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const lm = document.getElementById('acwr-lg-mid'); if(lm) lm.textContent = ew ? 'cronico EWMA 28 giorni' : 'media 4 settimane';
     const nt = document.getElementById('acwr-ewma-note'); if(nt) nt.hidden = !ew;
     renderAcwrStats(weeks, acwr, idx);
+    renderAcwrAth(weeks, idx);
     renderAcwrGrid();
     renderAcwrRatio(weeks, acwr, idx);
     renderAcwrGap(weeks, acwr, idx);
