@@ -7714,14 +7714,53 @@ window.FORZA = window.FORZA || { roster:[] };
     if(AT_WK) return AT_WK;
     AT_WK = { n:0, nx:0, lun:dstr(mondayOf(NOW)), p:{}, gg:{} };
 
+    /* Le righe fuori squadra del foglio del carico ("22PM diff", "12AM FT"): giorno e
+       turno per atleta. Chi quel giorno e in quel turno ha una riga sua, ha li' il
+       totale vero della seduta. Prima quel lavoro entrava due volte: la riga diff
+       qui sotto e, in piu', le esercitazioni del file di squadra in cui l'atleta
+       compare per il pezzo fatto col gruppo prima di staccarsi. Miraldi il 22/10:
+       7508 m di differenziato piu' 7334 m delle tre esercitazioni, cioe' la stessa
+       seduta contata due volte; Boldrini, a parte tutta la settimana, tre volte. */
+    const soloGT = {};
+    (function(){
+      const P0 = (window.SNAP && window.SNAP.players) ? window.SNAP.players : null;
+      if(!P0) return;
+      Object.keys(P0).forEach(function(nome){
+        ((P0[nome] && P0[nome].months) || []).forEach(function(mo){
+          let wk = '';
+          (mo.rows || []).forEach(function(r){
+            if(r.type === 'wk_header'){ wk = r.label || ''; return; }
+            if(r.type !== 'day' || !Array.isArray(r.v)) return;
+            const lb = String(r.label || '').trim();
+            if(!SOLO_RE.test(lb)) return;
+            const dd = gpsRowDate(r, wk, mo.key);
+            if(!dd) return;
+            const t = /(AM|PM)\s+\S+$/i.exec(lb);
+            const g = soloGT[nome] || (soloGT[nome] = {});
+            g[dstr(dd) + '|' + (t ? t[1].toUpperCase() : '')] = 1;
+          });
+        });
+      });
+    })();
+    function soloQuel(nome, giorno, turno){
+      const g = soloGT[nome];
+      if(!g) return false;
+      const t = String(turno || '').toUpperCase();
+      /* senza turno da una parte o dall'altra basta il giorno */
+      if(g[giorno + '|' + t] || g[giorno + '|']) return true;
+      if(!t) return !!(g[giorno + '|AM'] || g[giorno + '|PM']);
+      return false;
+    }
+
     const E = window.ESERC;
     const cols = (E && Array.isArray(E.load_cols)) ? E.load_cols : [];
     if(E && Array.isArray(E.sessions) && cols.length){
       const ix = {};
       AT_MET.forEach(function(m){ ix[m.k] = cols.indexOf(m.col); });
 
-      const add = function(name, arr, giorno){
+      const add = function(name, arr, giorno, turno){
         if(!Array.isArray(arr)) return;
+        if(soloQuel(name, giorno, turno)) return;
         let p = AT_WK.p[name];
         if(!p){ p = AT_WK.p[name] = atZero(); }
         p.gg[giorno] = 1;
@@ -7738,11 +7777,11 @@ window.FORZA = window.FORZA || { roster:[] };
         AT_WK.gg[d] = 1;
         const ft  = (s.ft && s.ft.atlete) ? s.ft.atlete : {};
         const vis = {};
-        Object.keys(ft).forEach(function(n){ vis[n] = 1; add(n, ft[n], d); });
+        Object.keys(ft).forEach(function(n){ vis[n] = 1; add(n, ft[n], d, s.slot); });
         (s.drills || []).forEach(function(dr){
           if(dr.dup) return;
           const a = dr.atlete || {};
-          Object.keys(a).forEach(function(n){ if(!vis[n]) add(n, a[n], d); });
+          Object.keys(a).forEach(function(n){ if(!vis[n]) add(n, a[n], d, s.slot); });
         });
       });
     }
