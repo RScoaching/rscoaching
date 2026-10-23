@@ -403,9 +403,14 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
 .tg-atv-h b{ font-size:11.5px; font-weight:650; color:var(--ink); white-space:nowrap; }
 .tg-atv-h .src{ font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:help; }
 .tg-atv.gen .tg-atv-h .src{ color:var(--orange2); font-weight:600; }
-.tg-atv-r{ display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:4px; }
-.tg-atv-r > div{ min-width:0; }
+.tg-atv-r{ display:flex; justify-content:space-between; gap:10px; }
+.tg-atv-r > div{ flex:0 1 auto; min-width:0; }
 .tg-atv.gen .tg-atv-r b{ color:var(--muted) !important; }
+.tg-atv-h .src .qi{ display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%;
+  border:1px solid var(--border3); font-size:10px; font-weight:700; color:var(--muted); }
+.tg-atv.none{ background:var(--surface3); border:1px dashed var(--border3); }
+.tg-atv.none .tg-atv-h{ margin-bottom:0; }
+.tg-atv .tg-atv-r .ok b{ color:var(--green) !important; font-size:13px !important; }
 .tg-atv .tg-atv-r b{ display:block; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:20px; white-space:nowrap;
   letter-spacing:.5px; line-height:1; color:var(--ink); }
 .tg-atv .key b{ color:var(--orange2); }
@@ -8466,26 +8471,21 @@ window.FORZA = window.FORZA || { roster:[] };
            avere una quota bassa e comunque fuori misura per lei. Niente riga se
            non restano sedute o se non le manca niente: in quel caso il testo
            sopra ha gia' detto tutto. */
-        let qta = '';
-        if(gg1){
-          const qq = qmet.map(function(m){
-            const k   = m.k;
-            const tot = gio.w[k];
-            if(!(tot > 0) || r.rest[k] <= 0) return '';
-            const quota  = Math.round(r.rest[k] * (+gg1.pes[k] || 0) / tot);
-            const solito = Math.round(r.base[k] * (+gg1.pes[k] || 0));
-            if(quota <= 0) return '';
-            /* Stessa soglia del riparto di gruppo: sotto il punto percentuale e'
-               tondeggio, non una seduta da caricare. */
-            const su = solito > 0 ? Math.round((quota / solito - 1) * 100) : 0;
-            const no = solito > 0 && su >= 1;
-            return '<span'+(no ? ' class="no"' : '')+'><b>'+NF.format(quota)+'</b> '+
-              esc(m.u)+(no ? ' &#183; +'+su+'% sul suo solito' : '')+'</span>';
-          }).filter(function(s){ return !!s; });
-          if(qq.length){
-            qta = '<div class="tg-atq tnum"><em>'+gg1L+'</em> le tocca '+qq.join(', ')+'.</div>';
-          }
-        }
+        /* QUANTO LE TOCCA NELLA PROSSIMA SEDUTA DI CAMPO.
+           E' il blocco in cima alla scheda. Prima li' c'era "oggi da fare" fatto
+           con una tabella fissa di quote per giorno, scollegata dai moltiplicatori
+           scelti qui sopra: il gruppo diceva una cosa e le schede un'altra. Ora la
+           regola e' la stessa del riparto di squadra: quello che le manca per la
+           settimana (riferimento gara per le volte scelte, meno quanto ha gia'
+           fatto), diviso sulle sedute che restano, e di quello la parte della
+           prima seduta di campo. */
+        const quo = {};
+        AT_MET.forEach(function(m){
+          const k = m.k, tot = gio.w[k];
+          if(!gg1){ quo[k] = null; return; }
+          if(r.rest[k] <= 0){ quo[k] = 0; return; }
+          quo[k] = tot > 0 ? tgRound(r.rest[k] * (+gg1.pes[k] || 0) / tot, m.step) : null;
+        });
 
         const ed = apri
           ? '<div class="tg-atx">'+
@@ -8532,19 +8532,25 @@ window.FORZA = window.FORZA || { roster:[] };
           /* Gli obiettivi di oggi, su una riga sola e con il loro titolo. Accanto si
              dice da dove escono: chi non ha il ruolo in Atlete prende la media di
              squadra, e cinque atlete con gli stessi numeri sembravano dati finti. */
-          '<div class="tg-atv'+(r.base.liv === 'squadra' ? ' gen' : '')+'">'+
-            '<div class="tg-atv-h"><b>Oggi da fare</b>'+
-              '<span class="src '+esc(r.base.liv)+'" title="'+esc(r.base.liv === 'squadra' ? 'Numeri di squadra, uguali per chi non ha il ruolo: scrivilo in Atlete per avere i suoi. ' + atSrcTxt(r.base) : atSrcTxt(r.base))+'">'+
-                (r.base.liv === 'sua' ? 'dalle sue gare' : (r.base.liv === 'ruolo' ? 'media del ruolo' : 'manca il ruolo'))+
-              '</span></div>'+
-            '<div class="tg-atv-r">'+AT_MET.map(function(m){
-              const kk = pmet.length ? !!pset[m.k] : m.key;
-              return '<div'+(kk ? ' class="key"' : '')+' title="'+esc(m.lbl)+': '+NF.format(r.t[m.k])+' '+esc(m.u)+' da fare oggi">'+
-                '<b class="tnum">'+NF.format(r.t[m.k])+'</b>'+
-                '<i>'+esc(m.s)+'</i>'+
-              '</div>';
-            }).join('')+'</div>'+
-          '</div>'+
+          (gg1
+            ? '<div class="tg-atv'+(r.base.liv === 'squadra' ? ' gen' : '')+'">'+
+                '<div class="tg-atv-h"><b>'+(gg1L.charAt(0).toUpperCase()+gg1L.slice(1))+' le tocca</b>'+
+                  '<span class="src '+esc(r.base.liv)+'" title="'+esc((r.base.liv === 'squadra' ? 'Senza ruolo in Atlete il riferimento e\' la media di squadra, uguale per tutte quelle senza ruolo. ' : '') + atSrcTxt(r.base) + '. La quota e\' la parte di questa seduta su quello che le manca per la settimana, divisa sulle sedute che restano come il riparto di squadra.')+'">'+
+                    (r.base.liv === 'squadra' ? 'manca il ruolo' : '<span class="qi" aria-hidden="true">?</span>')+
+                  '</span></div>'+
+                '<div class="tg-atv-r">'+AT_MET.map(function(m){
+                  const kk = pmet.length ? !!pset[m.k] : m.key;
+                  const q = quo[m.k];
+                  const fatto = q === 0;
+                  return '<div class="'+(kk ? 'key' : '')+(fatto ? ' ok' : '')+'" title="'+esc(m.lbl)+': '+
+                      (fatto ? 'settimana gia\' coperta' : (q == null ? 'nessuna quota' : NF.format(q)+' '+esc(m.u)+' in questa seduta, su '+NF.format(r.rest[m.k])+' che mancano'))+'">'+
+                    '<b class="tnum">'+(fatto ? 'fatto' : (q == null ? '-' : NF.format(q)))+'</b>'+
+                    '<i>'+esc(m.s)+'</i>'+
+                  '</div>';
+                }).join('')+'</div>'+
+              '</div>'
+            : '<div class="tg-atv none"><div class="tg-atv-h"><b>Nessuna seduta di campo rimasta</b>'+
+                '<span class="src">questa settimana</span></div></div>')+
           '<div class="tg-atw">'+
             /* la fonte del riferimento gara non sta piu' su una riga sua: e' una
                precisazione che si legge una volta, non tutti i giorni per venti
@@ -8556,7 +8562,6 @@ window.FORZA = window.FORZA || { roster:[] };
             bars+
             '<div class="tg-att tnum">'+txt+'</div>'+
             dfx+
-            qta+
             vmxRiga(r.name)+
           '</div>'+
           ed+
