@@ -768,6 +768,9 @@ window.RSGarmin = (function(){
     const L=Object.entries(gd&&gd.activities||{}).map(([id,a])=>a?norm(id,a):null).filter(a=>a&&a.tipo!=='pausa'&&!(a.sec&&a.sec<180)).sort((x,y)=>x.ts-y.ts);
     const out=[];
     L.forEach(a=>{
+      /* la stessa uscita due volte dalla stessa fonte (la corsa reimportata da file dopo aver
+         cancellato l'originale: intervals.icu le tiene tutte e due), stessa ora di partenza: una sola */
+      if(out.some(b=>b.tipo===a.tipo&&b.fonti.join()===a.fonti.join()&&Math.abs(a.ts-b.ts)<=120000))return;
       // stessa uscita dalle due fonti: stessa ora di inizio (entro 3'), oppure stesso giorno, tipo e durata simile.
       // Garmin da' il tempo totale, intervals.icu quello in movimento: nel calcio differiscono di parecchi minuti
       const d=out.find(b=>b.tipo===a.tipo&&b.fonti[0]!==a.fonti[0]&&(Math.abs(a.ts-b.ts)<=180000||(b.giorno===a.giorno&&a.sec&&b.sec&&Math.abs(a.sec-b.sec)<=Math.max(300,0.12*Math.max(a.sec,b.sec)))));
@@ -778,6 +781,9 @@ window.RSGarmin = (function(){
       /* se intervals.icu ha rifatto la distanza dalla traccia, vale quella: km, passo e giri
          dell'orologio sono quelli sbagliati, il resto (training effect, FC) resta di Garmin */
       if(o.corr&&!g.corr){g.km=o.km;g.passo=o.passo;if(o.laps)g.laps=o.laps;g.corr=o.corr;}
+      /* un'attivita' importata da file in Garmin Connect puo' prendere il fuso sbagliato (il 25/10,
+         notte del cambio d'ora, 05:13 invece di 06:13): intervals.icu ha l'ora dell'orologio */
+      if(Math.abs(g.ts-o.ts)>30*60000){g.ts=o.ts;g.giorno=o.giorno;}
       Object.keys(o).forEach(k=>{if(g[k]==null&&o[k]!=null)g[k]=o[k];});
       g.fonti=['garmin','intervals'];if(g!==d){out[out.indexOf(d)]=g;}
     });
