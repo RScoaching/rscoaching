@@ -759,18 +759,13 @@ window.RSGarmin = (function(){
     return {id,fonti:[a.source==='intervals.icu'?'intervals':'garmin'],nome:a.name||'',tipo:tipo(a.type),ts,giorno:iso(ts),sec,km,
       passo:v>0.5?Math.round(1000/v):(km&&sec?Math.round(sec/km):null),fc:+a.avgHR?Math.round(a.avgHR):null,fcMax:+a.maxHR?Math.round(a.maxHR):null,
       dsl:+a.elevGain?Math.round(a.elevGain):null,load:+a.trainingLoad?Math.round(a.trainingLoad):null,rpe:+a.rpe>0?Math.round(+a.rpe):null,feel:+a.feel||null,
-      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,zt:Array.isArray(a.zoneTimes)?a.zoneTimes:(a.zoneTimes&&typeof a.zoneTimes==='object'?Object.values(a.zoneTimes):null),traccia:a.traccia?id:null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null),
-      /* distanza rifatta dalla traccia GPS perche' quella dell'orologio non tornava (sensore di velocita' scalibrato) */
-      corr:a.gpsCorretta&&+a.distOrologioM>0?{orologioKm:Math.round(a.distOrologioM/10)/100}:null};
+      te:+a.aerobicTE||null,teA:+a.anaerobicTE||null,kcal:+a.kcal||null,zt:Array.isArray(a.zoneTimes)?a.zoneTimes:(a.zoneTimes&&typeof a.zoneTimes==='object'?Object.values(a.zoneTimes):null),traccia:a.traccia?id:null,laps:Array.isArray(a.laps)?a.laps:(a.laps&&typeof a.laps==='object'?Object.values(a.laps):null)};
   }
   // attivita' senza doppioni, dalla piu' recente
   function attivita(gd){
     const L=Object.entries(gd&&gd.activities||{}).map(([id,a])=>a?norm(id,a):null).filter(a=>a&&a.tipo!=='pausa'&&!(a.sec&&a.sec<180)).sort((x,y)=>x.ts-y.ts);
     const out=[];
     L.forEach(a=>{
-      /* la stessa uscita due volte dalla stessa fonte (la corsa reimportata da file dopo aver
-         cancellato l'originale: intervals.icu le tiene tutte e due), stessa ora di partenza: una sola */
-      if(out.some(b=>b.tipo===a.tipo&&b.fonti.join()===a.fonti.join()&&Math.abs(a.ts-b.ts)<=120000))return;
       // stessa uscita dalle due fonti: stessa ora di inizio (entro 3'), oppure stesso giorno, tipo e durata simile.
       // Garmin da' il tempo totale, intervals.icu quello in movimento: nel calcio differiscono di parecchi minuti
       const d=out.find(b=>b.tipo===a.tipo&&b.fonti[0]!==a.fonti[0]&&(Math.abs(a.ts-b.ts)<=180000||(b.giorno===a.giorno&&a.sec&&b.sec&&Math.abs(a.sec-b.sec)<=Math.max(300,0.12*Math.max(a.sec,b.sec)))));
@@ -778,12 +773,6 @@ window.RSGarmin = (function(){
       // tiene Garmin come base (training effect), prende da intervals.icu RPE, sensazioni e carico
       const g=d.fonti[0]==='garmin'?d:a,o=g===d?a:d;
       if(!(g.laps&&g.laps.length)&&o.laps)g.laps=o.laps;
-      /* se intervals.icu ha rifatto la distanza dalla traccia, vale quella: km, passo e giri
-         dell'orologio sono quelli sbagliati, il resto (training effect, FC) resta di Garmin */
-      if(o.corr&&!g.corr){g.km=o.km;g.passo=o.passo;if(o.laps)g.laps=o.laps;g.corr=o.corr;}
-      /* un'attivita' importata da file in Garmin Connect puo' prendere il fuso sbagliato (il 25/10,
-         notte del cambio d'ora, 05:13 invece di 06:13): intervals.icu ha l'ora dell'orologio */
-      if(Math.abs(g.ts-o.ts)>30*60000){g.ts=o.ts;g.giorno=o.giorno;}
       Object.keys(o).forEach(k=>{if(g[k]==null&&o[k]!=null)g[k]=o[k];});
       g.fonti=['garmin','intervals'];if(g!==d){out[out.indexOf(d)]=g;}
     });
@@ -851,7 +840,7 @@ window.RSGarmin = (function(){
       const sopra=l=>{const f=l.ts,i=f-(+l.duration||0)*60000;return Math.max(0,Math.min(f,a.ts+(a.sec||0)*1000)-Math.max(i,a.ts));};
       const cand=Object.keys(out).filter(k=>{const l=out[k];return !usati.has(k)&&l.ts&&!l.gm&&l.gmId==null&&iso(l.ts)===a.giorno&&compat(l,a);}).sort((x,y)=>gap(out[x])-gap(out[y])||sopra(out[y])-sopra(out[x])||(+out[y].duration?1:0)-(+out[x].duration?1:0));
       const k=Object.keys(out).find(k=>!usati.has(k)&&out[k].gmId!=null&&String(out[k].gmId)===String(a.id))||cand.find(k=>a.tipo==='corsa'||!(+out[k].duration)||gap(out[k])<=90*60000);
-      const corsa=a.tipo==='corsa'?{fonte:a.fonti.join('+'),km:a.km,corr:a.corr||null,sec:a.sec,fc:a.fc,fcMax:a.fcMax,dsl:a.dsl,passo:a.passo,load:a.load,te:a.te}:null;
+      const corsa=a.tipo==='corsa'?{fonte:a.fonti.join('+'),km:a.km,sec:a.sec,fc:a.fc,fcMax:a.fcMax,dsl:a.dsl,passo:a.passo,load:a.load,te:a.te}:null;
       // senza seduta in programma restano i tratti corsi (per km o per cambio di ritmo)
       const giriDi=(c,ps)=>{if(!c||!a.laps||!window.RSOrologio)return c;try{const r=ps?window.RSOrologio.confrontaGiri(ps,a.laps,null):{blocchi:window.RSOrologio.blocchi(a.laps),giri:[],centrati:null};if(!r||!r.blocchi.length)return c;
           const gi=r.giri.length?r.giri.map(x=>({n:x.nome,m:Math.round(x.m),s:Math.round(x.s),fc:x.fc,t:x.bersaglio||null,e:x.esito||null})):r.blocchi.map((x,i)=>({n:'Tratto '+(i+1),m:Math.round(x.m),s:Math.round(x.s),fc:x.fc}));
