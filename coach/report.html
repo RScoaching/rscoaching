@@ -212,7 +212,12 @@ table.dt.pt-t td small{ display:block; font-size:10.5px; color:var(--muted); fon
 table.dt.pt-t tr.pt-io td{ background-color:var(--ember-bg, rgba(255,106,46,.12)) !important; font-weight:700; }
 table.dt.pt-t tr.pt-med td{ color:var(--muted); font-style:italic; }
 table.dt.pt-t tr.pt-poco td{ opacity:.6; }
-@media (max-width:760px){ .pt-pc{ grid-template-columns:1fr; } .pt-doc .tbl-wrap{ overflow-x:auto; } }
+@media (max-width:760px){ .pt-pc{ grid-template-columns:1fr; } .pt-doc .tbl-wrap{ overflow-x:auto; }
+  .pt-doc .rsec-head{ flex-direction:column; align-items:flex-start; gap:4px; }
+  .pt-doc .rsec-head .rsec-n{ margin-left:0; text-align:left; }
+  .pt-kpi{ grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+  .pt-k{ padding:10px 12px; } .pt-k b{ font-size:20px; }
+  table.dt.pt-t td:first-child{ white-space:nowrap; } }
 #rprint .pt-kpi{ grid-template-columns:repeat(3, 1fr); gap:6px; }
 #rprint .pt-k{ background:#fff; border:1px solid #d9d2e6; padding:6px 8px; }
 #rprint .pt-k b{ font-size:16px; color:#141414; } #rprint .pt-k span, #rprint .pt-k em, #rprint .pt-k i{ color:#4a4450; font-size:9.5px; }
@@ -4544,6 +4549,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function ptIncontro(m){ return m.casa ? 'Fiorentina - '+m.avv : m.avv+' - Fiorentina'; }
   function ptCompNome(c, plur){ return c === 'amichevole' ? (plur ? 'amichevoli' : 'amichevole') : c === 'coppa' ? 'coppa' : 'campionato'; }
   function ptChiave(m){ return m.sigla+'|'+m.data; }
+  function ptGiorno(m){ const d = ptData(m.data); return WD_SIGLE[d.getDay()].toLowerCase()+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
   function ptEtichetta(m){
     const d = ptData(m.data);
     return m.avv+(m.casa?' (casa)':' (trasferta)')+' · '+WD_SIGLE[d.getDay()].toLowerCase()+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
@@ -4659,8 +4665,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const m = A.m;
     const kpi = '<div class="pt-kpi">'+A.metr.slice(0, 6).map(function(x){
       return '<div class="pt-k"><span>'+esc(x.o.n)+'</span><b class="tnum">'+esc(ptVal(x.v, x.o.i))+'<small>'+esc(MU[x.o.i]||'')+'</small></b>'+
-        '<em class="'+ptCls(x.dMed)+'">'+(x.dMed != null ? ptPctTxt(x.dMed)+' '+esc(A.rifSu) : 'prima partita')+'</em>'+
-        (x.dMod != null ? '<i>'+ptPctTxt(x.dMod)+' sul '+PT_MOD_N+'</i>' : '')+'</div>';
+        '<em class="'+ptCls(x.dMed)+'">'+(x.dMed != null ? ptPctTxt(x.dMed)+' sulle '+(/prima/.test(A.rifSu) ? 'precedenti' : 'altre') : 'prima partita')+'</em>'+
+        (x.dMod != null ? '<i>'+ptPctTxt(x.dMod)+' sul 25-26</i>' : '')+'</div>';
     }).join('')+'</div>';
     const pc = '<div class="pt-pc">'+
       '<div class="pt-pro"><h4>Pro</h4>'+(A.pro.length ? '<ul>'+A.pro.map(function(x){ return ptFrase(x, A.rifSu); }).join('')+'</ul>' : '<p>Nessuna voce sopra il 5% '+esc(A.rifSu)+'.</p>')+'</div>'+
@@ -4668,7 +4674,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','Az.int','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
     const righe = A.L.map(function(x){
       const io = x === m;
-      return '<tr'+(io ? ' class="pt-io"' : '')+'><td>'+esc(ptEtichetta(x))+'</td><td>'+esc(ptVal(x.v[IDX_MIN], IDX_MIN))+'</td>'+
+      return '<tr'+(io ? ' class="pt-io"' : '')+'><td>'+esc(x.avv)+'<small>'+(x.casa ? 'casa' : 'trasferta')+', '+esc(ptGiorno(x))+'</small></td><td>'+esc(ptVal(x.v[IDX_MIN], IDX_MIN))+'</td>'+
         cols.map(function(o){ return '<td>'+esc(ptVal(x.v[o.i], o.i))+'</td>'; }).join('')+'</tr>';
     }).join('');
     const medie = '<tr class="pt-med"><td>Media '+ptCompNome(A.m.comp, true)+'</td><td>'+esc(ptVal(ptMedia(A.L.map(function(x){ return x.v[IDX_MIN]; })), IDX_MIN))+'</td>'+
