@@ -1101,6 +1101,52 @@ body::before{
   .tmpl-grid{grid-template-columns:1fr;}
 }
 @media(min-width:769px){.mob-bar{display:none !important;}.mob-ov{display:none;}}
+.lp-tl{display:none}
+/* telefono: aperto un programma l'elenco sparisce (tasto 'Programmi' per tornarci);
+   la settimana va in colonna, un giorno sotto l'altro */
+@media(max-width:768px){
+  .main{padding-top:52px}
+  body.mob-prog .left-panel{display:none!important}
+  body.mob-lista .right-panel{display:none}
+  body:not(.mob-prog) .left-panel{max-height:none}
+  .lp-tog{position:static;width:auto;height:44px;border-radius:22px;padding:0 16px 0 12px;margin:12px 14px 0;gap:6px;font:600 13px Inter,sans-serif}
+  .lp-tog .lp-tl{display:inline;font-style:normal}
+  .lp-tog.chiuso span{transform:none}
+  body:not(.mob-prog) .lp-tog{display:none}
+  .pz-days-wrap{overflow:visible}
+  .pz-days,.pz-days.con-senza{grid-template-columns:1fr;min-width:0}
+  .pz-day{min-height:0}
+  .pz-day.vuoto .pz-dbody{padding:4px 6px}
+  .pz-modes{flex-wrap:wrap}
+  .pz-seg{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .pz-seg::-webkit-scrollbar{display:none}
+}
+/* telefono stretto: ogni esercizio della Tabella e' una scheda (numero, nome e menu in alto,
+   poi i campi con la loro etichetta, tre per riga); campi a 16px perche' iPhone non ingrandisca */
+@media(max-width:600px){
+  .pz-sess{overflow:visible}
+  .pz-t,.pz-t tbody{display:block;width:100%}
+  .pz-t thead{display:none}
+  .pz-t tr:not(.add){display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px 8px;padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .pz-t tr:not(.add)>td{display:block;grid-column:span 6;padding:0;border:0;width:auto!important;min-width:0}
+  .pz-t tr:not(.add)>td[data-l]{grid-column:span 2}
+  .pz-t tr:not(.add)>td[data-l="Note"],.pz-t tr:not(.add)>td[data-l="Fatto"]{grid-column:span 6;text-align:left}
+  .pz-t tr:not(.add)>td.n{grid-column:1/3;grid-row:1}
+  .pz-t tr:not(.add)>td.nmc{grid-column:3/6;grid-row:1}
+  .pz-t tr:not(.add)>td.x{grid-column:6/7;grid-row:1;display:flex;justify-content:flex-end}
+  .pz-t td[data-l]::before{content:attr(data-l);display:block;font:500 11px Inter,sans-serif;color:var(--muted);margin:0 0 3px 2px}
+  .pz-t .pz-c{font-size:16px;min-height:40px;max-width:none;width:100%;text-align:left;padding:0 10px;border:1px solid rgba(255,255,255,.10);border-radius:8px;background:rgba(255,255,255,.04)}
+  .pz-t .pz-c:focus{border-color:var(--primary)}
+  .pz-t .pz-c.nm,.pz-t .pz-c.lb{border-color:transparent;background:none;padding:0 4px}
+  .pz-t .pz-c.nm{font-weight:600}
+  .pz-sh{flex-wrap:wrap;row-gap:6px}.pz-sh .pz-sn{flex:1 1 100%}
+  .pz-t td.kg{text-align:left;font-size:14px}
+  .pz-t .pz-grip{display:none}
+  .pz-t .pz-xm{width:44px;height:44px;font-size:20px}
+  .pz-t tr.add{display:block;padding:10px}.pz-t tr.add>td{display:block;padding:0}
+  .pz-t tr.add>td.n{display:none}
+  .pz-t .pz-q{font-size:16px;min-height:44px;width:100%}
+}
 
 /* ═══ v6: builder piu' quieto (01/10) ═══
    Un solo pulsante pieno per schermata, gli altri tenui; viste in un gruppo
@@ -1409,7 +1455,7 @@ html,body{background:#0A0909!important}
 
   <!-- RIGHT: program editor -->
   <div class="right-panel">
-    <button type="button" class="lp-tog" id="lp-tog" onclick="lpTog()" title="Nascondi o mostra l'elenco dei programmi" aria-label="Elenco dei programmi"><span>&#8249;</span></button>
+    <button type="button" class="lp-tog" id="lp-tog" onclick="lpTog()" title="Nascondi o mostra l'elenco dei programmi" aria-label="Elenco dei programmi"><span>&#8249;</span><em class="lp-tl">Programmi</em></button>
     <!-- DATABASE ESERCIZI PANEL -->
     <div id="rp-empty" class="rp-inner">
       <div class="empty-state" style="padding-top:80px;">
@@ -2085,10 +2131,14 @@ function pzCodaGarmin(){clearTimeout(gmCodaT);gmCodaT=setTimeout(async()=>{const
   for(const aid of Object.keys(p.assignedTo||{}).filter(k=>p.assignedTo[k])){
     if(pzHaGarmin[aid]===undefined){try{pzHaGarmin[aid]=!!(await get(ref(db,'garmin_data/'+aid+'/profilo/garmin'))).val();}catch(e){pzHaGarmin[aid]=false;}}
     if(pzHaGarmin[aid])gmCodaScrivi(aid,programs,athletes[aid]&&athletes[aid].ritmi);}},4000);}
-window.lpTog=function(f){const lp=document.getElementById('left-panel');if(!lp)return;const c=f!=null?f:!lp.classList.contains('chiuso');lp.classList.toggle('chiuso',c);document.getElementById('lp-tog')?.classList.toggle('chiuso',c);try{localStorage.setItem('rsc_lp_chiuso',c?'1':'');}catch(e){}};
+window.lpTog=function(f){
+  // telefono: elenco e programma non stanno insieme, il tasto passa dall'uno all'altro
+  if(matchMedia('(max-width:768px)').matches){if(f!=null)return;if(!currentProgId){document.getElementById('left-panel')?.scrollIntoView();return;}{const b=document.body.classList,su=!b.contains('mob-prog');b.toggle('mob-prog',su);b.toggle('mob-lista',!su);}scrollTo(0,0);return;}
+  const lp=document.getElementById('left-panel');if(!lp)return;const c=f!=null?f:!lp.classList.contains('chiuso');lp.classList.toggle('chiuso',c);document.getElementById('lp-tog')?.classList.toggle('chiuso',c);try{localStorage.setItem('rsc_lp_chiuso',c?'1':'');}catch(e){}};
 try{if(localStorage.getItem('rsc_lp_chiuso')==='1')setTimeout(()=>lpTog(true),0);}catch(e){}
 window.selectProg=function(id){
   currentProgId=id; currentWeekIdx=0;
+  document.body.classList.add('mob-prog');document.body.classList.remove('mob-lista');if(matchMedia('(max-width:768px)').matches)scrollTo(0,0);
   {const k=pzSettOggi(programs[id]);if(k!=null&&k>=0&&k<pzWkOrd(programs[id]).length)currentWeekIdx=k;}
   localStorage.setItem('rsc_last_prog',id);
   document.getElementById('rp-empty').style.display='none';
@@ -8128,6 +8178,8 @@ function pzKgHead(){
   return `<label class="pz-kgsel" title="Kg dai suoi massimali e sedute fatte">Atleta <select onchange="pzKgSel(this.value)">${ids.map(id=>`<option value="${id}"${id===pzKgAid?' selected':''}>${stEsc(athletes[id].name)}${pzRM[id]&&!conRM(id)?' (senza massimali)':''}</option>`).join('')}</select></label>`;
 }
 
+// etichette delle celle: sul telefono ogni riga diventa una scheda e le colonne non si vedono
+const PZ_LBL={sets:'Serie',reps:'Ripetizioni',pct:'% 1RM',rpe:'RPE',rest:'Recupero',cue:'Note'};
 // ── GRIGLIA della settimana ──────────────────────────────────────
 function pzGriglia(wid,w){
   const ss=pzSess(w);
@@ -8167,10 +8219,10 @@ function pzGriglia(wid,w){
     else if(exs.length)h+=pzGrSess(exs.map(([,e])=>e));
     h+=`<table class="pz-t${tipo==='corsa'&&!exs.length?' solo-add':''}"><thead><tr><th class="n" title="Numero, o lettera del superset: A1, A2">#</th><th>Esercizio</th><th>Serie</th><th>Ripetizioni</th><th>% 1RM</th><th class="kg">Kg</th><th>RPE</th><th>Recupero</th><th>Note</th>${conF?'<th class="fa" title="Serie fatte su pianificate, kg usati, RPE medio">Fatto</th>':''}<th></th></tr></thead><tbody>`;
     exs.forEach(([eid,e],i)=>{
-      const c=(f,t)=>`<td><input class="pz-c${t?' '+t:''}" value="${stEsc(e[f]==null?'':e[f])}" data-pz="ex" data-f="${f}" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" ${f==='name'?'list="pz-exlist"':''} aria-label="${f}"></td>`;
+      const c=(f,t)=>`<td data-l="${PZ_LBL[f]||''}"><input class="pz-c${t?' '+t:''}" value="${stEsc(e[f]==null?'':e[f])}" data-pz="ex" data-f="${f}" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" ${f==='name'?'list="pz-exlist"':''} aria-label="${f}"></td>`;
       const gr=e.complexGroup?' cx':'';
       const mi=window.RSMuscoli&&RSMuscoli.info(e.name),mg=mi&&mi.g&&!/^Prevenzione/.test(e.cue||'')?RSMuscoli.GR[mi.g]:null;
-      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}" data-w="${wid}" data-s="${sid}"><td class="n"><div class="pz-ncell"><span class="pz-grip" draggable="true" data-w="${wid}" data-s="${sid}" data-e="${eid}" title="Trascina per spostare (o Alt + frecce)" aria-hidden="true">&#8942;&#8942;</span><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"><span class="pz-mv"><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',-1)" aria-label="Sposta su"${i?'':' disabled'}>&#9650;</button><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',1)" aria-label="Sposta giu'"${i<exs.length-1?'':' disabled'}>&#9660;</button></span></div></td><td class="nmc"><div class="pz-nmw">${mg?`<span class="pz-gchip" style="--g:${mg.c}" title="${stEsc(mg.n)}${Object.keys(mi.s||{}).length?' (mezza serie: '+Object.keys(mi.s).map(k=>RSMuscoli.GR[k].n.toLowerCase()).join(', ')+')':''}${mi.att?' &#183; '+mi.att:''}">${stEsc(mg.n.slice(0,3))}</span>`:'<span class="pz-gchip vuoto"></span>'}<input class="pz-c nm" value="${stEsc(e.name==null?'':e.name)}" data-pz="ex" data-f="name" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" list="pz-exlist" aria-label="name"></div></td>${e.cardio?pzCardioCella(wid,sid,eid,e):`${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}`}${conF?`<td class="fa">${pzFatto(e,log)}</td>`:''}
+      h+=`<tr class="${/^Prevenzione/.test(e.cue||'')?'prev':''}${gr}" data-e="${eid}" data-w="${wid}" data-s="${sid}"><td class="n"><div class="pz-ncell"><span class="pz-grip" draggable="true" data-w="${wid}" data-s="${sid}" data-e="${eid}" title="Trascina per spostare (o Alt + frecce)" aria-hidden="true">&#8942;&#8942;</span><input class="pz-c lb" value="${stEsc(e.complexLabel||'')}" placeholder="${i+1}" data-pz="ex" data-f="complexLabel" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" aria-label="Superset"><span class="pz-mv"><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',-1)" aria-label="Sposta su"${i?'':' disabled'}>&#9650;</button><button type="button" tabindex="-1" onclick="pzSpostaEx('${wid}','${sid}','${eid}',1)" aria-label="Sposta giu'"${i<exs.length-1?'':' disabled'}>&#9660;</button></span></div></td><td class="nmc"><div class="pz-nmw">${mg?`<span class="pz-gchip" style="--g:${mg.c}" title="${stEsc(mg.n)}${Object.keys(mi.s||{}).length?' (mezza serie: '+Object.keys(mi.s).map(k=>RSMuscoli.GR[k].n.toLowerCase()).join(', ')+')':''}${mi.att?' &#183; '+mi.att:''}">${stEsc(mg.n.slice(0,3))}</span>`:'<span class="pz-gchip vuoto"></span>'}<input class="pz-c nm" value="${stEsc(e.name==null?'':e.name)}" data-pz="ex" data-f="name" data-w="${wid}" data-s="${sid}" data-e="${eid}" data-r="${i}" list="pz-exlist" aria-label="name"></div></td>${e.cardio?pzCardioCella(wid,sid,eid,e):`${c('sets','s')}${c('reps','s')}${c('pct','s')}<td class="kg" data-l="Kg">${pzKg(e)}</td>${c('rpe','s')}${c('rest','s')}${c('cue','nt')}`}${conF?`<td class="fa" data-l="Fatto">${pzFatto(e,log)}</td>`:''}
         <td class="x"><button type="button" class="pz-x pz-xm" onclick="pzExMenu(event,'${wid}','${sid}','${eid}')" aria-label="Azioni dell'esercizio" title="Sostituisci, progredisci, RPE, elimina" tabindex="-1">&#8943;</button></td></tr>`;
     });
     h+=`<tr class="add"><td class="n">+</td><td colspan="${conF?10:9}"><input class="pz-q" data-pz="quick" data-w="${wid}" data-s="${sid}" list="pz-exlist" placeholder="Esercizio o intenzione, poi Invio: A1 Squat 4x6 @75% r2', oppure schiena orizzontale, petto inclinato, gambe mono, accessori polpacci">${tipo!=='corsa'&&tipo!=='match'&&tipo!=='squadra'?`<button type="button" class="pz-b pz-cardb" onclick="pzCardioApri('${wid}','${sid}')" title="Tapis roulant, cyclette, ellittica, vogatore... con minuti, velocita', pendenza o zona. Anche dalla riga: Tapis 20' 10 km/h 5%">Cardio</button>`:''}${!exs.length&&tipo!=='corsa'&&tipo!=='match'&&tipo!=='squadra'?`<button type="button" class="pz-b pz-libb" onclick="pzComponiApri('${wid}','${sid}')" title="Scegli gruppi, stile e minuti: la seduta si riempie">Componi</button>`:''}<button type="button" class="pz-b pz-libb" onclick="pzLibApri('${wid}','${sid}')" title="Cerca con i filtri: gruppo, attrezzo, movimento">Libreria</button></td></tr></tbody></table></div>`;
