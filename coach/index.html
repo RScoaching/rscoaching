@@ -1625,7 +1625,20 @@ input,select,textarea{border-radius:10px}
 .db-post-az button{appearance:none;border:1px solid rgba(255,255,255,.12);background:transparent;color:var(--text);font:600 11.5px inherit;font-family:inherit;border-radius:999px;padding:5px 10px;cursor:pointer;transition:color .15s ease,border-color .15s ease}
 .db-post-az button:hover{color:var(--white);border-color:rgba(255,255,255,.25)}
 .db-post-az button.ok{color:#86EFAC;border-color:rgba(134,239,172,.4)}
-.db-post .sp7-img{max-width:220px}
+.db-post .sp7-img{max-width:min(100%,320px);border-radius:12px;margin-top:6px}
+/* reazioni e commento del coach */
+.rz7{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.rz7-r{display:flex;gap:6px;flex-wrap:wrap}
+.rz7-b{appearance:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:transparent;color:var(--text);font:600 12.5px inherit;font-family:inherit;cursor:pointer;transition:color .15s ease,border-color .15s ease,background .15s ease}
+.rz7-b svg{width:16px;height:16px}
+.rz7-b:active{transform:scale(.97)}
+.rz7-b.on{color:#FF8A57;border-color:rgba(255,106,46,.55);background:rgba(255,106,46,.12)}
+.rz7-f{display:flex;gap:6px}
+.rz7-f input{flex:1 1 auto;min-width:0;min-height:40px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:var(--white);font:500 13px inherit;font-family:inherit}
+.rz7-f input:focus{outline:2px solid #FF6A2E;outline-offset:1px}
+.rz7-f button{appearance:none;min-height:40px;padding:0 14px;border-radius:12px;border:0;background:#FF6A2E;color:#1A0B05;font:650 13px inherit;font-family:inherit;cursor:pointer}
+.rz7-c{font-size:12.5px;line-height:1.45;color:var(--white)}
+.rz7-c span{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
 
 /* leggibilita': niente testi sotto gli 11,5 px nelle pagine (etichette, intestazioni, piccole note, stili scritti nel codice) */
 .content th,.content small,.db-st,.dw-av,.db-tag,.ac-an,.tab-n,.anC-tp,.anC-gps,.sy-st,
@@ -2389,7 +2402,7 @@ function dbFeed(ids){
   const el=document.getElementById('dash-feed');if(!el)return;const lim=Date.now()-48*3600e3,ev=[];
   ids.forEach(id=>{const n=String(athletes[id].name||'').split(' ')[0];
     const logs=Object.values(sessionLogs[id]||{}).filter(l=>l&&l.ts>lim);
-    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,post:l.post&&(l.post.testo||l.post.foto)?l.post:null,b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),cambi:cambiRighe(l),go:`dbApri('${id}')`});});
+    logs.forEach(l=>{const c=l.corsa&&+l.corsa.km>0?String(l.corsa.km).replace('.',',')+' km':'';ev.push({ts:l.ts,t:'seduta',id,post:l.post&&(l.post.testo||l.post.foto)?l.post:null,reaz:l.coachReaz||null,comm:l.coachComm||null,sess:l.sessName||'',b:athletes[id].name,p:[l.sessName||'Seduta',l.duration?l.duration+' min':'',c,(+l.avgRpe||0)?'RPE '+l.avgRpe:''].filter(Boolean).join(' · '),cambi:cambiRighe(l),go:`dbApri('${id}')`});});
     Object.values(checkins[id]||{}).forEach(c=>{if(!c||!c.ts||c.ts<lim)return;const basso=(+c.fatica>=7)||(+c.sonno&&+c.sonno<=4)||(+c.doms>=4);ev.push({ts:c.ts,t:'ci'+(basso?' basso':''),id,b:athletes[id].name,p:'Check-in'+(basso?': '+[+c.fatica>=7?'fatica '+c.fatica:'',+c.sonno<=4&&+c.sonno?'sonno '+c.sonno:'',+c.doms>=4?'dolori '+c.doms:''].filter(Boolean).join(', '):' nella norma'),go:`dbApri('${id}')`});});
     Object.entries(videoData[id]||{}).forEach(([vid,v])=>{if(v&&v.ts>lim)ev.push({ts:v.ts,t:'video',id,b:athletes[id].name,p:'Video: '+(v.esercizio||'esecuzione')+(v.stato==='visto'?' (corretto)':''),go:`dbApri('${id}');setTimeout(()=>vrApri('${id}','${vid}'),300)`});});
     Object.values((chatData[id]||{}).messages||{}).forEach(m=>{if(m&&m.ts>lim&&m.from==='athlete'&&!m.video)ev.push({ts:m.ts,t:'msg',id,b:athletes[id].name,p:m.text||'',go:`dbChat('${id}')`});});
@@ -2404,8 +2417,50 @@ function dbFeed(ids){
    a richiesta, e due risposte pronte che vanno in chat. Il tocco sulla riga resta quello di prima. */
 function dbPostHtml(e){
   const st='event.stopPropagation()';
-  return `<div class="db-post">${e.post.testo?`<q>${dEsc(e.post.testo)}</q>`:''}<div class="db-post-az">${e.post.foto?`<button type="button" onclick="${st};spFoto('${e.id}',${+e.ts},this)">Vedi la foto</button>`:''}${['Ottimo lavoro','Bella seduta, continua cosi\''].map(t=>`<button type="button" onclick="${st};dbRisp('${e.id}',this)" data-t="${dEsc(t)}">${dEsc(t)}</button>`).join('')}<button type="button" onclick="${st};dbChat('${e.id}')">Scrivi</button></div></div>`;
+  return `<div class="db-post">${e.post.testo?`<q>${dEsc(e.post.testo)}</q>`:''}`
+    +(e.post.foto?(FOTO_GIA[e.id+'|'+(+e.ts)]?`<img class="sp7-img" src="${FOTO_GIA[e.id+'|'+(+e.ts)]}" alt="Foto della seduta">`:`<div class="db-post-az"><button type="button" onclick="${st};spFoto('${e.id}',${+e.ts},this)">Vedi la foto</button></div>`):'')
+    +reazHtml(e.id,e.ts,e.reaz,e.comm)+`</div>`;
 }
+/* REAZIONI E COMMENTO DEL COACH SULLA SEDUTA.
+   Da telefono il coach non programma: guarda le foto di fine allenamento e risponde. Un tocco mette una
+   reazione (un secondo tocco la toglie), una riga di commento va sulla seduta e anche in chat, cosi'
+   all'atleta arriva la notifica. Tutto resta scritto sulla seduta: session_logs/{atleta}/{seduta}/coachReaz e coachComm. */
+const REAZ=[
+  {k:'bella',l:'Bella',ic:'<path d="M12 20s-7-4.4-7-9.6A4 4 0 0 1 12 7.6a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20z"/>'},
+  {k:'forte',l:'Forte',ic:'<path d="M12 3c1 3 4 4.5 4 8.5A4 4 0 0 1 8 11.5c0-1.6.8-2.6 1.6-3.4.2 1.4 1 2.2 1.9 2.4C11 8 11.4 5.4 12 3z"/><path d="M9 17.5a3 3 0 0 0 6 0"/>'},
+  {k:'ottimo',l:'Ottimo',ic:'<path d="M7 11v8H4v-8h3z"/><path d="M7 11l4-7a2 2 0 0 1 2.6 2.4L13 10h5.2a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 17 20H7"/>'}
+];
+function reazHtml(aid,ts,reaz,comm){
+  const st='event.stopPropagation()',cur=reaz&&reaz.t;
+  return `<div class="rz7" data-aid="${dEsc(aid)}" data-ts="${+ts}">`
+    +`<div class="rz7-r">${REAZ.map(r=>`<button type="button" class="rz7-b${cur===r.k?' on':''}" aria-pressed="${cur===r.k?'true':'false'}" onclick="${st};rzMetti(this,'${r.k}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${r.ic}</svg>${r.l}</button>`).join('')}</div>`
+    +(comm&&comm.testo?`<div class="rz7-c"><span>Il tuo commento</span>${dEsc(comm.testo)}</div>`
+      :`<form class="rz7-f" onclick="${st}" onsubmit="event.preventDefault();rzCommenta(this)"><input type="text" maxlength="300" placeholder="Commenta la seduta..." aria-label="Commento alla seduta" enterkeyhint="send" value="${dEsc(RZ_BOZZA[aid+'|'+(+ts)]||'')}" oninput="rzBozza(this)"><button type="submit">Invia</button></form>`)
+    +`</div>`;
+}
+/* il feed si ridisegna a ogni cambio nel database (anche la reazione appena messa): la foto gia' aperta
+   e il commento a meta' non devono sparire */
+const FOTO_GIA={},RZ_BOZZA={};
+window.rzBozza=function(i){const box=i.closest('.rz7');if(box)RZ_BOZZA[box.dataset.aid+'|'+box.dataset.ts]=i.value;};
+function rzChiave(aid,ts){return Object.entries(sessionLogsRaw[aid]||{}).find(([,l])=>l&&+l.ts===+ts)?.[0]||null;}
+window.rzMetti=async function(b,t){
+  const box=b.closest('.rz7'),aid=box.dataset.aid,ts=+box.dataset.ts,k=rzChiave(aid,ts);if(!k)return;
+  const l=sessionLogsRaw[aid][k],gia=l.coachReaz&&l.coachReaz.t===t,val=gia?null:{t,ts:Date.now()};
+  box.querySelectorAll('.rz7-b').forEach(x=>{const on=!gia&&x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on?'true':'false');});
+  try{await update(ref(db,`session_logs/${aid}/${k}`),{coachReaz:val});l.coachReaz=val||undefined;}
+  catch(e){showToast('Reazione non salvata: controlla la connessione');}
+};
+window.rzCommenta=async function(f){
+  const box=f.closest('.rz7'),aid=box.dataset.aid,ts=+box.dataset.ts,k=rzChiave(aid,ts);if(!k)return;
+  const inp=f.querySelector('input'),testo=String(inp.value||'').trim();if(!testo)return;
+  const bt=f.querySelector('button');bt.disabled=true;
+  const l=sessionLogsRaw[aid][k],c={testo,ts:Date.now()};
+  try{await update(ref(db,`session_logs/${aid}/${k}`),{coachComm:c});l.coachComm=c;
+    await push(ref(db,`chat/${aid}/messages`),{ts:Date.now(),text:`Sulla seduta "${l.sessName||'di oggi'}": ${testo}`,from:'coach',fromName:'Raoul (Coach)',read:false});
+    delete RZ_BOZZA[aid+'|'+ts];
+    const d=document.createElement('div');d.className='rz7-c';d.innerHTML=`<span>Il tuo commento</span>${dEsc(testo)}`;f.replaceWith(d);}
+  catch(e){bt.disabled=false;showToast('Commento non inviato: controlla la connessione');}
+};
 window.dbRisp=async function(id,b){
   const text=b.dataset.t;if(!text)return;b.disabled=true;
   try{await push(ref(db,`chat/${id}/messages`),{ts:Date.now(),text,from:'coach',fromName:'Raoul (Coach)',read:false});b.textContent='Inviato';b.classList.add('ok');}
@@ -4446,7 +4501,7 @@ function renderDetSessList(aid,aSess){
         <div class="sess-day">${wlog?.sessName||ci?.day||(wlog?.type?SLBL[wlog.type]||wlog.type:null)||'-'}</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;">${pills}</div>
         ${note?`<div style="font-size:11px;color:var(--muted);margin-top:3px;">"${note.slice(0,80)}"</div>`:''}
-        ${wlog?.post&&(wlog.post.testo||wlog.post.foto)?`<div class="sp7">${wlog.post.testo?`<p>${athEsc(wlog.post.testo)}</p>`:''}${wlog.post.foto?`<button type="button" class="sp7-b" onclick="event.stopPropagation();spFoto('${aid}',${+wlog.ts},this)">Vedi la foto</button>`:''}</div>`:''}
+        ${wlog?.post&&(wlog.post.testo||wlog.post.foto)?`<div class="sp7">${wlog.post.testo?`<p>${athEsc(wlog.post.testo)}</p>`:''}${wlog.post.foto?(FOTO_GIA[aid+'|'+(+wlog.ts)]?`<img class="sp7-img" src="${FOTO_GIA[aid+'|'+(+wlog.ts)]}" alt="Foto della seduta">`:`<button type="button" class="sp7-b" onclick="event.stopPropagation();spFoto('${aid}',${+wlog.ts},this)">Vedi la foto</button>`):''}${reazHtml(aid,wlog.ts,wlog.coachReaz,wlog.coachComm)}</div>`:''}
         ${exHtml}
       </div>
     </div>`;
@@ -4460,7 +4515,7 @@ window.spFoto=async function(aid,ts,b){
   const k=Object.entries(sessionLogsRaw[aid]||{}).find(([,l])=>l&&+l.ts===+ts)?.[0];if(!k)return;
   b.disabled=true;b.textContent='Carico...';
   try{const v=(await get(ref(db,`session_posts/${aid}/${k}`))).val();
-    if(v&&v.img){const f=document.createElement('img');f.src=v.img;f.alt='Foto della seduta';f.className='sp7-img';b.replaceWith(f);}else b.textContent='Foto non trovata';}
+    if(v&&v.img){FOTO_GIA[aid+'|'+(+ts)]=v.img;const f=document.createElement('img');f.src=v.img;f.alt='Foto della seduta';f.className='sp7-img';b.replaceWith(f);}else b.textContent='Foto non trovata';}
   catch(e){b.disabled=false;b.textContent='Vedi la foto';}
 };
 // ── BENESSERE: andamento a 28 giorni e scarto dalla sua media

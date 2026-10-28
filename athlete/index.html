@@ -19,7 +19,7 @@
   var casa=new URL('./'+(id?'?id='+encodeURIComponent(id):''),location.href).href;
   var ic=document.querySelector('link[rel="apple-touch-icon"]');
   var m={name:'RS Coaching',short_name:'RS Coaching',start_url:casa,scope:new URL('./',location.href).href,display:'standalone',
-    background_color:'#110C0B',theme_color:'#110C0B',icons:ic?[{src:ic.href,sizes:'180x180',type:'image/jpeg',purpose:'any'}]:[]};
+    background_color:'#110C0B',theme_color:'#110C0B',icons:[180,192,512].map(function(n){return {src:new URL('../coach/prev/rs-app-logo-'+n+'.jpg',location.href).href,sizes:n+'x'+n,purpose:'any'};})};
   var l=document.createElement('link');l.rel='manifest';
   l.href='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(m));
   document.head.appendChild(l);}catch(e){}})();
@@ -1736,6 +1736,12 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
 /* seduta in corso da riprendere */
 .live7{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:12px 14px;border-radius:16px;background:rgba(255,106,46,.10);border:1px solid var(--border2)}
 .live7[hidden]{display:none}
+/* risposta del coach sulla seduta fatta */
+.pf-coach{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;color:var(--violet2);background:rgba(139,92,246,.12);vertical-align:2px}
+.f7-coach{margin:10px 0 0;padding:10px 12px;border-radius:12px;background:rgba(139,92,246,.10);border:1px solid rgba(167,139,250,.28);display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.f7-coach-h{font-size:11.5px;font-weight:600;color:var(--violet2)}
+.f7-coach b{font-size:13.5px;font-weight:650;color:var(--white)}
+.f7-coach p{flex:1 0 100%;margin:0;font-size:13px;line-height:1.45;color:var(--text)}
 .live7-t{display:flex;flex-direction:column;gap:2px;min-width:0}
 .live7-t b{font-size:14px;font-weight:650;color:var(--white)}
 .live7-t span{font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2460,6 +2466,10 @@ const _ri=n=>window.rsIcon?window.rsIcon(n):'';
 const TICONS={forza:_ri('pesi'),sprint:_ri('sprint'),plyo:_ri('sprint'),rec:_ri('recupero'),priming:_ri('sprint'),squadra:_ri('sport'),riposo:_ri('recupero'),pesi:_ri('pesi'),campo:_ri('sport'),conditioning:_ri('conditioning'),match:_ri('sport'),test:_ri('test'),z2:_ri('corsa'),lungo:_ri('corsa'),tempo:_ri('corsa'),interval:_ri('corsa'),corsa:_ri('corsa'),recupero:_ri('recupero')};
 const SESS_BGS={pesi:'rgba(255,106,46,.10)',campo:'rgba(34,197,94,.1)',sprint:'rgba(239,68,68,.1)',conditioning:'rgba(255,106,46,.1)',rec:'rgba(34,197,94,.08)',forza:'rgba(255,106,46,.10)',squadra:'rgba(255,106,46,.1)',match:'rgba(239,68,68,.10)',test:'rgba(251,191,36,.10)',z2:'rgba(34,197,94,.10)',lungo:'rgba(99,102,241,.10)',tempo:'rgba(245,158,11,.10)',interval:'rgba(239,68,68,.10)'};
 
+/* senza codice nell'indirizzo (app aperta da un'icona creata altrove): si torna all'ultimo atleta di questo telefono */
+if(!aid){let ult=null;try{ult=localStorage.getItem('rs_ultimo_aid');}catch(e){}
+  if(ult){location.replace('./?id='+encodeURIComponent(ult));}}
+else{try{localStorage.setItem('rs_ultimo_aid',aid);}catch(e){}}
 if(!aid){
   document.getElementById('loading').style.display='none';
   document.getElementById('error-screen').style.display='flex';
@@ -2982,7 +2992,7 @@ function renderWorkoutLogs(logs){
     const apri=trk||` role="button" tabindex="0" style="cursor:pointer" onclick="apriLog(${l.ts})"`;
     return `<div class="wlog-card"${apri}>
       <div class="wlog-date-box"><div class="wlog-d">${String(d.getDate()).padStart(2,'0')}</div><div class="wlog-m">${GGc[d.getDay()]}</div></div>
-      <div class="wlog-body"><div class="wlog-name">${escH(l.sessName||'Seduta')}${l.post&&l.post.foto?`<span class="pf-foto" aria-label="con foto">${_ri('foto')}</span>`:''}</div><div class="wl7-m">${bits.join(' · ')||'&nbsp;'}</div>${l.post&&l.post.testo?`<div class="wl7-post">${escH(String(l.post.testo).slice(0,90))}</div>`:''}</div>
+      <div class="wlog-body"><div class="wlog-name">${escH(l.sessName||'Seduta')}${l.post&&l.post.foto?`<span class="pf-foto" aria-label="con foto">${_ri('foto')}</span>`:''}${l.coachReaz||l.coachComm?'<span class="pf-coach">risposta del coach</span>':''}</div><div class="wl7-m">${bits.join(' · ')||'&nbsp;'}</div>${l.post&&l.post.testo?`<div class="wl7-post">${escH(String(l.post.testo).slice(0,90))}</div>`:''}</div>
       <div class="wl7-rpe${rpe>=9?' hi':rpe>=7?' mid':rpe?' lo':''}">${rpe?`<b>${nfIt(rpe,1)}</b><i>RPE</i>`:'<i>senza RPE</i>'}</div>
     </div>`;
   }).join('');
@@ -3015,7 +3025,7 @@ function renderWorkoutStorico(logs){
     // una corsa con la traccia si apre sull'analisi (grafici, split, mappa)
     const togli=WS.sel&&l._k&&!l.gm,trk=WS.sel?(togli?`wsScegli('${l._k}')`:''):`apriLog(${l.ts})`;
     h+=`<div class="pf-row${trk?' pf-clic':''}${togli?' ws-s'+(WS.scelte.has(l._k)?' on':''):''}${WS.sel&&!togli?' ws-no':''}"${trk?` role="button" tabindex="0" onclick="${trk}" onkeydown="if(event.key==='Enter')this.click()"`:''}>${togli?`<span class="ws-chk" aria-hidden="true">${_ri('ok')}</span>`:''}<div class="pf-d"><b>${String(d.getDate()).padStart(2,'0')}</b><i>${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}</i></div>
-      <div class="pf-b"><div class="pf-n">${escH(l.sessName||'Seduta')}${l.post&&l.post.foto?`<span class="pf-foto" aria-label="con foto">${_ri('foto')}</span>`:''}</div><div class="pf-m">${num.join(' · ')||'&nbsp;'}${pr.length?' <span class="pf-pr">Record: '+pr.join(', ')+'</span>':''}</div>${l.post&&l.post.testo?`<div class="pf-nt">${escH(String(l.post.testo).slice(0,140))}</div>`:l.note?`<div class="pf-nt">${String(l.note).slice(0,120).replace(/</g,'&lt;')}</div>`:''}</div>
+      <div class="pf-b"><div class="pf-n">${escH(l.sessName||'Seduta')}${l.post&&l.post.foto?`<span class="pf-foto" aria-label="con foto">${_ri('foto')}</span>`:''}${l.coachReaz||l.coachComm?'<span class="pf-coach">risposta del coach</span>':''}</div><div class="pf-m">${num.join(' · ')||'&nbsp;'}${pr.length?' <span class="pf-pr">Record: '+pr.join(', ')+'</span>':''}</div>${l.post&&l.post.testo?`<div class="pf-nt">${escH(String(l.post.testo).slice(0,140))}</div>`:l.note?`<div class="pf-nt">${String(l.note).slice(0,120).replace(/</g,'&lt;')}</div>`:''}</div>
       <div class="pf-rpe${rpeLog(l)>=9?' hi':''}">${rpeLog(l)?'<b>'+nfIt(rpeLog(l),1)+'</b><i>RPE</i>':''}</div></div>`;
   });
   if(mese)h+='</div>';
@@ -4111,6 +4121,13 @@ function orolBlocco(l,C){
   const zt=(l.gmZt||[]).slice(0,5).map(x=>+x||0),tot=zt.reduce((t,x)=>t+x,0);
   return `<div class="f7-or"><div class="f7-or-h">${_ri('orologio')||''}<span>Dall'orologio</span></div><div class="f7-or-n">${n.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>${tot?`<div class="f7-or-z" role="img" aria-label="Tempo nelle zone di frequenza cardiaca">${zt.map((x,k)=>x?`<u style="flex:${x};background:${ZC7[k]}" title="Z${k+1}: ${Math.round(x/60)}'"></u>`:'').join('')}</div><div class="f7-or-zl">${zt.map((x,k)=>x>=60?`<span><i style="background:${ZC7[k]}"></i>Z${k+1} ${Math.round(x/60)}'</span>`:'').join('')}</div>`:''}</div>`;
 }
+/* la risposta del coach alla seduta: reazione e commento messi dalla dashboard */
+const RZ_NOMI={bella:'Bella',forte:'Forte',ottimo:'Ottimo'};
+function coachRisp(l){
+  const r=l&&l.coachReaz&&RZ_NOMI[l.coachReaz.t],c=l&&l.coachComm&&l.coachComm.testo;
+  if(!r&&!c)return '';
+  return `<div class="f7-coach"><span class="f7-coach-h">Il coach</span>${r?`<b>${r}</b>`:''}${c?`<p>${escH(c)}</p>`:''}</div>`;
+}
 function sedutaFattaHtml(l,m){
   const d=new Date(l.ts),k=isoLoc(l.ts);
   const quando=k===isoLoc(new Date())?'oggi alle '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):GG_LUNGHI[(d.getDay()+6)%7]+' '+d.getDate();
@@ -4124,6 +4141,7 @@ function sedutaFattaHtml(l,m){
     <div class="sess-head"><div class="sess-type-tag">${m.icon} ${escH(m.label)}</div><div class="sess-title">${escH(m.title)}</div>${m.progName?`<div class="sess-prog-label">${escH(m.progName)}</div>`:''}</div>
     <div class="f7-ok">${_ri('ok')}<span>Fatta ${quando}</span></div>
     ${num.length?`<div class="f7-num">${num.map(([v,t])=>`<div><b>${v}</b><i>${t}</i></div>`).join('')}</div>`:''}
+    ${coachRisp(l)}
     ${m.dettaglio&&(l.sostituzioni||[]).length?`<div class="f7-sw">${l.sostituzioni.map(x=>`<span>${escH(x.da)} &#8594; <b>${escH(x.a)}</b></span>`).join('')}</div>`:''}
     ${orolBlocco(l,C)}
     ${(l.cardio||[]).length?`<div class="f7-cd">${l.cardio.map(c=>`<div><b>${escH(c.macchina||c.name)}</b><span>${[c.min?nfIt(+c.min)+"'":null,c.km?nfIt(+c.km,1)+' km':null,c.fc?'FC '+c.fc:null].filter(Boolean).join(' · ')}</span></div>`).join('')}</div>`:''}

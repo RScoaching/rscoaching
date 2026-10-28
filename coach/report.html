@@ -187,6 +187,38 @@ a{ color:inherit; text-decoration:none; }
 
 /* ---------- section blocks ---------- */
 .rsec{ margin-top:34px; }
+/* report partita */
+#fg-match select{ width:270px; max-width:100%; }
+.pt-kpi{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.pt-k{ background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:12px 14px; display:flex; flex-direction:column; gap:3px; }
+.pt-k span{ font-size:11.5px; color:var(--muted); }
+.pt-k b{ font-size:22px; font-weight:650; color:var(--ink); line-height:1.15; }
+.pt-k b small{ font-size:11px; color:var(--muted); font-weight:500; margin-left:3px; }
+.pt-k em, .pt-k i{ font-style:normal; font-size:11.5px; color:var(--muted); }
+.pt-k em.up, .pt-doc .up{ color:var(--green); } .pt-k em.dn, .pt-doc .dn{ color:var(--red2, #FB7185); }
+.pt-pc{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.pt-pc > div{ background:var(--surface2); border:1px solid var(--border2); border-radius:var(--r); padding:12px 16px; }
+.pt-pc h4{ margin:0 0 6px; font-size:13px; font-weight:650; color:var(--ink); }
+.pt-pro h4{ color:var(--green); } .pt-contro h4{ color:var(--red2, #FB7185); }
+.pt-pc ul{ margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px; font-size:12.5px; line-height:1.45; color:var(--text); }
+.pt-pc li b{ color:var(--ink); font-weight:600; }
+.pt-pc p, .pt-vuoto{ margin:0; font-size:12.5px; color:var(--muted); }
+.pt-r{ font-size:11px; color:var(--muted); }
+table.dt.pt-t tbody td{ padding:8px 10px; }
+table.dt.pt-t td small{ display:block; font-size:10.5px; color:var(--muted); font-weight:400; }
+table.dt.pt-t tr.pt-io td{ background-color:var(--ember-bg, rgba(255,106,46,.12)) !important; font-weight:700; }
+table.dt.pt-t tr.pt-med td{ color:var(--muted); font-style:italic; }
+table.dt.pt-t tr.pt-poco td{ opacity:.6; }
+@media (max-width:760px){ .pt-pc{ grid-template-columns:1fr; } .pt-doc .tbl-wrap{ overflow-x:auto; } }
+#rprint .pt-kpi{ grid-template-columns:repeat(3, 1fr); gap:6px; }
+#rprint .pt-k{ background:#fff; border:1px solid #d9d2e6; padding:6px 8px; }
+#rprint .pt-k b{ font-size:16px; color:#141414; } #rprint .pt-k span, #rprint .pt-k em, #rprint .pt-k i{ color:#4a4450; font-size:9.5px; }
+#rprint .pt-pc > div{ background:#fff; border:1px solid #d9d2e6; padding:8px 10px; }
+#rprint .pt-pc ul{ font-size:10px; color:#222; gap:3px; } #rprint .pt-pc li b{ color:#141414; }
+#rprint .pt-pc h4{ font-size:11px; }
+#rprint .pt-doc .up, #rprint .pt-pro h4{ color:#1d7a3a !important; } #rprint .pt-doc .dn, #rprint .pt-contro h4{ color:#b4232f !important; }
+#rprint table.dt.pt-t tbody td, #rprint table.dt.pt-t thead th{ padding:3px 5px !important; font-size:9.5px; }
+#rprint table.dt.pt-t tr.pt-io td{ background:#f1e6fb !important; }
 .rsec:first-child{ margin-top:0; }
 .rsec-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:14px;
   padding-bottom:9px; border-bottom:1px solid var(--border2); }
@@ -1627,6 +1659,10 @@ html[data-tema="chiaro"] .sb-mob-overlay{ background:rgba(255,255,255,0.94); }
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>
               Esercitazioni
             </button>
+            <button type="button" role="tab" id="mode-partita" aria-selected="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 5h-5L8 10l4-3z"/></svg>
+              Partita
+            </button>
           </div>
 
           <span class="spacer"></span>
@@ -1667,6 +1703,10 @@ html[data-tema="chiaro"] .sb-mob-overlay{ background:rgba(255,255,255,0.94); }
           <div class="fg w-month no-eserc" id="fg-month">
             <label for="sel-month" id="lab-month">Periodo</label>
             <select id="sel-month"></select>
+          </div>
+          <div class="fg w-month only-partita is-hidden" id="fg-match">
+            <label for="sel-match">Partita</label>
+            <select id="sel-match"></select>
           </div>
           <div class="fg w-month only-giorno is-hidden" id="fg-session">
             <label for="sel-session">Seduta</label>
@@ -4451,10 +4491,221 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return true;
   }
 
+  /* ---------- REPORT PARTITA ----------------------------------------------
+     Una partita sola, in due fogli al massimo. Il primo e' la squadra: i numeri
+     chiave della gara contro la media delle partite giocate prima e contro il
+     modello partita, i pro e i contro scritti in parole (solo dove lo scarto
+     supera il 5%, sotto e' rumore), il posto della gara fra tutte quelle della
+     stagione e la tabella delle partite con questa evidenziata. Il secondo sono
+     le atlete: chi e' andata sopra o sotto il suo solito, a parita' di minuti.
+     Il confronto giusto per un'atleta e' con se stessa: un terzino e un
+     difensore centrale non corrono la stessa partita, quindi la classifica si
+     fa sullo scarto dalla sua media nelle altre gare, con i volumi riportati a
+     90 minuti. Chi non ha altre partite si confronta con le compagne in campo
+     quel giorno. In classifica solo chi ha giocato almeno 45 minuti: con un
+     quarto d'ora i numeri a 90 minuti si gonfiano e non dicono niente. */
+  const PT_MIN = 45;
+  const PT_MET = [
+    { re:/^Dist tot/i,      n:'Distanza totale',          s:'Distanza',  vol:true  },
+    { re:/^m\/min/i,        n:'Ritmo',                    s:'m/min',     vol:false },
+    { re:/^>\s*23/i,        n:'Oltre 23 km/h',            s:'>23 km/h',  vol:true  },
+    { re:/^20\s*-\s*23/i,   n:'Tra 20 e 23 km/h',         s:'20-23',     vol:true  },
+    { re:/^D\s*>\s*20/i,    n:'Distanza ad alta potenza', s:'D>20 W/kg', vol:true  },
+    { re:/^Az\.?\s*int/i,   n:'Azioni intense al minuto', s:'Az.int/min',vol:false },
+    { re:/^ACC/i,           n:'Accelerazioni',            s:'ACC',       vol:true  },
+    { re:/^DEC/i,           n:'Decelerazioni',            s:'DEC',       vol:true  },
+    { re:/^Vmax/i,          n:'Velocita\' massima',       s:'Vmax',      vol:false }
+  ].map(function(o){ return Object.assign(o, { i: idxDi(o.re) }); }).filter(function(o){ return o.i >= 0; });
+  let ptScelta = null;
+
+  function ptData(d){ const m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(d||'')); return m ? new Date(+m[3], +m[2]-1, +m[1]) : null; }
+  function ptPartite(){
+    return TEAM_MATCHES.filter(function(m){ return m && m.sigla && Array.isArray(m.v) && ptData(m.data); })
+      .map(function(m){ return Object.assign({}, m, { t: ptData(m.data).getTime() }); })
+      .sort(function(a, b){ return a.t - b.t; });
+  }
+  function ptChiave(m){ return m.sigla+'|'+m.data; }
+  function ptEtichetta(m){
+    const d = ptData(m.data), casa = /^FIO-/i.test(m.sigla);
+    return m.sigla+' · '+WD_SIGLE[d.getDay()].toLowerCase()+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+(casa?' · casa':' · trasferta');
+  }
+  // i numeri di un'atleta in quella partita: riga "match" con la stessa sigla, nel mese della gara se c'e'
+  function ptAtleta(nome, m){
+    const p = PLAYERS[nome]; if(!p || !Array.isArray(p.months)) return null;
+    const mese = itMonth(m.data);
+    let trovata = null;
+    p.months.forEach(function(mo){ (mo.rows||[]).forEach(function(r){
+      if(r.type !== 'match' || String(r.label||'').trim() !== m.sigla || !Array.isArray(r.v)) return;
+      if(!trovata || mo.key === mese) trovata = r.v;
+    }); });
+    return trovata;
+  }
+  function ptMedia(arr){ const a = arr.filter(function(x){ return x != null && !isNaN(x); }); return a.length ? a.reduce(function(t, x){ return t + x; }, 0) / a.length : null; }
+  function ptPct(a, b){ return (a != null && b) ? (a / b - 1) * 100 : null; }
+  function ptPctTxt(p){ if(p == null) return '-'; const r = Math.round(p); return (r > 0 ? '+' : '') + r + '%'; }
+  function ptCls(p, soglia){ soglia = soglia || 5; return p == null ? '' : (p >= soglia ? 'up' : (p <= -soglia ? 'dn' : 'eq')); }
+  function ptVal(v, i){ return fmtVal(v, MU[i]) || '-'; }
+  // volume a 90 minuti, intensita' com'e'
+  function pt90(v, o){ const min = +v[IDX_MIN]; const x = v[o.i]; if(x == null || isNaN(x)) return null; return o.vol ? (min > 0 ? x * 90 / min : null) : x; }
+
+  function ptAnalisi(chiave){
+    const L = ptPartite();
+    if(!L.length) return null;
+    const pos = Math.max(0, L.findIndex(function(m){ return ptChiave(m) === chiave; }));
+    const m = L[chiave ? pos : L.length - 1], k = L.indexOf(m);
+    const prima = L.slice(0, k), altre = L.filter(function(x){ return x !== m; });
+    const rif = prima.length ? prima : altre, rifNome = prima.length ? 'le partite prima' : 'le altre partite', rifSu = prima.length ? 'sulle partite prima' : 'sulle altre partite';
+    const metr = PT_MET.map(function(o){
+      const v = m.v[o.i], med = ptMedia(rif.map(function(x){ return x.v[o.i]; })), mod = MODEL[o.i] != null ? MODEL[o.i] : null;
+      const ord = L.map(function(x){ return x.v[o.i]; }).filter(function(x){ return x != null; }).sort(function(a, b){ return b - a; });
+      return { o:o, v:v, med:med, dMed:ptPct(v, med), mod:mod, dMod:ptPct(v, mod), rank: ord.indexOf(v) + 1, n: ord.length };
+    });
+    const pro = metr.filter(function(x){ const d = x.dMed != null ? x.dMed : x.dMod; return d != null && d >= 5; })
+      .sort(function(a, b){ return (b.dMed != null ? b.dMed : b.dMod) - (a.dMed != null ? a.dMed : a.dMod); });
+    const contro = metr.filter(function(x){ const d = x.dMed != null ? x.dMed : x.dMod; return d != null && d <= -5; })
+      .sort(function(a, b){ return (a.dMed != null ? a.dMed : a.dMod) - (b.dMed != null ? b.dMed : b.dMod); });
+    // atlete in campo
+    const atl = [];
+    Object.keys(PLAYERS).forEach(function(nome){
+      const v = ptAtleta(nome, m); if(!v || !(+v[IDX_MIN] > 0)) return;
+      const sue = altre.map(function(x){ return ptAtleta(nome, x); }).filter(function(w){ return w && +w[IDX_MIN] >= PT_MIN; });
+      atl.push({ nome:nome, ruolo: roleOf(nome) || '', v:v, min:+v[IDX_MIN], sue:sue });
+    });
+    const piene = atl.filter(function(a){ return a.min >= PT_MIN; });
+    const squadra90 = {};
+    PT_MET.forEach(function(o){ squadra90[o.i] = ptMedia(piene.map(function(a){ return pt90(a.v, o); })); });
+    atl.forEach(function(a){
+      const dS = [], dT = [], perVoce = [];
+      PT_MET.forEach(function(o){
+        const x = pt90(a.v, o); if(x == null) return;
+        const mia = ptMedia(a.sue.map(function(w){ return pt90(w, o); }));
+        const p1 = ptPct(x, mia), p2 = ptPct(x, squadra90[o.i]);
+        // nel punteggio ogni voce pesa al massimo +/-60%: su numeri piccoli (3 accelerazioni contro 1) lo scarto esplode
+        if(p1 != null){ dS.push(Math.max(-60, Math.min(60, p1))); perVoce.push({ o:o, p:p1 }); }
+        if(p2 != null) dT.push(Math.max(-60, Math.min(60, p2)));
+      });
+      a.vsSua = a.sue.length ? ptMedia(dS) : null;
+      a.vsSquadra = ptMedia(dT);
+      a.punteggio = a.vsSua != null ? a.vsSua : a.vsSquadra;
+      a.base = a.vsSua != null ? 'sua' : 'squadra';
+      perVoce.sort(function(x, y){ return y.p - x.p; });
+      a.forte = perVoce[0] || null; a.debole = perVoce.length ? perVoce[perVoce.length - 1] : null;
+    });
+    const classifica = atl.filter(function(a){ return a.min >= PT_MIN && a.punteggio != null; }).sort(function(a, b){ return b.punteggio - a.punteggio; });
+    return { L:L, m:m, k:k, rif:rif, rifNome:rifNome, rifSu:rifSu, metr:metr, pro:pro.slice(0, 4), contro:contro.slice(0, 4), atl:atl, classifica:classifica,
+      migliori: classifica.slice(0, 3), peggiori: classifica.length > 3 ? classifica.slice(-3).reverse() : [] };
+  }
+
+  function ptFrase(x, rifSu){
+    const d = x.dMed != null ? x.dMed : x.dMod;
+    return '<li><b>'+esc(x.o.n)+'</b> '+esc(ptVal(x.v, x.o.i))+' '+esc(MU[x.o.i]||'')+
+      ': <span class="'+ptCls(d)+'">'+ptPctTxt(d)+'</span> '+(x.dMed != null ? rifSu : 'sul modello partita')+
+      (x.dMed != null && x.dMod != null ? ', '+ptPctTxt(x.dMod)+' sul modello' : '')+
+      (x.rank && x.n > 1 ? ' &#183; '+x.rank+'&#170; su '+x.n : '')+'</li>';
+  }
+  function ptPagina1(A){
+    const m = A.m;
+    const kpi = '<div class="pt-kpi">'+A.metr.slice(0, 6).map(function(x){
+      return '<div class="pt-k"><span>'+esc(x.o.n)+'</span><b class="tnum">'+esc(ptVal(x.v, x.o.i))+'<small>'+esc(MU[x.o.i]||'')+'</small></b>'+
+        '<em class="'+ptCls(x.dMed)+'">'+(x.dMed != null ? ptPctTxt(x.dMed)+' '+esc(A.rifSu) : 'prima partita')+'</em>'+
+        (x.dMod != null ? '<i>'+ptPctTxt(x.dMod)+' sul modello</i>' : '')+'</div>';
+    }).join('')+'</div>';
+    const pc = '<div class="pt-pc">'+
+      '<div class="pt-pro"><h4>Pro</h4>'+(A.pro.length ? '<ul>'+A.pro.map(function(x){ return ptFrase(x, A.rifSu); }).join('')+'</ul>' : '<p>Nessuna voce sopra il 5% '+esc(A.rifSu)+'.</p>')+'</div>'+
+      '<div class="pt-contro"><h4>Contro</h4>'+(A.contro.length ? '<ul>'+A.contro.map(function(x){ return ptFrase(x, A.rifSu); }).join('')+'</ul>' : '<p>Nessuna voce sotto il 5% '+esc(A.rifSu)+'.</p>')+'</div></div>';
+    const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','Az.int','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    const righe = A.L.map(function(x){
+      const io = x === m;
+      return '<tr'+(io ? ' class="pt-io"' : '')+'><td>'+esc(ptEtichetta(x))+'</td><td>'+esc(ptVal(x.v[IDX_MIN], IDX_MIN))+'</td>'+
+        cols.map(function(o){ return '<td>'+esc(ptVal(x.v[o.i], o.i))+'</td>'; }).join('')+'</tr>';
+    }).join('');
+    const medie = '<tr class="pt-med"><td>Media stagione</td><td>'+esc(ptVal(ptMedia(A.L.map(function(x){ return x.v[IDX_MIN]; })), IDX_MIN))+'</td>'+
+      cols.map(function(o){ return '<td>'+esc(ptVal(ptMedia(A.L.map(function(x){ return x.v[o.i]; })), o.i))+'</td>'; }).join('')+'</tr>'+
+      (MODEL.length ? '<tr class="pt-med"><td>Modello partita</td><td>'+esc(ptVal(MODEL[IDX_MIN], IDX_MIN))+'</td>'+cols.map(function(o){ return '<td>'+esc(MODEL[o.i] != null ? ptVal(MODEL[o.i], o.i) : '-')+'</td>'; }).join('')+'</tr>' : '');
+    const tab = '<div class="tbl-wrap"><table class="dt pt-t"><thead><tr><th>Partita</th><th>Min</th>'+
+      cols.map(function(o){ return '<th>'+esc(MS[o.i]||'')+'</th>'; }).join('')+'</tr></thead><tbody>'+righe+medie+'</tbody></table></div>';
+    return [
+      { t:'I numeri della partita', n:'media a testa delle atlete in campo, confronto con '+A.rifNome+' ('+A.rif.length+') e con il modello partita', c:kpi },
+      { t:'Pro e contro', n:'solo le voci che si scostano piu\' del 5%', c:pc },
+      { t:'Confronto con le altre partite', n:A.L.length+' partite della stagione, questa evidenziata', c:tab }
+    ];
+  }
+  function ptPagina2(A){
+    function scheda(a, buona){
+      const v = buona ? a.forte : a.debole;
+      return '<li><b>'+esc(disp(a.nome))+'</b>'+(a.ruolo ? ' <span class="pt-r">'+esc(a.ruolo)+'</span>' : '')+
+        ' <span class="'+ptCls(a.punteggio, 3)+'">'+ptPctTxt(a.punteggio)+'</span> '+(a.base === 'sua' ? 'sul suo solito' : 'sulle compagne in campo')+
+        ' &#183; '+esc(ptVal(a.min, IDX_MIN))+' min'+
+        (v ? ' &#183; '+(buona ? 'meglio in ' : 'piu\' indietro in ')+esc(v.o.n.toLowerCase())+' ('+ptPctTxt(v.p)+')' : '')+'</li>';
+    }
+    const top = A.classifica.length
+      ? '<div class="pt-pc"><div class="pt-pro"><h4>Migliori</h4><ul>'+A.migliori.map(function(a){ return scheda(a, true); }).join('')+'</ul></div>'+
+        '<div class="pt-contro"><h4>Peggiori</h4>'+(A.peggiori.length ? '<ul>'+A.peggiori.map(function(a){ return scheda(a, false); }).join('')+'</ul>' : '<p>Troppo poche atlete con almeno '+PT_MIN+' minuti per una classifica.</p>')+'</div></div>'
+      : '<p class="pt-vuoto">Nessuna atleta con almeno '+PT_MIN+' minuti e dati di confronto.</p>';
+    const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','ACC','DEC','Vmax'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    const ord = A.atl.slice().sort(function(a, b){
+      const x = a.min >= PT_MIN && a.punteggio != null, y = b.min >= PT_MIN && b.punteggio != null;
+      if(x !== y) return x ? -1 : 1;
+      return x ? b.punteggio - a.punteggio : b.min - a.min;
+    });
+    const righe = ord.map(function(a){
+      const fuori = !(a.min >= PT_MIN && a.punteggio != null);
+      return '<tr'+(fuori ? ' class="pt-poco"' : '')+'><td>'+esc(disp(a.nome))+(a.ruolo ? '<small>'+esc(a.ruolo)+'</small>' : '')+'</td><td>'+esc(ptVal(a.min, IDX_MIN))+'</td>'+
+        cols.map(function(o){ return '<td>'+esc(ptVal(a.v[o.i], o.i))+'</td>'; }).join('')+
+        '<td class="'+ptCls(a.vsSua, 3)+'">'+(a.vsSua != null ? ptPctTxt(a.vsSua) : '-')+'</td>'+
+        '<td class="'+ptCls(a.vsSquadra, 3)+'">'+(a.vsSquadra != null ? ptPctTxt(a.vsSquadra) : '-')+'</td></tr>';
+    }).join('');
+    const tab = '<div class="tbl-wrap"><table class="dt pt-t"><thead><tr><th>Atleta</th><th>Min</th>'+
+      cols.map(function(o){ return '<th>'+esc(MS[o.i]||'')+'</th>'; }).join('')+'<th>vs sua media</th><th>vs squadra</th></tr></thead><tbody>'+righe+'</tbody></table></div>';
+    return [
+      { t:'Migliori e peggiori', n:'scarto medio sulle voci di corsa, volumi riportati a 90 minuti, almeno '+PT_MIN+' minuti giocati', c:top },
+      { t:'Tutte le atlete in campo', n:'numeri della partita; in grigio chi ha giocato meno di '+PT_MIN+' minuti', c:tab }
+    ];
+  }
+  function ptTesta(A, schermo){
+    const crestSrc = (window.SNAP && window.SNAP.logo) || './fiorentina.png';
+    const d = ptData(A.m.data), gg = d.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const sotto = gg+' &#183; '+(/^FIO-/i.test(A.m.sigla) ? 'in casa' : 'in trasferta')+' &#183; '+A.atl.length+' atlete con il GPS';
+    if(schermo) return '<div class="rdoc-head"><img class="rh-mark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
+      '<div class="rh-txt"><h2>Report partita · '+esc(A.m.sigla)+'</h2><div class="rh-sub"><b>'+sotto+'</b> &#183; Fiorentina Primavera U19W</div></div>'+
+      '<div class="rh-meta"><div>Stagione <b>'+esc(SEASON)+'</b></div><div>'+(A.k + 1)+'&#170; partita su '+A.L.length+'</div></div></div>';
+    return '<div class="ph"><img class="pmark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
+      '<div><h2>Report partita · '+esc(A.m.sigla)+'</h2><div class="psub"><b>'+sotto+'</b></div></div><div class="pno"></div></div>';
+  }
+  function renderPartita(){
+    const host = document.getElementById('rdoc');
+    host.classList.remove('has-fog');
+    const A = ptAnalisi(ptScelta);
+    if(!A){ host.innerHTML = '<div class="rbody"><p class="pt-vuoto">Nessuna partita con i dati GPS in questa stagione.</p></div>'; return; }
+    const sez = ptPagina1(A).concat(ptPagina2(A)).map(function(s){
+      return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.t)+'</h3><span class="rsec-n">'+esc(s.n)+'</span></div>'+s.c+'</div>';
+    }).join('');
+    host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+sez+'</div>';
+  }
+  function buildPrintPartita(){
+    const host = printHost();
+    const A = ptAnalisi(ptScelta);
+    if(!A){ host.innerHTML = ''; return false; }
+    const genTxt = S.generato ? ('agg. '+String(S.generato).slice(0,10)) : 'anteprima';
+    const piede = function(n){ return '<div class="pfoot"><span>Volumi delle atlete riportati a 90 minuti; squadra = media a testa di chi era in campo</span><span>Pagina '+n+' di 2 &#183; '+esc(genTxt)+'</span></div>'; };
+    const sezioni = function(L){ return L.map(function(s){ return pSecHTML(s.t, s.n, s.c); }).join(''); };
+    host.innerHTML = pSheet(ptTesta(A, false), '<div class="pt-doc">'+sezioni(ptPagina1(A))+'</div>', piede(1))+
+      pSheet(ptTesta(A, false), '<div class="pt-doc">'+sezioni(ptPagina2(A))+'</div>', piede(2));
+    pAdatta(host);
+    return true;
+  }
+  function fillPartite(){
+    const sel = document.getElementById('sel-match'); if(!sel) return;
+    const L = ptPartite();
+    sel.innerHTML = L.slice().reverse().map(function(m){ return '<option value="'+esc(ptChiave(m))+'">'+esc(ptEtichetta(m))+'</option>'; }).join('');
+    if(ptScelta && L.some(function(m){ return ptChiave(m) === ptScelta; })) sel.value = ptScelta;
+    else if(L.length){ ptScelta = ptChiave(L[L.length - 1]); sel.value = ptScelta; }
+  }
+
   // ---------- dispatcher + modalita ----------
   function render(){
     syncMetrics();
-    if(mode==='giorno') renderDaily(); else if(mode==='eserc') renderEserc(); else renderSintesi();
+    if(mode==='giorno') renderDaily(); else if(mode==='eserc') renderEserc(); else if(mode==='partita') renderPartita(); else renderSintesi();
   }
   function refreshMonthOptions(){
     const mo = document.getElementById('sel-month');
@@ -4479,8 +4730,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(list.length) ss.value = sessValue(list[list.length-1]);
   }
   function setMode(next){
-    mode = (next==='giorno' || next==='eserc') ? next : 'sintesi';
-    const giorno = (mode==='giorno'), eserc = (mode==='eserc');
+    mode = (next==='giorno' || next==='eserc' || next==='partita') ? next : 'sintesi';
+    const giorno = (mode==='giorno'), eserc = (mode==='eserc'), partita = (mode==='partita');
     /* La prima volta che si entra nel report del giorno le metriche scendono
        alle quattro chiave: il foglio deve stare in una pagina. Dopo, se il
        mister ne aggiunge altre, la sua scelta resta. */
@@ -4490,13 +4741,16 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       buildMetricList();
       updateMetricBadge();
     }
-    document.getElementById('mode-sintesi').setAttribute('aria-selected', (giorno||eserc)?'false':'true');
+    document.getElementById('mode-sintesi').setAttribute('aria-selected', (giorno||eserc||partita)?'false':'true');
+    document.getElementById('mode-partita').setAttribute('aria-selected', partita?'true':'false');
     document.getElementById('mode-giorno').setAttribute('aria-selected', giorno?'true':'false');
     document.getElementById('mode-eserc').setAttribute('aria-selected', eserc?'true':'false');
     document.querySelectorAll('.only-giorno').forEach(function(el){ el.classList.toggle('is-hidden', !giorno); });
-    document.querySelectorAll('.only-sintesi').forEach(function(el){ el.classList.toggle('is-hidden', giorno||eserc); });
+    document.querySelectorAll('.only-sintesi').forEach(function(el){ el.classList.toggle('is-hidden', giorno||eserc||partita); });
     document.querySelectorAll('.only-eserc').forEach(function(el){ el.classList.toggle('is-hidden', !eserc); });
-    document.querySelectorAll('.no-eserc').forEach(function(el){ el.classList.toggle('is-hidden', eserc); });
+    document.querySelectorAll('.no-eserc').forEach(function(el){ el.classList.toggle('is-hidden', eserc||partita); });
+    document.querySelectorAll('.only-partita').forEach(function(el){ el.classList.toggle('is-hidden', !partita); });
+    if(partita) fillPartite();
     if(eserc) fillWeeks();
     document.getElementById('lab-month').textContent = giorno ? 'Mese' : 'Periodo';
     /* Nel report del giorno la stampa e' il documento vero: due fogli, il primo
@@ -4505,7 +4759,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        finisce per esportare il PNG e non si vede mai l'impaginazione. */
     const bPrint = document.getElementById('btn-print');
     const bPng   = document.getElementById('btn-png');
-    if(bPrint) bPrint.classList.toggle('primary', giorno||eserc);
+    if(bPrint) bPrint.classList.toggle('primary', giorno||eserc||partita);
     if(bPng) bPng.classList.remove('primary');
     refreshMonthOptions();
     if(giorno) fillSessions();
@@ -4518,6 +4772,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function aggiornaTastoStampa(){
     const b = document.getElementById('btn-print');
     if(!b || !b.lastChild) return;
+    if(mode === 'partita'){
+      b.lastChild.nodeValue = ' Stampa 2 pagine ';
+      b.title = 'Squadra nel primo foglio, atlete nel secondo';
+      return;
+    }
     if(mode === 'eserc'){
       const n = esRange().length;
       b.lastChild.nodeValue = n ? (' Stampa '+n+(n === 1 ? ' pagina ' : ' pagine ')) : ' Stampa ';
@@ -4839,6 +5098,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   document.getElementById('mode-sintesi').addEventListener('click', function(){ setMode('sintesi'); });
   document.getElementById('mode-giorno').addEventListener('click', function(){ setMode('giorno'); });
   document.getElementById('mode-eserc').addEventListener('click', function(){ esScelta = null; setMode('eserc'); });
+  document.getElementById('mode-partita').addEventListener('click', function(){ setMode('partita'); });
+  document.getElementById('sel-match').addEventListener('change', function(){ ptScelta = this.value; render(); });
   document.getElementById('btn-es').addEventListener('click', function(){
     esScelta = printDays().map(function(d){ return { iso:d.iso, ap:(d.meta && d.meta.ap) || '' }; });
     setMode('eserc');
@@ -4861,7 +5122,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
      sistema. Se il documento non si costruisce (nessun dato nel periodo) si
      ricade sulla pagina, che in stampa si rimette da sola il suo contorno. */
   function stampaPronta(){
-    const ok = (mode === 'giorno') ? buildPrintDaily() : (mode === 'eserc' ? buildPrintEserc() : buildPrintSintesi());
+    const ok = (mode === 'giorno') ? buildPrintDaily() : (mode === 'eserc' ? buildPrintEserc() : (mode === 'partita' ? buildPrintPartita() : buildPrintSintesi()));
     if(ok) document.body.classList.add('pstampa');
     else document.body.classList.remove('pstampa');
   }
