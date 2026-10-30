@@ -3056,7 +3056,7 @@ function rpeLog(l){return +l.avgRpe||(l.gm?0:+(ST.sess[isoLoc(l.ts)]&&ST.sess[is
 function renderProfSett(logs){
   const el=document.getElementById('prof-sett');if(!el)return;
   const lun=getMondayOf(new Date());lun.setHours(0,0,0,0);
-  const W=[];for(let i=7;i>=0;i--){const a=new Date(lun);a.setDate(a.getDate()-7*i);W.push({a:a.getTime(),b:a.getTime()+7*864e5,n:0,car:0,rpe:[]});}
+  const W=[];for(let i=7;i>=0;i--){const a=new Date(lun);a.setDate(a.getDate()-7*i);W.push({a:a.getTime(),b:_tsPiu(a.getTime(),7),n:0,car:0,rpe:[]});}
   const sc=document.getElementById('athlete-sess-count');if(sc&&(logs||[]).length)sc.textContent=logs.length;
   // senza RPE registrato il carico e' fatto dai soli minuti
   // RPE della seduta, se no quello del giorno: lo stesso carico che vede il preparatore
@@ -3310,7 +3310,7 @@ function renderGara(){
 /* La settimana appena chiusa: allenamenti fatti su quelli in programma, minuti, km, serie,
    record di forza stimati, abitudini, prontezza media; ogni numero contro la settimana prima. */
 function riepSett(lunTs){
-  const fine=lunTs+7*864e5,L=(ST.logs||[]).filter(l=>l&&l.ts>=lunTs&&l.ts<fine);
+  const fine=_tsPiu(lunTs,7),L=(ST.logs||[]).filter(l=>l&&l.ts>=lunTs&&l.ts<fine);
   const min=L.reduce((t,l)=>t+((+l.duration||+l.minuti||0)||(l.corsa&&+l.corsa.sec?Math.round(l.corsa.sec/60):0)),0);
   const km=L.reduce((t,l)=>t+((l.corsa&&+l.corsa.km)||0),0);
   let serie=0;L.forEach(l=>Object.values(l.exerciseData||{}).forEach(a=>{serie+=(Array.isArray(a)?a:Object.values(a||{})).filter(x=>x&&(parseInt(x.reps)>0)).length;}));
@@ -3322,13 +3322,13 @@ function riepPrevisti(){
   // sedute in programma la settimana scorsa (facoltative escluse)
   let n=0;Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived).forEach(([pid,p])=>{
     const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0)),wi=settAttiva(pid,p,W.length)-1,i=_inizioProg(p);
-    if(wi<0||!W[wi]||(i&&_lunedi(i).getTime()>lunTs()-7*864e5))return;
+    if(wi<0||!W[wi]||(i&&_lunedi(i).getTime()>_tsPiu(lunTs(),-7)))return;
     n+=Object.values(W[wi][1].sessions||{}).filter(x=>x&&x.dayOfWeek!=null&&!x.opz).length;});
   return n;
 }
 function riepRecord(lunTs){
   const e1=x=>{const kg=+String(x&&x.kg||'').replace(',','.'),r=parseInt(x&&x.reps)||0,rpe=+(x&&x.rpe)||0;if(!(kg>0&&r>0&&r<=12))return 0;return kg*(1+(r+(rpe?Math.max(0,Math.min(4,10-rpe)):0))/30);};
-  const prima={},ora={};(ST.logs||[]).forEach(l=>{if(!l||!l.exerciseData||l.ts<lunTs-63*864e5||l.ts>=lunTs+7*864e5)return;const D=l.ts>=lunTs?ora:prima;
+  const prima={},ora={};(ST.logs||[]).forEach(l=>{if(!l||!l.exerciseData||l.ts<lunTs-63*864e5||l.ts>=_tsPiu(lunTs,7))return;const D=l.ts>=lunTs?ora:prima;
     Object.entries(l.exerciseData).forEach(([n,a])=>(Array.isArray(a)?a:Object.values(a||{})).forEach(x=>{const v=e1(x);if(v>(D[n]||0))D[n]=v;}));});
   return Object.entries(ora).filter(([n,v])=>prima[n]&&v>=prima[n]+1).sort((a,b)=>(b[1]-prima[b[0]])-(a[1]-prima[a[0]])).slice(0,3).map(([n,v])=>({n,v:Math.round(v*2)/2,d:Math.round((v-prima[n])*2)/2}));
 }
@@ -3337,12 +3337,12 @@ function renderRiepilogo(){
   const el=document.getElementById('rs-sec');if(!el)return;
   const g=(new Date().getDay()+6)%7;let chiuso=0;try{chiuso=+localStorage.getItem('rs_riep_'+aid)||0;}catch(e){}
   if(g>1||chiuso===lunTs()){el.hidden=true;return;}
-  const l0=lunTs()-7*864e5,a=riepSett(l0),b=riepSett(l0-7*864e5);
+  const l0=_tsPiu(lunTs(),-7),a=riepSett(l0),b=riepSett(_tsPiu(l0,-7));
   if(!a.n){el.hidden=true;return;}
   const pv=riepPrevisti(),rec=riepRecord(l0),O=window.RSObiettivi,H=ST.hab||{};
-  const ab=O?O.attive(H.defs).map(([id,d])=>{const s=O.storico(d,id,H.log||{},ST.gd,7,new Date(l0+6*864e5));return {nome:d.nome,ok:s.ok};}):[];
+  const ab=O?O.attive(H.defs).map(([id,d])=>{const s=O.storico(d,id,H.log||{},ST.gd,7,new Date(_tsPiu(l0,6)));return {nome:d.nome,ok:s.ok};}):[];
   const f1=x=>String(Math.round(x*10)/10).replace('.',','),dl=(x,y,u)=>{if(!y)return '';const d=x-y;return d?`<i class="${d>0?'su':'giu'}">${d>0?'+':''}${u==='km'?f1(d):Math.round(d)}</i>`:'';};
-  const dd=new Date(l0),de=new Date(l0+6*864e5),per=dd.getDate()+(dd.getMonth()!==de.getMonth()?' '+dd.toLocaleDateString('it-IT',{month:'short'}):'')+' - '+de.getDate()+' '+de.toLocaleDateString('it-IT',{month:'short'});
+  const dd=new Date(l0),de=new Date(_tsPiu(l0,6)),per=dd.getDate()+(dd.getMonth()!==de.getMonth()?' '+dd.toLocaleDateString('it-IT',{month:'short'}):'')+' - '+de.getDate()+' '+de.toLocaleDateString('it-IT',{month:'short'});
   const cel=(v,l,d)=>`<div><b>${v}${d||''}</b><span>${l}</span></div>`;
   el.hidden=false;
   el.innerHTML=`<div class="rw"><div class="rw-h"><div><span>La tua settimana</span><b>${per}</b></div><button type="button" onclick="riepChiudi()" aria-label="Chiudi il riepilogo">Chiudi</button></div>
@@ -3577,8 +3577,8 @@ function pianoSett(){
 }
 function lunTs(){return _lunedi(new Date()).getTime();}
 // il registro che chiude una seduta del programma questa settimana
-function logDi(x){const l0=lunTs();return x&&x.pid?ST.logs.find(l=>l.progId===x.pid&&+l.weekIdx===+x.wi&&String(l.sessId)===String(x.sid)&&l.ts>=l0&&l.ts<l0+7*864e5)||null:null;}
-function logsGiorno(i){const l0=lunTs()+i*864e5;return ST.logs.filter(l=>l.ts>=l0&&l.ts<l0+864e5);}
+function logDi(x){const l0=lunTs();return x&&x.pid?ST.logs.find(l=>l.progId===x.pid&&+l.weekIdx===+x.wi&&String(l.sessId)===String(x.sid)&&l.ts>=l0&&l.ts<_tsPiu(l0,7))||null:null;}
+function logsGiorno(i){const l0=_tsPiu(lunTs(),i),l1=_tsPiu(l0,1);return ST.logs.filter(l=>l.ts>=l0&&l.ts<l1);}
 function renderSettimana(){
   const row=document.getElementById('week-dots-row');if(!row)return;
   const oggi=(new Date().getDay()+6)%7,lun=new Date(lunTs()),P=pianoSett(),SH=['Lu','Ma','Me','Gi','Ve','Sa','Do'];
@@ -3598,7 +3598,7 @@ function renderSettimana(){
     return `<button type="button" class="w7-d${i===oggi?' oggi':''}${i===window._selectedDayIdx?' sel':''}" onclick="selectDay(${i})"${i>oggi&&!pv.length?' disabled':''} title="${escH(tip||'Riposo')}" aria-label="${GG_LUNGHI[i]} ${dt.getDate()}: ${escH(tip||'riposo')}">
       <span class="w7-l">${d}</span><span class="w7-t ${st}">${ic}${st==='pv'&&pv.length>1?pv.length:''}</span><span class="w7-n">${dt.getDate()}</span></button>`;
   }).join('');
-  ST.logs.forEach(l=>{if(l.ts>=lunTs()&&l.ts<lunTs()+7*864e5&&!usati.has(l))extra++;});
+  ST.logs.forEach(l=>{if(l.ts>=lunTs()&&l.ts<_tsPiu(lunTs(),7)&&!usati.has(l))extra++;});
   row.innerHTML=celle;
   const lbl=document.getElementById('week-progress-label');
   if(lbl){lbl.textContent=prev?`${fatte} di ${prev} ${prev===1?'seduta':'sedute'}${extra?' + '+extra+' fuori programma':''}`:(extra?extra+(extra===1?' seduta':' sedute'):'');lbl.className='w7-cnt'+(prev&&fatte>=prev?' ok':'');}
@@ -3711,7 +3711,7 @@ function renderNumeri(){
   // settimane complete di fila: almeno le sedute attese (freq del preparatore, se no 2)
   const freq=Math.max(1,Math.min(14,+(window._ath&&window._ath.freq)||2));
   const l0=lunTs();let fila=0;
-  const nSett=k=>{const a=l0-k*7*864e5;return new Set(ST.logs.filter(l=>l.ts>=a&&l.ts<a+7*864e5).map(l=>isoLoc(l.ts))).size;};
+  const nSett=k=>{const a=_tsPiu(l0,-7*k),b=_tsPiu(a,7);return new Set(ST.logs.filter(l=>l.ts>=a&&l.ts<b).map(l=>isoLoc(l.ts))).size;};
   if(nSett(0)>=freq)fila++;
   for(let k=1;k<60;k++){if(nSett(k)>=freq)fila++;else break;}
   set('n-fila',String(fila));
@@ -4414,7 +4414,7 @@ function renderPrograms(progData){
         const nF=sessions.filter(([sid])=>logProg(pid,wi,sid)).length;
         const metaW=sessions.length&&nF===sessions.length?`${_ri('ok')} Completata`:(wi<=cur||nF)&&sessions.length?`${nF} di ${sessions.length} ${sessions.length===1?'fatta':'fatte'}`:`${sessions.length} ${sessions.length===1?'seduta':'sedute'}`;
         // le date vere della settimana, se il preparatore ha messo l'inizio del programma
-        const lw=ini?new Date(_lunedi(ini).getTime()+wi*7*864e5):null;
+        const lw=ini?_piuGiorni(_lunedi(ini),wi*7):null;
         const per=lw?pcPeriodo(lw):'';
         // i sette giorni: allenamento fatto, da fare, oggi, saltato o riposo
         const gg=[0,1,2,3,4,5,6].map(d=>{
@@ -4435,10 +4435,10 @@ function renderPrograms(progData){
           // stato della seduta: fatta (con il giorno), oggi, da fare, non registrata
           const l=logProg(pid,wi,sid);
           let st='';
-          const giornoS=(lw&&s.dayOfWeek!=null)?new Date(lw.getTime()+s.dayOfWeek*864e5):null;
+          const giornoS=(lw&&s.dayOfWeek!=null)?_piuGiorni(lw,s.dayOfWeek):null;
           if(l){const d=new Date(l.ts);const altro=giornoS&&isoLoc(d)!==isoLoc(giornoS);
             // fatta in un altro giorno: della stessa settimana basta il giorno, se no anche il mese
-            const fuori=lw&&(d<lw||d.getTime()>=lw.getTime()+7*864e5);
+            const fuori=lw&&(d<lw||d.getTime()>=_piuGiorni(lw,7).getTime());
             st=`<span class="ps7 ok">${_ri('ok')}${!altro?'fatta':fuori?'fatta '+d.getDate()+' '+d.toLocaleDateString('it-IT',{month:'short'}).replace('.',''):'fatta '+GGL[(d.getDay()+6)%7]+' '+d.getDate()}</span>`;}
           else if(wi<cur||(wi===cur&&s.dayOfWeek!=null&&s.dayOfWeek<oggiG))st='<span class="ps7 no">non fatta</span>';
           else if(wi===cur&&s.dayOfWeek===oggiG)st='<span class="ps7 oggi">oggi</span>';
@@ -4493,23 +4493,27 @@ window.toggleArchive=()=>{
 // cosi' l'atleta trova sempre la settimana giusta senza impostarla. Se sceglie a
 // mano un'altra settimana, la scelta vale fino a domenica. Senza data di inizio
 // resta la settimana salvata sul telefono, come prima.
+// giorni di calendario, non 24 ore: col cambio dell'ora (ultima domenica di ottobre e di marzo)
+// lunedi + 7*24h cadeva la domenica alle 23 e la settimana 4 del piano partiva il 25 ottobre
+function _piuGiorni(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function _tsPiu(ts,n){return _piuGiorni(new Date(ts),n).getTime();}
 function _lunedi(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
 function _inizioProg(p){const t=String(p&&p.startDate||'');let m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);if(m)return new Date(+m[3],+m[2]-1,+m[1]);m=/^(\d{4})-(\d{2})-(\d{2})/.exec(t);return m?new Date(+m[1],+m[2]-1,+m[3]):null;}
 // c'e' un programma in corso questa settimana? (assegnato, non archiviato, gia' iniziato e non finito)
 function progAttivo(){const oggi=new Date();return Object.values(ST.progs||{}).some(p=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived&&!progFinito(p)&&(!_inizioProg(p)||_lunedi(_inizioProg(p))<=oggi));}
 // finito: oltre l'ultima settimana dalla data di inizio
-function progFinito(p){const i=_inizioProg(p),n=Object.keys(p&&p.weeks||{}).length;return !!(i&&n&&_lunedi(new Date()).getTime()>=_lunedi(i).getTime()+n*7*864e5);}
+function progFinito(p){const i=_inizioProg(p),n=Object.keys(p&&p.weeks||{}).length;return !!(i&&n&&_lunedi(new Date()).getTime()>=_piuGiorni(_lunedi(i),n*7).getTime());}
 function settAttiva(pid,p,n){
   const lun=_lunedi(new Date()).getTime();
   try{const m=JSON.parse(localStorage.getItem(`rsc_weekman_${aid}_${pid}`)||'null');if(m&&m.lun===lun)return Math.max(0,Math.min(n-1,+m.wi||0));}catch(e){}
   const i=_inizioProg(p);
-  if(i)return Math.max(0,Math.min(n-1,Math.floor((lun-_lunedi(i).getTime())/(7*864e5)+0.01)));
+  if(i)return Math.max(0,Math.min(n-1,Math.floor(Math.round((lun-_lunedi(i).getTime())/864e5)/7)));
   return Math.max(0,Math.min(n-1,parseInt(localStorage.getItem(`rsc_week_${aid}_${pid}`)||'0')));
 }
 window.setCurrentWeek=(pid,wi)=>{localStorage.setItem(`rsc_week_${aid}_${pid}`,wi);localStorage.setItem(`rsc_weekman_${aid}_${pid}`,JSON.stringify({wi:+wi,lun:_lunedi(new Date()).getTime()}));showToast(`Settimana ${parseInt(wi)+1} attiva`);};
 window.toggleWeek=wid=>{const el=document.getElementById('wsess-'+wid);const ch=document.getElementById('wchev-'+wid);const o=el.classList.toggle('open');if(ch){ch.classList.toggle('su',o);const b=ch.closest('.week-row');if(b)b.setAttribute('aria-expanded',String(o));}};
 // "12 - 18 ott", "28 set - 4 ott"
-function pcPeriodo(l){const e=new Date(l.getTime()+6*864e5),m=d=>d.toLocaleDateString('it-IT',{month:'short'}).replace('.','');return l.getMonth()===e.getMonth()?`${l.getDate()} - ${e.getDate()} ${m(e)}`:`${l.getDate()} ${m(l)} - ${e.getDate()} ${m(e)}`;}
+function pcPeriodo(l){const e=_piuGiorni(l,6),m=d=>d.toLocaleDateString('it-IT',{month:'short'}).replace('.','');return l.getMonth()===e.getMonth()?`${l.getDate()} - ${e.getDate()} ${m(e)}`:`${l.getDate()} ${m(l)} - ${e.getDate()} ${m(e)}`;}
 
 function renderQuickPlans(qpData){
   const wrap=document.getElementById('quick-plans-wrap'),el=document.getElementById('quick-plans-list');if(!wrap||!el)return;
