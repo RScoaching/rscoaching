@@ -619,6 +619,17 @@ svg.ac-svg text{ font-family:'Inter',sans-serif; }
   transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease);
 }
 .tg-atc .hd .xb:hover{ color:var(--ink); border-color:var(--border3); }
+.tg-atc .hd .mb{ display:none; }
+/* telefono: venti schede complete facevano una pagina di dodicimila pixel. Si vede il dato
+   del giorno ('le tocca'); barre e testo della settimana col tasto 'settimana' */
+@media (max-width:600px){
+  .tg-atc .hd .mb{ display:inline-flex; align-items:center; margin-left:auto; min-height:32px; padding:0 10px; border-radius:8px;
+    border:1px solid var(--border2); background:none; color:var(--muted); font:600 12px Inter,sans-serif; cursor:pointer; }
+  .tg-atc .hd .mb + .xb{ margin-left:0; }
+  .tg-atc.mob-on .hd .mb{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
+  .tg-atc:not(.mob-on) .tg-atw{ display:none; }
+  .tg-atc .hd{ flex-wrap:wrap; }
+}
 .tg-atc .hd .xb.on{ color:var(--orange2); border-color:var(--ember-border); background:var(--ember-bg); }
 .tg-atc .hd .st + .xb{ margin-left:0; }
 .tg-atx{ margin-top:11px; padding-top:10px; border-top:1px solid var(--border);
@@ -7675,6 +7686,8 @@ window.FORZA = window.FORZA || { roster:[] };
   const AT_ST = ['disponibile','parziale','differenziato'];
   let AT_WK   = null;
   let AT_OPEN = '';
+  // telefono: schede atleta chiuse sul dato del giorno, la settimana si apre a richiesta
+  const AT_MOB = new Set();
 
   // I portieri qui non ci stanno: il riferimento gara e' quello dei ruoli di
   // movimento, e a loro verrebbe assegnato quello di squadra, cioe' un obiettivo
@@ -8521,11 +8534,12 @@ window.FORZA = window.FORZA || { roster:[] };
           ? pmet.some(function(m){ return r.rest[m.k] > 0; })
           : r.rest.hi > 0;
 
-        return '<div class="tg-atc'+(scoperta ? ' gap' : '')+'">'+
+        return '<div class="tg-atc'+(scoperta ? ' gap' : '')+(AT_MOB.has(r.name) ? ' mob-on' : '')+'">'+
           '<div class="hd">'+
             '<span class="nm">'+esc(plNome(r.name))+'</span>'+
             '<span class="rl">'+esc(r.role || 'senza ruolo')+'</span>'+
             chip+
+            '<button type="button" class="mb" data-mob="'+esc(r.name)+'" aria-expanded="'+(AT_MOB.has(r.name) ? 'true' : 'false')+'">settimana</button>'+
             '<button type="button" class="xb'+(r.sua ? ' on' : '')+'" data-xo="'+esc(r.name)+'">'+
               (apri ? 'chiudi' : (r.sua ? 'su misura' : 'cambia'))+'</button>'+
           '</div>'+
@@ -8865,6 +8879,13 @@ window.FORZA = window.FORZA || { roster:[] };
         return;
       }
 
+      const mb = t.closest('.mb[data-mob]');
+      if(mb){
+        const n = mb.getAttribute('data-mob'), c = mb.closest('.tg-atc');
+        if(AT_MOB.has(n)) AT_MOB.delete(n); else AT_MOB.add(n);
+        if(c){ c.classList.toggle('mob-on', AT_MOB.has(n)); mb.setAttribute('aria-expanded', AT_MOB.has(n) ? 'true' : 'false'); }
+        return;
+      }
       const ob = t.closest('.xb');
       if(ob){
         const n = ob.getAttribute('data-xo');
