@@ -720,7 +720,31 @@ window.markActiveNav = function(pageId) {
     el.classList.remove('active');
     if (el.dataset.page === pageId && !el.classList.contains('soon')) el.classList.add('active');
   });
+  fioBarra(pageId);
 };
+
+/* Telefono: le quattro pagine di tutti i giorni in una barra in basso, dove arriva il
+   pollice, piu' Altro che apre il menu completo (come nell'area RS Coaching). Le icone
+   sono quelle del menu, copiate da li'. */
+function fioBarra(pageId) {
+  var b = document.getElementById('fio-bt');
+  if (!b) {
+    b = document.createElement('nav'); b.id = 'fio-bt'; b.setAttribute('aria-label', 'Pagine');
+    var V = [['oggi', 'Oggi'], ['carico', 'Carico'], ['calendario', 'Calendario'], ['report', 'Report']];
+    V.forEach(function(v) {
+      var src = document.querySelector('#sb-sidebar .nav-item[data-page="' + v[0] + '"]'); if (!src) return;
+      var a = document.createElement('a'); a.href = src.getAttribute('href'); a.dataset.page = v[0];
+      var ic = src.querySelector('svg'); if (ic) a.appendChild(ic.cloneNode(true));
+      var t = document.createElement('b'); t.textContent = v[1]; a.appendChild(t); b.appendChild(a);
+    });
+    var al = document.createElement('button'); al.type = 'button'; al.dataset.page = 'altro';
+    al.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><b>Altro</b>';
+    al.addEventListener('click', function() { var h = document.getElementById('sb-ham-btn'); if (h) h.click(); });
+    b.appendChild(al);
+    document.body.appendChild(b);
+  }
+  b.querySelectorAll('[data-page]').forEach(function(x) { x.classList.toggle('on', x.dataset.page === pageId); });
+}
 
 // Stagione attiva (condivisa fra tutte le pagine, persistita solo su questo dispositivo).
 window.FIO_STAGIONI = ['25-26', '26-27'];
@@ -2602,8 +2626,25 @@ html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:590;
 }
 .sb-mob-overlay.open{display:block;}
+#fio-bt{display:none}
 @media(max-width:900px){
   .sb-mob-bar{display:flex;}
+  .sb-ham{display:none;}
+  #fio-bt{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:580;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+    background:rgba(20,16,23,.95);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);
+    border-top:1px solid rgba(255,255,255,.08);justify-content:space-around}
+  #fio-bt a,#fio-bt button{all:unset;box-sizing:border-box;flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    border-radius:12px;color:rgba(248,250,255,.55);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s ease,background .15s ease}
+  #fio-bt svg{width:22px;height:22px}
+  #fio-bt b{font:600 10.5px Inter,sans-serif}
+  #fio-bt .on{color:#C4B5FD;background:rgba(124,58,237,.16)}
+  #fio-bt a:active,#fio-bt button:active{transform:scale(.96)}
+  body{padding-bottom:calc(66px + env(safe-area-inset-bottom)) !important;}
+  html[data-tema="chiaro"] #fio-bt{background:rgba(255,255,255,.96);border-top-color:rgba(40,30,70,.13)}
+  html[data-tema="chiaro"] #fio-bt a,html[data-tema="chiaro"] #fio-bt button{color:#5b5368}
+  html[data-tema="chiaro"] #fio-bt .on{color:#5B21B6;background:rgba(124,58,237,.10)}
+  /* il menu si apre fra la testata e la barra: prima il suo inizio (la stagione) finiva sotto la testata */
+  #sb-sidebar{top:52px !important;height:calc(100vh - 52px - 66px - env(safe-area-inset-bottom)) !important;overflow-y:auto}
   #sb-sidebar{
     display:none;position:fixed;top:0;left:0;height:100vh;
     z-index:595;transform:translateX(-100%);
