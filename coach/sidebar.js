@@ -1821,3 +1821,26 @@ window.RSCardio = (function(){
   function dose(e){if(!e||!e.cardio)return null;return [qta(e.cardio),testo(e.cardio,true)].filter(Boolean).join(' · ');}
   return {leggi,testo,qta,minuti,fr,dose,macchina,MACCHINE};
 })();
+
+/* Telefono, Builder e Planner: la stessa barra in basso della pagina coach, cosi' da qui
+   si torna alla pagina giusta (l'indirizzo con # la riapre su Atleti, Chat o Analisi)
+   invece di dover passare dal menu. Solo in queste due pagine: sidebar.js lo caricano
+   anche l'app atleta e l'area Fiorentina per le funzioni comuni. */
+(function(){
+  if (!/\/(builder|planner)\.html$/.test(location.pathname)) return;
+  function monta(){
+    if (document.getElementById('bt-bar')) return;
+    var V = [['index.html','casa','Oggi'],['index.html#athletes','atleti','Atleti'],['index.html#chat-global','chat','Chat'],['index.html#analytics','analytics','Analisi']];
+    var n = document.createElement('nav'); n.id = 'bt-bar'; n.setAttribute('aria-label','Sezioni');
+    n.innerHTML = V.map(function(v){ return '<a href="./'+v[0]+'">'+window.rsIcon(v[1])+'<b>'+v[2]+'</b></a>'; }).join('') +
+      '<button type="button" onclick="var h=document.getElementById(\'sb-ham-btn\');if(h)h.click();">'+window.rsIcon('menu')+'<b>Altro</b></button>';
+    document.body.appendChild(n);
+    var st = document.createElement('style');
+    st.textContent = '#bt-bar{display:none}@media(max-width:768px){#bt-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:450;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:rgba(12,10,16,.94);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border-top:1px solid rgba(255,255,255,.08);justify-content:space-around}' +
+      '#bt-bar a,#bt-bar button{all:unset;box-sizing:border-box;flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:12px;color:#8E8678;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+      '#bt-bar svg{width:22px;height:22px}#bt-bar b{font:600 10.5px Inter,sans-serif}#bt-bar .on{color:#FF6A2E;background:rgba(255,106,46,.10)}' +
+      'body{padding-bottom:calc(66px + env(safe-area-inset-bottom)) !important}.sb-ham{display:none !important}}';
+    document.head.appendChild(st);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', monta); else monta();
+})();
