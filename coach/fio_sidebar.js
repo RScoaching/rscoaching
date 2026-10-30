@@ -3,6 +3,122 @@
 // markActiveNav / initSidebarToggle) cosi' le pagine Fiorentina la montano allo stesso modo.
 
 /* ==========================================================================
+   IMPOSTAZIONI UGUALI SU OGNI DISPOSITIVO
+   Le pagine Fiorentina tengono tutto nel browser (tabella del mister,
+   microciclo, rosa e disponibilita', ruoli, campionato o amichevole, RPE,
+   massimali...): scritte sul PC, il telefono non le vedeva e la pagina Oggi
+   usciva diversa. Qui ogni chiave 'rs_fio...' e 'fio_...' scritta nel browser
+   va anche nel database (fio_impostazioni) con l'ora in cui e' cambiata, e
+   all'apertura si prende quello che e' piu' recente. Se arriva qualcosa di
+   nuovo la pagina si ricarica una volta, perche' le pagine leggono le
+   impostazioni solo all'avvio. Restano del singolo dispositivo il tema e la
+   stagione che si sta guardando.
+   Un dispositivo che si sincronizza la prima volta e ha valori diversi da
+   quelli del database tiene quelli del database, ma i suoi li mette da parte
+   (fio_impostazioni_copie) per poterli recuperare.
+   In anteprima (localhost) parla con un database finto sulla porta 7791.
+   ========================================================================== */
+(function() {
+  var LS = window.localStorage; if (!LS || !window.fetch) return;
+  var LOCALE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  var BASE = LOCALE ? 'http://127.0.0.1:7791/' : 'https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app/';
+  var URL_V = BASE + 'fio_impostazioni', META = 'rs_fiosync_meta';
+  var FUORI = { rs_fio_tema: 1, fio_stagione: 1, rs_fiosync_meta: 1 };
+  function sincro(k) { return typeof k === 'string' && !FUORI[k] && (k.indexOf('rs_fio') === 0 || k.indexOf('fio_') === 0); }
+  // nel database un nome non puo' avere . # $ [ ] /
+  function enc(k) { return encodeURIComponent(k).replace(/\./g, '%2E'); }
+  function dec(k) { try { return decodeURIComponent(k); } catch (e) { return k; } }
+  var set0 = LS.setItem.bind(LS), del0 = LS.removeItem.bind(LS), get0 = LS.getItem.bind(LS);
+  // finche' non e' arrivato il database le scritture delle pagine (valori di partenza,
+  // memorie) non hanno un'ora: non devono passare davanti a quello che c'e' online
+  var meta = {}, prima = true, pronto = false, sporche = {};
+  try { var m = JSON.parse(get0(META) || 'null'); if (m && typeof m === 'object') { meta = m; prima = false; } } catch (e) {}
+  function salvaMeta() { try { set0(META, JSON.stringify(meta)); } catch (e) {} }
+  var coda = {}, tmr = null;
+  function manda() {
+    tmr = null; var corpo = coda; coda = {};
+    if (!Object.keys(corpo).length) return;
+    // POST semplice con il metodo vero nell'indirizzo (lo accetta il database): niente
+    // controllo preliminare del browser, quindi parte anche mentre la pagina si chiude
+    // keepalive (che sopravvive alla chiusura) regge solo pacchetti fino a 64 KB
+    var b = JSON.stringify(corpo);
+    fetch(URL_V + '.json?x-http-method-override=PATCH', { method: 'POST', body: b, keepalive: b.length < 60000 }).catch(function() {
+      // senza rete si riprova alla prossima scrittura o apertura
+      Object.keys(corpo).forEach(function(k) { if (!coda[k]) coda[k] = corpo[k]; });
+    });
+  }
+  function accoda(k, v, ts) { coda[enc(k)] = { v: v, ts: ts }; if (!tmr) tmr = setTimeout(manda, 1200); }
+  // ogni scrittura delle pagine passa da qui
+  function scritta(k) {
+    if (!pronto) { sporche[k] = 1; return; }
+    var ts = Date.now(), v = get0(k); meta[k] = ts; salvaMeta(); accoda(k, v, ts);
+  }
+  Storage.prototype.setItem = (function(orig) { return function(k, v) {
+    var uguale = this === LS && get0(k) === String(v);
+    orig.call(this, k, v);
+    if (this === LS && sincro(k) && !uguale) scritta(k);
+  }; })(Storage.prototype.setItem);
+  Storage.prototype.removeItem = (function(orig) { return function(k) {
+    var c = this === LS && sincro(k) && get0(k) != null;
+    orig.call(this, k);
+    if (c) scritta(k);
+  }; })(Storage.prototype.removeItem);
+
+  function allinea(ricarica) {
+    return fetch(URL_V + '.json', { cache: 'no-store' }).then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); }).then(function(rem) {
+      rem = rem && typeof rem === 'object' ? rem : {};
+      var cambiato = false, copie = {}, viste = {};
+      Object.keys(rem).forEach(function(ek) {
+        var k = dec(ek), x = rem[ek]; if (!sincro(k) || !x || typeof x !== 'object') return;
+        viste[k] = 1;
+        var mio = meta[k] || 0, loc = get0(k), rv = x.v == null ? null : String(x.v);
+        if ((+x.ts || 0) > mio) {
+          delete sporche[k];
+          if (loc !== rv) {
+            if (prima && loc != null) copie[enc(k)] = loc;
+            if (rv == null) del0(k); else set0(k, rv);
+            cambiato = true;
+          }
+          meta[k] = +x.ts || 0;
+        } else if (mio > (+x.ts || 0) && loc !== rv) accoda(k, loc, mio);
+      });
+      // quello che c'e' qui e nel database non ancora
+      for (var i = 0; i < LS.length; i++) {
+        var k = LS.key(i);
+        if (sincro(k) && !viste[k]) { var ts = meta[k] || Date.now(); meta[k] = ts; accoda(k, get0(k), ts); delete sporche[k]; }
+      }
+      // scritte dalle pagine mentre si aspettava e non superate dal database: adesso valgono
+      var ora = Date.now();
+      Object.keys(sporche).forEach(function(k) { meta[k] = ora; accoda(k, get0(k), ora); });
+      sporche = {}; pronto = true;
+      salvaMeta(); prima = false;
+      if (Object.keys(copie).length) fetch(BASE + 'fio_impostazioni_copie/' + Date.now() + '.json?x-http-method-override=PUT', { method: 'POST', body: JSON.stringify(copie) }).catch(function() {});
+      if (cambiato && ricarica) ricarica();
+      return cambiato;
+    }).catch(function() { pronto = true; return false; });
+  }
+  window.fioSincro = allinea;
+  // all'apertura: se arriva qualcosa di nuovo si ricarica una volta (non di continuo)
+  allinea(function() {
+    var g = 'rs_fiosync_rl', t = +(sessionStorage.getItem(g) || 0);
+    if (Date.now() - t < 15000) return;
+    sessionStorage.setItem(g, String(Date.now()));
+    location.reload();
+  });
+  // tornando sulla pagina (telefono riaperto, scheda ripresa) si ricontrolla, ma senza
+  // ricaricare mentre si sta scrivendo in un campo
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState !== 'visible') return;
+    allinea(function() {
+      var a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      location.reload();
+    });
+  });
+  window.addEventListener('pagehide', function() { if (tmr) { clearTimeout(tmr); manda(); } });
+})();
+
+/* ==========================================================================
    ACCESSO ALL'AREA FIORENTINA
    Quattro persone, quattro chiavi diverse: mister, secondo, preparatore e
    Raoul. Si entra con email e password, poi con un codice di sei cifre che
