@@ -726,6 +726,8 @@ select option{background:#10101E;}
   box-shadow:0 -8px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,214,196,.08);
 }
 .bsheet.open{transform:translateY(0);}
+/* chiuso e' solo spostato sotto lo schermo: senza questo il tasto Tab e il lettore di schermo ci entravano */
+.bsheet:not(.open){visibility:hidden;transition:transform .32s cubic-bezier(.32,.72,0,1),visibility 0s linear .32s}
 .bsheet-handle{width:38px;height:4px;border-radius:2px;background:rgba(255,214,196,.15);margin:14px auto 18px;}
 .bsheet-title{font-family:var(--ff);font-weight:600;font-size:17px;letter-spacing:-.02em;color:var(--white);padding:0 20px 16px;border-bottom:1px solid rgba(255,214,196,.07);font-variant-numeric:tabular-nums}
 .bsheet-body{padding:20px 20px 12px;}
@@ -1076,6 +1078,8 @@ body::before,body::after,.bcard::before,.workout-hero::before{display:none!impor
 .w7-d:focus-visible .w7-t{box-shadow:0 0 0 2px #110C0B,0 0 0 3.5px var(--primary)}
 #week-progress-label.w7-cnt{font-size:12px!important;font-weight:600!important;color:var(--text)!important;letter-spacing:0!important}
 #week-progress-label.w7-cnt.ok{color:var(--primary2)!important}
+.serie-sett{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:10px 12px;border-radius:12px;background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.28);font-size:13px;color:var(--text)}
+.serie-sett svg{width:16px;height:16px;color:#C4B5FD;flex-shrink:0}.serie-sett b{color:#DDD6FE;font-weight:600}
 /* prontezza */
 .pr7{cursor:default}
 .pr-vuoto{display:flex;align-items:center;gap:14px}
@@ -2026,6 +2030,7 @@ html body .ps7.oggi{background:var(--primary);color:#1A0B05}
       <div class="o9-h"><h2>Questa settimana</h2><span id="week-progress-label"></span></div>
       <div id="week-progress-bar-wrap" class="o9-bar" style="display:none"><div id="week-progress-bar" style="width:0%"></div></div>
       <div class="wd-row" id="week-dots-row"></div>
+      <p class="serie-sett" id="serie-sett" hidden></p>
     </section>
 
     <section class="o9-sec" id="rs-sec" hidden></section>
@@ -3318,6 +3323,26 @@ function riepSett(lunTs){
   let pr=[],pv=[];for(let i=0;i<7;i++){const g=prGiorno(isoLoc(new Date(lunTs+i*864e5+12*3600e3)));if(g)pr.push(g.score);}
   return {n:L.length,giorni,min,km,serie,prMedia:pr.length?Math.round(pr.reduce((a,b)=>a+b,0)/pr.length):null,L};
 }
+/* Settimane complete di fila (come la costanza di TrainHeroic o Runna): si contano all'indietro
+   dalla settimana scorsa le settimane con tutte le sedute del programma fatte; quelle senza
+   sedute in programma (scarico, pausa) non spezzano la fila. Se questa e' gia' completa conta. */
+function serieSettimane(questaOk){
+  const pr=Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived&&_inizioProg(p));
+  if(!pr.length)return 0;
+  let n=questaOk?1:0;
+  for(let k=1;k<=26;k++){
+    const l0=_tsPiu(lunTs(),-7*k);let pv=0,fa=0;
+    pr.forEach(([pid,p])=>{
+      const W=Object.entries(p.weeks||{}).sort((a,b)=>(a[1].order||0)-(b[1].order||0));
+      const wi=Math.floor(Math.round((l0-_lunedi(_inizioProg(p)).getTime())/864e5)/7);if(wi<0||!W[wi])return;
+      const S=Object.entries(W[wi][1].sessions||{}).filter(([,x])=>x&&x.dayOfWeek!=null&&!x.opz);pv+=S.length;
+      fa+=S.filter(([sid])=>(ST.logs||[]).some(l=>l&&l.progId===pid&&+l.weekIdx===wi&&String(l.sessId)===String(sid))).length;
+    });
+    if(!pv){if(k>8&&!n)break;continue;}
+    if(fa>=pv)n++;else break;
+  }
+  return n;
+}
 function riepPrevisti(){
   // sedute in programma la settimana scorsa (facoltative escluse)
   let n=0;Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived).forEach(([pid,p])=>{
@@ -3604,6 +3629,7 @@ function renderSettimana(){
   if(lbl){lbl.textContent=prev?`${fatte} di ${prev} ${prev===1?'seduta':'sedute'}${extra?' + '+extra+' fuori programma':''}`:(extra?extra+(extra===1?' seduta':' sedute'):'');lbl.className='w7-cnt'+(prev&&fatte>=prev?' ok':'');}
   const bw=document.getElementById('week-progress-bar-wrap'),bar=document.getElementById('week-progress-bar');
   if(bw&&bar){bw.style.display=prev?'block':'none';bar.style.width=(prev?Math.min(100,Math.round(fatte/prev*100)):0)+'%';}
+  {const el=document.getElementById('serie-sett');if(el){const n=serieSettimane(prev&&fatte>=prev);el.hidden=n<2;el.innerHTML=n>=2?`${_ri('ok')}<span><b>Programma fatto tutto</b> da ${n} settimane</span>`:'';}}
   // in alto a destra la settimana del programma, al posto del vecchio "Mc"
   const tag=document.getElementById('hero-micro');
   if(tag){const pr=Object.entries(ST.progs||{}).filter(([,p])=>p&&p.assignedTo&&p.assignedTo[aid]&&!p.archived);
