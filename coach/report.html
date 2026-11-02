@@ -219,6 +219,10 @@ a{ color:inherit; text-decoration:none; }
 .gpa-b.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
 .gpa-b.on span{ color:#C2410C; font-weight:600; }
 .gpa-b:disabled{ opacity:.45; cursor:default; }
+.gpa-dc{ display:flex; flex-direction:column; gap:4px; padding:14px; margin-bottom:16px; border:1px solid rgba(255,106,46,.45); border-radius:12px; background:rgba(255,106,46,.06); font-size:13.5px; }
+.gpa-dc > span{ color:var(--muted); }
+.gpa-dcl{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+@media print{ .gpa-dc, #gpa-sez{ display:none !important; } }
 .gpa-b:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
@@ -3307,68 +3311,110 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   // stato in vigore: la scelta salvata, se no quello che c'e' nei dati
   function gaStato(q){
     const sc = gpsScelte()[q.chiave];
-    if(sc && (sc.agg || sc.no)) return { agg: sc.agg || {}, no: sc.no || [], mia: true };
-    const agg = {}, no = [];
+    if(sc && (sc.agg || sc.no || sc.fuori)) return { agg: sc.agg || {}, no: sc.no || [], fuori: sc.fuori || [], mia: true };
+    const agg = {}, no = [], fuori = [];
     q.atl.forEach(function(a){
       if(a.agg && a.agg.length) agg[a.n] = a.agg.map(function(k){ return q.eserc[k][0]; });
-      if(a.no) no.push(a.n);
+      if(a.ok) no.push(a.n);
+      if(a.fuori) fuori.push(a.n);
     });
-    return { agg: agg, no: no, mia: false };
+    return { agg: agg, no: no, fuori: fuori, mia: false };
   }
+  function gaFirma(st){ return JSON.stringify(Object.keys(st.agg).sort().map(function(n){ return [n, st.agg[n].slice().sort()]; }))+'|'+st.no.slice().sort().join(',')+'|'+st.fuori.slice().sort().join(','); }
   function gaSalva(q, st){
-    const sc = gpsScelte(); sc[q.chiave] = { agg: st.agg, no: st.no, ts: Date.now() };
+    const sc = gpsScelte(); sc[q.chiave] = { agg: st.agg, no: st.no, fuori: st.fuori, ts: Date.now() };
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
   }
+  function gaQ(ch){ return ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); }
+  // una scelta su un'atleta toglie il 'va bene cosi'' e viceversa
   window.gaToccaEs = function(ch, nome, k){
-    const q = ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); if(!q) return;
+    const q = gaQ(ch); if(!q) return;
     const st = gaStato(q), es = q.eserc[+k][0], L = (st.agg[nome] || []).slice(), i = L.indexOf(es);
     if(i >= 0) L.splice(i, 1); else L.push(es);
     if(L.length) st.agg[nome] = L; else delete st.agg[nome];
     st.no = st.no.filter(function(n){ return n !== nome; });
     gaSalva(q, st);
   };
-  window.gaToccaNo = function(ch, nome){
-    const q = ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); if(!q) return;
-    const st = gaStato(q), i = st.no.indexOf(nome);
-    if(i >= 0) st.no.splice(i, 1); else { st.no.push(nome); delete st.agg[nome]; }
+  window.gaToccaFuori = function(ch, nome){
+    const q = gaQ(ch); if(!q) return;
+    const st = gaStato(q), i = st.fuori.indexOf(nome);
+    if(i >= 0) st.fuori.splice(i, 1); else st.fuori.push(nome);
+    st.no = st.no.filter(function(n){ return n !== nome; });
     gaSalva(q, st);
   };
+  window.gaToccaNo = function(ch, nome){
+    const q = gaQ(ch); if(!q) return;
+    const st = gaStato(q), i = st.no.indexOf(nome);
+    if(i >= 0) st.no.splice(i, 1); else { st.no.push(nome); delete st.agg[nome]; st.fuori = st.fuori.filter(function(n){ return n !== nome; }); }
+    gaSalva(q, st);
+  };
+  window.gaTutteOk = function(ch){
+    const q = gaQ(ch); if(!q) return;
+    const st = gaStato(q);
+    q.atl.forEach(function(a){ if(!st.agg[a.n] && st.fuori.indexOf(a.n) < 0 && st.no.indexOf(a.n) < 0) st.no.push(a.n); });
+    gaSalva(q, st);
+  };
+  function gaDeciso(st, n){ return !!(st.agg[n] && st.agg[n].length) || st.fuori.indexOf(n) >= 0 || st.no.indexOf(n) >= 0; }
+  // sedute con atlete ancora da controllare, con lo stato salvato in questo browser
+  function gaDaControllare(){
+    return ((S.gps && S.gps.sedute) || []).map(function(q){
+      const st = gaStato(q);
+      return { q: q, n: q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length };
+    }).filter(function(x){ return x.n; });
+  }
+  window.gaApri = function(ch){
+    const q = gaQ(ch); if(!q) return;
+    const p = q.data.split('-'), dd = p[2]+'/'+p[1]+'/'+p[0];
+    const mo = document.getElementById('sel-month'), se = document.getElementById('sel-session');
+    for(const o of Array.from(mo.options)){
+      mo.value = o.value; mo.dispatchEvent(new Event('change'));
+      const t = Array.from(se.options).find(function(x){ const mm = sessParse(x.value); const me = sessionMeta(o.value, mm.label, mm.wd); return me.dateStr === dd && (!q.slot || !me.ap || me.ap === q.slot); });
+      if(t){ se.value = t.value; se.dispatchEvent(new Event('change')); break; }
+    }
+    const h = document.getElementById('gpa-sez'); if(h) h.scrollIntoView({ block:'start' });
+  };
+  function gpsDaControllareHTML(){
+    const L = gaDaControllare();
+    if(!L.length) return '';
+    const fmt = function(q){ const p = q.data.split('-'); return p[2]+'/'+p[1]+(q.slot ? ' '+q.slot : ''); };
+    return '<div class="gpa-dc"><b>GPS da controllare</b><span>'+L.length+' '+(L.length === 1 ? 'allenamento' : 'allenamenti')+' con atlete sotto i minuti della maggioranza: dimmi che parte non ha preso il GPS.</span>'+
+      '<div class="gpa-dcl">'+L.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.q.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(fmt(x.q))+'</b><span>'+x.n+' da vedere</span></button>'; }).join('')+'</div></div>';
+  }
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
-    if(!q || !q.eserc.length) return '';
+    if(!q) return '';
     const st = gaStato(q);
-    // la scelta salvata e' gia' nei dati? confronto con quello che lo script ha applicato
-    const firma = function(agg, no){ return JSON.stringify(Object.keys(agg).sort().map(function(n){ return [n, agg[n].slice().sort()]; }))+'|'+no.slice().sort().join(','); };
-    const dati = (function(){ const a = {}, n = []; q.atl.forEach(function(x){ if(x.agg && x.agg.length) a[x.n] = x.agg.map(function(k){ return q.eserc[k][0]; }); if(x.no) n.push(x.n); }); return firma(a, n); })();
-    const attesa = st.mia && firma(st.agg, st.no) !== dati;
-    // una riga per atleta: minuti, su quante esercitazioni c'e' il GPS e un tasto
-    // per ogni esercitazione di squadra che manca
-    // chi ha il GPS su tutte le esercitazioni non ha niente da segnare
-    const atl = q.atl.filter(function(a){ return a.assenti.length || st.no.indexOf(a.n) >= 0; });
-    const complete = q.complete + q.atl.length - atl.length;
-    const righe = atl.map(function(a){
-      const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [];
-      const basso = a.min < q.med - 5;
+    const dati = gaFirma(gaStato({ chiave: '', atl: q.atl, eserc: q.eserc }));
+    const attesa = st.mia && gaFirma(st) !== dati;
+    const righe = q.atl.map(function(a){
+      const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [], fu = st.fuori.indexOf(a.n) >= 0;
+      const dec = gaDeciso(st, a.n);
       const es = a.assenti.map(function(k){
-        const e = q.eserc[k], on = !no && ag.indexOf(e[0]) >= 0;
-        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+'" aria-pressed="'+on+'"'+(no ? ' disabled' : '')+' data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+k+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
-          '<b>'+esc(e[0])+'</b><span>'+Math.round(e[1])+'\' &#183; '+(on ? 'fatta senza GPS' : 'manca')+'</span></button>';
+        const e = q.eserc[k], on = ag.indexOf(e[0]) >= 0;
+        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+k+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
+          '<b>'+esc(e[0])+'</b><span>'+Math.round(e[1])+'\' &#183; '+(on ? 'fatta senza GPS' : 'senza GPS?')+'</span></button>';
       }).join('');
+      const tf = q.fuori_min >= 2
+        ? '<button type="button" class="gpa-b'+(fu ? ' on' : '')+'" aria-pressed="'+fu+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaFuori(this.dataset.ch,this.dataset.n)"><b>Tempo fuori esercitazioni</b><span>pause e spiegazioni, fino a '+Math.round(q.fuori_min)+'\''+(fu ? ' &#183; aggiunto' : '')+'</span></button>'
+        : '';
       return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+
-        '<span class="tnum'+(basso ? ' gpa-basso' : '')+'">'+Math.round(a.min)+'\' su '+Math.round(q.med)+'\' della squadra</span>'+
+        '<span class="tnum gpa-basso">'+Math.round(a.min)+'\' su '+Math.round(q.rif)+'\' della maggioranza</span>'+
         '<span>GPS su '+(q.eserc.length - a.assenti.length)+' di '+q.eserc.length+' esercitazioni</span>'+
-        (a.come === 'auto' && !st.mia ? '<span class="gpa-auto">completata da sola</span>' : '')+'</div>'+
-        '<div class="gpa-bs">'+es+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Non e\' il GPS</b><span>lavoro diverso</span></button></div></div>';
+        (dec ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
+        '<div class="gpa-bs">'+es+tf+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button></div></div>';
     }).join('');
-    const corpo = atl.length
+    const nDa = q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length;
+    const corpo = q.atl.length
       ? '<div class="gpa-l">'+righe+'</div>'
-      : '<p class="gps-n">Tutte le '+complete+' atlete hanno il GPS su ogni esercitazione di squadra.</p>';
+      : '<p class="gps-n">Tutte le '+q.complete+' atlete hanno i minuti della maggioranza.</p>';
     const nota = attesa
-      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola il Full Training e la media squadra al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
-      : '<p class="gps-n">'+(atl.length ? 'Le altre '+complete+' hanno il GPS su tutto. ' : '')+'Una esercitazione segnata "fatta senza GPS" entra nel suo Full Training con la media squadra, riportata al suo ritmo di quel giorno; la media squadra si ricalcola. "Non e\' il GPS": ha fatto un lavoro diverso e i suoi numeri restano quelli.</p>';
-    return '<div class="rsec"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi manca da un\'esercitazione di squadra; tocca quelle fatte senza GPS</span></div>'+
-      corpo+nota+(st.mia ? '<div class="gps-btn"><button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Torna alla proposta automatica</button></div>' : '')+'</div>';
+      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola il suo Full Training e la media squadra della seduta al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
+      : (q.atl.length ? '<p class="gps-n">Le altre '+q.complete+' hanno '+Math.round(q.rif)+'\' o quasi. Un\'esercitazione "fatta senza GPS" entra con i valori di squadra di quell\'esercitazione, cosi\' come sono; il tempo fuori esercitazioni con l\'intensita\' che la squadra ha avuto in quel tempo. Dopo una scelta la media squadra della seduta si rifa\' su tutte le atlete; prima resta quella del file.</p>' : '');
+    const btn = (nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaTutteOk(this.dataset.ch)">Le altre vanno bene cosi\'</button>' : '')+
+      (st.mia ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Annulla le scelte</button>' : '');
+    return '<div class="rsec" id="gpa-sez"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi ha meno minuti della maggioranza: dimmi che parte non ha preso il GPS</span></div>'+
+      corpo+nota+(btn ? '<div class="gps-btn">'+btn+'</div>' : '')+'</div>';
   }
   function cosaFattoHTML(m){
     const iso = cfIso(m.meta.dateStr);
@@ -4350,7 +4396,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     /* La riga di forza va prima delle esercitazioni: in stampa il foglio del
        mister apre il documento, poi si legge cosa si e' fatto in sala e poi
        cosa si e' fatto in campo. A schermo la riga non si vede. */
-    host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
+    host.innerHTML = headHTML + '<div class="rbody">'+gpsDaControllareHTML()+fogHTML(fk)+kpis+descBlock+
       forzaRigaHTML(m)+exSecHTML(m)+tmSecHTML(m)+tbl+gpsAllenHTML(m)+cosaFattoHTML(m)+chart+foot+'</div>';
     fogSistema(host, fk);
     const ta = document.getElementById('dr-text');
