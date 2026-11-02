@@ -229,6 +229,32 @@ a{ color:inherit; text-decoration:none; }
 @media print{ .gpa-dc, .gpa-bd, #gpa-sez{ display:none !important; } }
 .gpa-b:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
+.pt-ris{ font-variant-numeric:tabular-nums; color:#FF6A2E; margin-left:6px; }
+.pt-nota{ margin:10px 0 0; font-size:12.5px; color:var(--muted); line-height:1.5; max-width:100ch; }
+.pt-trs{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+.pt-tr{ margin:0; padding:12px 12px 8px; border:1px solid var(--border, rgba(127,127,127,.22)); border-radius:12px; }
+.pt-tr figcaption{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; color:var(--muted); }
+.pt-tr figcaption b{ font-size:18px; color:var(--text); }
+.pt-tr figcaption small{ font-size:11px; margin-left:3px; color:var(--muted); font-weight:500; }
+.pt-tr svg{ display:block; width:100%; height:74px; margin-top:6px; overflow:visible; }
+.pt-tr-l{ fill:none; stroke:#8B5CF6; stroke-width:1.6; vector-effect:non-scaling-stroke; }
+.pt-tr-p{ fill:#8B5CF6; }
+.pt-tr-c{ fill:#FF6A2E; stroke:var(--bg, #111); stroke-width:1.5; }
+.pt-tr-mod{ stroke:var(--muted, #8a8a8a); stroke-width:1.2; opacity:.8; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
+#rprint .pt-tr-mod{ stroke:#999; }
+.pt-tr-x{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:2px; }
+#rprint .pt-trs{ gap:6px; }
+#rprint .pt-tr{ padding:6px 8px 4px; border-color:#ddd; }
+#rprint .pt-tr figcaption{ font-size:9px; color:#555; }
+#rprint .pt-tr figcaption b{ font-size:12px; color:#141414; }
+#rprint .pt-tr svg{ height:44px; }
+#rprint .pt-tr-c{ stroke:#fff; }
+#rprint .pt-nota{ font-size:9px; color:#555; margin-top:4px; }
+#rprint .pt-ris{ color:inherit; }
+@media screen and (max-width:760px){ .pt-trs{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+.gps-l{ display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap:6px 14px; }
+.gps-p{ flex-wrap:nowrap; }
+@media screen and (max-width:560px){ .gps-p{ flex-wrap:wrap; } }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .gps-n{ margin:10px 0 0; font-size:13.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
 .gps-n.att{ color:var(--text); }
@@ -3384,8 +3410,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   /* Righe dove le soglie di velocita' (0-20, 20-23, oltre 23 km/h) non fanno la
      distanza totale: nei file del KSport tornano sempre, quindi sono righe
      scritte a mano. Si mostrano per poterle sistemare nei fogli. */
-  function gpsBandeHTML(){
-    const B = (S.gps && S.gps.bande) || [];
+  function gpsBandeHTML(iso){
+    // nel Report partita solo le righe di quella partita
+    const B = ((S.gps && S.gps.bande) || []).filter(function(b){ return !iso || b.data === iso; });
     if(!B.length) return '';
     const n0 = function(x){ return Math.round(x).toLocaleString('it-IT'); };
     const fmt = function(b){ const p = b.data.split('-'); return p[2]+'/'+p[1]; };
@@ -3404,14 +3431,14 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   };
   /* Tutto quello che c'e' da decidere sul GPS, in un riquadro solo (stesso conto
      del numero sul tasto Report, fioGpsPendenti in fio_sidebar.js). */
-  function gpsDaControllareHTML(){
+  function gpsDaControllareHTML(iso){
     const P = window.fioGpsPendenti ? window.fioGpsPendenti() : null;
-    if(!P || !P.n) return gpsBandeHTML();
+    if(!P || !P.n) return gpsBandeHTML(iso);
     const dm = function(iso){ const p = iso.split('-'); return p[2]+'/'+p[1]; };
     const bA = P.allen.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(dm(x.data))+(x.slot ? ' '+esc(x.slot) : '')+'</b><span>allenamento, '+x.n+' da vedere</span></button>'; });
     const bP = P.partite.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.chiave)+'" onclick="gaApriPartita(this.dataset.ch)"><b>'+esc(dm(x.data))+' '+esc(x.sigla)+'</b><span>partita, '+esc(x.cosa)+'</span></button>'; });
     return '<div class="gpa-dc" id="gpa-dc"><b>GPS da controllare</b><span>Tocca una seduta: negli allenamenti dimmi che parte non ha preso il GPS; nelle partite conferma i cambi'+(P.partite.some(function(x){ return x.cosa === 'segna le titolari'; }) ? ' o segna le titolari nel risultato della gara (Calendario)' : '')+'.</span>'+
-      '<div class="gpa-dcl">'+bP.concat(bA).join('')+'</div></div>'+gpsBandeHTML();
+      '<div class="gpa-dcl">'+bP.concat(bA).join('')+'</div></div>'+gpsBandeHTML(iso);
   }
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
@@ -4829,6 +4856,88 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       migliori: classifica.slice(0, 3), peggiori: classifica.length > 3 ? classifica.slice(-3).reverse() : [] };
   }
 
+  /* ---------- Risultato, titolari e andamento ----------
+     Il risultato e le titolari li segna il mister nel Calendario (rs_fio_gare
+     della stagione, sincronizzato fra i dispositivi). Senza titolari segnate si
+     usano i posti ricostruiti dai minuti (SNAP.gps): in ogni posto chi ha giocato
+     di piu' e' quasi sempre chi e' partita. */
+  function ptIso(m){ const d = ptData(m.data); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function ptGara(m){
+    try{
+      const k = window.fioKey ? window.fioKey('rs_fio_gare') : 'rs_fio_gare_26-27';
+      const g = JSON.parse(localStorage.getItem(k) || '{}')[ptIso(m)];
+      return g && typeof g === 'object' ? g : null;
+    }catch(e){ return null; }
+  }
+  function ptRisultato(m){
+    const g = ptGara(m); if(!g || g.gf == null || g.gs == null) return '';
+    const gf = +g.gf || 0, gs = +g.gs || 0;
+    return m.casa ? gf+' - '+gs : gs+' - '+gf;
+  }
+  function ptTitolari(A){
+    const g = ptGara(A.m), in_campo = {};
+    A.atl.forEach(function(a){ in_campo[a.nome] = 1; });
+    const pt1 = (g && Array.isArray(g.pt1) ? g.pt1 : []).filter(function(n){ return in_campo[n]; });
+    if(pt1.length >= 6) return { tit: pt1, fonte: 'Titolari segnate nel Calendario' };
+    const gp = gpsPartita(A.m);
+    if(gp && gp.posti && gp.posti.length){
+      const tit = gp.posti.map(function(b){ return b.slice().sort(function(x, y){ return y[1] - x[1]; })[0][0]; }).filter(function(n){ return in_campo[n]; });
+      if(tit.length >= 6) return { tit: tit, fonte: 'Titolari non segnate nel Calendario: dedotte dai cambi (chi ha giocato di piu\' nel suo posto)' };
+    }
+    return null;
+  }
+  // ritmo a 90' di un gruppo: volumi sommati sui minuti di tutte, come fa il KSport
+  function ptGruppo90(L){
+    const min = L.reduce(function(t, a){ return t + a.min; }, 0), out = {};
+    PT_MET.forEach(function(o){
+      const val = L.map(function(a){ return a.v[o.i]; }).filter(function(x){ return x != null && !isNaN(x); });
+      if(!val.length || !min){ out[o.i] = null; return; }
+      out[o.i] = o.vol ? L.reduce(function(t, a){ return t + (+a.v[o.i] || 0); }, 0) * 90 / min
+        : L.reduce(function(t, a){ return t + (+a.v[o.i] || 0) * a.min; }, 0) / min;
+    });
+    return { n: L.length, min: min, v: out };
+  }
+  function ptCambi(A){
+    const T = ptTitolari(A); if(!T) return null;
+    const tit = A.atl.filter(function(a){ return T.tit.indexOf(a.nome) >= 0; });
+    const sub = A.atl.filter(function(a){ return T.tit.indexOf(a.nome) < 0 && a.min >= 5; });
+    if(!tit.length || !sub.length) return null;
+    return { fonte: T.fonte, tit: ptGruppo90(tit), sub: ptGruppo90(sub), nSub: sub.length };
+  }
+  function ptCambiHTML(A){
+    const C = ptCambi(A); if(!C) return '';
+    const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','D>20','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    const riga = function(nome, G){ return '<tr><td>'+nome+'<small>'+G.n+' atlete, '+Math.round(G.min)+' minuti in tutto</small></td>'+cols.map(function(o){ return '<td>'+esc(ptVal(G.v[o.i], o.i))+'</td>'; }).join('')+'</tr>'; };
+    const diff = '<tr class="pt-med"><td>Subentrate sulle titolari</td>'+cols.map(function(o){ const p = ptPct(C.sub.v[o.i], C.tit.v[o.i]); return '<td class="'+ptCls(p)+'">'+(p != null ? ptPctTxt(p) : '-')+'</td>'; }).join('')+'</tr>';
+    return '<div class="tbl-wrap"><table class="dt pt-t"><thead><tr><th>Gruppo</th>'+cols.map(function(o){ return '<th>'+esc(MS[o.i]||'')+(o.vol ? ' a 90\'' : '')+'</th>'; }).join('')+'</tr></thead><tbody>'+
+      riga('Titolari', C.tit)+riga('Subentrate', C.sub)+diff+'</tbody></table></div>'+
+      '<p class="pt-nota">'+esc(C.fonte)+'. Chi entra a gara in corso di solito corre di piu\' al minuto: se le subentrate non stanno sopra le titolari, i cambi non hanno alzato il ritmo.</p>';
+  }
+  // andamento: una piccola linea per voce, partita per partita, questa evidenziata
+  function ptTrendHTML(A){
+    if(A.L.length < 3) return '';
+    const voci = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','ACC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    const W = 240, H = 74, P = 8;
+    const box = voci.map(function(o){
+      const ys = A.L.map(function(x){ return x.v[o.i]; }), mod = PT_MOD[o.i];
+      const ok = ys.filter(function(y){ return y != null; }).concat(mod != null ? [mod] : []);
+      if(ok.length < 2) return '';
+      let lo = Math.min.apply(null, ok), hi = Math.max.apply(null, ok);
+      if(hi === lo){ hi += 1; lo -= 1; }
+      const X = function(i){ return P + i * (W - 2 * P) / Math.max(1, A.L.length - 1); };
+      const Y = function(v){ return H - P - (v - lo) * (H - 2 * P) / (hi - lo); };
+      const pts = ys.map(function(y, i){ return y == null ? null : [X(i), Y(y)]; }).filter(Boolean);
+      const k = A.L.indexOf(A.m), cur = ys[k];
+      return '<figure class="pt-tr"><figcaption><span>'+esc(o.n)+'</span><b class="tnum">'+esc(ptVal(cur, o.i))+'<small>'+esc(MU[o.i]||'')+'</small></b></figcaption>'+
+        '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+esc(o.n)+' partita per partita">'+
+        (mod != null ? '<line class="pt-tr-mod" x1="'+P+'" x2="'+(W - P)+'" y1="'+Y(mod)+'" y2="'+Y(mod)+'"/>' : '')+
+        '<polyline class="pt-tr-l" points="'+pts.map(function(p){ return p[0].toFixed(1)+','+p[1].toFixed(1); }).join(' ')+'"/>'+
+        pts.map(function(p, i){ return '<circle class="pt-tr-p" cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6"/>'; }).join('')+
+        (cur != null ? '<circle class="pt-tr-c" cx="'+X(k).toFixed(1)+'" cy="'+Y(cur).toFixed(1)+'" r="4.5"/>' : '')+
+        '</svg><div class="pt-tr-x"><span>'+esc(A.L[0].sigla || '')+'</span><span>'+esc(A.L[A.L.length - 1].sigla || '')+'</span></div></figure>';
+    }).join('');
+    return box ? '<div class="pt-trs">'+box+'</div><p class="pt-nota">Partita per partita, la piu\' vecchia a sinistra; il punto grande e\' questa, la linea tratteggiata il modello 25-26.</p>' : '';
+  }
   function ptFrase(x, rifSu){
     const d = x.dMed != null ? x.dMed : x.dMod;
     return '<li><b>'+esc(x.o.n)+'</b> '+esc(ptVal(x.v, x.o.i))+' '+esc(MU[x.o.i]||'')+
@@ -4846,6 +4955,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(hi.length) f.push('Prima '+quale+' per '+elenco(hi)+'.');
     if(lo.length) f.push('Ultima '+quale+' per '+elenco(lo)+'.');
     if(dist && dist.dMed != null) f.push('Volume '+(Math.abs(dist.dMed) < 5 ? 'in linea con' : (dist.dMed > 0 ? 'sopra' : 'sotto'))+' '+A.rifSu.replace(/^sulle /, 'le ')+' ('+ptPctTxt(dist.dMed)+' di distanza totale)'+(A.contro.length ? '; in calo '+A.contro.slice(0, 2).map(function(x){ return x.o.n.toLowerCase(); }).join(' e ') : '')+'.');
+    const C = ptCambi(A), dmC = C ? PT_MET.find(function(o){ return /^m\/min/.test(MS[o.i]||''); }) : null;
+    if(C && dmC){ const p = ptPct(C.sub.v[dmC.i], C.tit.v[dmC.i]); if(p != null) f.push('Le subentrate hanno corso '+(Math.abs(p) < 3 ? 'come' : (p > 0 ? 'il '+Math.round(p)+'% in piu\' al minuto delle' : 'il '+Math.round(-p)+'% in meno al minuto delle'))+(Math.abs(p) < 3 ? ' le titolari.' : ' titolari.')); }
     const gg = gpsPartita(A.m), gst = gg ? Object.keys(gg.stimate || {}) : [];
     if(gst.length) f.push('GPS spento per '+elenco(gst.map(function(n){ return disp(n)+' ('+Math.round(gg.stimate[n][0])+'\' su '+Math.round(gg.stimate[n][1])+'\')'; }))+': il resto della gara e\' stimato e i numeri di squadra lo comprendono.');
     if(A.migliori.length) f.push('Sopra il loro solito: '+A.migliori.map(function(a){ return disp(a.nome); }).join(', ')+(A.peggiori.filter(function(a){ return a.punteggio < -3; }).length ? '; sotto: '+A.peggiori.filter(function(a){ return a.punteggio < -3; }).map(function(a){ return disp(a.nome); }).join(', ') : '')+'.');
@@ -4877,7 +4988,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       { t:'I numeri della partita', n:'media a testa delle atlete in campo, confronto con '+A.rifNome+' ('+A.rif.length+') e con il '+PT_MOD_N, c:kpi },
       { t:'Pro e contro', n:'solo le voci che si scostano piu\' del 5%', c:pc },
       { t:'Confronto con le altre partite', n:A.L.length+' partite di '+ptCompNome(A.m.comp, true)+', questa evidenziata'+(A.T.length > A.L.length ? '; le altre '+(A.T.length - A.L.length)+' restano fuori dai confronti' : ''), c:tab }
-    ];
+    ].concat(ptTrendHTML(A) ? [{ t:'Andamento nella stagione', n:'le voci chiave di squadra nelle partite di '+ptCompNome(A.m.comp, true), c:ptTrendHTML(A) }] : []);
   }
   function ptPagina2(A){
     function scheda(a, buona){
@@ -4915,7 +5026,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<td class="'+ptCls(r.vs, 3)+'">'+(r.vs != null ? ptPctTxt(r.vs) : '-')+'</td></tr>'; }).join('')+'</tbody></table></div>' : '';
     return [
       { t:'Migliori e peggiori', n:'scarto medio sulle voci di corsa, volumi riportati a 90 minuti, almeno '+PT_MIN+' minuti giocati', c:top },
-    ].concat(ruoliTab ? [{ t:'Per ruolo', n:'media a 90\' di chi ha giocato almeno '+PT_MIN+' minuti, accanto lo scarto dallo stesso ruolo nelle altre partite', c:ruoliTab }] : []).concat([
+    ].concat(ptCambiHTML(A) ? [{ t:'Titolari e subentrate', n:'ritmo a 90\' dei due gruppi: volumi sommati sui minuti di tutte', c:ptCambiHTML(A) }] : []).concat(ruoliTab ? [{ t:'Per ruolo', n:'media a 90\' di chi ha giocato almeno '+PT_MIN+' minuti, accanto lo scarto dallo stesso ruolo nelle altre partite', c:ruoliTab }] : []).concat([
       { t:'Tutte le atlete in campo', n:'numeri della partita; in grigio chi ha giocato meno di '+PT_MIN+' minuti', c:tab }
     ]);
   }
@@ -4924,10 +5035,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const d = ptData(A.m.data), gg = d.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     const sotto = gg+' &#183; '+(A.m.casa ? 'in casa' : 'in trasferta')+' &#183; '+ptCompNome(A.m.comp)+' &#183; '+A.atl.length+' atlete con il GPS';
     if(schermo) return '<div class="rdoc-head"><img class="rh-mark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
-      '<div class="rh-txt"><h2>'+esc(ptIncontro(A.m))+'</h2><div class="rh-sub"><b>'+sotto+'</b> &#183; Fiorentina Primavera U19W</div></div>'+
+      '<div class="rh-txt"><h2>'+esc(ptIncontro(A.m))+(ptRisultato(A.m) ? ' <span class="pt-ris">'+esc(ptRisultato(A.m))+'</span>' : '')+'</h2><div class="rh-sub"><b>'+sotto+'</b> &#183; Fiorentina Primavera U19W</div></div>'+
       '<div class="rh-meta"><div>Stagione <b>'+esc(SEASON)+'</b></div><div>'+(A.k + 1)+'&#170; di '+ptCompNome(A.m.comp, true)+' su '+A.L.length+'</div></div></div>';
     return '<div class="ph"><img class="pmark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
-      '<div><h2>'+esc(ptIncontro(A.m))+'</h2><div class="psub"><b>'+sotto+'</b></div></div><div class="pno"></div></div>';
+      '<div><h2>'+esc(ptIncontro(A.m))+(ptRisultato(A.m) ? ' '+esc(ptRisultato(A.m)) : '')+'</h2><div class="psub"><b>'+sotto+'</b></div></div><div class="pno"></div></div>';
   }
   /* GPS spenti: i posti in campo ricostruiti dai minuti (titolare e cambi) da
      aggiorna_2627.py. Il mister tocca chi aveva il GPS spento; la scelta va nel
@@ -5015,12 +5126,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     host.classList.remove('has-fog');
     const A = ptAnalisi(ptScelta);
     if(!A){ host.innerHTML = '<div class="rbody"><p class="pt-vuoto">Nessuna partita con i dati GPS in questa stagione.</p></div>'; return; }
-    const P1 = ptPagina1(A), gs = gpsSezione(A);
-    if(gs) P1.splice(1, 0, gs);
-    const sez = P1.concat(ptPagina2(A)).map(function(s){
+    // il controllo del GPS e' lavoro sui dati, non lettura della partita: va in fondo
+    const gs = gpsSezione(A);
+    const sez = ptPagina1(A).concat(ptPagina2(A)).concat(gs ? [gs] : []).map(function(s){
       return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.t)+'</h3><span class="rsec-n">'+esc(s.n)+'</span></div>'+s.c+'</div>';
     }).join('');
-    host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+gpsDaControllareHTML()+sez+'</div>';
+    host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+gpsDaControllareHTML(ptIso(A.m))+sez+'</div>';
   }
   function buildPrintPartita(){
     const host = printHost();
