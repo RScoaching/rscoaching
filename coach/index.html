@@ -1418,6 +1418,7 @@ a.ac-s:hover{border-color:var(--line2)}
 .anH-altri{margin:4px 0 14px}.anH-altri summary{cursor:pointer;font-size:13px;color:var(--muted);padding:10px 0;min-height:24px}
 .anH-sq{width:100%;justify-content:center;min-height:44px;margin-bottom:16px}
 .ac-gw{display:none}
+.ac-wb{display:contents}.ac-prima{display:none}
 /* telefono: il calendario diventa un elenco di giorni (sette colonne da 50 px tagliavano tutto);
    i giorni vuoti spariscono, oggi resta sempre */
 @media(max-width:600px){
@@ -1425,6 +1426,8 @@ a.ac-s:hover{border-color:var(--line2)}
   .ac-g8{grid-template-columns:1fr}.ac-g8>.ac-hd{display:none}
   .ac-c{display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:10px;align-items:start;min-height:0;padding:8px 10px}
   .ac-c.vuoto:not(.oggi){display:none}
+  .ac-prima{display:flex;width:100%;justify-content:center;min-height:44px;margin:0 0 10px}
+  .ac-g8:not(.tutte) .ac-wb.prima{display:none}
   .ac-c>*:not(.ac-d){grid-column:2}
   .ac-d{grid-row:1/span 30;margin:2px 0 0;font:600 15px/1.1 Inter,sans-serif;color:var(--white);text-align:center}
   .ac-gw{display:block;font:500 11px Inter,sans-serif;color:var(--muted);text-transform:capitalize;margin-bottom:2px}
@@ -1747,6 +1750,21 @@ input,select,textarea{border-radius:10px}
    'Tutti gli atleti' con atleta precedente e successivo finiva sotto il logo */
 @media(max-width:640px){
   body.det-full .detail.open{top:62px;bottom:calc(66px + env(safe-area-inset-bottom));}
+}
+/* elenco atleti dal telefono: nome e avvisi, poi quattro numeri in una riga e il programma
+   su una riga sola (prima ogni atleta era alto quasi mezzo schermo) */
+@media(max-width:600px){
+  .ath-row.at-r{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"who who who who" "st st st st" "ls ci s7 ac" "pr pr pr pr";column-gap:8px;row-gap:8px;padding:12px 14px}
+  .at-r .at-who{grid-area:who}.at-r .at-st{grid-area:st}.at-r .at-prog{grid-area:pr}
+  .at-r [data-l="Ultima seduta"]{grid-area:ls}.at-r [data-l="Check-in"]{grid-area:ci}.at-r [data-l="Ultimi 7 giorni"]{grid-area:s7}.at-r [data-l="ACWR"]{grid-area:ac}
+  .at-r .at-c{gap:2px;font-size:13px}
+  .at-r .at-c[data-s]::before{content:attr(data-s)}
+  .at-r .at-c small{display:none}
+  .at-r .at-st::before,.at-r .at-st.vuoto{display:none}
+  .at-r .at-prog{flex-direction:row;align-items:baseline;gap:6px;font-size:12px}
+  .at-r .at-prog::before{content:none}
+  .at-r .at-prog small{display:inline;white-space:nowrap}
+  .at-r .at-bar{max-width:none}
 }
 </style>
 </head>
@@ -3034,19 +3052,19 @@ function renderAthletes(){
     const grp=a.group&&groups[a.group]?groups[a.group].name:'';
     const acwrCls=st.acwr==null?'':st.acwr<0.8?'basso':st.acwr<=1.3?'':st.acwr<=1.5?'alto':'rosso';
     const sett=Math.max(1,st.freq||0),p7=Math.min(100,Math.round((st.sess7||0)/sett*100));
-    const pr=dProgAtleta(id)[0];let prog='<span class="at-no">nessuno</span>';
+    const pr=dProgAtleta(id)[0];let prog='<span class="at-no">nessun programma</span>';
     if(pr){const k=dSettIdx(pr[0],pr[1],id,new Date()),W=dSett(pr[1]).length;prog=`<b>${athEsc(pr[1].name||'programma')}</b><small>${k!=null&&k>=0&&k<W?'settimana '+(k+1)+' di '+W:k!=null&&k>=W?'finito':''}</small>`;}
     const al=[];
     if(st.alerts.length){const rosso=st.alerts.some(x=>x.cls==='p-red');al.push(`<span class="at-al${rosso?' rosso':''}" title="${athEsc(st.alerts.map(x=>x.label+': '+x.why).join(' | '))}">${athEsc(st.alerts[0].label)}${st.alerts.length>1?' +'+(st.alerts.length-1):''}</span>`);}
     if(st.unread)al.push(`<span class="at-msg" title="Messaggi non letti">${st.unread} msg</span>`);
     return `<div class="ath-row at-r${st.inattivo?' idle':''}" role="button" tabindex="0" onclick="openAthlete('${id}')" onkeydown="if(event.key==='Enter')openAthlete('${id}')">
       <div class="at-who"><div class="ath-av">${ini(a.name)}</div><div class="ath-mid"><div class="ath-name">${athEsc(a.name)}</div><div class="ath-meta">${athEsc(LV_L[lv]||'')}${a.role?' · '+athEsc(a.role):''}${a.team?' · '+athEsc(a.team):''}${grp?' · '+athEsc(grp):''}</div></div></div>
-      <div class="at-c${st.inattivo?' late':''}" data-l="Ultima seduta">${st.lastSess?ggFa(st.lastSess):'<span class="at-no">mai</span>'}${st.lastRpe?`<small>RPE ${st.lastRpe}</small>`:''}</div>
+      <div class="at-c${st.inattivo?' late':''}" data-l="Ultima seduta" data-s="Seduta">${st.lastSess?ggFa(st.lastSess):'<span class="at-no">mai</span>'}${st.lastRpe?`<small>RPE ${st.lastRpe}</small>`:''}</div>
       <div class="at-c" data-l="Check-in">${st.ciOggi?'oggi':st.lastCi?ggFa(st.lastCi):'<span class="at-no">mai</span>'}</div>
-      <div class="at-c" data-l="Ultimi 7 giorni"><span class="at-n">${st.sess7} su ${st.freq||0}</span><span class="at-bar"><i style="width:${p7}%"></i></span></div>
+      <div class="at-c" data-l="Ultimi 7 giorni" data-s="7 giorni"><span class="at-n">${st.sess7} su ${st.freq||0}</span><span class="at-bar"><i style="width:${p7}%"></i></span></div>
       <div class="at-c at-prog" data-l="Programma">${prog}</div>
       <div class="at-c" data-l="ACWR"><span class="at-acwr ${acwrCls}" title="Rapporto carico acuto su cronico">${st.acwr==null?'-':st.acwr.toFixed(2).replace('.',',')}</span></div>
-      <div class="at-c at-st" data-l="Da guardare">${al.join('')||'<span class="at-no">tutto in linea</span>'}</div>
+      <div class="at-c at-st${al.length?'':' vuoto'}" data-l="Da guardare">${al.join('')||'<span class="at-no">tutto in linea</span>'}</div>
     </div>`;
   }).join('');
 }
@@ -3821,10 +3839,14 @@ function athCalendario(aid){
   };
   let h=`<div class="ac-h"><button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',-1)" aria-label="Settimane prima">&#8249;</button><b>${tit}</b><button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',1)" aria-label="Settimane dopo">&#8250;</button>${athCalOff!==-2?`<button type="button" class="btn btn-ghost btn-sm" onclick="athCalVai('${aid}',0)">Oggi</button>`:''}<span class="ac-sum" id="ac-sum"></span></div>
   <div class="ac-g ac-g8"><div class="ac-hd">Settimana</div>${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(g=>`<div class="ac-hd">${g}</div>`).join('')}`;
+  let nPrima=0;
   for(let w=0;w<4;w++){
     // colonna della settimana: tempo, km di corsa, carico, forma e fatica
     const a0=new Date(lun);a0.setDate(a0.getDate()+w*7);const a1=new Date(a0);a1.setDate(a1.getDate()+7);
     const Lw=logs.filter(l=>l.ts>=a0.setHours(0,0,0,0)&&l.ts<a1.setHours(0,0,0,0));
+    // telefono: le settimane finite prima di questa stanno dietro un tasto, cosi' si parte da oggi
+    const prima=a1.getTime()<=oggi.getTime()&&new Date(lun).getTime()+28*864e5>oggi.getTime();if(prima)nPrima++;
+    h+=`<div class="ac-wb${prima?' prima':''}">`;
     // seduta spostata (come TrainingPeaks): un registro senza collegamento, nella stessa settimana e con lo
     // stesso nome di una seduta in programma non fatta in un altro giorno, vale come quella seduta
     const nm=t=>String(t||'').trim().toLowerCase(),gg=['dom','lun','mar','mer','gio','ven','sab'];
@@ -3871,9 +3893,11 @@ function athCalendario(aid){
       if(pf.length)c+=pf.map(x=>`<div class="ac-ph${x.n>=x.tot?' tutta':''}" title="Prevenzione ${athEsc(x.nome||'')}: ${x.n} esercizi su ${x.tot}">Prevenzione ${x.n}/${x.tot}</div>`).join('');
       h+=`<div class="ac-c${og?' oggi':''}${!c?' vuoto':''}"><div class="ac-d"><span class="ac-gw">${['dom','lun','mar','mer','gio','ven','sab'][d.getDay()]}</span>${d.getDate()}${d.getDate()===1?' '+MESI[d.getMonth()].slice(0,3):''}</div>${well?`<div class="ac-wl">${well}</div>`:''}${c}</div>`;
     }
+    h+='</div>';
   }
   h+='</div>';
   const sum=nP?`<b>${nF}</b> fatte su ${nP} passate${nS?`, <b>${nS}</b> non registrate`:''}`:'';
+  if(nPrima)h=h.replace('<div class="ac-g ac-g8">',`<button type="button" class="btn btn-ghost btn-sm ac-prima" onclick="this.nextElementSibling.classList.add('tutte');this.remove()">Mostra ${nPrima===1?'la settimana prima':'le '+nPrima+' settimane prima'}</button><div class="ac-g ac-g8">`);
   return h.replace('<span class="ac-sum" id="ac-sum"></span>',`<span class="ac-sum">${sum}</span>`);
 }
 // le serie fatte di una seduta di forza, con lo scritto del programma accanto e il massimale stimato
