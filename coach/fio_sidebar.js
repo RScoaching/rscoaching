@@ -2682,6 +2682,16 @@ html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
 .fio-gpsn{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:auto;border-radius:9px;background:#FF6A2E;color:#1A0B05;font:700 11px Inter,sans-serif;line-height:1}
 @media(max-width:900px){
   .sb-mob-bar{display:flex;}
+  #sb-sidebar{
+    display:none;position:fixed;top:0;left:0;height:100vh;
+    z-index:595;transform:translateX(-100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  #sb-sidebar.open{display:flex !important;transform:translateX(0);}
+}
+/* telefono, solo a schermo: barra in basso, numeri GPS e menu fra testata e barra.
+   In stampa il foglio A4 e' largo come un telefono e queste regole finivano sui fogli */
+@media screen and (max-width:900px){
   .sb-ham{display:none;}
   #fio-bt{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:580;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
     background:rgba(20,16,23,.95);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);
@@ -2700,12 +2710,12 @@ html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
   html[data-tema="chiaro"] #fio-bt .on{color:#5B21B6;background:rgba(124,58,237,.10)}
   /* il menu si apre fra la testata e la barra: prima il suo inizio (la stagione) finiva sotto la testata */
   #sb-sidebar{top:52px !important;height:calc(100vh - 52px - 66px - env(safe-area-inset-bottom)) !important;overflow-y:auto}
-  #sb-sidebar{
-    display:none;position:fixed;top:0;left:0;height:100vh;
-    z-index:595;transform:translateX(-100%);
-    transition:transform .3s cubic-bezier(.4,0,.2,1);
-  }
-  #sb-sidebar.open{display:flex !important;transform:translateX(0);}
+}
+/* in stampa mai la barra, il menu o i numeri, e niente spazio vuoto in fondo:
+   anche dal telefono i fogli escono come dal PC */
+@media print{
+  #fio-bt,.fio-gpsn,.sb-mob-bar,.sb-mob-overlay,.sb-edge{display:none !important;}
+  body{padding-bottom:0 !important;}
 }
 @media(min-width:901px){
   .sb-mob-bar{display:none !important;}
