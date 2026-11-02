@@ -190,6 +190,19 @@ a{ color:inherit; text-decoration:none; }
 /* report partita */
 #fg-match select{ width:270px; max-width:100%; }
 .pt-sint{ margin:0; font-size:14px; line-height:1.6; color:var(--text); max-width:90ch; }
+.gps-l{ display:flex; flex-direction:column; gap:6px; }
+.gps-p{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.gps-fr{ color:var(--muted); font-size:13px; }
+.gps-a{ appearance:none; display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border-radius:10px; border:1px solid var(--border, rgba(127,127,127,.25)); background:transparent; color:var(--text); font:inherit; font-size:14px; cursor:pointer; }
+.gps-a b{ font-weight:600; }
+.gps-a span{ color:var(--muted); font-size:13px; }
+.gps-a em{ font-style:normal; font-size:12px; font-weight:600; color:#C2410C; }
+.gps-a.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
+.gps-a em.pr{ color:var(--muted); font-weight:500; }
+.gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
+.gps-n{ margin:10px 0 0; font-size:13.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
+.gps-n.att{ color:var(--text); }
+.gps-auto{ appearance:none; margin-top:8px; min-height:44px; padding:0 14px; border-radius:10px; border:1px solid var(--border, rgba(127,127,127,.25)); background:transparent; color:var(--text); font:inherit; font-size:13.5px; cursor:pointer; }
 #rprint .pt-sint{ font-size:10.5px; line-height:1.5; color:#222; }
 table.dt.pt-t td small.up, table.dt.pt-t td small.dn, table.dt.pt-t td small.eq{ display:inline; font-size:10.5px; margin-left:3px; }
 .pt-kpi{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
@@ -4738,12 +4751,70 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return '<div class="ph"><img class="pmark" src="'+esc(crestSrc)+'" alt="Stemma Fiorentina" '+CREST_ERR+'>'+
       '<div><h2>'+esc(ptIncontro(A.m))+'</h2><div class="psub"><b>'+sotto+'</b></div></div><div class="pno"></div></div>';
   }
+  /* GPS spenti: i posti in campo ricostruiti dai minuti (titolare e cambi) da
+     aggiorna_2627.py. Il mister tocca chi aveva il GPS spento; la scelta va nel
+     database (rs_fio_gps_scelte, sincronizzata da fio_sidebar.js) e il Mac
+     ricalcola minuti, stima a fine gara e media squadra. */
+  const GPS_K = 'rs_fio_gps_scelte';
+  function gpsScelte(){ try { const v = JSON.parse(localStorage.getItem(GPS_K) || '{}'); return v && typeof v === 'object' ? v : {}; } catch(e){ return {}; } }
+  function gpsPartita(m){
+    const P = (S.gps && S.gps.partite) || [], d = ptData(m.data);
+    const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    return P.filter(function(x){ return x.data === iso; }).sort(function(a, b){ return (b.sigla === m.sigla) - (a.sigla === m.sigla); })[0] || null;
+  }
+  function gpsSpenti(g){
+    const sc = gpsScelte()[g.chiave];
+    return sc && Array.isArray(sc.spenti) ? sc.spenti : Object.keys(g.stimate || {});
+  }
+  window.gpsTocca = function(ch, nome){
+    const sc = gpsScelte(), g = ((S.gps && S.gps.partite) || []).find(function(x){ return x.chiave === ch; });
+    if(!g) return;
+    const L = gpsSpenti(g).slice(), i = L.indexOf(nome);
+    if(i >= 0) L.splice(i, 1); else L.push(nome);
+    sc[ch] = { spenti: L, ts: Date.now() };
+    localStorage.setItem(GPS_K, JSON.stringify(sc));
+    render();
+  };
+  window.gpsAuto = function(ch){
+    const sc = gpsScelte(); delete sc[ch];
+    localStorage.setItem(GPS_K, JSON.stringify(sc));
+    render();
+  };
+  function gpsSezione(A){
+    const g = gpsPartita(A.m);
+    if(!g || !g.posti || !g.posti.length) return null;
+    const sp = gpsSpenti(g), mia = gpsScelte()[g.chiave];
+    // la scelta salvata non e' ancora nei dati: il Mac deve rifare il giro
+    const fatte = Object.keys(g.stimate || {}).sort().join('|');
+    const attesa = mia && Array.isArray(mia.spenti) && mia.spenti.slice().sort().join('|') !== fatte;
+    const min = function(x){ return Math.round(x)+'\''; };
+    const righe = g.posti.map(function(b){
+      return '<div class="gps-p">'+b.map(function(x, j){
+        const nm = x[0], st = (g.stimate || {})[nm], on = sp.indexOf(nm) >= 0, pr = !on && (g.proposte || {})[nm];
+        return (j ? '<span class="gps-fr" aria-hidden="true">&#8594;</span>' : '')+
+          '<button type="button" class="gps-a'+(on ? ' on' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(g.chiave)+'" data-n="'+esc(nm)+'" onclick="gpsTocca(this.dataset.ch,this.dataset.n)">'+
+          '<b>'+esc(disp(nm))+'</b><span class="tnum">'+(st ? min(st[0])+' &#8594; '+min(st[1]) : min(x[1]))+'</span>'+(on ? '<em>GPS spento</em>' : pr ? '<em class="pr">GPS spento?</em>' : '')+'</button>';
+      }).join('')+'</div>';
+    }).join('');
+    const prop = Object.keys(g.proposte || {}).filter(function(n){ return sp.indexOf(n) < 0; });
+    const nota = attesa
+      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola minuti, stime e media squadra al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
+      : (Object.keys(g.stimate || {}).length
+        ? '<p class="gps-n">Completate fino a fine gara con il loro ritmo di oggi e quello delle partite prima: '+Object.keys(g.stimate).map(function(n){ return esc(disp(n)); }).join(', ')+'. La media squadra e\' gia\' ricalcolata.</p>'
+        : prop.length
+          ? '<p class="gps-n">Possibile GPS spento: '+prop.map(function(n){ return esc(disp(n))+' ('+min(g.proposte[n][0])+' su '+min(g.dur)+')'; }).join(', ')+'. Le partite prima del 1/11 le correggevi nei fogli: qui vale solo se la tocchi.</p>'
+          : '<p class="gps-n">Nessun GPS spento trovato: ogni posto arriva alla durata della gara.</p>');
+    return { t:'GPS', n:'posti in campo ricostruiti dai minuti, titolare e cambi; tocca chi aveva il GPS spento'+(g.scelta || mia ? '' : ' (proposta automatica)'),
+      c:'<div class="gps-l">'+righe+'</div>'+nota+(mia ? '<button type="button" class="gps-auto" data-ch="'+esc(g.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Torna alla proposta automatica</button>' : '') };
+  }
   function renderPartita(){
     const host = document.getElementById('rdoc');
     host.classList.remove('has-fog');
     const A = ptAnalisi(ptScelta);
     if(!A){ host.innerHTML = '<div class="rbody"><p class="pt-vuoto">Nessuna partita con i dati GPS in questa stagione.</p></div>'; return; }
-    const sez = ptPagina1(A).concat(ptPagina2(A)).map(function(s){
+    const P1 = ptPagina1(A), gs = gpsSezione(A);
+    if(gs) P1.splice(1, 0, gs);
+    const sez = P1.concat(ptPagina2(A)).map(function(s){
       return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.t)+'</h3><span class="rsec-n">'+esc(s.n)+'</span></div>'+s.c+'</div>';
     }).join('');
     host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+sez+'</div>';
