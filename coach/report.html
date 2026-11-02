@@ -199,6 +199,12 @@ a{ color:inherit; text-decoration:none; }
 .gps-a em{ font-style:normal; font-size:12px; font-weight:600; color:#C2410C; }
 .gps-a.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
 .gps-a em.pr{ color:var(--muted); font-weight:500; }
+.gps-esp{ cursor:default; }
+.gps-btn{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.gps-t{ margin-top:12px; }
+.gps-t td small{ display:block; color:var(--muted); font-weight:400; white-space:nowrap; }
+.gps-t td:nth-child(2){ white-space:nowrap; }
+.gps-t tr.gps-agg td{ color:#C2410C; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .gps-n{ margin:10px 0 0; font-size:13.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
@@ -4672,6 +4678,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     if(hi.length) f.push('Prima '+quale+' per '+elenco(hi)+'.');
     if(lo.length) f.push('Ultima '+quale+' per '+elenco(lo)+'.');
     if(dist && dist.dMed != null) f.push('Volume '+(Math.abs(dist.dMed) < 5 ? 'in linea con' : (dist.dMed > 0 ? 'sopra' : 'sotto'))+' '+A.rifSu.replace(/^sulle /, 'le ')+' ('+ptPctTxt(dist.dMed)+' di distanza totale)'+(A.contro.length ? '; in calo '+A.contro.slice(0, 2).map(function(x){ return x.o.n.toLowerCase(); }).join(' e ') : '')+'.');
+    const gg = gpsPartita(A.m), gst = gg ? Object.keys(gg.stimate || {}) : [];
+    if(gst.length) f.push('GPS spento per '+elenco(gst.map(function(n){ return disp(n)+' ('+Math.round(gg.stimate[n][0])+'\' su '+Math.round(gg.stimate[n][1])+'\')'; }))+': il resto della gara e\' stimato e i numeri di squadra lo comprendono.');
     if(A.migliori.length) f.push('Sopra il loro solito: '+A.migliori.map(function(a){ return disp(a.nome); }).join(', ')+(A.peggiori.filter(function(a){ return a.punteggio < -3; }).length ? '; sotto: '+A.peggiori.filter(function(a){ return a.punteggio < -3; }).map(function(a){ return disp(a.nome); }).join(', ') : '')+'.');
     return '<p class="pt-sint">'+f.map(esc).join(' ')+'</p>';
   }
@@ -4777,6 +4785,12 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
   };
+  // nessun GPS spento: un posto corto per un'espulsione o per un'atleta senza GPS
+  window.gpsNessuno = function(ch){
+    const sc = gpsScelte(); sc[ch] = { spenti: [], ts: Date.now() };
+    localStorage.setItem(GPS_K, JSON.stringify(sc));
+    render();
+  };
   window.gpsAuto = function(ch){
     const sc = gpsScelte(); delete sc[ch];
     localStorage.setItem(GPS_K, JSON.stringify(sc));
@@ -4793,6 +4807,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const righe = g.posti.map(function(b){
       return '<div class="gps-p">'+b.map(function(x, j){
         const nm = x[0], st = (g.stimate || {})[nm], on = sp.indexOf(nm) >= 0, pr = !on && (g.proposte || {})[nm];
+        if((g.esp || []).indexOf(nm) >= 0) return '<span class="gps-a gps-esp"><b>'+esc(disp(nm))+'</b><span class="tnum">'+min(x[1])+'</span><em class="pr">espulsa</em></span>';
         return (j ? '<span class="gps-fr" title="cambio">&#8644;</span>' : '')+
           '<button type="button" class="gps-a'+(on ? ' on' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(g.chiave)+'" data-n="'+esc(nm)+'" onclick="gpsTocca(this.dataset.ch,this.dataset.n)">'+
           '<b>'+esc(disp(nm))+'</b><span class="tnum">'+(st ? min(st[0])+' &#8594; '+min(st[1]) : min(x[1]))+'</span>'+(on ? '<em>GPS spento</em>' : pr ? '<em class="pr">GPS spento?</em>' : '')+'</button>';
@@ -4807,8 +4822,22 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         : prop.length
           ? '<p class="gps-n">Possibile GPS spento: '+prop.map(function(n){ return esc(disp(n))+' ('+min(g.proposte[n][0])+' su '+min(g.dur)+')'; }).join(', ')+'. '+(g.dubbio ? 'Con questi minuti tornano due ricostruzioni diverse, quindi non cambio niente finche\' non tocchi chi aveva il GPS spento.' : 'Le partite prima del 1/11 le correggevi nei fogli: qui vale solo se la tocchi.')+'</p>'
           : '<p class="gps-n">Nessun GPS spento trovato: ogni posto arriva alla durata della gara.</p>');
-    return { t:'GPS', n:'posti in campo ricostruiti dai minuti: chi ha giocato e chi l\'ha cambiata; tocca chi aveva il GPS spento'+(g.scelta || mia ? '' : ' (proposta automatica)'),
-      c:'<div class="gps-l">'+righe+'</div>'+nota+(mia ? '<button type="button" class="gps-auto" data-ch="'+esc(g.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Torna alla proposta automatica</button>' : '') };
+    // registrato, aggiunto e totale per chi e' stata completata
+    const VI = [1, 3, 5, 13, 7, 8, 2].filter(function(i){ return i < MS.length; });
+    const dett = Object.keys(g.vec || {}).map(function(nm){
+      const pr = g.vec[nm][0], tt = g.vec[nm][1];
+      const cell = function(v, i){ return '<td>'+(v == null ? '-' : esc(ptVal(v, i)))+'</td>'; };
+      return '<tr><td><b>'+esc(disp(nm))+'</b><small>base: '+esc((g.fonte || {})[nm] || 'partite prima')+'</small></td><td>Registrato</td><td>'+min(pr[IDX_MIN])+'</td>'+VI.map(function(i){ return cell(pr[i], i); }).join('')+'</tr>'+
+        '<tr class="gps-agg"><td></td><td>Aggiunto</td><td>+'+min(tt[IDX_MIN] - pr[IDX_MIN])+'</td>'+VI.map(function(i){ return SUMF[i] ? cell(tt[i] != null && pr[i] != null ? tt[i] - pr[i] : null, i) : '<td></td>'; }).join('')+'</tr>'+
+        '<tr class="pt-med"><td></td><td>Totale stimato</td><td>'+min(tt[IDX_MIN])+'</td>'+VI.map(function(i){ return cell(tt[i], i); }).join('')+'</tr>';
+    }).join('');
+    const tabDett = dett ? '<div class="tbl-wrap"><table class="dt pt-t gps-t"><thead><tr><th>Atleta</th><th></th><th>Min</th>'+VI.map(function(i){ return '<th>'+esc(MS[i]||'')+'</th>'; }).join('')+'</tr></thead><tbody>'+dett+'</tbody></table></div>' : '';
+    const nessuno = mia && Array.isArray(mia.spenti) && !mia.spenti.length;
+    const btn = (mia ? '<button type="button" class="gps-auto" data-ch="'+esc(g.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Torna alla proposta automatica</button>' : '')+
+      (!nessuno && (Object.keys(g.stimate || {}).length || prop.length) ? '<button type="button" class="gps-auto" data-ch="'+esc(g.chiave)+'" onclick="gpsNessuno(this.dataset.ch)">Va bene cosi\': nessun GPS spento</button>' : '');
+    return { t:'GPS', n:(g.titolari ? 'titolari dal Calendario, cambi ricostruiti dai minuti' : 'titolari non segnate nel Calendario: posti ricostruiti dai minuti')+'; tocca chi aveva il GPS spento',
+      c:'<div class="gps-l">'+righe+'</div>'+nota+tabDett+(btn ? '<div class="gps-btn">'+btn+'</div>' : '')+
+        (g.titolari ? '' : '<p class="gps-n">Con le titolari segnate nel risultato della gara (Calendario) i cambi diventano certi; le espulse si segnano li\' accanto.</p>') };
   }
   function renderPartita(){
     const host = document.getElementById('rdoc');

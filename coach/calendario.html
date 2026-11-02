@@ -1683,6 +1683,13 @@ html[data-tema="chiaro"] .sb-mob-overlay{ background:rgba(255,255,255,0.94); }
         </div>
       </div>
     </div>
+    <div class="pl-drow">
+      <label>Espulse</label>
+      <div class="pl-gapt">
+        <div class="pl-plchips" id="pl-gaesp"></div>
+        <div class="pl-gapth"><span>Chi e' uscita senza cambio: i suoi minuti restano quelli, non e' un GPS spento.</span></div>
+      </div>
+    </div>
     <div class="pl-dactions">
       <button type="button" class="btn" id="pl-gacancel">Annulla</button>
       <button type="submit" class="btn primary" value="save" id="pl-gasave">Salva</button>
@@ -5172,6 +5179,21 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }).join('');
     gaRenderPtn();
   }
+  /* Espulse: solo chi ha giocato questa gara. Servono alla ricostruzione dei
+     cambi di aggiorna_2627.py: un posto rimasto corto per un rosso non e' un
+     GPS spento e non va stimato. */
+  function gaRenderEsp(){
+    const host = document.getElementById('pl-gaesp'); if(!host) return;
+    const mins = gaCur ? gaMin(gaCur) : {};
+    // senza minuti della gara (gara non ancora nei dati GPS) si sceglie dalla rosa
+    const base = Object.keys(mins).length ? Object.keys(mins) : rosterList().map(function(p){ return p.n; });
+    const nomi = base.slice().sort(function(a, b){ return plNome(a).localeCompare(plNome(b)); });
+    host.innerHTML = nomi.length ? nomi.map(function(n){
+      const on = (gaDraft.esp||[]).indexOf(n) >= 0;
+      return '<button type="button" class="pl-plchip'+(on?' on':'')+'" data-esp="'+esc(n)+'" aria-pressed="'+(on?'true':'false')+'">'+
+        esc(plNome(n))+(mins[n] ? '<span class="pl-gaptm">'+NF0.format(mins[n])+"'</span>" : '')+'</button>';
+    }).join('') : '<div class="pl-phz-empty">Nessuna giocatrice nel roster.</div>';
+  }
   function gaBind(){
     const sc = document.getElementById('pl-gasc');
     if(sc) sc.addEventListener('input', function(e){
@@ -5223,6 +5245,16 @@ window.RS_ROSTER = window.RS_ROSTER || [
       b.setAttribute('aria-pressed', on?'true':'false');
       gaRenderPtn();
     });
+    const es = document.getElementById('pl-gaesp');
+    if(es) es.addEventListener('click', function(e){
+      const b = e.target.closest('[data-esp]'); if(!b) return; e.preventDefault();
+      const n = b.getAttribute('data-esp');
+      gaDraft.esp = gaDraft.esp || [];
+      const j = gaDraft.esp.indexOf(n), on = (j < 0);
+      if(on) gaDraft.esp.push(n); else gaDraft.esp.splice(j, 1);
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     const clr = document.getElementById('pl-gaptclear');
     if(clr) clr.addEventListener('click', function(){ gaDraft.pt1 = []; gaRenderPt(); });
     const cnc = document.getElementById('pl-gacancel');
@@ -5252,7 +5284,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
       goals: (r && Array.isArray(r.goals)) ? r.goals.map(function(g){
         return { n:g.n||'', a:g.a||'', m:(g.m==null?null:Number(g.m)) };
       }) : [],
-      pt1: (r && Array.isArray(r.pt1)) ? r.pt1.slice() : []
+      pt1: (r && Array.isArray(r.pt1)) ? r.pt1.slice() : [],
+      esp: (r && Array.isArray(r.esp)) ? r.esp.slice() : []
     };
     const sl = document.getElementById('pl-gaslot');
     /* Senza risultato salvato, lo slot parte da quello scritto nel calendario
@@ -5265,7 +5298,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
     }
     const del = document.getElementById('pl-gadel');
     if(del){ if(r) del.removeAttribute('hidden'); else del.setAttribute('hidden',''); }
-    gaRenderSc(); gaRenderGoals(); gaRenderPt();
+    gaRenderSc(); gaRenderGoals(); gaRenderPt(); gaRenderEsp();
     if(typeof gaDlg.showModal==='function') gaDlg.showModal(); else gaDlg.setAttribute('open','');
   }
   function gaAfterSave(){
@@ -5299,6 +5332,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       gs: Math.max(0, Math.min(30, Math.round(Number(gaDraft.gs)||0))),
       goals: goals,
       pt1: gaDraft.pt1.slice(),
+      esp: (gaDraft.esp||[]).slice(),
       opp: String(t.opp||''),
       casa: !!t.casa,
       /* Mattina o pomeriggio la sa solo il mister: il file GPS della gara non
