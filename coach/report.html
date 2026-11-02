@@ -205,6 +205,21 @@ a{ color:inherit; text-decoration:none; }
 .gps-t td small{ display:block; color:var(--muted); font-weight:400; white-space:nowrap; }
 .gps-t td:nth-child(2){ white-space:nowrap; }
 .gps-t tr.gps-agg td{ color:#C2410C; }
+.gpa-l{ display:flex; flex-direction:column; }
+.gpa-r{ padding:12px 0; border-bottom:1px solid var(--border, rgba(127,127,127,.2)); }
+.gpa-r:last-child{ border-bottom:0; }
+.gpa-h{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; margin-bottom:8px; font-size:13px; color:var(--muted); }
+.gpa-h b{ font-size:15px; color:var(--text); }
+.gpa-h .gpa-basso{ color:#C2410C; font-weight:600; }
+.gpa-h .gpa-auto{ color:#C2410C; font-weight:600; }
+.gpa-r.gpa-no .gpa-h{ opacity:.7; }
+.gpa-bs{ display:flex; flex-wrap:wrap; gap:8px; }
+.gpa-b{ appearance:none; display:inline-flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:1px; min-height:48px; padding:6px 12px; border-radius:10px; border:1px solid var(--border, rgba(127,127,127,.25)); background:transparent; color:var(--text); font:inherit; font-size:13.5px; text-align:left; cursor:pointer; }
+.gpa-b span{ font-size:12px; color:var(--muted); }
+.gpa-b.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
+.gpa-b.on span{ color:#C2410C; font-weight:600; }
+.gpa-b:disabled{ opacity:.45; cursor:default; }
+.gpa-b:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .gps-n{ margin:10px 0 0; font-size:13.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
@@ -3280,6 +3295,81 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }).join('')+'</ul>';
     return '<div class="cf-blk cf-forza">'+top+lista+'</div>';
   }
+  /* GPS negli allenamenti: chi manca da un'esercitazione di squadra (quadro
+     preparato da aggiorna_2627.py, SNAP.gps.sedute). Il mister segna quelle
+     fatte senza GPS, oppure 'Non e' il GPS' se ha fatto un lavoro diverso; la
+     scelta va in rs_fio_gps_scelte come per le partite e il Mac ricalcola. */
+  function gaQuadro(m){
+    const iso = cfIso(m.meta.dateStr), ap = m.meta.ap || '';
+    const L = ((S.gps && S.gps.sedute) || []).filter(function(q){ return q.data === iso; });
+    return L.find(function(q){ return q.slot === ap; }) || (L.length === 1 ? L[0] : null);
+  }
+  // stato in vigore: la scelta salvata, se no quello che c'e' nei dati
+  function gaStato(q){
+    const sc = gpsScelte()[q.chiave];
+    if(sc && (sc.agg || sc.no)) return { agg: sc.agg || {}, no: sc.no || [], mia: true };
+    const agg = {}, no = [];
+    q.atl.forEach(function(a){
+      if(a.agg && a.agg.length) agg[a.n] = a.agg.map(function(k){ return q.eserc[k][0]; });
+      if(a.no) no.push(a.n);
+    });
+    return { agg: agg, no: no, mia: false };
+  }
+  function gaSalva(q, st){
+    const sc = gpsScelte(); sc[q.chiave] = { agg: st.agg, no: st.no, ts: Date.now() };
+    localStorage.setItem(GPS_K, JSON.stringify(sc));
+    render();
+  }
+  window.gaToccaEs = function(ch, nome, k){
+    const q = ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); if(!q) return;
+    const st = gaStato(q), es = q.eserc[+k][0], L = (st.agg[nome] || []).slice(), i = L.indexOf(es);
+    if(i >= 0) L.splice(i, 1); else L.push(es);
+    if(L.length) st.agg[nome] = L; else delete st.agg[nome];
+    st.no = st.no.filter(function(n){ return n !== nome; });
+    gaSalva(q, st);
+  };
+  window.gaToccaNo = function(ch, nome){
+    const q = ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); if(!q) return;
+    const st = gaStato(q), i = st.no.indexOf(nome);
+    if(i >= 0) st.no.splice(i, 1); else { st.no.push(nome); delete st.agg[nome]; }
+    gaSalva(q, st);
+  };
+  function gpsAllenHTML(m){
+    const q = gaQuadro(m);
+    if(!q || !q.eserc.length) return '';
+    const st = gaStato(q);
+    // la scelta salvata e' gia' nei dati? confronto con quello che lo script ha applicato
+    const firma = function(agg, no){ return JSON.stringify(Object.keys(agg).sort().map(function(n){ return [n, agg[n].slice().sort()]; }))+'|'+no.slice().sort().join(','); };
+    const dati = (function(){ const a = {}, n = []; q.atl.forEach(function(x){ if(x.agg && x.agg.length) a[x.n] = x.agg.map(function(k){ return q.eserc[k][0]; }); if(x.no) n.push(x.n); }); return firma(a, n); })();
+    const attesa = st.mia && firma(st.agg, st.no) !== dati;
+    // una riga per atleta: minuti, su quante esercitazioni c'e' il GPS e un tasto
+    // per ogni esercitazione di squadra che manca
+    // chi ha il GPS su tutte le esercitazioni non ha niente da segnare
+    const atl = q.atl.filter(function(a){ return a.assenti.length || st.no.indexOf(a.n) >= 0; });
+    const complete = q.complete + q.atl.length - atl.length;
+    const righe = atl.map(function(a){
+      const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [];
+      const basso = a.min < q.med - 5;
+      const es = a.assenti.map(function(k){
+        const e = q.eserc[k], on = !no && ag.indexOf(e[0]) >= 0;
+        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+'" aria-pressed="'+on+'"'+(no ? ' disabled' : '')+' data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+k+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
+          '<b>'+esc(e[0])+'</b><span>'+Math.round(e[1])+'\' &#183; '+(on ? 'fatta senza GPS' : 'manca')+'</span></button>';
+      }).join('');
+      return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+
+        '<span class="tnum'+(basso ? ' gpa-basso' : '')+'">'+Math.round(a.min)+'\' su '+Math.round(q.med)+'\' della squadra</span>'+
+        '<span>GPS su '+(q.eserc.length - a.assenti.length)+' di '+q.eserc.length+' esercitazioni</span>'+
+        (a.come === 'auto' && !st.mia ? '<span class="gpa-auto">completata da sola</span>' : '')+'</div>'+
+        '<div class="gpa-bs">'+es+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Non e\' il GPS</b><span>lavoro diverso</span></button></div></div>';
+    }).join('');
+    const corpo = atl.length
+      ? '<div class="gpa-l">'+righe+'</div>'
+      : '<p class="gps-n">Tutte le '+complete+' atlete hanno il GPS su ogni esercitazione di squadra.</p>';
+    const nota = attesa
+      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola il Full Training e la media squadra al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
+      : '<p class="gps-n">'+(atl.length ? 'Le altre '+complete+' hanno il GPS su tutto. ' : '')+'Una esercitazione segnata "fatta senza GPS" entra nel suo Full Training con la media squadra, riportata al suo ritmo di quel giorno; la media squadra si ricalcola. "Non e\' il GPS": ha fatto un lavoro diverso e i suoi numeri restano quelli.</p>';
+    return '<div class="rsec"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi manca da un\'esercitazione di squadra; tocca quelle fatte senza GPS</span></div>'+
+      corpo+nota+(st.mia ? '<div class="gps-btn"><button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Torna alla proposta automatica</button></div>' : '')+'</div>';
+  }
   function cosaFattoHTML(m){
     const iso = cfIso(m.meta.dateStr);
     const ap  = m.meta.ap || '';
@@ -4261,7 +4351,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
        mister apre il documento, poi si legge cosa si e' fatto in sala e poi
        cosa si e' fatto in campo. A schermo la riga non si vede. */
     host.innerHTML = headHTML + '<div class="rbody">'+fogHTML(fk)+kpis+descBlock+
-      forzaRigaHTML(m)+exSecHTML(m)+tmSecHTML(m)+tbl+cosaFattoHTML(m)+chart+foot+'</div>';
+      forzaRigaHTML(m)+exSecHTML(m)+tmSecHTML(m)+tbl+gpsAllenHTML(m)+cosaFattoHTML(m)+chart+foot+'</div>';
     fogSistema(host, fk);
     const ta = document.getElementById('dr-text');
     if(ta) ta.addEventListener('input', function(){ dailyDesc = ta.value; });
