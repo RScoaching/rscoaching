@@ -199,6 +199,7 @@ a{ color:inherit; text-decoration:none; }
 .gps-a em{ font-style:normal; font-size:12px; font-weight:600; color:#C2410C; }
 .gps-a.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
 .gps-a em.pr{ color:var(--muted); font-weight:500; }
+.pt-gst{ color:#C2410C !important; font-weight:600; }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .gps-n{ margin:10px 0 0; font-size:13.5px; line-height:1.5; color:var(--muted); max-width:90ch; }
 .gps-n.att{ color:var(--text); }
@@ -4722,7 +4723,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     const righe = ord.map(function(a){
       const fuori = !(a.min >= PT_MIN && a.punteggio != null);
-      return '<tr'+(fuori ? ' class="pt-poco"' : '')+'><td>'+esc(disp(a.nome))+(a.ruolo ? '<small>'+esc(a.ruolo)+'</small>' : '')+'</td><td>'+esc(ptVal(a.min, IDX_MIN))+'</td>'+
+      const gst = ((gpsPartita(A.m) || {}).stimate || {})[a.nome];
+      return '<tr'+(fuori ? ' class="pt-poco"' : '')+'><td>'+esc(disp(a.nome))+(a.ruolo ? '<small>'+esc(a.ruolo)+'</small>' : '')+(gst ? '<small class="pt-gst">GPS spento a '+Math.round(gst[0])+'\', resto stimato</small>' : '')+'</td><td>'+esc(ptVal(a.min, IDX_MIN))+'</td>'+
         cols.map(function(o){ return '<td>'+esc(ptVal(a.v[o.i], o.i))+'</td>'; }).join('')+
         '<td class="'+ptCls(a.vsSua, 3)+'">'+(a.vsSua != null ? ptPctTxt(a.vsSua) : '-')+'</td>'+
         '<td class="'+ptCls(a.vsSquadra, 3)+'">'+(a.vsSquadra != null ? ptPctTxt(a.vsSquadra) : '-')+'</td></tr>';
@@ -4797,10 +4799,11 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       }).join('')+'</div>';
     }).join('');
     const prop = Object.keys(g.proposte || {}).filter(function(n){ return sp.indexOf(n) < 0; });
+    const ctrl = g.dubbio && !mia && Object.keys(g.stimate || {}).length;
     const nota = attesa
       ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola minuti, stime e media squadra al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
       : (Object.keys(g.stimate || {}).length
-        ? '<p class="gps-n">Completate fino a fine gara con il loro ritmo di oggi e quello delle partite prima: '+Object.keys(g.stimate).map(function(n){ return esc(disp(n)); }).join(', ')+'. La media squadra e\' gia\' ricalcolata.</p>'
+        ? '<p class="gps-n">Completate fino a fine gara con il loro ritmo di oggi, quello delle partite prima e il calo di fine gara: '+Object.keys(g.stimate).map(function(n){ return esc(disp(n)); }).join(', ')+'. Media squadra, Carico e schede atleta usano gia\' questi numeri.'+(ctrl ? ' Da controllare: un\'altra ricostruzione dei cambi tornava quasi uguale; se e\' sbagliata tocca le atlete giuste.' : '')+'</p>'
         : prop.length
           ? '<p class="gps-n">Possibile GPS spento: '+prop.map(function(n){ return esc(disp(n))+' ('+min(g.proposte[n][0])+' su '+min(g.dur)+')'; }).join(', ')+'. '+(g.dubbio ? 'Con questi minuti tornano due ricostruzioni diverse, quindi non cambio niente finche\' non tocchi chi aveva il GPS spento.' : 'Le partite prima del 1/11 le correggevi nei fogli: qui vale solo se la tocchi.')+'</p>'
           : '<p class="gps-n">Nessun GPS spento trovato: ogni posto arriva alla durata della gara.</p>');
