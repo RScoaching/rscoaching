@@ -4886,32 +4886,36 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     return null;
   }
-  // ritmo a 90' di un gruppo: volumi sommati sui minuti di tutte, come fa il KSport
-  function ptGruppo90(L){
+  // un gruppo al minuto: per ogni voce il totale del gruppo diviso i minuti giocati
+  // (le voci gia' al minuto, come il ritmo, pesate sui minuti di ognuna)
+  function ptGruppoMin(L){
     const min = L.reduce(function(t, a){ return t + a.min; }, 0), out = {};
     PT_MET.forEach(function(o){
       const val = L.map(function(a){ return a.v[o.i]; }).filter(function(x){ return x != null && !isNaN(x); });
       if(!val.length || !min){ out[o.i] = null; return; }
-      out[o.i] = o.vol ? L.reduce(function(t, a){ return t + (+a.v[o.i] || 0); }, 0) * 90 / min
+      out[o.i] = o.vol ? L.reduce(function(t, a){ return t + (+a.v[o.i] || 0); }, 0) / min
         : L.reduce(function(t, a){ return t + (+a.v[o.i] || 0) * a.min; }, 0) / min;
     });
-    return { n: L.length, min: min, v: out };
+    return { n: L.length, min: min, medi: L.length ? min / L.length : 0, v: out };
   }
   function ptCambi(A){
     const T = ptTitolari(A); if(!T) return null;
     const tit = A.atl.filter(function(a){ return T.tit.indexOf(a.nome) >= 0; });
     const sub = A.atl.filter(function(a){ return T.tit.indexOf(a.nome) < 0 && a.min >= 5; });
     if(!tit.length || !sub.length) return null;
-    return { fonte: T.fonte, tit: ptGruppo90(tit), sub: ptGruppo90(sub), nSub: sub.length };
+    return { fonte: T.fonte, tit: ptGruppoMin(tit), sub: ptGruppoMin(sub), nSub: sub.length };
   }
   function ptCambiHTML(A){
     const C = ptCambi(A); if(!C) return '';
-    const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','D>20','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
-    const riga = function(nome, G){ return '<tr><td>'+nome+'<small>'+G.n+' atlete, '+Math.round(G.min)+' minuti in tutto</small></td>'+cols.map(function(o){ return '<td>'+esc(ptVal(G.v[o.i], o.i))+'</td>'; }).join('')+'</tr>'; };
+    const cols = PT_MET.filter(function(o){ return ['Dist tot','>23','20-23','D>20','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    // metri al minuto con una cifra decimale sotto i 10, conteggi al minuto con due
+    const fmt = function(x, o){ if(x == null) return '-'; const u = String(MU[o.i]||''); const d = u === 'n' ? 2 : (x < 10 ? 1 : 0); return x.toFixed(d).replace('.', ','); };
+    const nome = function(o){ const u = String(MU[o.i]||''); return esc(MS[o.i]||'')+'<small>'+(u === 'n' ? 'al minuto' : 'm al minuto')+'</small>'; };
+    const riga = function(et, G){ return '<tr><td>'+et+'<small>'+G.n+' atlete, in media '+Math.round(G.medi)+' minuti</small></td>'+cols.map(function(o){ return '<td>'+fmt(G.v[o.i], o)+'</td>'; }).join('')+'</tr>'; };
     const diff = '<tr class="pt-med"><td>Subentrate sulle titolari</td>'+cols.map(function(o){ const p = ptPct(C.sub.v[o.i], C.tit.v[o.i]); return '<td class="'+ptCls(p)+'">'+(p != null ? ptPctTxt(p) : '-')+'</td>'; }).join('')+'</tr>';
-    return '<div class="tbl-wrap"><table class="dt pt-t"><thead><tr><th>Gruppo</th>'+cols.map(function(o){ return '<th>'+esc(MS[o.i]||'')+(o.vol ? ' a 90\'' : '')+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    return '<div class="tbl-wrap"><table class="dt pt-t"><thead><tr><th>Gruppo</th>'+cols.map(function(o){ return '<th>'+nome(o)+'</th>'; }).join('')+'</tr></thead><tbody>'+
       riga('Titolari', C.tit)+riga('Subentrate', C.sub)+diff+'</tbody></table></div>'+
-      '<p class="pt-nota">'+esc(C.fonte)+'. Chi entra a gara in corso di solito corre di piu\' al minuto: se le subentrate non stanno sopra le titolari, i cambi non hanno alzato il ritmo.</p>';
+      '<p class="pt-nota">'+esc(C.fonte)+'. Valori al minuto giocato: niente proiezioni a 90\', perche\' chi entra gioca uno spezzone. Chi entra a gara in corso di solito corre di piu\' al minuto: se le subentrate non stanno sopra le titolari, i cambi non hanno alzato il ritmo.</p>';
   }
   // andamento: una piccola linea per voce, partita per partita, questa evidenziata
   function ptTrendHTML(A){
@@ -5026,7 +5030,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
         '<td class="'+ptCls(r.vs, 3)+'">'+(r.vs != null ? ptPctTxt(r.vs) : '-')+'</td></tr>'; }).join('')+'</tbody></table></div>' : '';
     return [
       { t:'Migliori e peggiori', n:'scarto medio sulle voci di corsa, volumi riportati a 90 minuti, almeno '+PT_MIN+' minuti giocati', c:top },
-    ].concat(ptCambiHTML(A) ? [{ t:'Titolari e subentrate', n:'ritmo a 90\' dei due gruppi: volumi sommati sui minuti di tutte', c:ptCambiHTML(A) }] : []).concat(ruoliTab ? [{ t:'Per ruolo', n:'media a 90\' di chi ha giocato almeno '+PT_MIN+' minuti, accanto lo scarto dallo stesso ruolo nelle altre partite', c:ruoliTab }] : []).concat([
+    ].concat(ptCambiHTML(A) ? [{ t:'Titolari e subentrate', n:'quanto ha fatto ogni gruppo per minuto giocato', c:ptCambiHTML(A) }] : []).concat(ruoliTab ? [{ t:'Per ruolo', n:'media a 90\' di chi ha giocato almeno '+PT_MIN+' minuti, accanto lo scarto dallo stesso ruolo nelle altre partite', c:ruoliTab }] : []).concat([
       { t:'Tutte le atlete in campo', n:'numeri della partita; in grigio chi ha giocato meno di '+PT_MIN+' minuti', c:tab }
     ]);
   }
