@@ -222,7 +222,11 @@ a{ color:inherit; text-decoration:none; }
 .gpa-dc{ display:flex; flex-direction:column; gap:4px; padding:14px; margin-bottom:16px; border:1px solid rgba(255,106,46,.45); border-radius:12px; background:rgba(255,106,46,.06); font-size:13.5px; }
 .gpa-dc > span{ color:var(--muted); }
 .gpa-dcl{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-@media print{ .gpa-dc, #gpa-sez{ display:none !important; } }
+.gpa-bd{ margin-bottom:16px; font-size:13.5px; }
+.gpa-bd summary{ cursor:pointer; min-height:44px; display:flex; align-items:center; color:var(--muted); }
+.gpa-bd p{ color:var(--muted); margin:4px 0 8px; max-width:90ch; }
+.gpa-bd ul{ margin:0; padding-left:18px; line-height:1.7; }
+@media print{ .gpa-dc, .gpa-bd, #gpa-sez{ display:none !important; } }
 .gpa-b:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
 .gps-a:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
@@ -3360,7 +3364,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   function gaDaControllare(){
     return ((S.gps && S.gps.sedute) || []).map(function(q){
       const st = gaStato(q);
-      return { q: q, n: q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length };
+      // fino al 25/10 i Full Training li ha gia' sistemati il mister
+      return { q: q, n: q.vecchia ? 0 : q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length };
     }).filter(function(x){ return x.n; });
   }
   window.gaApri = function(ch){
@@ -3374,12 +3379,24 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }
     const h = document.getElementById('gpa-sez'); if(h) h.scrollIntoView({ block:'start' });
   };
+  /* Righe dove le soglie di velocita' (0-20, 20-23, oltre 23 km/h) non fanno la
+     distanza totale: nei file del KSport tornano sempre, quindi sono righe
+     scritte a mano. Si mostrano per poterle sistemare nei fogli. */
+  function gpsBandeHTML(){
+    const B = (S.gps && S.gps.bande) || [];
+    if(!B.length) return '';
+    const n0 = function(x){ return Math.round(x).toLocaleString('it-IT'); };
+    const fmt = function(b){ const p = b.data.split('-'); return p[2]+'/'+p[1]; };
+    return '<details class="gpa-bd"><summary>'+B.length+' righe con le soglie di velocita\' che non fanno la distanza totale</summary>'+
+      '<p>Nei file del KSport 0-20, 20-23 e oltre 23 km/h sommati danno sempre la distanza totale: queste sono righe scritte o corrette a mano. Le stime non le usano come riferimento per le soglie.</p><ul>'+
+      B.slice().reverse().map(function(b){ return '<li><b>'+esc(fmt(b))+' '+esc(b.seduta)+'</b> '+esc(disp(b.atleta))+': distanza '+n0(b.dist)+' m, soglie '+n0(b.bande)+' m</li>'; }).join('')+'</ul></details>';
+  }
   function gpsDaControllareHTML(){
     const L = gaDaControllare();
-    if(!L.length) return '';
+    if(!L.length) return gpsBandeHTML();
     const fmt = function(q){ const p = q.data.split('-'); return p[2]+'/'+p[1]+(q.slot ? ' '+q.slot : ''); };
     return '<div class="gpa-dc"><b>GPS da controllare</b><span>'+L.length+' '+(L.length === 1 ? 'allenamento' : 'allenamenti')+' con atlete sotto i minuti della maggioranza: dimmi che parte non ha preso il GPS.</span>'+
-      '<div class="gpa-dcl">'+L.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.q.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(fmt(x.q))+'</b><span>'+x.n+' da vedere</span></button>'; }).join('')+'</div></div>';
+      '<div class="gpa-dcl">'+L.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.q.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(fmt(x.q))+'</b><span>'+x.n+' da vedere</span></button>'; }).join('')+'</div></div>'+gpsBandeHTML();
   }
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
@@ -3401,10 +3418,10 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+
         '<span class="tnum gpa-basso">'+Math.round(a.min)+'\' su '+Math.round(q.rif)+'\' della maggioranza</span>'+
         '<span>GPS su '+(q.eserc.length - a.assenti.length)+' di '+q.eserc.length+' esercitazioni</span>'+
-        (dec ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
+        (dec || q.vecchia ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
         '<div class="gpa-bs">'+es+tf+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button></div></div>';
     }).join('');
-    const nDa = q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length;
+    const nDa = q.vecchia ? 0 : q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length;
     const corpo = q.atl.length
       ? '<div class="gpa-l">'+righe+'</div>'
       : '<p class="gps-n">Tutte le '+q.complete+' atlete hanno i minuti della maggioranza.</p>';
