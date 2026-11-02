@@ -721,7 +721,58 @@ window.markActiveNav = function(pageId) {
     if (el.dataset.page === pageId && !el.classList.contains('soon')) el.classList.add('active');
   });
   fioBarra(pageId);
+  fioGpsBadge();
 };
+
+/* GPS da controllare, in un posto solo: allenamenti con atlete sotto i minuti
+   della maggioranza non ancora decise, partite dove i cambi tornano in due modi
+   e partite con un GPS spento senza le titolari segnate. I dati vengono da
+   SNAP_2627.gps (aggiorna_2627.py), le scelte da rs_fio_gps_scelte. Il numero
+   finisce sul tasto Report del menu e della barra in basso; sulle pagine che non
+   caricano i dati (Calendario) si usa l'ultimo conto fatto su questo dispositivo. */
+window.fioGpsPendenti = function() {
+  var G = window.SNAP_2627 && window.SNAP_2627.gps;
+  if (!G) return null;
+  var sc = {};
+  try { sc = JSON.parse(localStorage.getItem('rs_fio_gps_scelte') || '{}') || {}; } catch (e) {}
+  var gare = {};
+  try { gare = JSON.parse(localStorage.getItem('rs_fio_gare_26-27') || '{}') || {}; } catch (e) {}
+  var allen = [], partite = [];
+  (G.sedute || []).forEach(function(q) {
+    if (q.vecchia) return;
+    var c = sc[q.chiave], dec;
+    if (c && (c.agg || c.no || c.fuori)) {
+      dec = {};
+      Object.keys(c.agg || {}).forEach(function(n) { if ((c.agg[n] || []).length) dec[n] = 1; });
+      (c.no || []).concat(c.fuori || []).forEach(function(n) { dec[n] = 1; });
+    }
+    var n = (q.atl || []).filter(function(a) { return dec ? !dec[a.n] : !a.deciso; }).length;
+    if (n) allen.push({ chiave: q.chiave, data: q.data, slot: q.slot, n: n });
+  });
+  (G.partite || []).forEach(function(p) {
+    if (p.data < '2026-11-01') return;
+    var c = sc[p.chiave], g = gare[p.data] || {};
+    var tit = (g.pt1 || []).length >= 6 || p.titolari;
+    if (p.dubbio && !c) partite.push({ chiave: p.chiave, data: p.data, sigla: p.sigla, cosa: 'cambi da confermare' });
+    else if (Object.keys(p.stimate || {}).length && !tit && !c) partite.push({ chiave: p.chiave, data: p.data, sigla: p.sigla, cosa: 'segna le titolari' });
+  });
+  return { allen: allen, partite: partite, n: allen.length + partite.length };
+};
+function fioGpsBadge() {
+  var P = window.fioGpsPendenti ? window.fioGpsPendenti() : null, n;
+  if (P) { n = P.n; try { localStorage.setItem('rsgps_pend', String(n)); } catch (e) {} }
+  else { try { n = +(localStorage.getItem('rsgps_pend') || 0); } catch (e) { n = 0; } }
+  document.querySelectorAll('.nav-item[data-page="report"], #fio-bt [data-page="report"]').forEach(function(el) {
+    var b = el.querySelector('.fio-gpsn');
+    if (!n) { if (b) b.remove(); el.removeAttribute('title'); return; }
+    if (!b) { b = document.createElement('span'); b.className = 'fio-gpsn'; el.appendChild(b); }
+    b.textContent = n;
+    el.setAttribute('title', n + (n === 1 ? ' seduta' : ' sedute') + ' con il GPS da controllare');
+  });
+  document.querySelectorAll('a.nav-item[data-page="report"], #fio-bt a[data-page="report"]').forEach(function(el) { el.href = el.href.split('#')[0] + (n ? '#gps' : ''); });
+}
+window.fioGpsBadge = fioGpsBadge;
+window.addEventListener('load', fioGpsBadge);
 
 /* Telefono: le quattro pagine di tutti i giorni in una barra in basso, dove arriva il
    pollice, piu' Altro che apre il menu completo (come nell'area RS Coaching). Le icone
@@ -2627,6 +2678,8 @@ html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
 }
 .sb-mob-overlay.open{display:block;}
 #fio-bt{display:none}
+.nav-item{position:relative}
+.fio-gpsn{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:auto;border-radius:9px;background:#FF6A2E;color:#1A0B05;font:700 11px Inter,sans-serif;line-height:1}
 @media(max-width:900px){
   .sb-mob-bar{display:flex;}
   .sb-ham{display:none;}
@@ -2637,6 +2690,8 @@ html[data-tema="chiaro"] .sb-tema .t-luna{display:block;}
     border-radius:12px;color:rgba(248,250,255,.55);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s ease,background .15s ease}
   #fio-bt svg{width:22px;height:22px}
   #fio-bt b{font:600 10.5px Inter,sans-serif}
+  #fio-bt a{position:relative}
+  #fio-bt .fio-gpsn{position:absolute;top:4px;left:calc(50% + 6px);margin:0}
   #fio-bt .on{color:#C4B5FD;background:rgba(124,58,237,.16)}
   #fio-bt a:active,#fio-bt button:active{transform:scale(.96)}
   body{padding-bottom:calc(66px + env(safe-area-inset-bottom)) !important;}

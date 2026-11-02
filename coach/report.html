@@ -689,6 +689,13 @@ dialog.imgmodal[open] .imgmodal-card{ animation:pk .28s var(--ease); }
   .rkpis{ grid-template-columns:repeat(2, 1fr); }
   .rkpi:nth-child(odd){ border-left:0; }
   .rkpi:nth-child(n+3){ border-top:1px solid var(--border2); }
+  /* con 5 o 6 riquadri la regola .rkpis.k6 (piu' specifica) teneva sei colonne
+     anche sul telefono e i numeri si accavallavano: tre per riga */
+  .rkpis.k5, .rkpis.k6{ grid-template-columns:repeat(3, 1fr); }
+  .rkpis.k5 .rkpi, .rkpis.k6 .rkpi{ border-left:1px solid var(--border2); border-top:0; padding:12px 10px 13px; }
+  .rkpis.k5 .rkpi:nth-child(3n+1), .rkpis.k6 .rkpi:nth-child(3n+1){ border-left:0; }
+  .rkpis.k5 .rkpi:nth-child(n+4), .rkpis.k6 .rkpi:nth-child(n+4){ border-top:1px solid var(--border2); }
+  .rkpis.k6 .rkpi .k-val, .rkpis.k5 .rkpi .k-val{ font-size:24px; }
   .fg.w-scope select, .fg.w-month select, .fg.w-kind select{ width:100%; }
   .fg{ flex:1 1 160px; }
   .rh-meta{ display:none; }
@@ -3329,6 +3336,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const sc = gpsScelte(); sc[q.chiave] = { agg: st.agg, no: st.no, fuori: st.fuori, ts: Date.now() };
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
+    if(window.fioGpsBadge) window.fioGpsBadge();
   }
   function gaQ(ch){ return ((S.gps && S.gps.sedute) || []).find(function(x){ return x.chiave === ch; }); }
   // una scelta su un'atleta toglie il 'va bene cosi'' e viceversa
@@ -3360,14 +3368,6 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     gaSalva(q, st);
   };
   function gaDeciso(st, n){ return !!(st.agg[n] && st.agg[n].length) || st.fuori.indexOf(n) >= 0 || st.no.indexOf(n) >= 0; }
-  // sedute con atlete ancora da controllare, con lo stato salvato in questo browser
-  function gaDaControllare(){
-    return ((S.gps && S.gps.sedute) || []).map(function(q){
-      const st = gaStato(q);
-      // fino al 25/10 i Full Training li ha gia' sistemati il mister
-      return { q: q, n: q.vecchia ? 0 : q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length };
-    }).filter(function(x){ return x.n; });
-  }
   window.gaApri = function(ch){
     const q = gaQ(ch); if(!q) return;
     const p = q.data.split('-'), dd = p[2]+'/'+p[1]+'/'+p[0];
@@ -3391,12 +3391,25 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       '<p>Nei file del KSport 0-20, 20-23 e oltre 23 km/h sommati danno sempre la distanza totale: queste sono righe scritte o corrette a mano. Le stime non le usano come riferimento per le soglie.</p><ul>'+
       B.slice().reverse().map(function(b){ return '<li><b>'+esc(fmt(b))+' '+esc(b.seduta)+'</b> '+esc(disp(b.atleta))+': distanza '+n0(b.dist)+' m, soglie '+n0(b.bande)+' m</li>'; }).join('')+'</ul></details>';
   }
+  window.gaApriPartita = function(ch){
+    const g = ((S.gps && S.gps.partite) || []).find(function(x){ return x.chiave === ch; }); if(!g) return;
+    const p = g.data.split('-'), v = g.sigla+'|'+p[2]+'/'+p[1]+'/'+p[0];
+    setMode('partita');
+    const sel = document.getElementById('sel-match');
+    if(sel && Array.from(sel.options).some(function(o){ return o.value === v; })){ sel.value = v; ptScelta = v; render(); }
+    const h = Array.from(document.querySelectorAll('.rsec h3')).find(function(x){ return x.textContent === 'GPS'; });
+    if(h) h.scrollIntoView({ block:'start' });
+  };
+  /* Tutto quello che c'e' da decidere sul GPS, in un riquadro solo (stesso conto
+     del numero sul tasto Report, fioGpsPendenti in fio_sidebar.js). */
   function gpsDaControllareHTML(){
-    const L = gaDaControllare();
-    if(!L.length) return gpsBandeHTML();
-    const fmt = function(q){ const p = q.data.split('-'); return p[2]+'/'+p[1]+(q.slot ? ' '+q.slot : ''); };
-    return '<div class="gpa-dc"><b>GPS da controllare</b><span>'+L.length+' '+(L.length === 1 ? 'allenamento' : 'allenamenti')+' con atlete sotto i minuti della maggioranza: dimmi che parte non ha preso il GPS.</span>'+
-      '<div class="gpa-dcl">'+L.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.q.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(fmt(x.q))+'</b><span>'+x.n+' da vedere</span></button>'; }).join('')+'</div></div>'+gpsBandeHTML();
+    const P = window.fioGpsPendenti ? window.fioGpsPendenti() : null;
+    if(!P || !P.n) return gpsBandeHTML();
+    const dm = function(iso){ const p = iso.split('-'); return p[2]+'/'+p[1]; };
+    const bA = P.allen.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.chiave)+'" onclick="gaApri(this.dataset.ch)"><b>'+esc(dm(x.data))+(x.slot ? ' '+esc(x.slot) : '')+'</b><span>allenamento, '+x.n+' da vedere</span></button>'; });
+    const bP = P.partite.slice().reverse().map(function(x){ return '<button type="button" class="gpa-b" data-ch="'+esc(x.chiave)+'" onclick="gaApriPartita(this.dataset.ch)"><b>'+esc(dm(x.data))+' '+esc(x.sigla)+'</b><span>partita, '+esc(x.cosa)+'</span></button>'; });
+    return '<div class="gpa-dc" id="gpa-dc"><b>GPS da controllare</b><span>Tocca una seduta: negli allenamenti dimmi che parte non ha preso il GPS; nelle partite conferma i cambi'+(P.partite.some(function(x){ return x.cosa === 'segna le titolari'; }) ? ' o segna le titolari nel risultato della gara (Calendario)' : '')+'.</span>'+
+      '<div class="gpa-dcl">'+bP.concat(bA).join('')+'</div></div>'+gpsBandeHTML();
   }
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
@@ -4937,17 +4950,20 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     sc[ch] = { spenti: L, ts: Date.now() };
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
+    if(window.fioGpsBadge) window.fioGpsBadge();
   };
   // nessun GPS spento: un posto corto per un'espulsione o per un'atleta senza GPS
   window.gpsNessuno = function(ch){
     const sc = gpsScelte(); sc[ch] = { spenti: [], ts: Date.now() };
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
+    if(window.fioGpsBadge) window.fioGpsBadge();
   };
   window.gpsAuto = function(ch){
     const sc = gpsScelte(); delete sc[ch];
     localStorage.setItem(GPS_K, JSON.stringify(sc));
     render();
+    if(window.fioGpsBadge) window.fioGpsBadge();
   };
   function gpsSezione(A){
     const g = gpsPartita(A.m);
@@ -5002,7 +5018,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const sez = P1.concat(ptPagina2(A)).map(function(s){
       return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.t)+'</h3><span class="rsec-n">'+esc(s.n)+'</span></div>'+s.c+'</div>';
     }).join('');
-    host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+sez+'</div>';
+    host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+gpsDaControllareHTML()+sez+'</div>';
   }
   function buildPrintPartita(){
     const host = printHost();
@@ -5583,7 +5599,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   buildMetricList(); updateMetricBadge();
   buildAthleteList(); updateAthleteBadge();
   updateDayBadge();
-  setMode('sintesi');
+  setMode(location.hash === '#gps' ? 'giorno' : 'sintesi');
+  if(location.hash === '#gps') setTimeout(function(){ const b = document.getElementById('gpa-dc'); if(b) b.scrollIntoView({ block:'start' }); }, 300);
 })();
 </script>
 </body>
