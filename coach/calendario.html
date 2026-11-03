@@ -791,7 +791,7 @@ button.pl-vrow:hover .pl-vgo{ color:var(--orange2); }
   font-size:11.5px; color:var(--muted); }
 .pl-gapth b{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
 .pl-garu{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:6px 12px; }
-.pl-garr{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--ink); }
+.pl-garr{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:8px; align-items:center; font-size:12px; color:var(--ink); }
 .pl-garr span{ font-weight:600; }
 .pl-garr span i{ font-style:normal; font-weight:500; color:var(--faint); margin-left:6px; font-variant-numeric:tabular-nums; }
 .pl-garr select{ min-height:40px; font-size:13px; background:var(--surface); }
@@ -1700,7 +1700,7 @@ html[data-tema="chiaro"] .sb-mob-overlay{ background:rgba(255,255,255,0.94); }
     <div class="pl-drow">
       <label>Ruolo in partita</label>
       <div class="pl-garu" id="pl-garu"></div>
-      <div class="pl-gapth"><span>Il ruolo giocato in questa gara: serve al modello per ruolo nel Report partita.</span></div>
+      <div class="pl-gapth"><span>Parte dal ruolo dell'atleta: cambialo solo se in questa gara ha giocato altrove (bordo viola). Serve al modello per ruolo nel Report partita.</span></div>
     </div>
     <div class="pl-dactions">
       <button type="button" class="btn" id="pl-gacancel">Annulla</button>
@@ -5198,7 +5198,8 @@ window.RS_ROSTER = window.RS_ROSTER || [
     const host = document.getElementById('pl-gaesp'); if(!host) return;
     const mins = gaCur ? gaMin(gaCur) : {};
     // senza minuti della gara (gara non ancora nei dati GPS) si sceglie dalla rosa
-    const base = Object.keys(mins).length ? Object.keys(mins) : rosterList().map(function(p){ return p.n; });
+    // chi ha giocato (GPS), se no le titolari segnate, se no la rosa
+    const base = Object.keys(mins).length ? Object.keys(mins) : ((gaDraft.pt1||[]).length ? gaDraft.pt1.slice() : rosterList().map(function(p){ return p.n; }));
     const nomi = base.slice().sort(function(a, b){ return plNome(a).localeCompare(plNome(b)); });
     host.innerHTML = nomi.length ? nomi.map(function(n){
       const on = (gaDraft.esp||[]).indexOf(n) >= 0;
@@ -5220,7 +5221,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       const base = window.fioRuolo ? window.fioRuolo(n) : '';
       const v = (gaDraft.ruoli||{})[n] || base;
       return '<label class="pl-garr'+(v !== base ? ' cambiato' : '')+'"><span>'+esc(plNome(n))+(mins[n] ? '<i>'+NF0.format(mins[n])+"'</i>" : '')+'</span>'+
-        '<select data-ru="'+esc(n)+'"><option value="">'+esc(base || 'Da assegnare')+' (suo ruolo)</option>'+
+        '<select data-ru="'+esc(n)+'" aria-label="Ruolo di '+esc(plNome(n))+' in questa gara"><option value="">'+esc(base || 'Da assegnare')+'</option>'+
         R.filter(function(x){ return x !== base; }).map(function(x){ return '<option value="'+esc(x)+'"'+(x === v ? ' selected' : '')+'>'+esc(x)+'</option>'; }).join('')+
         '</select></label>';
     }).join('');
@@ -5275,7 +5276,7 @@ window.RS_ROSTER = window.RS_ROSTER || [
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on?'true':'false');
       gaRenderPtn();
-      if(gaCur && !Object.keys(gaMin(gaCur)).length) gaRenderRuoli();
+      if(gaCur && !Object.keys(gaMin(gaCur)).length){ gaRenderRuoli(); gaRenderEsp(); }
     });
     const es = document.getElementById('pl-gaesp');
     if(es) es.addEventListener('click', function(e){
