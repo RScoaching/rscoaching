@@ -230,6 +230,9 @@ a{ color:inherit; text-decoration:none; }
 .gpa-b:focus-visible{ outline:2px solid #FF6A2E; outline-offset:2px; }
 .pt-gst{ color:#C2410C !important; font-weight:600; }
 .pt-rp{ color:#5B21B6 !important; font-weight:600; }
+.pt-mr th small{ display:block; font-weight:400; text-transform:none; letter-spacing:0; }
+.pt-mr td small{ display:block; font-weight:400; color:var(--muted); white-space:normal; max-width:34ch; }
+.pt-mr td small.ok, .pt-mr td small.ko, .pt-mr td small[class]{ display:inline; }
 .pt-ris{ font-variant-numeric:tabular-nums; color:#FF6A2E; margin-left:6px; }
 .pt-nota{ margin:10px 0 0; font-size:12.5px; color:var(--muted); line-height:1.5; max-width:100ch; }
 .pt-trs{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
@@ -5001,6 +5004,36 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       { t:'Confronto con le altre partite', n:A.L.length+' partite di '+ptCompNome(A.m.comp, true)+', questa evidenziata'+(A.T.length > A.L.length ? '; le altre '+(A.T.length - A.L.length)+' restano fuori dai confronti' : ''), c:tab }
     ].concat(ptTrendHTML(A) ? [{ t:'Andamento nella stagione', n:'le voci chiave di squadra nelle partite di '+ptCompNome(A.m.comp, true), c:ptTrendHTML(A) }] : []);
   }
+  /* Modello prestativo per ruolo della stagione: tutte le partite dello stesso tipo
+     (campionato con campionato), prestazioni da almeno PT_MIN minuti, ogni atleta nel
+     ruolo giocato quel giorno (Calendario). Volumi a 90', ritmo e azioni al minuto. */
+  function ptModelloRuoli(A){
+    const cols = PT_MET.filter(function(o){ return ['Dist tot','m/min','>23','20-23','D>20','ACC','DEC'].some(function(p){ return String(MS[o.i]||'').indexOf(p) === 0; }); });
+    const R = {};
+    A.L.forEach(function(x){
+      Object.keys(PLAYERS).forEach(function(nome){
+        const w = ptAtleta(nome, x); if(!w || !(+w[IDX_MIN] >= PT_MIN)) return;
+        const ru = ptRuolo(x, nome); if(!ru) return;
+        const r = R[ru] || (R[ru] = { ruolo:ru, n:0, atl:{}, v:{} });
+        r.n++; r.atl[nome] = (r.atl[nome] || 0) + 1;
+        cols.forEach(function(o){ const y = pt90(w, o); if(y != null) (r.v[o.i] = r.v[o.i] || []).push(y); });
+      });
+    });
+    const ordine = window.FIO_RUOLI || [];
+    const L = Object.keys(R).map(function(k){ return R[k]; }).sort(function(a, b){ return (ordine.indexOf(a.ruolo) - ordine.indexOf(b.ruolo)) || (b.n - a.n); });
+    if(!L.length) return '';
+    const tutti = {}; cols.forEach(function(o){ tutti[o.i] = ptMedia([].concat.apply([], L.map(function(r){ return r.v[o.i] || []; }))); });
+    const righe = L.map(function(r){
+      const chi = Object.keys(r.atl).sort(function(a, b){ return r.atl[b] - r.atl[a]; }).map(function(n){ return disp(n)+(r.atl[n] > 1 ? ' ('+r.atl[n]+')' : ''); }).join(', ');
+      return '<tr><td><b>'+esc(r.ruolo)+'</b><small>'+esc(chi)+'</small></td><td>'+r.n+'</td>'+cols.map(function(o){
+        const v = ptMedia(r.v[o.i] || []), p = ptPct(v, tutti[o.i]);
+        return '<td>'+esc(ptVal(v, o.i))+(p != null ? ' <small class="'+ptCls(p)+'">'+ptPctTxt(p)+'</small>' : '')+'</td>'; }).join('')+'</tr>';
+    }).join('');
+    const media = '<tr class="pt-med"><td>Squadra</td><td>'+L.reduce(function(t, r){ return t + r.n; }, 0)+'</td>'+cols.map(function(o){ return '<td>'+esc(ptVal(tutti[o.i], o.i))+'</td>'; }).join('')+'</tr>';
+    return '<div class="tbl-wrap"><table class="dt pt-t pt-mr"><thead><tr><th>Ruolo<small>chi l\'ha giocato (prestazioni)</small></th><th>Prest.</th>'+
+      cols.map(function(o){ return '<th>'+esc(MS[o.i]||'')+(o.vol ? ' a 90\'' : '')+'</th>'; }).join('')+'</tr></thead><tbody>'+righe+media+'</tbody></table></div>'+
+      '<p class="pt-nota">Accanto a ogni valore lo scarto dalla media della squadra. Il ruolo e\' quello giocato in ogni gara, segnato nel risultato della gara in Calendario; dove non c\'e\' vale il ruolo dell\'atleta.</p>';
+  }
   function ptPagina2(A){
     function scheda(a, buona){
       const v = buona ? a.forte : a.debole;
@@ -5139,8 +5172,8 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     const A = ptAnalisi(ptScelta);
     if(!A){ host.innerHTML = '<div class="rbody"><p class="pt-vuoto">Nessuna partita con i dati GPS in questa stagione.</p></div>'; return; }
     // il controllo del GPS e' lavoro sui dati, non lettura della partita: va in fondo
-    const gs = gpsSezione(A);
-    const sez = ptPagina1(A).concat(ptPagina2(A)).concat(gs ? [gs] : []).map(function(s){
+    const gs = gpsSezione(A), mr = ptModelloRuoli(A);
+    const sez = ptPagina1(A).concat(ptPagina2(A)).concat(mr ? [{ t:'Modello per ruolo della stagione', n:A.L.length+' partite di '+ptCompNome(A.m.comp, true)+', prestazioni da almeno '+PT_MIN+' minuti', c:mr }] : []).concat(gs ? [gs] : []).map(function(s){
       return '<div class="rsec"><div class="rsec-head"><h3>'+esc(s.t)+'</h3><span class="rsec-n">'+esc(s.n)+'</span></div>'+s.c+'</div>';
     }).join('');
     host.innerHTML = ptTesta(A, true)+'<div class="rbody pt-doc">'+gpsDaControllareHTML(ptIso(A.m))+sez+'</div>';
