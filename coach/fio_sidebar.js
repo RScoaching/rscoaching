@@ -1123,6 +1123,27 @@ window.fioRuolo = function(name, base) {
   return window.fioNormRuolo(base === undefined ? window.fioRuoloBase(name) : base);
 };
 
+/* Ruolo giocato in una partita. Il mister lo segna nel risultato della gara
+   (Calendario, rs_fio_gare[data].ruoli = {atleta: ruolo}); se non c'e' vale il
+   ruolo dell'atleta. Serve al modello prestativo per ruolo: chi gioca da esterno
+   in una gara va confrontata con gli esterni, non con il suo ruolo di sempre.
+   I primi casi (25/10 e 1/11) partono gia' segnati qui, finche' il mister non li
+   salva lui dal Calendario. */
+window.FIO_RUOLI_PARTITA_BASE = {
+  '2026-10-25': { 'Miraldi': 'Esterno', 'De Gregorio': 'Mezzala' },
+  '2026-11-01': { 'Miraldi': 'Esterno', 'De Gregorio': 'Mezzala' }
+};
+window.fioRuoliPartita = function(iso) {
+  var g = null;
+  try { g = (JSON.parse(localStorage.getItem(window.fioKey('rs_fio_gare')) || '{}') || {})[iso]; } catch (e) {}
+  if (g && g.ruoli && typeof g.ruoli === 'object') return g.ruoli;
+  return window.FIO_RUOLI_PARTITA_BASE[iso] || {};
+};
+window.fioRuoloPartita = function(iso, name, base) {
+  var r = window.fioRuoliPartita(iso)[String(name == null ? '' : name).trim()];
+  return window.fioNormRuolo(r) || window.fioRuolo(name, base);
+};
+
 // Rosa della stagione con il ruolo e il nome da mostrare gia' risolti.
 // `name` e' sempre la chiave vera del dato, quella con cui il GPS e i fogli
 // scrivono l'atleta: va usata per salvare. `nome` e' come si legge a schermo.
