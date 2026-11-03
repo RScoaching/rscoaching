@@ -1133,6 +1133,8 @@ window.FIO_RUOLI_PARTITA_BASE = {
   '2026-10-25': { 'Miraldi': 'Esterno', 'De Gregorio': 'Mezzala' },
   '2026-11-01': { 'Miraldi': 'Esterno', 'De Gregorio': 'Mezzala' }
 };
+// espulse gia' note, valgono finche' il mister non salva le sue nel risultato della gara
+window.FIO_ESPULSE_BASE = { '2026-10-18': ['Muka'] };
 window.fioRuoliPartita = function(iso) {
   var g = null;
   try { g = (JSON.parse(localStorage.getItem(window.fioKey('rs_fio_gare')) || '{}') || {})[iso]; } catch (e) {}
