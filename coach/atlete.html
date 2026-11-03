@@ -2685,9 +2685,26 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     }catch(e){}
     return {};
   }
+  /* Minuti di gioco dal GPS per data: le righe partita della singola atleta,
+     ritrovate con la sigla della gara (stessa data in S.team.matches). */
+  function minutiGare(name){
+    const out = {};
+    const M = (S.team && Array.isArray(S.team.matches)) ? S.team.matches : [];
+    const p = (S.players || {})[name];
+    if(!p || !Array.isArray(p.months)) return out;
+    const sig = {};
+    M.forEach(function(m){ const d = String(m.data||'').split('/'); if(d.length===3) sig[m.sigla] = d[2]+'-'+d[1]+'-'+d[0]; });
+    p.months.forEach(function(mo){ (mo.rows||[]).forEach(function(r){
+      if(r.type!=='match' || !Array.isArray(r.v)) return;
+      const iso = sig[String(r.label||'').trim()]; if(!iso) return;
+      out[iso] = { min: +r.v[0] || 0, stima: !!r.st };
+    }); });
+    return out;
+  }
   function gareDi(name){
     const all = gaStore();
     const out = [];
+    const MIN = minutiGare(name);
     Object.keys(all).forEach(function(iso){
       const r = all[iso];
       if(!r || typeof r!=='object' || Array.isArray(r)) return;
@@ -2696,23 +2713,33 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       const miei  = goals.filter(function(g){ return g && g.n===name; });
       const assist= goals.filter(function(g){ return g && g.a===name; });
       const primo = pt1.indexOf(name) >= 0;
-      if(!miei.length && !assist.length && !primo) return;
+      const mg = MIN[iso];
+      if(!miei.length && !assist.length && !primo && !(mg && mg.min > 0)) return;
       const gf = Number(r.gf)||0, gs = Number(r.gs)||0;
       out.push({
         iso: iso, gf: gf, gs: gs,
         esito: (gf>gs) ? 'vinta' : (gf<gs ? 'persa' : 'pari'),
         opp: String(r.opp||''), casa: !!r.casa,
         goal: miei.length, assist: assist.length, primo: primo,
-        minuti: miei.map(function(g){ return (g.m==null) ? null : Number(g.m); })
+        minuti: miei.map(function(g){ return (g.m==null) ? null : Number(g.m); }),
+        giocati: mg ? mg.min : null, stima: !!(mg && mg.stima),
+        ruolo: window.fioRuoloPartita ? window.fioRuoloPartita(iso, name) : ''
       });
+    });
+    // gare giocate senza risultato segnato nel calendario: restano con i soli minuti
+    Object.keys(MIN).forEach(function(iso){
+      if(all[iso] || !(MIN[iso].min > 0)) return;
+      out.push({ iso: iso, senza: true, goal: 0, assist: 0, primo: false, minuti: [],
+        giocati: MIN[iso].min, stima: MIN[iso].stima, ruolo: window.fioRuoloPartita ? window.fioRuoloPartita(iso, name) : '' });
     });
     out.sort(function(a,b){ return a.iso<b.iso ? 1 : (a.iso>b.iso ? -1 : 0); });
     return out;
   }
   function secGare(pl){
     const list = gareDi(pl.name);
-    let goal = 0, assist = 0, primo = 0;
-    list.forEach(function(g){ goal += g.goal; assist += g.assist; if(g.primo) primo++; });
+    let goal = 0, assist = 0, primo = 0, minTot = 0;
+    list.forEach(function(g){ goal += g.goal; assist += g.assist; if(g.primo) primo++; minTot += g.giocati || 0; });
+    const suo = window.fioRuolo ? window.fioRuolo(pl.name) : '';
 
     let corpo;
     if(!list.length){
@@ -2722,6 +2749,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
       corpo = '<div class="sh-stats">'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(list.length)+'</span><span class="ps-l">Gare</span></div>'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(primo)+'</span><span class="ps-l">Da titolare</span></div>'+
+          '<div class="pstat"><span class="ps-v">'+NF0.format(Math.round(minTot))+'</span><span class="ps-l">Minuti</span></div>'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(goal)+'</span><span class="ps-l">Goal</span></div>'+
           '<div class="pstat"><span class="ps-v">'+NF0.format(assist)+'</span><span class="ps-l">Assist</span></div>'+
         '</div>'+
@@ -2733,7 +2761,9 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           const dx = g.casa ? g.gs : g.gf;
           const dove = g.opp ? (esc(g.opp)+(g.casa ? ' in casa' : ' fuori')) : '';
           const fatti = [];
-          if(g.primo) fatti.push('titolare');
+          if(g.giocati) fatti.push(Math.round(g.giocati)+"'"+(g.stima ? '*' : ''));
+          if(!g.senza) fatti.push(g.primo ? 'titolare' : 'subentrata');
+          if(g.ruolo && g.ruolo !== suo) fatti.push('da '+g.ruolo.toLowerCase());
           if(g.goal){
             const min = g.minuti.filter(function(m){ return m!=null && !isNaN(m); });
             fatti.push((g.goal===1 ? '1 goal' : g.goal+' goal')+(min.length ? ' ('+min.map(function(m){ return m+"'"; }).join(', ')+')' : ''));
@@ -2741,13 +2771,13 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
           if(g.assist) fatti.push(g.assist===1 ? '1 assist' : g.assist+' assist');
           return '<tr><td class="l">'+esc(fmtDay(g.iso))+
               (dove ? '<span class="asy">'+dove+'</span>' : '')+'</td>'+
-            '<td class="v"><span class="gsc '+g.esito+'" title="Gara '+g.esito+'">'+sx+' - '+dx+'</span></td>'+
+            '<td class="v">'+(g.senza ? '<span class="gsc" title="Risultato non segnato nel calendario">-</span>' : '<span class="gsc '+g.esito+'" title="Gara '+g.esito+'">'+sx+' - '+dx+'</span>')+'</td>'+
             '<td class="d">'+(fatti.join(' &#183; ') || g.esito)+'</td></tr>';
         }).join('') +'</tbody></table>';
     }
 
     return '<section class="sh-sec">'+
-      '<h3 class="sh-h">Le sue gare <span class="n">dai tabellini segnati</span></h3>'+
+      '<h3 class="sh-h">Le sue gare <span class="n">tabellini del calendario e minuti dal GPS</span></h3>'+
       corpo+
       '<a class="sh-link" href="calendario.html">Apri il calendario'+ARROW+'</a>'+
     '</section>';
