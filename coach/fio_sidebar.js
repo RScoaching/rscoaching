@@ -746,7 +746,8 @@ window.fioGpsPendenti = function() {
       Object.keys(c.agg || {}).forEach(function(n) { if ((c.agg[n] || []).length) dec[n] = 1; });
       (c.no || []).concat(c.fuori || []).forEach(function(n) { dec[n] = 1; });
     }
-    var n = (q.atl || []).filter(function(a) { return dec ? !dec[a.n] : !a.deciso; }).length;
+    // le atlete con i minuti pieni si possono correggere ma non sono da controllare
+    var n = (q.atl || []).filter(function(a) { return a.basso !== false && (dec ? !dec[a.n] : !a.deciso); }).length;
     if (n) allen.push({ chiave: q.chiave, data: q.data, slot: q.slot, n: n });
   });
   (G.partite || []).forEach(function(p) {

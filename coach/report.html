@@ -226,6 +226,13 @@ a{ color:inherit; text-decoration:none; }
 .gpa-h .gpa-dopo{ color:var(--text); font-weight:600; }
 .gpa-h .gpa-dopo.ok{ color:#15803D; }
 .gpa-b.gpa-cb{ border-color:#FF6A2E; color:#C2410C; font-weight:700; }
+.gpa-alt{ margin-top:12px; border-top:1px solid var(--border, rgba(127,127,127,.2)); padding-top:10px; }
+.gpa-alt summary{ cursor:pointer; min-height:44px; display:flex; align-items:center; font-size:14px; font-weight:600; color:var(--text); }
+.gpa-rie{ margin:4px 0 10px; padding:10px 12px; border:1px solid var(--border, rgba(127,127,127,.25)); border-radius:10px; font-size:13px; }
+.gpa-rie ul{ margin:6px 0 0; padding-left:18px; }
+.gpa-rie li{ margin:2px 0; }
+.gpa-rie .gpa-ok{ color:#15803D; font-weight:600; }
+.gpa-rie .gpa-att{ color:#C2410C; font-weight:600; }
 .gpa-dc{ display:flex; flex-direction:column; gap:4px; padding:14px; margin-bottom:16px; border:1px solid rgba(255,106,46,.45); border-radius:12px; background:rgba(255,106,46,.06); font-size:13.5px; }
 .gpa-dc > span{ color:var(--muted); }
 .gpa-dcl{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
@@ -3442,7 +3449,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   window.gaTutteOk = function(ch){
     const q = gaQ(ch); if(!q) return;
     const st = gaStato(q);
-    q.atl.forEach(function(a){ if(!st.agg[a.n] && st.fuori.indexOf(a.n) < 0 && st.no.indexOf(a.n) < 0) st.no.push(a.n); });
+    q.atl.forEach(function(a){ if(a.basso !== false && !st.agg[a.n] && st.fuori.indexOf(a.n) < 0 && st.no.indexOf(a.n) < 0) st.no.push(a.n); });
     gaSalva(q, st);
   };
   function gaDeciso(st, n){ return !!(st.agg[n] && st.agg[n].length) || st.fuori.indexOf(n) >= 0 || st.no.indexOf(n) >= 0; }
@@ -3509,7 +3516,7 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
   window.gaConsigliate = function(ch, nome){
     const q = gaQ(ch); if(!q) return;
     const st = gaStato(q);
-    const lista = nome ? q.atl.filter(function(a){ return a.n === nome; }) : q.atl.filter(function(a){ return !gaDeciso(st, a.n); });
+    const lista = nome ? q.atl.filter(function(a){ return a.n === nome; }) : q.atl.filter(function(a){ return a.basso !== false && !gaDeciso(st, a.n); });
     lista.forEach(function(a){
       const L = gaManca(q, a).filter(function(c){ return c[3]; }).map(function(c){ return q.eserc[c[0]][0]; });
       if(L.length) st.agg[a.n] = L; else delete st.agg[a.n];
@@ -3520,61 +3527,111 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     });
     gaSalva(q, st);
   };
+  // la sezione delle atlete con i minuti pieni resta aperta tra un tocco e l'altro
+  let GA_ALT = null;
+  window.gaAltTocca = function(el){ GA_ALT = el.open; };
+  // "di solito la fa": le ultime volte in cui quel lavoro era di gruppo
+  function gaAbit(c){
+    if(c.length < 6 || c[5] < 2) return '';
+    return c[4] >= 0.6 * c[5] ? 'di solito la fa ('+c[4]+' su '+c[5]+')' : 'di solito no ('+c[4]+' su '+c[5]+')';
+  }
+  function gaChi(e){
+    const L = e[4] || [];
+    if(!L.length || L.length > 6) return '';
+    return 'fatta da '+L.map(disp).join(', ');
+  }
+  function gaRiga(q, a, st, alt){
+    const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [], fu = st.fuori.indexOf(a.n) >= 0;
+    const dec = gaDeciso(st, a.n);
+    const manca = gaManca(q, a);
+    const cons = manca.some(function(c){ return c[3]; }) || a.cons_fuori;
+    const nAtl = q.n_atl || 0;
+    // prima le consigliate, poi le altre di squadra, in fondo quelle di un gruppo solo
+    const ord = manca.slice().sort(function(x, y){
+      const gx = x[3] ? 0 : (q.eserc[x[0]][3] === false ? 2 : 1), gy = y[3] ? 0 : (q.eserc[y[0]][3] === false ? 2 : 1);
+      return gx - gy || x[0] - y[0];
+    });
+    const es = ord.map(function(c){
+      const e = q.eserc[c[0]], on = ag.indexOf(e[0]) >= 0;
+      const gruppo = e[3] === false;
+      const bits = [];
+      if(c[1] > 0) bits.push('GPS '+gaN1(c[1])+'\' su '+gaN1(e[1])+'\'', 'mancano '+gaN1(c[2])+'\'');
+      else {
+        bits.push((e[5] ? 'oltre la seduta' : 'non presa')+' '+gaN1(e[1])+'\'');
+        const chi = gruppo ? gaChi(e) : '';
+        bits.push(chi || ('fatta da '+e[2]+(nAtl ? ' su '+nAtl : '')));
+        const ab = gaAbit(c);
+        if(ab) bits.push(ab);
+      }
+      if(on) bits.push('aggiunta');
+      return '<button type="button" class="gpa-b'+(on ? ' on' : '')+(c[3] ? ' cons' : '')+(gruppo ? ' gpa-grp' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+c[0]+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
+        '<b>'+esc(e[0])+(c[3] && !on ? '<span class="gpa-ct">consigliata</span>' : '')+'</b><span>'+bits.join(' &#183; ')+'</span></button>';
+    }).join('');
+    const tf = (!alt && q.fuori_min >= 2)
+      ? '<button type="button" class="gpa-b'+(fu ? ' on' : '')+(a.cons_fuori ? ' cons' : '')+'" aria-pressed="'+fu+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaFuori(this.dataset.ch,this.dataset.n)"><b>Tempo fuori esercitazioni'+(a.cons_fuori && !fu ? '<span class="gpa-ct">consigliato</span>' : '')+'</b><span>pause e spiegazioni, fino a '+Math.round(q.fuori_min)+'\''+(fu ? ' &#183; aggiunto' : '')+'</span></button>'
+      : '';
+    const cb = (cons && !dec)
+      ? '<button type="button" class="gpa-b gpa-cb" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaConsigliate(this.dataset.ch,this.dataset.n)"><b>Aggiungi le consigliate</b><span>poi si toglie quello che non ha fatto</span></button>'
+      : '';
+    const nob = alt ? '' : '<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button>';
+    const dopo = gaDopo(q, a, st);
+    const cambia = Math.abs(dopo - a.min) >= 0.5;
+    const testa = alt
+      ? '<span class="tnum">Full Training '+gaN1(a.min)+'\'</span>'
+      : '<span class="tnum gpa-basso">Full Training '+gaN1(a.min)+'\' su '+gaN1(q.rif)+'\' della maggioranza, mancano '+gaN1(q.rif - a.min)+'\'</span>';
+    return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+testa+
+      (cambia ? '<span class="tnum gpa-dopo'+(!alt && Math.abs(dopo - q.rif) <= 3 ? ' ok' : '')+'">con le scelte: '+gaN1(dopo)+'\'</span>' : '')+
+      (alt || dec || q.vecchia ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
+      '<div class="gpa-bs">'+cb+es+tf+nob+'</div></div>';
+  }
+  /* Le scelte salvate in una riga per atleta, con lo stato: applicata dal Mac
+     (i dati arrivati coincidono con la scelta) o ancora in attesa. Si
+     modificano dalle stesse righe sotto, quante volte si vuole. */
+  function gaRiepilogo(q, st){
+    const nomi = Object.keys(st.agg).filter(function(n){ return (st.agg[n] || []).length; });
+    st.fuori.forEach(function(n){ if(nomi.indexOf(n) < 0) nomi.push(n); });
+    if(!nomi.length) return '';
+    const per = {};
+    q.atl.forEach(function(a){ per[a.n] = a; });
+    const voci = nomi.filter(function(n){ return per[n]; }).sort().map(function(n){
+      const a = per[n];
+      const mio = (st.agg[n] || []).slice().sort().join('|') + (st.fuori.indexOf(n) >= 0 ? '|F' : '');
+      const dati = (a.agg || []).map(function(k){ return q.eserc[k][0]; }).sort().join('|') + (a.fuori ? '|F' : '');
+      const fatto = mio === dati;
+      return '<li><b>'+esc(disp(n))+'</b> '+gaN1(a.min)+'\' &#8594; '+gaN1(fatto && a.dopo ? a.dopo : gaDopo(q, a, st))+'\' '+
+        '<span class="'+(fatto ? 'gpa-ok' : 'gpa-att')+'">'+(fatto ? 'applicata' : 'in attesa del Mac')+'</span></li>';
+    });
+    return voci.length ? '<div class="gpa-rie"><b>Scelte salvate</b><ul>'+voci.join('')+'</ul></div>' : '';
+  }
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
     if(!q) return '';
     const st = gaStato(q);
     const dati = gaFirma(gaStato({ chiave: '', atl: q.atl, eserc: q.eserc }));
     const attesa = st.mia && gaFirma(st) !== dati;
-    const nAtl = q.n_atl || 0;
-    let haCons = false;
-    const righe = q.atl.map(function(a){
-      const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [], fu = st.fuori.indexOf(a.n) >= 0;
-      const dec = gaDeciso(st, a.n);
-      const manca = gaManca(q, a);
-      const cons = manca.some(function(c){ return c[3]; }) || a.cons_fuori;
-      if(cons && !dec) haCons = true;
-      // prima le consigliate, poi le altre di squadra, in fondo quelle di un gruppo solo
-      const ord = manca.slice().sort(function(x, y){
-        const gx = x[3] ? 0 : (q.eserc[x[0]][3] === false ? 2 : 1), gy = y[3] ? 0 : (q.eserc[y[0]][3] === false ? 2 : 1);
-        return gx - gy || x[0] - y[0];
-      });
-      const es = ord.map(function(c){
-        const e = q.eserc[c[0]], on = ag.indexOf(e[0]) >= 0;
-        const gruppo = e[3] === false;
-        const det = c[1] > 0
-          ? 'GPS '+gaN1(c[1])+'\' su '+gaN1(e[1])+'\' &#183; mancano '+gaN1(c[2])+'\''
-          : 'non presa &#183; '+gaN1(e[1])+'\''+(e[2] ? ' &#183; fatta da '+e[2]+(nAtl ? ' su '+nAtl : '') : '');
-        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+(c[3] ? ' cons' : '')+(gruppo ? ' gpa-grp' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+c[0]+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
-          '<b>'+esc(e[0])+(c[3] && !on ? '<span class="gpa-ct">consigliata</span>' : '')+'</b><span>'+det+(on ? ' &#183; aggiunta' : '')+'</span></button>';
-      }).join('');
-      const tf = q.fuori_min >= 2
-        ? '<button type="button" class="gpa-b'+(fu ? ' on' : '')+(a.cons_fuori ? ' cons' : '')+'" aria-pressed="'+fu+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaFuori(this.dataset.ch,this.dataset.n)"><b>Tempo fuori esercitazioni'+(a.cons_fuori && !fu ? '<span class="gpa-ct">consigliato</span>' : '')+'</b><span>pause e spiegazioni, fino a '+Math.round(q.fuori_min)+'\''+(fu ? ' &#183; aggiunto' : '')+'</span></button>'
-        : '';
-      const cb = (cons && !dec)
-        ? '<button type="button" class="gpa-b gpa-cb" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaConsigliate(this.dataset.ch,this.dataset.n)"><b>Aggiungi le consigliate</b><span>poi si toglie quello che non ha fatto</span></button>'
-        : '';
-      const dopo = gaDopo(q, a, st);
-      const cambia = Math.abs(dopo - a.min) >= 0.5;
-      const dif = q.rif - a.min;
-      return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+
-        '<span class="tnum gpa-basso">Full Training '+gaN1(a.min)+'\' su '+gaN1(q.rif)+'\' della maggioranza, mancano '+gaN1(dif)+'\'</span>'+
-        (cambia ? '<span class="tnum gpa-dopo'+(Math.abs(dopo - q.rif) <= 3 ? ' ok' : '')+'">con le scelte: '+gaN1(dopo)+'\'</span>' : '')+
-        (dec || q.vecchia ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
-        '<div class="gpa-bs">'+cb+es+tf+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button></div></div>';
-    }).join('');
-    const nDa = q.vecchia ? 0 : q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length;
-    const corpo = q.atl.length
-      ? '<div class="gpa-l">'+righe+'</div>'
+    const bassi = q.atl.filter(function(a){ return a.basso !== false; });
+    const altre = q.atl.filter(function(a){ return a.basso === false; });
+    const haCons = bassi.some(function(a){ return !gaDeciso(st, a.n) && (gaManca(q, a).some(function(c){ return c[3]; }) || a.cons_fuori); });
+    const nDa = q.vecchia ? 0 : bassi.filter(function(a){ return !gaDeciso(st, a.n); }).length;
+    let corpo = bassi.length
+      ? '<div class="gpa-l">'+bassi.map(function(a){ return gaRiga(q, a, st, false); }).join('')+'</div>'
       : '<p class="gps-n">Tutte le '+q.complete+' atlete hanno i minuti della maggioranza.</p>';
+    if(altre.length){
+      const scelte = altre.filter(function(a){ return gaDeciso(st, a.n); }).length;
+      const aperta = GA_ALT == null ? scelte > 0 : GA_ALT;
+      corpo += '<details class="gpa-alt"'+(aperta ? ' open' : '')+' ontoggle="gaAltTocca(this)"><summary>Lavori fatti oltre la seduta: '+altre.length+(altre.length===1 ? ' atleta' : ' atlete')+' con i minuti pieni'+
+        (scelte ? ' &#183; '+scelte+' con scelte' : '')+'</summary>'+
+        '<p class="gps-n">Durante la seduta il loro GPS era acceso: possono mancare solo i lavori che chi li ha fatti ha in piu&#39; rispetto alla maggioranza (tiri dopo l&#39;allenamento, aerobico in coda). Tocca quelli fatti con il GPS gia&#39; spento.</p>'+
+        '<div class="gpa-l">'+altre.map(function(a){ return gaRiga(q, a, st, true); }).join('')+'</div></details>';
+    }
     const nota = attesa
-      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola al prossimo giro (serve acceso): il suo Full Training, la sua riga nelle esercitazioni aggiunte e la media squadra della seduta, e da li\' Carico, Report, Esercitazioni e Atlete. Qualche minuto, poi ricarica la pagina.</p>'
-      : (q.atl.length ? '<p class="gps-n">Le altre '+q.complete+' hanno '+Math.round(q.rif)+'\' o quasi. Per ognuna ci sono le esercitazioni dove il GPS non c\'e\' o ha preso solo un pezzo: <b>consigliate</b> quelle dove c\'era a meta\' e quelle di squadra che mancano, finche\' i minuti tornano alla maggioranza; quelle di un gruppo solo le decidi tu. Ogni parte entra con i valori di squadra di quell\'esercitazione, riportati al suo rapporto abituale con le compagne; il tempo fuori con l\'intensita\' che la squadra ha avuto in quel tempo. Dopo una scelta si rifanno la sua seduta, le sue esercitazioni e la media squadra.</p>' : '');
+      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola al prossimo giro (serve acceso): il suo Full Training, la sua riga nelle esercitazioni aggiunte e la media squadra della seduta, e da li\' Carico, Report, Esercitazioni e Atlete. Qualche minuto, poi ricarica la pagina. Le scelte restano modificabili.</p>'
+      : (bassi.length ? '<p class="gps-n">Le altre '+q.complete+' hanno '+Math.round(q.rif)+'\' o quasi. <b>Consigliate</b>: le esercitazioni dove c\'era ma il GPS ne ha preso solo un pezzo, quelle di squadra che mancano finche\' i minuti tornano alla maggioranza, e i lavori di gruppo che di solito fa. Ogni parte entra con i valori di squadra di quell\'esercitazione, riportati al suo rapporto abituale con le compagne. Dopo una scelta si rifanno la sua seduta, le sue esercitazioni e la media squadra.</p>' : '');
     const btn = (haCons && nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaConsigliate(this.dataset.ch)">Consigliate a tutte quelle da vedere</button>' : '')+
       (nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaTutteOk(this.dataset.ch)">Le altre vanno bene cosi\'</button>' : '')+
-      (st.mia ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Annulla le scelte</button>' : '');
-    return '<div class="rsec" id="gpa-sez"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi ha meno minuti della maggioranza: scegli le parti che il GPS non ha preso</span></div>'+
-      corpo+nota+(btn ? '<div class="gps-btn">'+btn+'</div>' : '')+'</div>';
+      (st.mia ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="if(confirm(\'Annullare tutte le scelte GPS di questa seduta?\')) gpsAuto(this.dataset.ch)">Annulla le scelte</button>' : '');
+    return '<div class="rsec" id="gpa-sez"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">correggi le parti che il GPS non ha preso, per tutte le atlete della seduta</span></div>'+
+      gaRiepilogo(q, st)+corpo+nota+(btn ? '<div class="gps-btn">'+btn+'</div>' : '')+'</div>';
   }
   function cosaFattoHTML(m){
     const iso = cfIso(m.meta.dateStr);
