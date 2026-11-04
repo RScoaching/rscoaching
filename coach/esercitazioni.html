@@ -3307,6 +3307,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     MOD.perLk.forEach(l=> l.sort((a,b)=> b.gps - a.gps));
     MOD.mc = microciclo(all);
+    MOD.forma = formaGiorni(all);
     MOD.ob = simObiettivi(all, MOD.tipo, MOD.mc);
     return MOD;
   }
@@ -3748,40 +3749,103 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(/\brond/.test(t)) return 'rondo';
     if(/possess|costruzion/.test(t)) return 'possesso';
     if(/duell|1c1|2c2/.test(t)) return 'duelli';
-    if(/sprint|\brsa\b|rapidit|navett|\bcod\b|velocit/.test(t)) return 'sprint';
+    // l'RSA chiude la seduta, gli sprint e la rapidita' stanno subito dopo l'attivazione
+    if(/\brsa\b/.test(t)) return 'rsa';
+    if(/sprint|rapidit|navett|\bcod\b|velocit/.test(t)) return 'sprint';
     if(/aerobic|intermitt|resistenz|intervall|\bz2\b/.test(t)) return 'aerobico';
-    if(/partita|\bssg\b|\d+c\d+/.test(t)) return 'partita';
-    if(/tir|cross|finalizz|passing|idp|tecnic|reparto/.test(t)) return 'tecnica';
+    if(/partita|\bssg\b|\d+c\d+/.test(t)){
+      const f = formaOf(nome);
+      const n = f ? f.split('c').reduce((a, v)=> a + (+v), 0) : null;
+      return (n && n <= 12) ? 'partitaP' : 'partita';
+    }
+    if(/\btiri\b|cross|finalizz|conclusion/.test(t)) return 'tiri';
+    if(/passing|idp|tecnic|reparto/.test(t)) return 'tecnica';
     return 'altro';
   }
-  const CAT_L = { attivazione:'attivazione', contrapposizione:'contrapposizione', palleinattive:'palle inattive', rondo:'rondos',
-    possesso:'possessi', duelli:'duelli', sprint:'sprint e RSA', aerobico:'lavoro aerobico', partita:'partite', tecnica:'tecnica', tattica:'tattica', altro:'altro' };
-  /* La forma della settimana come la fa il mister: per ogni giorno le parti in
-     ordine. Le esercitazioni per riempirle si prendono fra quelle fatte proprio
-     in quel giorno della settimana, con i loro minuti; "pref" premia le varianti
-     tipiche (l'attivazione con i cambi di direzione del mercoledi), "piccola"
-     chiede una partita a numeri ridotti, "opz" una parte che si fa solo se
-     servono ancora metri. */
-  const SCHELETRO = {
-    2: [ { c:['attivazione'], l:'attivazione, spesso tecnica', pref:/tecnic/ },
-         { c:['possesso','partita'], l:'possesso o partita iniziale' },
-         { c:['possesso','rondo'], l:'possessi' },
-         { c:['partita'], l:'partita finale' },
-         { c:['sprint','aerobico'], l:'RSA o lavoro aerobico' } ],
-    3: [ { c:['attivazione'], l:'attivazione con cambi di direzione', pref:/\bcod\b|cambi/ },
-         { c:['rondo'], l:'rondos' },
-         { c:['duelli'], l:'duelli' },
-         { c:['partita'], l:'partita libera o a sponde', pref:/sponde|liber/ } ],
-    4: [ { c:['attivazione'], l:'attivazione' },
-         { c:['rondo','possesso'], l:'rondos o possessi' },
-         { c:['contrapposizione'], l:'contrapposizione 11c11 lunga' },
-         { c:['partita'], l:'partita' } ],
-    5: [ { c:['attivazione'], l:'attivazione' },
-         { c:['sprint'], l:'sprint' },
-         { c:['possesso','partita'], l:'possesso o partita a numeri ridotti', piccola:true, opz:true },
-         { c:['contrapposizione'], l:'contrapposizione 11c11' },
-         { c:['palleinattive'], l:'palle inattive' } ]
-  };
+  const CAT_L = { attivazione:'attivazione', tattica:'tattica 11c0', sprint:'sprint e rapidita&#39;', tecnica:'tecnica e reparto',
+    rondo:'rondos', possesso:'possessi', duelli:'duelli', partitaP:'partite a numeri ridotti', contrapposizione:'contrapposizione',
+    partita:'partita', palleinattive:'palle inattive', tiri:'tiri e cross', rsa:'RSA', aerobico:'lavoro aerobico', altro:'altro' };
+  // dove sta di solito ogni parte in una seduta, quando l'ordine vero non e' stato salvato
+  const CAT_POS = { attivazione:0, tattica:1, sprint:2, tecnica:3, rondo:4, possesso:5, duelli:6, altro:6.5, partitaP:7,
+    contrapposizione:8, partita:9, palleinattive:10, tiri:11, rsa:12, aerobico:13 };
+  /* La forma di ogni giorno si impara dallo storico. Per ogni giorno della
+     settimana le ultime 8 sedute: quali parti ci sono, in quante sedute su 8,
+     quante volte nella stessa seduta e per quanti minuti. Una parte presente in
+     almeno meta' delle sedute entra sempre, una presente in almeno un quarto
+     entra solo se servono ancora metri. L'ordine viene da "Ordina" delle sedute
+     quando il mister l'ha salvato (posizione media della parte), altrimenti
+     dall'ordine tipico del campo: i file GPS sono in ordine alfabetico, non in
+     quello in cui si e' lavorato. */
+  const FORMA_N = 8;
+  function formaGiorni(all){
+    const ORD = loadOrd();
+    const per = {};
+    all.forEach(s=>{
+      const ds = (s.allDrills || s.drills).filter(d=> !d.manual || d.descrizione);
+      if(!ds.length) return;
+      const g = parseDate(s.date).getDay();
+      (per[g] || (per[g] = [])).push(s);
+    });
+    const out = {};
+    Object.keys(per).forEach(gk=>{
+      const g = +gk;
+      const ss = per[g].sort((a,b)=> a.date < b.date ? 1 : (a.date > b.date ? -1 : 0)).slice(0, FORMA_N);
+      if(ss.length < 3) return;
+      const st = {};
+      ss.forEach(s=>{
+        const ds = s.allDrills || s.drills;
+        const keys = ORD[ordKey(s)];
+        const cnt = {}, mins = {};
+        ds.forEach((d, i)=>{
+          const c = catOf(d.descrizione);
+          cnt[c] = (cnt[c] || 0) + 1;
+          const m = d.load ? lnum(d.load['Minuti']) : null;
+          if(m) (mins[c] || (mins[c] = [])).push(m);
+          if(keys){
+            const j = keys.indexOf(drillKey(d));
+            if(j >= 0 && keys.length > 1){
+              const e = st[c] || (st[c] = { n:0, cnt:[], min:[], pos:[] });
+              e.pos.push(j / (keys.length - 1));
+            }
+          }
+        });
+        Object.keys(cnt).forEach(c=>{
+          const e = st[c] || (st[c] = { n:0, cnt:[], min:[], pos:[] });
+          e.n++;
+          e.cnt.push(cnt[c]);
+          (mins[c] || []).forEach(m=> e.min.push(m));
+        });
+      });
+      const parti = [];
+      Object.keys(st).forEach(c=>{
+        const e = st[c], f = e.n / ss.length;
+        if(f < 0.25 || c === 'altro') return;
+        const rip = f >= 0.5 ? Math.max(1, Math.round(median(e.cnt))) : 1;
+        // ordine: posizione salvata se c'e' su almeno due sedute, senno' quella tipica (scalata su 0-1)
+        const pos = e.pos.length >= 2 ? median(e.pos) : CAT_POS[c] / 13;
+        for(let r = 0; r < rip; r++){
+          parti.push({ c:c, l:CAT_L[c] || c, opz: f < 0.5, n:e.n, su:ss.length, tip: median(e.min) || null, pos: pos + r * 0.001, daOrd: e.pos.length >= 2 });
+        }
+      });
+      parti.sort((a,b)=> a.pos - b.pos);
+      // quante esercitazioni si fanno di solito quel giorno
+      const nTip = Math.max(3, Math.round(median(ss.map(s=> (s.allDrills || s.drills).filter(d=> catOf(d.descrizione) !== 'altro').length)) || 4));
+      if(parti.length) out[g] = { parti:parti, n:ss.length, nTip:nTip };
+    });
+    return out;
+  }
+  function formaTxt(F, g){
+    const fg = F && F[g];
+    if(!fg) return '';
+    const viste = Object.create(null);
+    const pz = fg.parti.filter(p=>{ if(viste[p.c]) return false; viste[p.c] = 1; return true; }).map(p=>{
+      const rip = fg.parti.filter(q=> q.c === p.c).length;
+      return (p.opz ? 'a volte ' : '')+(rip > 1 ? rip+' x ' : '')+p.l+' ('+p.n+' su '+fg.n+(p.tip ? ', circa '+Math.round(p.tip)+'&#39;' : '')+')';
+    });
+    const ord = fg.parti.some(p=> p.daOrd);
+    return 'Di '+GIORNI[g]+', nelle ultime '+fg.n+' sedute, di solito '+fg.nTip+' esercitazioni: '+pz.join(', ')+'. '+
+      (ord ? 'L&#39;ordine viene da quello salvato nelle sedute.' : 'L&#39;ordine e&#39; quello tipico del campo: salvalo con &quot;Ordina&quot; nelle sedute e la pagina impara anche quello.');
+  }
   function volteGiorno(x, g){ return x.occ.filter(q=> parseDate(q.s.date).getDay() === g); }
   function minGiorno(x, g){
     const m = median(volteGiorno(x, g).filter(q=> q.d.load).map(q=> lnum(q.d.load['Minuti'])));
@@ -3864,7 +3928,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }).join('')+'</div>';
   }
   /* Componi la seduta. Se l'obiettivo e' un giorno della settimana, la seduta
-     segue la forma di quel giorno (SCHELETRO): una parte alla volta, e per ogni
+     segue la forma di quel giorno imparata dallo storico (formaGiorni): una parte alla volta, e per ogni
      parte l'esercitazione fatta piu' spesso proprio quel giorno che avvicina di
      piu' la fila all'obiettivo, con i minuti che ha di solito quel giorno. Poi,
      se mancano ancora metri e minuti, si aggiunge quello che chiude meglio, come
@@ -3881,7 +3945,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       k:x.k, lk:x.lk, nome:x.nome, se:null, la:(la ? Math.round(la * 2) / 2 : null), re:null, mq:null, lu:null, lg:null, ng:null });
     const ob0 = simObiettivo(o);
     const g = ob0 && ob0.gt ? ob0.gt.g : null;
-    const sch = (g!=null && !o.items.length) ? SCHELETRO[g] : null;
+    const fg = (g!=null && !o.items.length && MOD.forma) ? MOD.forma[g] : null;
+    const sch = fg ? fg.parti : null;
     let n = 0;
     const libero = ()=>{
       const B = simBuco(o, simTotali(o));
@@ -3893,36 +3958,55 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
          dividono fra le parti come si dividono di solito quel giorno, scalati
          sulla durata dell'obiettivo; l'attivazione tiene i suoi. */
       const parti = sch.map(sl=>{
-        let cs = pool.filter(x=> sl.c.indexOf(catOf(x.nome)) >= 0 && !(sl.piccola && nGioc(x) > 12));
+        let cs = pool.filter(x=> catOf(x.nome) === sl.c);
         const cg = cs.filter(x=> volteGiorno(x, g).length);
         if(cg.length) cs = cg;
-        const tip = median((cg.length ? cg.map(x=> minGiorno(x, g)) : cs.map(x=> x.met[LIBM_I.min].med)).filter(v=> v > 0)) || 10;
-        return { sl:sl, cs:cs, tip:tip, att: sl.c.length === 1 && sl.c[0] === 'attivazione' };
+        const tip = sl.tip || median((cg.length ? cg.map(x=> minGiorno(x, g)) : cs.map(x=> x.met[LIBM_I.min].med)).filter(v=> v > 0)) || 10;
+        return { sl:sl, cs:cs, tip:tip, att: sl.c === 'attivazione' };
       }).filter(pt=> pt.cs.length);
-      const fuoriP = o.fuori == null ? MOD.fuori.cambio * parti.length : o.fuori;
-      const durA = parti.filter(pt=> pt.att).reduce((a, pt)=> a + pt.tip, 0);
-      const durR = parti.filter(pt=> !pt.att && !pt.sl.opz).reduce((a, pt)=> a + pt.tip, 0);
+      /* Le parti fisse sono al massimo quante esercitazioni si fanno di solito
+         quel giorno (le piu' frequenti, l'attivazione sempre); quelle "a volte"
+         entrano dopo, solo se mancano ancora metri e c'e' tempo. Alla fine la
+         fila si rimette nell'ordine della seduta. */
+      let obb = parti.filter(pt=> !pt.sl.opz);
+      const opt = parti.filter(pt=> pt.sl.opz).sort((a,b)=> b.sl.n - a.sl.n);
+      if(obb.length > fg.nTip){
+        const keep = obb.slice().sort((a,b)=> (b.att - a.att) || (b.sl.n - a.sl.n)).slice(0, fg.nTip);
+        obb = obb.filter(pt=> keep.indexOf(pt) >= 0);
+      }
+      const fuoriP = o.fuori == null ? MOD.fuori.cambio * obb.length : o.fuori;
+      const durA = obb.filter(pt=> pt.att).reduce((a, pt)=> a + pt.tip, 0);
+      const durR = obb.filter(pt=> !pt.att).reduce((a, pt)=> a + pt.tip, 0);
       const sc = (ob0.val.min > 0 && durR > 0) ? Math.max(0.5, Math.min(1.6, (ob0.val.min - fuoriP - durA) / durR)) : 1;
-      parti.forEach(pt=>{
+      const nuove = [];
+      const scegli = (pt, L)=>{
         const B = simBuco(o, simTotali(o));
         if(!B) return;
-        if(pt.sl.opz && !B.manca) return;
-        const L = pt.att ? pt.tip : Math.max(4, pt.tip * sc);
         let best = null, bv = -Infinity;
         pt.cs.forEach(x=>{
           if(usate[x.lk]) return;
           const nd = volteGiorno(x, g).length;
-          const pf = pt.sl.pref && pt.sl.pref.test(cercaNorm(x.nome)) ? 1 : 0;
           // l'attivazione e' quella di sempre; per il resto conta cosa porta in quei minuti
-          const v = pt.att ? nd + 1.5 * pf + 0.1 * Math.log(x.volte)
-                           : chiude(x, Object.assign({}, B, { min:0 }), L) + 0.15 * Math.min(nd, 3) + 0.3 * pf + 0.05 * Math.log(x.volte);
+          const v = pt.att ? nd + 0.1 * Math.log(x.volte)
+                           : chiude(x, Object.assign({}, B, { min:0 }), L) + 0.15 * Math.min(nd, 3) + 0.05 * Math.log(x.volte);
           if(v > bv){ bv = v; best = x; }
         });
         if(!best) return;
-        o.items.push(nuovo(best, L));
+        const it = nuovo(best, L);
+        o.items.push(it);
+        nuove.push({ it:it, pos:pt.sl.pos });
         usate[best.lk] = 1;
         n++;
+      };
+      obb.forEach(pt=> scegli(pt, pt.att ? pt.tip : Math.max(4, pt.tip * sc)));
+      opt.forEach(pt=>{
+        if(nuove.length > fg.nTip) return;
+        const L0 = libero();
+        if(!L0.B || !L0.B.manca || L0.min < pt.tip * 0.7 || L0.min < 5) return;
+        scegli(pt, Math.min(pt.tip, L0.min));
       });
+      nuove.sort((a,b)=> a.pos - b.pos);
+      o.items = nuove.map(z=> z.it);
     } else if(!o.items.length){
       const att = pool.filter(x=> catOf(x.nome) === 'attivazione').sort((a,b)=> b.volte - a.volte)[0];
       if(att){ o.items.push(nuovo(att)); usate[att.lk] = 1; n++; }
@@ -3974,9 +4058,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(B.ob.gt){
       const c = carattere(B.ob.gt);
       if(c) h += '<div class="cmpft">Il '+B.ob.gt.nome+' tipo, al minuto, rispetto alla settimana: '+c+'. La ricerca da&#39; piu&#39; peso a queste voci.</div>';
-      const sch = SCHELETRO[B.ob.gt.g];
-      if(sch) h += '<div class="cmpft">Di '+B.ob.gt.nome+' la seduta va cosi&#39;: '+sch.map(sl=> sl.l+(sl.opz ? ' (se serve)' : '')).join(', ')+
-        '. &quot;Componi la seduta&quot; segue quest&#39;ordine con le esercitazioni fatte di '+B.ob.gt.nome+'.</div>';
+      const ft = formaTxt(MOD.forma, B.ob.gt.g);
+      if(ft) h += '<div class="cmpft">'+ft+' &quot;Componi la seduta&quot; segue questa forma con le esercitazioni fatte di '+B.ob.gt.nome+'.</div>';
     }
     h += '<div class="obt"><table class="gtbl"><thead><tr><th class="nm" scope="col">Voce</th>'+
       '<th scope="col">In fila</th><th scope="col">Obiettivo</th><th scope="col">Diff.</th></tr></thead><tbody>';
@@ -4056,7 +4139,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     if(!t.n){
       return h + '<p class="ss">Metti in fila le esercitazioni che vuoi fare: qui compare quanto produce la seduta intera.</p>'+
-        (simObiettivo(o) ? '<div class="obm"><span>Oppure lascia che la pagina componga una seduta per questo obiettivo, poi la correggi.</span>'+
+        (function(){ const ob = simObiettivo(o); const ft = ob && ob.gt ? formaTxt(MOD.forma, ob.gt.g) : ''; return ft ? '<div class="cmpft">'+ft+'</div>' : ''; })()+
+        (simObiettivo(o) ? '<div class="obm"><span>Oppure lascia che la pagina componga una seduta per questo obiettivo, seguendo la forma del giorno, poi la correggi.</span>'+
           '<button class="btn sm primary" type="button" id="sim-proponi">Componi la seduta</button></div>' : '');
     }
     h += '<p class="ss">'+t.n+(t.n===1?' esercitazione':' esercitazioni')+' con i loro valori d&#39;archivio, piu&#39; '+
