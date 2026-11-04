@@ -629,7 +629,7 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simbox h3{ margin:0 0 3px; font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:20px; letter-spacing:.5px; color:var(--ink); }
 .simbox .ss{ font-size:12px; color:var(--muted); margin:0 0 10px; max-width:72ch; }
 .simtot .load.mini .lcell .lv{ font-size:22px; }
-.simtot .cmpft{ font-size:11.5px; color:var(--faint); margin-top:8px; }
+.simtot .cmpft, .simtar .cmpft{ font-size:11.5px; color:var(--faint); margin-top:8px; }
 .simob{ margin:0 0 10px; }
 .simob label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); max-width:420px; }
 .simob select{ width:100%; min-height:44px; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink);
@@ -637,6 +637,20 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simob select:focus-visible{ outline:2px solid var(--violet2); outline-offset:1px; }
 .simtot .obt{ margin-top:12px; overflow-x:auto; }
 .simtot .obt .gtbl td.df{ font-weight:700; }
+.simtot .obt .gtbl td.mio{ color:var(--violet2); font-weight:700; }
+.simtar .tar{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin:6px 0 10px; }
+.simtar .tar label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); }
+.simtar .tar input{ width:100%; min-height:44px; font-family:inherit; font-size:15px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--violet-border); border-radius:8px; padding:8px 10px; }
+.simtar .tar input::placeholder{ color:var(--muted); font-weight:500; }
+.simtar .tar input:focus-visible{ outline:2px solid var(--violet2); outline-offset:1px; }
+.simtar .btn{ min-height:44px; }
+.simtar .lsec{ margin-top:16px; }
+.simtar .obt{ overflow-x:auto; margin-top:6px; }
+.simtar .mct td.top{ color:var(--violet2); font-weight:700; }
+.simtar .mct tr.cur td{ background:var(--violet-bg); }
+.simtar .mct tr.sett td{ font-weight:700; border-top:1px solid var(--border2); }
+.simtar .mct .u{ display:block; font-size:10px; font-weight:600; color:var(--faint); }
 @media screen and (max-width:480px){
   .simtot .obt table.gtbl th, .simtot .obt table.gtbl td{ padding-left:6px; padding-right:6px; }
   .simtot .obt table.gtbl td{ font-size:12px; }
@@ -1250,6 +1264,7 @@ html[data-tema="chiaro"] .sb-mob-overlay{ background:rgba(255,255,255,0.94); }
 
 <!-- snapshot esercitazioni (window.ESERC) -->
 <script src="./esercitazioni_data.js"></script>
+<script src="./calendario_data.js"></script>
 <script>
 window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorentina Primavera U19W',
   load_cols:[],load_unit:{},sessions:[]};
@@ -3267,7 +3282,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       if(l) l.push(x); else MOD.perLk.set(x.lk, [x]);
     });
     MOD.perLk.forEach(l=> l.sort((a,b)=> b.gps - a.gps));
-    MOD.ob = simObiettivi(all, MOD.tipo);
+    MOD.mc = microciclo(all);
+    MOD.ob = simObiettivi(all, MOD.tipo, MOD.mc);
     return MOD;
   }
   /* Il valore che si proietta in avanti. Per quasi tutto e' la mediana, ma
@@ -3381,9 +3397,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const o = JSON.parse(localStorage.getItem(LS_SIM) || '{}');
       if(o && Array.isArray(o.items)) return { items:o.items, fuori: (typeof o.fuori==='number' ? o.fuori : null),
         salvate: Array.isArray(o.salvate) ? o.salvate.filter(v=> v && Array.isArray(v.items)) : [],
-        obj: (typeof o.obj==='string' ? o.obj : null) };
+        obj: (typeof o.obj==='string' ? o.obj : null),
+        tar: (o.tar && typeof o.tar==='object') ? o.tar : {} };
     }catch(e){}
-    return { items:[], fuori:null, salvate:[], obj:null };
+    return { items:[], fuori:null, salvate:[], obj:null, tar:{} };
   }
   function saveSim(o){ try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){} }
   function simAdd(x, se, la, re, mq){
@@ -3451,32 +3468,143 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
-  /* L'obiettivo della seduta: la seduta tipo della stagione oppure il Full
-     Training di un giorno gia' fatto ("voglio un MD-3 come quello del 28").
-     La fila si confronta con quello, e la ricerca puo' ordinare l'archivio per
-     cosa chiude meglio la differenza. */
+  /* L'obiettivo della seduta. Di partenza e' il giorno della settimana tipo:
+     il mercoledi delle ultime settimane, il venerdi delle ultime settimane, e
+     cosi' via, perche' il microciclo si ripete e ogni giorno ha il suo carattere
+     (forza e frenate a meta' settimana, velocita' alla fine). Si puo' scegliere
+     anche la seduta tipo della stagione o il Full Training di un giorno preciso.
+     Ogni obiettivo si tara a mano voce per voce, e la taratura resta salvata:
+     il mercoledi dopo riparte gia' da li'. */
   const OBV = [
-    { k:'pm',  l:'Distanza',      u:'m', m:'di distanza', g:t=> t.pm },
-    { k:'hs',  l:'Oltre 20 km/h', u:'m', m:'oltre 20 km/h', g:t=> (t.v20==null && t.v23==null) ? null : (t.v20 || 0) + (t.v23 || 0) },
+    { k:'pm',  l:'Distanza',      u:'m', m:'di distanza',   g:t=> t.pm },
+    { k:'v20', l:'20-23 km/h',    u:'m', m:'tra 20 e 23 km/h', g:t=> t.v20 },
+    { k:'v23', l:'Oltre 23 km/h', u:'m', m:'oltre 23 km/h', g:t=> t.v23 },
     { k:'w20', l:'Oltre 20 W/kg', u:'m', m:'oltre 20 W/kg', g:t=> t.w20 },
     { k:'ad',  l:'Acc e dec',     u:'',  m:'tra acc e dec', g:t=> (t.acc==null && t.dec==null) ? null : (t.acc || 0) + (t.dec || 0) }
   ];
-  function simObiettivi(all, T){
-    const out = [];
-    if(T.n) out.push({ v:'tipo', l:'Seduta tipo della stagione ('+T.n+' Full Training)', min:T.min, tot:T.tot });
+  const GIORNI = ['domenica','lunedi','martedi','mercoledi','giovedi','venerdi','sabato'];
+  const MC_N = 6, MC_MIN = 3;
+  function isoOf(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  // le voci dell'obiettivo da un Full Training o da un totale gia' fatto
+  function vociDi(tot, min){
+    const o = { min:min };
+    OBV.forEach(b=> o[b.k] = b.g(tot));
+    return o;
+  }
+  function totDi(F){
+    const tot = {};
+    LIBM.forEach(mm=>{ if(mm.t){ const v = mm.f(F); tot[mm.k] = v==null ? null : v * F['Minuti']; } });
+    return tot;
+  }
+  function gareDate(){
+    const out = new Set();
+    [window.CAL, window.CAL_2627].forEach(C=>{
+      if(!C) return;
+      (C.fixtures || []).forEach(f=>{ if(f && f.data) out.add(String(f.data).slice(0, 10)); });
+      Object.keys(C.days || {}).forEach(i=>{ const d = C.days[i]; if(d && d.is_match && d.data) out.add(String(d.data).slice(0, 10)); });
+    });
+    return Array.from(out).sort();
+  }
+  // come nel calendario: MD-n prima della gara, MD+n dopo
+  function mdOf(iso, gare){
+    if(gare.indexOf(iso) >= 0) return 'Gara';
+    const d0 = parseDate(iso);
+    let next = null, prev = null;
+    gare.forEach(g=>{
+      const d = Math.round((parseDate(g) - d0) / 86400000);
+      if(d > 0 && (next==null || d < next)) next = d;
+      if(d < 0 && (prev==null || -d < prev)) prev = -d;
+    });
+    if(prev===1) return 'MD+1';
+    if(next!=null && next<=6) return 'MD-'+next;
+    if(prev!=null && prev<=3) return 'MD+'+prev;
+    return '';
+  }
+  /* La settimana tipo. Contano solo le sedute delle settimane di gara (il
+     precampionato ha un'altra forma), raggruppate per giorno della settimana:
+     le partite in calendario arrivano fino all'ultima giocata, quindi oggi non
+     si puo' sempre contare dalla prossima gara, il giorno della settimana si'.
+     Per ogni giorno la mediana delle ultime sei volte, e il peso: quanto quel
+     giorno sta sopra o sotto la settimana su ogni voce, al minuto. Al minuto
+     perche' il mercoledi e' corto: in totale ha le acc e dec degli altri giorni,
+     ma fitte il doppio, ed e' quello il suo carattere. */
+  function microciclo(all){
+    const gare = gareDate();
+    const per = {};
     all.forEach(s=>{
       const F = s.ft && s.ft.load;
       if(!F || !lnum(F['Minuti'])) return;
-      const tot = {};
-      LIBM.forEach(mm=>{ if(mm.t){ const v = mm.f(F); tot[mm.k] = v==null ? null : v * F['Minuti']; } });
-      const dt = parseDate(s.date);
-      out.push({ v:s.date+'|'+s.slot, l:(dt ? DTF.format(dt).replace('.','') : s.date)+' '+s.slot+' &#183; '+lfmt(F['Minuti'], 0)+' min', min:F['Minuti'], tot:tot });
+      const md = gare.length ? mdOf(s.date, gare) : '';
+      if(!/^MD[+-]\d$/.test(md)) return;
+      const g = parseDate(s.date).getDay();
+      (per[g] || (per[g] = [])).push({ date:s.date, md:md, v:vociDi(totDi(F), F['Minuti']) });
     });
-    return out.slice(0, 61);
+    const giorni = Object.keys(per).map(Number).filter(g=> per[g].length >= MC_MIN)
+      .sort((a,b)=> ((a + 6) % 7) - ((b + 6) % 7)).map(g=>{
+        const xs = per[g].sort((a,b)=> a.date < b.date ? 1 : -1).slice(0, MC_N);
+        const val = { min: median(xs.map(x=> x.v.min)) };
+        OBV.forEach(b=> val[b.k] = median(xs.map(x=> x.v[b.k])));
+        const mds = {};
+        xs.forEach(x=>{ mds[x.md] = (mds[x.md] || 0) + 1; });
+        const md = Object.keys(mds).sort((a,b)=> mds[b] - mds[a])[0];
+        return { g:g, nome:GIORNI[g], md:md, n:xs.length, val:val, dal:xs[xs.length-1].date };
+      });
+    if(!giorni.length) return null;
+    const sett = { min:0 };
+    OBV.forEach(b=> sett[b.k] = 0);
+    giorni.forEach(d=>{ sett.min += d.val.min || 0; OBV.forEach(b=> sett[b.k] += d.val[b.k] || 0); });
+    giorni.forEach(d=>{
+      d.peso = {};
+      OBV.forEach(b=>{
+        const m = sett.min > 0 ? sett[b.k] / sett.min : 0;
+        d.peso[b.k] = (m > 0 && d.val.min > 0) ? (d.val[b.k] || 0) / d.val.min / m : 1;
+      });
+    });
+    return { giorni:giorni, sett:sett };
   }
+  // il giorno tipo di oggi, o il primo che viene se oggi non si allena
+  function mcOggi(MC){
+    if(!MC) return null;
+    const t = new Date();
+    for(let i = 0; i < 7; i++){
+      const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + i);
+      const gt = MC.giorni.filter(x=> x.g === d.getDay())[0];
+      if(gt) return { gt:gt, i:i };
+    }
+    return null;
+  }
+  function cap(t){ return t.charAt(0).toUpperCase() + t.slice(1); }
+  function simObiettivi(all, T, MC){
+    const out = [];
+    const og = mcOggi(MC);
+    if(MC) MC.giorni.forEach(d=>{
+      const quando = (og && og.gt === d) ? (og.i===0 ? ', oggi' : (og.i===1 ? ', domani' : '')) : '';
+      out.push({ v:'g'+d.g, l:cap(d.nome)+' tipo'+quando+' ('+d.md+', ultime '+d.n+')', val:d.val, gt:d });
+    });
+    if(T.n) out.push({ v:'tipo', l:'Seduta tipo della stagione ('+T.n+' Full Training)', val:vociDi(T.tot, T.min) });
+    all.forEach(s=>{
+      const F = s.ft && s.ft.load;
+      if(!F || !lnum(F['Minuti'])) return;
+      const dt = parseDate(s.date);
+      out.push({ v:s.date+'|'+s.slot, l:(dt ? DTF.format(dt).replace('.','') : s.date)+' '+s.slot+' &#183; '+lfmt(F['Minuti'], 0)+' min', val:vociDi(totDi(F), F['Minuti']) });
+    });
+    return out.slice(0, 70);
+  }
+  // senza scelta vale il giorno tipo di oggi; la taratura salvata si applica sopra
   function simObiettivo(o){
-    const v = o.obj || 'tipo';
-    return MOD.ob.filter(b=> b.v === v)[0] || MOD.ob[0] || null;
+    let v = o.obj;
+    if(!v){ const og = mcOggi(MOD.mc); v = og ? 'g'+og.gt.g : 'tipo'; }
+    const base = MOD.ob.filter(b=> b.v === v)[0] || MOD.ob[0];
+    if(!base) return null;
+    const tar = (o.tar && o.tar[base.v]) || {};
+    const val = Object.assign({}, base.val);
+    Object.keys(tar).forEach(k=>{ if(typeof tar[k]==='number' && tar[k] >= 0) val[k] = tar[k]; });
+    return Object.assign({}, base, { val:val, auto:base.val, tar:tar, tarato:Object.keys(tar).length > 0 });
+  }
+  // il peso del giorno sulla ricerca: le voci che lo caratterizzano contano di piu'
+  function pesoOb(ob, k){
+    if(!ob.gt) return 1;
+    return Math.max(0.4, Math.min(2.5, ob.gt.peso[k]));
   }
   // quanto manca alla fila per arrivare all'obiettivo, voce per voce
   function simBuco(o, t){
@@ -3485,22 +3613,22 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const g = {}, T = {};
     let manca = false;
     OBV.forEach(b=>{
-      const tv = b.g(ob.tot);
+      const tv = ob.val[b.k];
       T[b.k] = tv;
       g[b.k] = (tv==null || tv <= 0) ? 0 : Math.max(0, tv - (b.g(t.v) || 0));
       if(tv > 0 && g[b.k] / tv >= 0.05) manca = true;
     });
-    return { ob:ob, g:g, T:T, min: Math.max(0, (ob.min || 0) - t.dur), manca:manca };
+    return { ob:ob, g:g, T:T, min: Math.max(0, (ob.val.min || 0) - t.dur), manca:manca };
   }
   // cosa porta un'esercitazione nella sua durata solita
   function porta(x){
     const L = x.met[LIBM_I.min].med || 10;
-    const d = dieci(x);
-    return { L:L, pm: d.pm==null ? 0 : d.pm / 10 * L, hs: d.hs==null ? 0 : d.hs / 10 * L,
-      w20: d.w20==null ? 0 : d.w20 / 10 * L, ad: d.ad==null ? 0 : d.ad / 10 * L };
+    const r = k=>{ const v = proj(x.met[LIBM_I[k]], k); return v==null ? 0 : v * L; };
+    return { L:L, pm:r('pm'), v20:r('v20'), v23:r('v23'), w20:r('w20'), ad:r('acc') + r('dec') };
   }
-  // ogni voce che manca conta allo stesso modo; andare oltre conta meta', in negativo.
-  // Un lavoro piu' lungo dei minuti rimasti vale per la parte che ci sta.
+  /* Ogni voce che manca conta per il suo peso nel giorno; andare oltre conta in
+     negativo, tanto piu' quanto il giorno la tiene bassa (alta velocita' di
+     mercoledi). Un lavoro piu' lungo dei minuti rimasti vale per la parte che ci sta. */
   function chiude(x, B){
     const p = porta(x);
     let sc = 0;
@@ -3508,25 +3636,40 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     OBV.forEach(b=>{
       const tv = B.T[b.k];
       if(!(tv > 0)) return;
-      sc += (Math.min(p[b.k], B.g[b.k]) - 0.5 * Math.max(0, p[b.k] - B.g[b.k])) / tv;
+      const w = pesoOb(B.ob, b.k);
+      sc += (w * Math.min(p[b.k], B.g[b.k]) - (0.5 / w) * Math.max(0, p[b.k] - B.g[b.k])) / tv;
     });
     return sc * sta;
+  }
+  // il carattere del giorno tipo in una riga
+  function carattere(gt){
+    const vv = OBV.map(b=> ({ b:b, p:gt.peso[b.k] })).filter(x=> x.p >= 1.15 || x.p <= 0.85)
+      .sort((a,b)=> Math.abs(Math.log(b.p)) - Math.abs(Math.log(a.p))).slice(0, 3);
+    if(!vv.length) return '';
+    return vv.map(x=> (x.p > 1 ? 'piu&#39; ' : 'meno ')+x.b.l.toLowerCase().replace('acc e dec', 'acc e dec')+' ('+pctTxt(x.p, 1)+')').join(', ');
   }
   function simObHTML(o, t){
     const B = simBuco(o, t);
     if(!B) return '';
     const fmt = v=> v==null ? '&#8211;' : lfmtA(v);
-    const righe = [{ l:'Durata', u:'min', a:t.dur, b:B.ob.min }].concat(OBV.map(b=> ({ l:b.l, u:b.u, a:b.g(t.v), b:b.g(B.ob.tot) })));
-    let h = '<div class="obt"><table class="gtbl"><thead><tr><th class="nm" scope="col">Voce</th>'+
+    const righe = [{ l:'Durata', u:'min', a:t.dur, b:B.ob.val.min }].concat(OBV.map(b=> ({ l:b.l, u:b.u, a:b.g(t.v), b:B.ob.val[b.k], k:b.k })));
+    let h = '';
+    if(B.ob.gt){
+      const c = carattere(B.ob.gt);
+      if(c) h += '<div class="cmpft">Il '+B.ob.gt.nome+' tipo, al minuto, rispetto alla settimana: '+c+'. La ricerca da&#39; piu&#39; peso a queste voci.</div>';
+    }
+    h += '<div class="obt"><table class="gtbl"><thead><tr><th class="nm" scope="col">Voce</th>'+
       '<th scope="col">In fila</th><th scope="col">Obiettivo</th><th scope="col">Diff.</th></tr></thead><tbody>';
     righe.forEach(r=>{
       const p = (r.a!=null && r.b) ? Math.round((r.a / r.b - 1) * 100) : null;
       const c = p==null ? '' : (p <= -10 ? ' giu' : (p >= 10 ? ' su' : ''));
-      h += '<tr><td class="nm">'+r.l+'</td><td>'+fmt(r.a)+(r.u ? ' '+r.u : '')+'</td><td>'+fmt(r.b)+(r.u ? ' '+r.u : '')+'</td>'+
+      const mio = (r.k ? B.ob.tar[r.k] : B.ob.tar.min) != null;
+      h += '<tr><td class="nm">'+r.l+'</td><td>'+fmt(r.a)+(r.u ? ' '+r.u : '')+'</td><td'+(mio ? ' class="mio"' : '')+'>'+fmt(r.b)+(r.u ? ' '+r.u : '')+'</td>'+
         '<td class="df'+c+'">'+(p==null ? '&#8211;' : (Math.abs(p) < 5 ? 'in linea' : pctTxt(r.a, r.b)))+'</td></tr>';
     });
     h += '</tbody></table></div>';
     const mancano = OBV.filter(b=> B.T[b.k] > 0 && B.g[b.k] / B.T[b.k] >= 0.1)
+      .sort((a,b)=> pesoOb(B.ob, b.k) - pesoOb(B.ob, a.k))
       .map(b=> lfmtA(B.g[b.k])+(b.u ? ' '+b.u : '')+' '+b.m);
     if(t.n && mancano.length){
       h += '<div class="obm"><span>Mancano '+mancano.join(', ')+(B.min >= 3 ? ', con '+lfmt(B.min, 0)+' minuti ancora liberi' : '')+'.</span>'+
@@ -3536,12 +3679,46 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
+  /* Taratura e settimana tipo: stanno fuori dai totali perche' quelli si
+     ridisegnano a ogni cifra, e qui si scrive. */
+  function simTarHTML(o){
+    const ob = simObiettivo(o);
+    if(!ob) return '';
+    const fid = 'tar-';
+    const campi = [{ k:'min', l:'Durata (min)' }].concat(OBV.map(b=> ({ k:b.k, l:b.l+(b.u ? ' ('+b.u+')' : '') })));
+    let h = '<h3 id="simtar-t">Taratura dell&#39;obiettivo</h3>'+
+      '<p class="ss">In grigio i valori di partenza ('+(ob.gt ? 'il '+ob.gt.nome+' delle ultime '+ob.gt.n+' settimane' : 'l&#39;obiettivo scelto')+
+      '). Scrivi un numero solo dove vuoi cambiarlo: resta salvato per '+(ob.gt ? 'tutti i '+ob.gt.nome : 'questo obiettivo')+', e la prossima volta si riparte da qui.</p>'+
+      '<div class="sf tar">'+campi.map(c=>{
+        const a = ob.auto[c.k], m = ob.tar[c.k];
+        return '<label for="'+fid+c.k+'">'+esc(c.l)+'<input id="'+fid+c.k+'" class="tnum" type="number" inputmode="decimal" min="0" step="1" data-t="'+c.k+'"'+
+          ' value="'+(m==null ? '' : Math.round(m))+'" placeholder="'+(a==null ? '' : Math.round(a))+'" autocomplete="off"></label>';
+      }).join('')+'</div>'+
+      (ob.tarato ? '<button class="btn sm" type="button" id="sim-tar0">Torna ai valori '+(ob.gt ? 'del '+ob.gt.nome+' tipo' : 'di partenza')+'</button>' : '');
+    const MC = MOD.mc;
+    if(MC){
+      const cols = [{ k:'min', l:'Durata', u:'min' }].concat(OBV.map(b=> ({ k:b.k, l:b.l, u:b.u })));
+      h += '<div class="lsec">La settimana tipo</div><div class="obt"><table class="gtbl mct"><thead><tr><th class="nm" scope="col">Giorno</th>'+
+        cols.map(c=> '<th scope="col">'+esc(c.l)+(c.u ? '<span class="u">'+c.u+'</span>' : '')+'</th>').join('')+'</tr></thead><tbody>'+
+        MC.giorni.map(d=> '<tr'+(ob.gt === d ? ' class="cur"' : '')+'><td class="nm">'+cap(d.nome)+'<span class="u">'+d.md+'</span></td>'+
+          cols.map(c=>{
+            const v = d.val[c.k];
+            const top = c.k !== 'min' && d.peso[c.k] >= 1.15;
+            return '<td'+(top ? ' class="top"' : '')+'>'+(v==null ? '&#8211;' : lfmtA(v))+'</td>';
+          }).join('')+'</tr>').join('')+
+        '<tr class="sett"><td class="nm">Settimana</td>'+cols.map(c=> '<td>'+lfmtA(MC.sett[c.k])+'</td>').join('')+'</tr>'+
+        '</tbody></table></div><div class="cmpft">Mediana delle ultime '+MC_N+' volte di ogni giorno, solo nelle settimane di gara. In viola le voci che quel giorno sono piu&#39; fitte della media della settimana (al minuto).</div>';
+    }
+    return h;
+  }
   function simTotHTML(o){
     const t = simTotali(o);
     let h = '<h3 id="simtot-t">A fine allenamento</h3>';
     if(MOD.ob.length){
-      const cur = (simObiettivo(o) || {}).v;
+      const cur = o.obj || '';
+      const og = mcOggi(MOD.mc);
       h += '<div class="simob"><label for="sim-ob">Obiettivo della seduta<select id="sim-ob">'+
+        '<option value=""'+(cur ? '' : ' selected')+'>'+(og ? 'Il giorno tipo di '+(og.i===0 ? 'oggi' : (og.i===1 ? 'domani' : og.gt.nome))+' ('+og.gt.nome+')' : 'La seduta tipo della stagione')+'</option>'+
         MOD.ob.map(b=> '<option value="'+esc(b.v)+'"'+(b.v===cur ? ' selected' : '')+'>'+b.l+'</option>').join('')+'</select></label></div>';
     }
     if(!t.n){
@@ -3686,8 +3863,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         // in ordine "chiude" si legge cosa porta nei suoi minuti, in viola le voci che mancano
         const p = porta(x);
         const on = k=> (B.T[k] > 0 && B.g[k] / B.T[k] >= 0.1) ? ' class="on"' : '';
-        met = 'In '+lfmt(p.L, 0)+'&#39; porta <span'+on('pm')+'>+'+lfmt(p.pm, 0)+' m</span> &#183; <span'+on('hs')+'>oltre 20 km/h +'+lfmtA(p.hs)+' m</span> &#183; '+
-          '<span'+on('ad')+'>acc+dec +'+lfmtA(p.ad)+'</span> &#183; <span'+on('w20')+'>oltre 20 W/kg +'+lfmt(p.w20, 0)+' m</span>';
+        met = 'In '+lfmt(p.L, 0)+'&#39; porta <span'+on('pm')+'>+'+lfmt(p.pm, 0)+' m</span> &#183; <span'+on('v20')+'>20-23 km/h +'+lfmtA(p.v20)+' m</span> &#183; '+
+          '<span'+on('v23')+'>oltre 23 +'+lfmtA(p.v23)+' m</span> &#183; <span'+on('ad')+'>acc+dec +'+lfmtA(p.ad)+'</span> &#183; <span'+on('w20')+'>oltre 20 W/kg +'+lfmt(p.w20, 0)+' m</span>';
       }
       const nf = inFila[x.lk];
       return '<div class="pk"><span class="pn">'+esc(x.nome)+(nf ? ' <span class="badge arc">in fila'+(nf>1?' x'+nf:'')+'</span>' : '')+
@@ -3738,6 +3915,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const t0 = simTotali(o);
     const sed = simSedute(all);
     let h = '<section class="simbox simtot" id="simtot" aria-labelledby="simtot-t" aria-live="polite">'+simTotHTML(o)+'</section>';
+    h += '<section class="simbox simtar" aria-labelledby="simtar-t">'+simTarHTML(o)+'</section>';
     h += '<section class="simbox" aria-labelledby="simfila-t"><h3 id="simfila-t">In fila</h3>'+
       '<p class="ss">Serie, minuti di lavoro e recupero per ognuna. Senza serie vale la durata solita. I mq a testa spostano la stima con la regola dello spazio dell&#39;archivio.</p>'+
       '<div class="simtop"><label for="sim-fuori">Tempo fuori esercitazioni (min)'+
@@ -3816,9 +3994,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     host.onchange = e=>{
       if(!e.target || e.target.id !== 'sim-ob') return;
       const o2 = loadSim();
-      o2.obj = e.target.value === 'tipo' ? null : e.target.value;
-      saveSim(o2); aggiorna();
-      if(SIMF.ord==='buco') pick();
+      o2.obj = e.target.value || null;
+      saveSim(o2); ridisegna();
     };
     host.onclick = e=>{
       const b = e.target && e.target.closest && e.target.closest('#sim-buco');
@@ -3829,6 +4006,25 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const ph = document.getElementById('simpick-t');
       if(ph) ph.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block:'start' });
     };
+    host.querySelectorAll('.simtar input[data-t]').forEach(inp=> inp.addEventListener('input', ()=>{
+      const o2 = loadSim();
+      const ob = simObiettivo(o2);
+      if(!ob) return;
+      const t = Object.assign({}, o2.tar[ob.v] || {});
+      const v = parseFloat(inp.value);
+      if(inp.value.trim()==='' || !isFinite(v) || v < 0) delete t[inp.getAttribute('data-t')];
+      else t[inp.getAttribute('data-t')] = v;
+      if(Object.keys(t).length) o2.tar[ob.v] = t; else delete o2.tar[ob.v];
+      saveSim(o2); aggiorna();
+    }));
+    const t0b = document.getElementById('sim-tar0');
+    if(t0b) t0b.addEventListener('click', ()=>{
+      const o2 = loadSim();
+      const ob = simObiettivo(o2);
+      if(ob) delete o2.tar[ob.v];
+      saveSim(o2); ridisegna();
+      toast('Obiettivo riportato ai valori di partenza');
+    });
     const fin = document.getElementById('sim-fuori');
     if(fin) fin.addEventListener('input', ()=>{
       const o2 = loadSim();
