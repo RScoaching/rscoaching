@@ -3465,7 +3465,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }catch(e){}
     return { items:[], fuori:null, salvate:[], obj:null, tar:{} };
   }
-  function saveSim(o){ try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){} }
+  // la fila com'era prima di "Componi la seduta": basta un tocco per tornarci,
+  // finche' non si cambia altro
+  let SIM_PRIMA = null;
+  function saveSim(o, tieni){
+    if(!tieni) SIM_PRIMA = null;
+    try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){}
+  }
   function simAdd(x, se, la, re, mq, sp){
     const o = loadSim();
     sp = sp || {};
@@ -3714,6 +3720,54 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(!vv.length) return '';
     return vv.map(x=> (x.p > 1 ? 'piu&#39; ' : 'meno ')+x.b.l.toLowerCase().replace('acc e dec', 'acc e dec')+' ('+pctTxt(x.p, 1)+')').join(', ');
   }
+  /* Componi la seduta. Si aggiunge un'esercitazione alla volta, sempre quella
+     che avvicina di piu' la fila all'obiettivo nei minuti che restano (la stessa
+     misura dell'ordine "Chiude cio' che manca"), finche' mancano meno di cinque
+     minuti o niente aiuta piu'. Solo esercitazioni fatte almeno due volte, mai
+     la stessa due volte, niente amichevoli; quelle piu' fatte hanno un piccolo
+     vantaggio, perche' sono quelle che la squadra conosce. I test (30-15,
+     yo-yo) stanno in archivio ma non sono lavoro da proporre. Se la fila e' vuota
+     si parte dall'attivazione usata piu' spesso, come in campo. Una lunga si
+     accorcia ai minuti rimasti. */
+  function simComponi(){
+    const o = loadSim();
+    const prima = { items: JSON.parse(JSON.stringify(o.items)), fuori:o.fuori };
+    const usate = Object.create(null);
+    o.items.forEach(it=> usate[it.lk] = 1);
+    const pool = MOD.lib.filter(x=> x.gps && x.volte >= 2 && x.met[LIBM_I.min].med && !/amichevol|partita ufficiale|gara|\btest\b|yo-?yo/i.test(x.nome));
+    const nuovo = x=> ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      k:x.k, lk:x.lk, nome:x.nome, se:null, la:null, re:null, mq:null, lu:null, lg:null, ng:null });
+    let n = 0;
+    if(!o.items.length){
+      const att = pool.filter(x=> /attivaz|riscald/i.test(x.nome)).sort((a,b)=> b.volte - a.volte)[0];
+      if(att){ o.items.push(nuovo(att)); usate[att.lk] = 1; n++; }
+    }
+    for(let giro = 0; giro < 10; giro++){
+      const t = simTotali(o);
+      const B = simBuco(o, t);
+      // il tempo fuori cresce con ogni cambio: va contato prima di scegliere
+      const libero = B ? B.min - (o.fuori == null ? MOD.fuori.cambio : 0) : 0;
+      if(!B || !B.manca || libero < 5) break;
+      const B2 = Object.assign({}, B, { min:libero });
+      let best = null, bv = 0;
+      pool.forEach(x=>{
+        if(usate[x.lk]) return;
+        const v = chiude(x, B2) * (1 + 0.08 * Math.log(x.volte));
+        if(v > bv){ bv = v; best = x; }
+      });
+      if(!best) break;
+      const it = nuovo(best);
+      const L = best.met[LIBM_I.min].med;
+      if(L > libero + 3) it.la = Math.max(4, Math.round(libero));
+      o.items.push(it);
+      usate[best.lk] = 1;
+      n++;
+    }
+    if(!n) return 0;
+    saveSim(o, true);
+    SIM_PRIMA = prima;
+    return n;
+  }
   function simObHTML(o, t){
     const B = simBuco(o, t);
     if(!B) return '';
@@ -3739,10 +3793,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       .map(b=> lfmtA(B.g[b.k])+(b.u ? ' '+b.u : '')+' '+b.m);
     if(t.n && mancano.length){
       h += '<div class="obm"><span>Mancano '+mancano.join(', ')+(B.min >= 3 ? ', con '+lfmt(B.min, 0)+' minuti ancora liberi' : '')+'.</span>'+
-        '<button class="btn sm primary" type="button" id="sim-buco">Cerca cosa le chiude</button></div>';
+        (B.min >= 5 ? '<button class="btn sm primary" type="button" id="sim-proponi">Completa la seduta</button>' : '')+
+        '<button class="btn sm" type="button" id="sim-buco">Cerca cosa le chiude</button></div>';
     } else if(t.n){
       h += '<div class="obm"><span>La fila arriva all&#39;obiettivo su tutte le voci.</span></div>';
     }
+    if(SIM_PRIMA) h += '<div class="obm"><span>Le esercitazioni aggiunte dalla pagina sono in fila: cambia quello che vuoi.</span>'+
+      '<button class="btn sm" type="button" id="sim-annulla">Torna alla fila di prima</button></div>';
     return h;
   }
   /* Taratura e settimana tipo: stanno fuori dai totali perche' quelli si
@@ -3791,7 +3848,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         MOD.ob.map(b=> '<option value="'+esc(b.v)+'"'+(b.v===cur ? ' selected' : '')+'>'+b.l+'</option>').join('')+'</select></label></div>';
     }
     if(!t.n){
-      return h + '<p class="ss">Metti in fila le esercitazioni che vuoi fare: qui compare quanto produce la seduta intera.</p>';
+      return h + '<p class="ss">Metti in fila le esercitazioni che vuoi fare: qui compare quanto produce la seduta intera.</p>'+
+        (simObiettivo(o) ? '<div class="obm"><span>Oppure lascia che la pagina componga una seduta per questo obiettivo, poi la correggi.</span>'+
+          '<button class="btn sm primary" type="button" id="sim-proponi">Componi la seduta</button></div>' : '');
     }
     h += '<p class="ss">'+t.n+(t.n===1?' esercitazione':' esercitazioni')+' con i loro valori d&#39;archivio, piu&#39; '+
       lfmt(t.fuori, 0)+' minuti fuori dalle esercitazioni. Sotto ogni numero la fascia in cui sta la meta&#39; delle volte.</p>';
@@ -4068,7 +4127,26 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       saveSim(o2); ridisegna();
     };
     host.onclick = e=>{
-      const b = e.target && e.target.closest && e.target.closest('#sim-buco');
+      const cl = e.target && e.target.closest ? e.target.closest.bind(e.target) : ()=> null;
+      if(cl('#sim-proponi')){
+        const n = simComponi();
+        ridisegna();
+        const t2 = simTotali(loadSim());
+        toast(n ? 'Aggiunte '+n+(n===1?' esercitazione':' esercitazioni')+': seduta di '+Math.round(t2.dur)+' min'
+                : 'Nessuna esercitazione dell&#39;archivio avvicina la fila all&#39;obiettivo'.replace(/&#39;/g, "'"));
+        const tb = document.getElementById('simfila-t');
+        if(n && tb) tb.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block:'start' });
+        return;
+      }
+      if(cl('#sim-annulla')){
+        if(!SIM_PRIMA) return;
+        const o2 = loadSim();
+        o2.items = SIM_PRIMA.items; o2.fuori = SIM_PRIMA.fuori;
+        saveSim(o2); ridisegna();
+        toast('Fila tornata com\'era');
+        return;
+      }
+      const b = cl('#sim-buco');
       if(!b) return;
       SIMF.ord = 'buco'; SIMF.n = 15; saveSimp();
       host.querySelectorAll('.simord [data-ord]').forEach(y=>{ const on = y.getAttribute('data-ord')==='buco'; y.classList.toggle('on', on); y.setAttribute('aria-pressed', String(on)); });
