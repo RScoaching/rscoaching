@@ -630,6 +630,21 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simbox .ss{ font-size:12px; color:var(--muted); margin:0 0 10px; max-width:72ch; }
 .simtot .load.mini .lcell .lv{ font-size:22px; }
 .simtot .cmpft{ font-size:11.5px; color:var(--faint); margin-top:8px; }
+.simob{ margin:0 0 10px; }
+.simob label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); max-width:420px; }
+.simob select{ width:100%; min-height:44px; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--violet-border); border-radius:8px; padding:8px 10px; }
+.simob select:focus-visible{ outline:2px solid var(--violet2); outline-offset:1px; }
+.simtot .obt{ margin-top:12px; overflow-x:auto; }
+.simtot .obt .gtbl td.df{ font-weight:700; }
+@media screen and (max-width:480px){
+  .simtot .obt table.gtbl th, .simtot .obt table.gtbl td{ padding-left:6px; padding-right:6px; }
+  .simtot .obt table.gtbl td{ font-size:12px; }
+}
+.simtot .obt .gtbl td.df.giu{ color:var(--violet2); }
+.simtot .obm{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; font-size:12.5px; color:var(--text); }
+.simtot .obm span{ flex:1 1 260px; }
+.simtot .obm .btn{ min-height:44px; }
 .simtop{ display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:10px; }
 .simtop label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); width:200px; }
 .simtop .simhint{ flex:1 1 200px; font-size:11.5px; color:var(--faint); padding-bottom:12px; }
@@ -2836,7 +2851,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const met = LIBM.map(m=>{
         const vals = [];
         gps.forEach(o=>{ const v = m.f(o.d.load); if(v!=null) vals.push(v); });
-        return { m:m, med:median(vals), n:vals.length, q1:quant(vals, 0.25), q3:quant(vals, 0.75),
+        return { m:m, med:median(vals), avg: vals.length ? vals.reduce((a,b)=> a+b, 0) / vals.length : null,
+          n:vals.length, q1:quant(vals, 0.25), q3:quant(vals, 0.75),
           min: vals.length ? Math.min.apply(null, vals) : null,
           max: vals.length ? Math.max.apply(null, vals) : null };
       });
@@ -3200,7 +3216,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const di = new Map();
     lib.forEach(x=> x.occ.forEach(o=> di.set(o.d, x)));
     const MINV = { pm:500, eq:500, v20:15, v23:10, w20:50, acc:5, dec:5 };
-    const err = {};
+    const err = {}, rap = {};
     let n = 0;
     all.forEach(s=>{
       const o = sedutaGps(s);
@@ -3214,7 +3230,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(!altre.length){ ok = false; return; }
         LIBM.forEach(mm=>{
           if(!mm.t) return;
-          const r = median(altre.map(q=> mm.f(q.d.load)));
+          const vs = altre.map(q=> mm.f(q.d.load)).filter(v=> v!=null);
+          const r = !vs.length ? null : (MEDIA_K[mm.k] ? vs.reduce((a,b)=> a+b, 0) / vs.length : median(vs));
           st[mm.k] = (st[mm.k] || 0) + (r==null ? 0 : r * d.load['Minuti']);
         });
       });
@@ -3228,19 +3245,37 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(vero < MINV[mm.k]) return;
         const stima = st[mm.k] + fuori.rate[mm.k] * Math.max(0, o.fuori);
         (err[mm.k] || (err[mm.k] = [])).push(Math.abs(stima - vero) / vero);
+        (rap[mm.k] || (rap[mm.k] = [])).push(stima / vero);
       });
     });
-    const out = {};
-    Object.keys(err).forEach(k=>{ if(err[k].length >= 5) out[k] = median(err[k]); });
-    return { n:n, err:out };
+    // err: quanto si sbaglia di solito; bias: se si sbaglia sempre dalla stessa parte
+    const out = {}, bias = {};
+    Object.keys(err).forEach(k=>{ if(err[k].length >= 5){ out[k] = median(err[k]); bias[k] = median(rap[k]) - 1; } });
+    return { n:n, err:out, bias:bias };
   }
   function modelli(all){
     if(MOD) return MOD;
     const lib = libBuild(all, true);
     const fuori = fuoriModello(all);
     MOD = { lib:lib, spz:spazioModello(lib), fuori:fuori, tipo:sedutaTipo(all), prova:provaModello(all, lib, fuori) };
+    // la fila cerca le sue schede a ogni cifra battuta: meglio un indice che rifiltrare l'archivio
+    MOD.perK = new Map(); MOD.perLk = new Map();
+    lib.forEach(x=>{
+      if(!x.gps) return;
+      MOD.perK.set(x.k, x);
+      const l = MOD.perLk.get(x.lk);
+      if(l) l.push(x); else MOD.perLk.set(x.lk, [x]);
+    });
+    MOD.perLk.forEach(l=> l.sort((a,b)=> b.gps - a.gps));
+    MOD.ob = simObiettivi(all, MOD.tipo);
     return MOD;
   }
+  /* Il valore che si proietta in avanti. Per quasi tutto e' la mediana, ma
+     l'alta velocita' e le frenate hanno la coda lunga: molte volte quasi zero e
+     ogni tanto tanto. La mediana li dava sotto di un quarto o di un terzo nelle
+     sedute gia' fatte, la media no, e su una seduta quello che conta e' la somma. */
+  const MEDIA_K = { v20:1, v23:1, dec:1 };
+  function proj(mt, k){ return (MEDIA_K[k] && mt.avg != null) ? mt.avg : mt.med; }
   // il lavoro giocato piu' largo o piu' stretto di com'era in archivio
   function fattoreSpazio(e, mqNew, mqOld){
     if(!(mqNew > 0) || !(mqOld > 0) || e==null) return 1;
@@ -3258,10 +3293,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const mt = x.met[mi];
       const f = fattoreSpazio(MOD.spz.el[m.k], mq, x.mqa);
       const g = MOD.fuori.rate[m.k] || 0;
-      if(mt.med==null){ out.v[m.k] = out.lo[m.k] = out.hi[m.k] = null; return; }
-      out.v[m.k]  = mt.med * f * work + g * rec;
-      out.lo[m.k] = (mt.q1==null ? mt.med : mt.q1) * f * work + g * rec;
-      out.hi[m.k] = (mt.q3==null ? mt.med : mt.q3) * f * work + g * rec;
+      const c = proj(mt, m.k);
+      if(c==null){ out.v[m.k] = out.lo[m.k] = out.hi[m.k] = null; return; }
+      // la fascia resta quella delle volte in archivio, allargata se la media ne esce
+      out.v[m.k]  = c * f * work + g * rec;
+      out.lo[m.k] = Math.min(c, mt.q1==null ? c : mt.q1) * f * work + g * rec;
+      out.hi[m.k] = Math.max(c, mt.q3==null ? c : mt.q3) * f * work + g * rec;
     });
     return out;
   }
@@ -3343,9 +3380,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     try{
       const o = JSON.parse(localStorage.getItem(LS_SIM) || '{}');
       if(o && Array.isArray(o.items)) return { items:o.items, fuori: (typeof o.fuori==='number' ? o.fuori : null),
-        salvate: Array.isArray(o.salvate) ? o.salvate.filter(v=> v && Array.isArray(v.items)) : [] };
+        salvate: Array.isArray(o.salvate) ? o.salvate.filter(v=> v && Array.isArray(v.items)) : [],
+        obj: (typeof o.obj==='string' ? o.obj : null) };
     }catch(e){}
-    return { items:[], fuori:null, salvate:[] };
+    return { items:[], fuori:null, salvate:[], obj:null };
   }
   function saveSim(o){ try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){} }
   function simAdd(x, se, la, re, mq){
@@ -3358,10 +3396,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      il metraggio: per questo si cerca prima per nome esatto, e la chiave serve
      solo a scegliere tra due schede con lo stesso nome. */
   function simTrova(it){
-    const same = MOD.lib.filter(y=> y.lk === it.lk && y.gps);
-    let x = same.filter(y=> y.k === it.k)[0] || same.sort((a,b)=> b.gps - a.gps)[0];
-    if(!x) x = MOD.lib.filter(y=> y.k === it.k && y.gps)[0];
-    return x || null;
+    const same = MOD.perLk.get(it.lk) || [];
+    return same.filter(y=> y.k === it.k)[0] || same[0] || MOD.perK.get(it.k) || null;
   }
   function numOr(v, d){ const n = parseFloat(v); return isFinite(n) && n >= 0 ? n : d; }
   function simVoce(it){
@@ -3415,9 +3451,99 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
+  /* L'obiettivo della seduta: la seduta tipo della stagione oppure il Full
+     Training di un giorno gia' fatto ("voglio un MD-3 come quello del 28").
+     La fila si confronta con quello, e la ricerca puo' ordinare l'archivio per
+     cosa chiude meglio la differenza. */
+  const OBV = [
+    { k:'pm',  l:'Distanza',      u:'m', m:'di distanza', g:t=> t.pm },
+    { k:'hs',  l:'Oltre 20 km/h', u:'m', m:'oltre 20 km/h', g:t=> (t.v20==null && t.v23==null) ? null : (t.v20 || 0) + (t.v23 || 0) },
+    { k:'w20', l:'Oltre 20 W/kg', u:'m', m:'oltre 20 W/kg', g:t=> t.w20 },
+    { k:'ad',  l:'Acc e dec',     u:'',  m:'tra acc e dec', g:t=> (t.acc==null && t.dec==null) ? null : (t.acc || 0) + (t.dec || 0) }
+  ];
+  function simObiettivi(all, T){
+    const out = [];
+    if(T.n) out.push({ v:'tipo', l:'Seduta tipo della stagione ('+T.n+' Full Training)', min:T.min, tot:T.tot });
+    all.forEach(s=>{
+      const F = s.ft && s.ft.load;
+      if(!F || !lnum(F['Minuti'])) return;
+      const tot = {};
+      LIBM.forEach(mm=>{ if(mm.t){ const v = mm.f(F); tot[mm.k] = v==null ? null : v * F['Minuti']; } });
+      const dt = parseDate(s.date);
+      out.push({ v:s.date+'|'+s.slot, l:(dt ? DTF.format(dt).replace('.','') : s.date)+' '+s.slot+' &#183; '+lfmt(F['Minuti'], 0)+' min', min:F['Minuti'], tot:tot });
+    });
+    return out.slice(0, 61);
+  }
+  function simObiettivo(o){
+    const v = o.obj || 'tipo';
+    return MOD.ob.filter(b=> b.v === v)[0] || MOD.ob[0] || null;
+  }
+  // quanto manca alla fila per arrivare all'obiettivo, voce per voce
+  function simBuco(o, t){
+    const ob = simObiettivo(o);
+    if(!ob) return null;
+    const g = {}, T = {};
+    let manca = false;
+    OBV.forEach(b=>{
+      const tv = b.g(ob.tot);
+      T[b.k] = tv;
+      g[b.k] = (tv==null || tv <= 0) ? 0 : Math.max(0, tv - (b.g(t.v) || 0));
+      if(tv > 0 && g[b.k] / tv >= 0.05) manca = true;
+    });
+    return { ob:ob, g:g, T:T, min: Math.max(0, (ob.min || 0) - t.dur), manca:manca };
+  }
+  // cosa porta un'esercitazione nella sua durata solita
+  function porta(x){
+    const L = x.met[LIBM_I.min].med || 10;
+    const d = dieci(x);
+    return { L:L, pm: d.pm==null ? 0 : d.pm / 10 * L, hs: d.hs==null ? 0 : d.hs / 10 * L,
+      w20: d.w20==null ? 0 : d.w20 / 10 * L, ad: d.ad==null ? 0 : d.ad / 10 * L };
+  }
+  // ogni voce che manca conta allo stesso modo; andare oltre conta meta', in negativo.
+  // Un lavoro piu' lungo dei minuti rimasti vale per la parte che ci sta.
+  function chiude(x, B){
+    const p = porta(x);
+    let sc = 0;
+    const sta = (B.min >= 3 && p.L > B.min + 3) ? B.min / p.L : 1;
+    OBV.forEach(b=>{
+      const tv = B.T[b.k];
+      if(!(tv > 0)) return;
+      sc += (Math.min(p[b.k], B.g[b.k]) - 0.5 * Math.max(0, p[b.k] - B.g[b.k])) / tv;
+    });
+    return sc * sta;
+  }
+  function simObHTML(o, t){
+    const B = simBuco(o, t);
+    if(!B) return '';
+    const fmt = v=> v==null ? '&#8211;' : lfmtA(v);
+    const righe = [{ l:'Durata', u:'min', a:t.dur, b:B.ob.min }].concat(OBV.map(b=> ({ l:b.l, u:b.u, a:b.g(t.v), b:b.g(B.ob.tot) })));
+    let h = '<div class="obt"><table class="gtbl"><thead><tr><th class="nm" scope="col">Voce</th>'+
+      '<th scope="col">In fila</th><th scope="col">Obiettivo</th><th scope="col">Diff.</th></tr></thead><tbody>';
+    righe.forEach(r=>{
+      const p = (r.a!=null && r.b) ? Math.round((r.a / r.b - 1) * 100) : null;
+      const c = p==null ? '' : (p <= -10 ? ' giu' : (p >= 10 ? ' su' : ''));
+      h += '<tr><td class="nm">'+r.l+'</td><td>'+fmt(r.a)+(r.u ? ' '+r.u : '')+'</td><td>'+fmt(r.b)+(r.u ? ' '+r.u : '')+'</td>'+
+        '<td class="df'+c+'">'+(p==null ? '&#8211;' : (Math.abs(p) < 5 ? 'in linea' : pctTxt(r.a, r.b)))+'</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    const mancano = OBV.filter(b=> B.T[b.k] > 0 && B.g[b.k] / B.T[b.k] >= 0.1)
+      .map(b=> lfmtA(B.g[b.k])+(b.u ? ' '+b.u : '')+' '+b.m);
+    if(t.n && mancano.length){
+      h += '<div class="obm"><span>Mancano '+mancano.join(', ')+(B.min >= 3 ? ', con '+lfmt(B.min, 0)+' minuti ancora liberi' : '')+'.</span>'+
+        '<button class="btn sm primary" type="button" id="sim-buco">Cerca cosa le chiude</button></div>';
+    } else if(t.n){
+      h += '<div class="obm"><span>La fila arriva all&#39;obiettivo su tutte le voci.</span></div>';
+    }
+    return h;
+  }
   function simTotHTML(o){
     const t = simTotali(o);
     let h = '<h3 id="simtot-t">A fine allenamento</h3>';
+    if(MOD.ob.length){
+      const cur = (simObiettivo(o) || {}).v;
+      h += '<div class="simob"><label for="sim-ob">Obiettivo della seduta<select id="sim-ob">'+
+        MOD.ob.map(b=> '<option value="'+esc(b.v)+'"'+(b.v===cur ? ' selected' : '')+'>'+b.l+'</option>').join('')+'</select></label></div>';
+    }
     if(!t.n){
       return h + '<p class="ss">Metti in fila le esercitazioni che vuoi fare: qui compare quanto produce la seduta intera.</p>';
     }
@@ -3429,23 +3555,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       '<div class="lcell"><div class="ll">'+esc(c.l)+'</div><div class="lv tnum">'+(c.lo==null ? lfmt(c.v, 0) : lfmtA(c.v))+'<small>'+esc(c.u)+'</small></div>'+
       (c.lo!=null && lfmtA(c.hi) !== lfmtA(c.lo) ? '<div class="fb">da '+lfmtA(c.lo)+' a '+lfmtA(c.hi)+'</div>' : '')+'</div>'
     ).join('')+'</div>';
-    const T = MOD.tipo;
-    if(T.n){
-      const hsT = (T.tot.v20 || 0) + (T.tot.v23 || 0), hsS = t.v.v20 + t.v.v23;
-      const pz = [
-        ['durata', pctTxt(t.dur, T.min)], ['distanza', pctTxt(t.v.pm, T.tot.pm)],
-        ['oltre 20 km/h', pctTxt(hsS, hsT)], ['oltre 20 W/kg', pctTxt(t.v.w20, T.tot.w20)],
-        ['acc', pctTxt(t.v.acc, T.tot.acc)], ['dec', pctTxt(t.v.dec, T.tot.dec)]
-      ].filter(p=> p[1]).map(p=> p[0]+' <b>'+p[1]+'</b>');
-      h += '<div class="cmpft">Rispetto alla seduta tipo della stagione (mediana di '+T.n+' Full Training, '+
-        lfmt(T.min, 0)+' min e '+lfmt(T.tot.pm, 0)+' m): '+pz.join(', ')+'.</div>';
-    }
+    h += simObHTML(o, t);
     const P = MOD.prova, E = P.err;
     const ev = [['pm','distanza'],['w20','oltre 20 W/kg'],['dec','dec'],['acc','acc'],['v20','20-23 km/h'],['v23','oltre 23']]
       .filter(e=> E[e[0]]!=null).map(e=> e[1]+' &#177;'+Math.round(E[e[0]] * 100)+'%');
     if(P.n >= 5 && ev.length){
+      const bs = [['pm','la distanza'],['v20','20-23 km/h'],['v23','oltre 23'],['w20','oltre 20 W/kg'],['acc','le acc'],['dec','le dec']]
+        .filter(e=> P.bias[e[0]]!=null && Math.abs(P.bias[e[0]]) >= 0.1)
+        .map(e=> e[1]+' '+(P.bias[e[0]] < 0 ? 'sotto' : 'sopra')+' di '+Math.round(Math.abs(P.bias[e[0]]) * 100)+'%');
       h += '<div class="cmpft">Provato su '+P.n+' sedute gia&#39; fatte, ricostruite dalle altre volte delle stesse esercitazioni: errore tipico '+
-        ev.join(', ')+'. Per l&#39;alta velocita&#39; conta la fascia piu&#39; del numero.</div>';
+        ev.join(', ')+'. '+(bs.length ? 'Di solito resta '+bs.join(', ')+'. ' : 'Nessuna voce resta sempre sopra o sotto. ')+
+        'Per l&#39;alta velocita&#39; conta la fascia piu&#39; del numero.</div>';
     }
     return h;
   }
@@ -3499,11 +3619,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     { v:'pm',     l:'Piu&#39; corsa' },
     { v:'hs',     l:'Piu&#39; alta velocita&#39;' },
     { v:'ad',     l:'Piu&#39; acc e dec' },
-    { v:'w20',    l:'Piu&#39; potenza' }
+    { v:'w20',    l:'Piu&#39; potenza' },
+    { v:'buco',   l:'Chiude cio&#39; che manca' }
   ];
   // quanto produce ogni 10 minuti: e' la misura con cui si sceglie
   function dieci(x){
-    const g = k=> x.met[LIBM_I[k]].med;
+    const g = k=> proj(x.met[LIBM_I[k]], k);
     const hs = (g('v20')==null && g('v23')==null) ? null : ((g('v20') || 0) + (g('v23') || 0)) * 10;
     const ad = (g('acc')==null && g('dec')==null) ? null : ((g('acc') || 0) + (g('dec') || 0)) * 10;
     return { pm: g('pm')==null ? null : g('pm') * 10, hs:hs, ad:ad, w20: g('w20')==null ? null : g('w20') * 10 };
@@ -3518,8 +3639,17 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       if(q.length && !x.occ.some(o=> cercaOk(q, o.d.descrizione))) return false;
       return true;
     });
-    const by = SIMF.ord;
-    const val = x=>{ const d = dieci(x); const v = d[by]; return v==null ? -1 : v; };
+    let by = SIMF.ord;
+    let val = x=>{ const d = dieci(x); const v = d[by]; return v==null ? -1 : v; };
+    if(by==='buco'){
+      const o = loadSim();
+      const B = simBuco(o, simTotali(o));
+      if(B && B.manca){
+        // le amichevoli stanno in archivio ma non si mettono in un allenamento
+        const sc = new Map(pool.map(x=> [x, /amichevol/i.test(x.nome) ? -9 : chiude(x, B)]));
+        val = x=> sc.get(x);
+      } else by = 'uso';
+    }
     pool.sort((a,b)=>{
       if(by==='uso') return (b.volte - a.volte) || (a.ultima < b.ultima ? 1 : -1);
       if(by==='ultima') return a.ultima===b.ultima ? (b.volte - a.volte) : (a.ultima < b.ultima ? 1 : -1);
@@ -3533,7 +3663,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const inFila = Object.create(null);
     loadSim().items.forEach(it=>{ inFila[it.lk] = (inFila[it.lk] || 0) + 1; });
     const plus = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
-    let h = '<div class="pkn">'+(pool.length ? pool.length+(pool.length===1?' esercitazione':' esercitazioni')+' con il GPS' : '')+'</div>';
+    const o = loadSim();
+    const B = SIMF.ord==='buco' ? simBuco(o, simTotali(o)) : null;
+    const buco = !!(B && B.manca);
+    let h = '<div class="pkn">'+(pool.length ? pool.length+(pool.length===1?' esercitazione':' esercitazioni')+' con il GPS' : '')+
+      (SIMF.ord==='buco' ? (buco ? ', in ordine per quanto avvicinano la fila all&#39;obiettivo nella loro durata solita'
+                                 : '. La fila arriva gia&#39; all&#39;obiettivo: ordine per le piu&#39; fatte') : '')+'</div>';
     if(!pool.length){
       return h + '<div class="simempty">Nessuna esercitazione con il GPS risponde a questa ricerca. Prova con meno parole o togli il filtro di forma.</div>';
     }
@@ -3545,8 +3680,15 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         'fatta '+x.volte+(x.volte===1?' volta':' volte'), u ? 'ultima '+DTFS.format(u).replace('.','') : ''].filter(Boolean).join(' &#183; ');
       const d = dieci(x);
       const hl = k=> SIMF.ord===k ? ' class="on"' : '';
-      const met = 'Ogni 10&#39;: <span'+hl('pm')+'>'+lfmt(d.pm, 0)+' m</span> &#183; <span'+hl('hs')+'>oltre 20 km/h '+lfmtA(d.hs)+' m</span> &#183; '+
+      let met = 'Ogni 10&#39;: <span'+hl('pm')+'>'+lfmt(d.pm, 0)+' m</span> &#183; <span'+hl('hs')+'>oltre 20 km/h '+lfmtA(d.hs)+' m</span> &#183; '+
         '<span'+hl('ad')+'>acc+dec '+lfmtA(d.ad)+'</span> &#183; <span'+hl('w20')+'>oltre 20 W/kg '+lfmt(d.w20, 0)+' m</span>';
+      if(buco){
+        // in ordine "chiude" si legge cosa porta nei suoi minuti, in viola le voci che mancano
+        const p = porta(x);
+        const on = k=> (B.T[k] > 0 && B.g[k] / B.T[k] >= 0.1) ? ' class="on"' : '';
+        met = 'In '+lfmt(p.L, 0)+'&#39; porta <span'+on('pm')+'>+'+lfmt(p.pm, 0)+' m</span> &#183; <span'+on('hs')+'>oltre 20 km/h +'+lfmtA(p.hs)+' m</span> &#183; '+
+          '<span'+on('ad')+'>acc+dec +'+lfmtA(p.ad)+'</span> &#183; <span'+on('w20')+'>oltre 20 W/kg +'+lfmt(p.w20, 0)+' m</span>';
+      }
       const nf = inFila[x.lk];
       return '<div class="pk"><span class="pn">'+esc(x.nome)+(nf ? ' <span class="badge arc">in fila'+(nf>1?' x'+nf:'')+'</span>' : '')+
         '<small>'+info+'</small><small class="pm">'+met+'</small></span>'+
@@ -3649,6 +3791,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const r = simVoce(it);
         if(row && r) row.innerHTML = simOutTxt(r.p, t);
       });
+      if(SIMF.ord==='buco') pick();
       renderKPIs(all);
     }
     function pick(){
@@ -3669,6 +3812,23 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const al = document.getElementById('sim-altre');
       if(al) al.addEventListener('click', ()=>{ SIMF.n += 15; pick(); });
     }
+    // obiettivo e "cerca cosa le chiude" stanno nei totali, che si ridisegnano a ogni cifra
+    host.onchange = e=>{
+      if(!e.target || e.target.id !== 'sim-ob') return;
+      const o2 = loadSim();
+      o2.obj = e.target.value === 'tipo' ? null : e.target.value;
+      saveSim(o2); aggiorna();
+      if(SIMF.ord==='buco') pick();
+    };
+    host.onclick = e=>{
+      const b = e.target && e.target.closest && e.target.closest('#sim-buco');
+      if(!b) return;
+      SIMF.ord = 'buco'; SIMF.n = 15; saveSimp();
+      host.querySelectorAll('.simord [data-ord]').forEach(y=>{ const on = y.getAttribute('data-ord')==='buco'; y.classList.toggle('on', on); y.setAttribute('aria-pressed', String(on)); });
+      pick();
+      const ph = document.getElementById('simpick-t');
+      if(ph) ph.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block:'start' });
+    };
     const fin = document.getElementById('sim-fuori');
     if(fin) fin.addEventListener('input', ()=>{
       const o2 = loadSim();
