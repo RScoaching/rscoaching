@@ -219,6 +219,13 @@ a{ color:inherit; text-decoration:none; }
 .gpa-b.on{ border-color:#FF6A2E; background:rgba(255,106,46,.10); }
 .gpa-b.on span{ color:#C2410C; font-weight:600; }
 .gpa-b:disabled{ opacity:.45; cursor:default; }
+/* consigliata: il bordo tratteggiato dice "probabile", la scelta resta del mister */
+.gpa-b.cons:not(.on){ border-style:dashed; border-color:rgba(255,106,46,.6); }
+.gpa-b .gpa-ct{ display:inline-block; margin-left:6px; font-size:10.5px; font-weight:700; color:#C2410C; text-transform:uppercase; letter-spacing:.04em; }
+.gpa-b.gpa-grp b{ font-weight:600; }
+.gpa-h .gpa-dopo{ color:var(--text); font-weight:600; }
+.gpa-h .gpa-dopo.ok{ color:#15803D; }
+.gpa-b.gpa-cb{ border-color:#FF6A2E; color:#C2410C; font-weight:700; }
 .gpa-dc{ display:flex; flex-direction:column; gap:4px; padding:14px; margin-bottom:16px; border:1px solid rgba(255,106,46,.45); border-radius:12px; background:rgba(255,106,46,.06); font-size:13.5px; }
 .gpa-dc > span{ color:var(--muted); }
 .gpa-dcl{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
@@ -3483,39 +3490,90 @@ window.SNAP = window.SNAP || {generato:'',stagione:'2025-26',squadra:'Fiorentina
     return '<div class="gpa-dc" id="gpa-dc"><b>GPS da controllare</b><span>Tocca una seduta: negli allenamenti dimmi che parte non ha preso il GPS; nelle partite conferma i cambi'+(P.partite.some(function(x){ return x.cosa === 'segna le titolari'; }) ? ' o segna le titolari nel risultato della gara (Calendario)' : '')+'.</span>'+
       '<div class="gpa-dcl">'+bP.concat(bA).join('')+'</div></div>'+gpsBandeHTML(iso);
   }
+  /* Le parti mancanti di un'atleta: esercitazioni non prese del tutto e
+     esercitazioni prese a meta' (GPS acceso tardi o chiuso prima). Con i dati
+     vecchi, che avevano solo le assenti, si ricostruiscono da quelle. */
+  function gaManca(q, a){
+    if(a.manca) return a.manca;
+    return (a.assenti || []).map(function(k){ return [k, 0, q.eserc[k][1], 0]; });
+  }
+  function gaN1(x){ return (Math.round(x * 10) / 10).toLocaleString('it-IT'); }
+  // i minuti che avrebbe con le scelte di adesso: quelli del Mac arrivano dopo
+  function gaDopo(q, a, st){
+    const ag = st.agg[a.n] || [];
+    let m = a.min;
+    gaManca(q, a).forEach(function(c){ if(ag.indexOf(q.eserc[c[0]][0]) >= 0) m += c[2]; });
+    if(st.fuori.indexOf(a.n) >= 0 && m < q.rif) m += Math.min(q.rif - m, q.fuori_min);
+    return m;
+  }
+  window.gaConsigliate = function(ch, nome){
+    const q = gaQ(ch); if(!q) return;
+    const st = gaStato(q);
+    const lista = nome ? q.atl.filter(function(a){ return a.n === nome; }) : q.atl.filter(function(a){ return !gaDeciso(st, a.n); });
+    lista.forEach(function(a){
+      const L = gaManca(q, a).filter(function(c){ return c[3]; }).map(function(c){ return q.eserc[c[0]][0]; });
+      if(L.length) st.agg[a.n] = L; else delete st.agg[a.n];
+      st.fuori = st.fuori.filter(function(n){ return n !== a.n; });
+      if(a.cons_fuori) st.fuori.push(a.n);
+      st.no = st.no.filter(function(n){ return n !== a.n; });
+      if(!L.length && !a.cons_fuori) st.no.push(a.n);
+    });
+    gaSalva(q, st);
+  };
   function gpsAllenHTML(m){
     const q = gaQuadro(m);
     if(!q) return '';
     const st = gaStato(q);
     const dati = gaFirma(gaStato({ chiave: '', atl: q.atl, eserc: q.eserc }));
     const attesa = st.mia && gaFirma(st) !== dati;
+    const nAtl = q.n_atl || 0;
+    let haCons = false;
     const righe = q.atl.map(function(a){
       const no = st.no.indexOf(a.n) >= 0, ag = st.agg[a.n] || [], fu = st.fuori.indexOf(a.n) >= 0;
       const dec = gaDeciso(st, a.n);
-      const es = a.assenti.map(function(k){
-        const e = q.eserc[k], on = ag.indexOf(e[0]) >= 0;
-        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+k+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
-          '<b>'+esc(e[0])+'</b><span>'+Math.round(e[1])+'\' &#183; '+(on ? 'fatta senza GPS' : 'senza GPS?')+'</span></button>';
+      const manca = gaManca(q, a);
+      const cons = manca.some(function(c){ return c[3]; }) || a.cons_fuori;
+      if(cons && !dec) haCons = true;
+      // prima le consigliate, poi le altre di squadra, in fondo quelle di un gruppo solo
+      const ord = manca.slice().sort(function(x, y){
+        const gx = x[3] ? 0 : (q.eserc[x[0]][3] === false ? 2 : 1), gy = y[3] ? 0 : (q.eserc[y[0]][3] === false ? 2 : 1);
+        return gx - gy || x[0] - y[0];
+      });
+      const es = ord.map(function(c){
+        const e = q.eserc[c[0]], on = ag.indexOf(e[0]) >= 0;
+        const gruppo = e[3] === false;
+        const det = c[1] > 0
+          ? 'GPS '+gaN1(c[1])+'\' su '+gaN1(e[1])+'\' &#183; mancano '+gaN1(c[2])+'\''
+          : 'non presa &#183; '+gaN1(e[1])+'\''+(e[2] ? ' &#183; fatta da '+e[2]+(nAtl ? ' su '+nAtl : '') : '');
+        return '<button type="button" class="gpa-b'+(on ? ' on' : '')+(c[3] ? ' cons' : '')+(gruppo ? ' gpa-grp' : '')+'" aria-pressed="'+on+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" data-k="'+c[0]+'" onclick="gaToccaEs(this.dataset.ch,this.dataset.n,this.dataset.k)">'+
+          '<b>'+esc(e[0])+(c[3] && !on ? '<span class="gpa-ct">consigliata</span>' : '')+'</b><span>'+det+(on ? ' &#183; aggiunta' : '')+'</span></button>';
       }).join('');
       const tf = q.fuori_min >= 2
-        ? '<button type="button" class="gpa-b'+(fu ? ' on' : '')+'" aria-pressed="'+fu+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaFuori(this.dataset.ch,this.dataset.n)"><b>Tempo fuori esercitazioni</b><span>pause e spiegazioni, fino a '+Math.round(q.fuori_min)+'\''+(fu ? ' &#183; aggiunto' : '')+'</span></button>'
+        ? '<button type="button" class="gpa-b'+(fu ? ' on' : '')+(a.cons_fuori ? ' cons' : '')+'" aria-pressed="'+fu+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaFuori(this.dataset.ch,this.dataset.n)"><b>Tempo fuori esercitazioni'+(a.cons_fuori && !fu ? '<span class="gpa-ct">consigliato</span>' : '')+'</b><span>pause e spiegazioni, fino a '+Math.round(q.fuori_min)+'\''+(fu ? ' &#183; aggiunto' : '')+'</span></button>'
         : '';
+      const cb = (cons && !dec)
+        ? '<button type="button" class="gpa-b gpa-cb" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaConsigliate(this.dataset.ch,this.dataset.n)"><b>Aggiungi le consigliate</b><span>poi si toglie quello che non ha fatto</span></button>'
+        : '';
+      const dopo = gaDopo(q, a, st);
+      const cambia = Math.abs(dopo - a.min) >= 0.5;
+      const dif = q.rif - a.min;
       return '<div class="gpa-r'+(no ? ' gpa-no' : '')+'"><div class="gpa-h"><b>'+esc(disp(a.n))+'</b>'+
-        '<span class="tnum gpa-basso">'+Math.round(a.min)+'\' su '+Math.round(q.rif)+'\' della maggioranza</span>'+
-        '<span>GPS su '+(q.eserc.length - a.assenti.length)+' di '+q.eserc.length+' esercitazioni</span>'+
+        '<span class="tnum gpa-basso">Full Training '+gaN1(a.min)+'\' su '+gaN1(q.rif)+'\' della maggioranza, mancano '+gaN1(dif)+'\'</span>'+
+        (cambia ? '<span class="tnum gpa-dopo'+(Math.abs(dopo - q.rif) <= 3 ? ' ok' : '')+'">con le scelte: '+gaN1(dopo)+'\'</span>' : '')+
         (dec || q.vecchia ? '' : '<span class="gpa-auto">da controllare</span>')+'</div>'+
-        '<div class="gpa-bs">'+es+tf+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button></div></div>';
+        '<div class="gpa-bs">'+cb+es+tf+'<button type="button" class="gpa-b gpa-nob'+(no ? ' on' : '')+'" aria-pressed="'+no+'" data-ch="'+esc(q.chiave)+'" data-n="'+esc(a.n)+'" onclick="gaToccaNo(this.dataset.ch,this.dataset.n)"><b>Va bene cosi\'</b><span>i suoi numeri restano quelli</span></button></div></div>';
     }).join('');
     const nDa = q.vecchia ? 0 : q.atl.filter(function(a){ return !gaDeciso(st, a.n); }).length;
     const corpo = q.atl.length
       ? '<div class="gpa-l">'+righe+'</div>'
       : '<p class="gps-n">Tutte le '+q.complete+' atlete hanno i minuti della maggioranza.</p>';
     const nota = attesa
-      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola il suo Full Training e la media squadra della seduta al prossimo giro (serve acceso): qualche minuto, poi ricarica la pagina.</p>'
-      : (q.atl.length ? '<p class="gps-n">Le altre '+q.complete+' hanno '+Math.round(q.rif)+'\' o quasi. Un\'esercitazione "fatta senza GPS" entra con i valori di squadra di quell\'esercitazione, cosi\' come sono; il tempo fuori esercitazioni con l\'intensita\' che la squadra ha avuto in quel tempo. Dopo una scelta la media squadra della seduta si rifa\' su tutte le atlete; prima resta quella del file.</p>' : '');
-    const btn = (nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaTutteOk(this.dataset.ch)">Le altre vanno bene cosi\'</button>' : '')+
+      ? '<p class="gps-n att">Scelta salvata. Il Mac ricalcola al prossimo giro (serve acceso): il suo Full Training, la sua riga nelle esercitazioni aggiunte e la media squadra della seduta, e da li\' Carico, Report, Esercitazioni e Atlete. Qualche minuto, poi ricarica la pagina.</p>'
+      : (q.atl.length ? '<p class="gps-n">Le altre '+q.complete+' hanno '+Math.round(q.rif)+'\' o quasi. Per ognuna ci sono le esercitazioni dove il GPS non c\'e\' o ha preso solo un pezzo: <b>consigliate</b> quelle dove c\'era a meta\' e quelle di squadra che mancano, finche\' i minuti tornano alla maggioranza; quelle di un gruppo solo le decidi tu. Ogni parte entra con i valori di squadra di quell\'esercitazione, riportati al suo rapporto abituale con le compagne; il tempo fuori con l\'intensita\' che la squadra ha avuto in quel tempo. Dopo una scelta si rifanno la sua seduta, le sue esercitazioni e la media squadra.</p>' : '');
+    const btn = (haCons && nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaConsigliate(this.dataset.ch)">Consigliate a tutte quelle da vedere</button>' : '')+
+      (nDa ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gaTutteOk(this.dataset.ch)">Le altre vanno bene cosi\'</button>' : '')+
       (st.mia ? '<button type="button" class="gps-auto" data-ch="'+esc(q.chiave)+'" onclick="gpsAuto(this.dataset.ch)">Annulla le scelte</button>' : '');
-    return '<div class="rsec" id="gpa-sez"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi ha meno minuti della maggioranza: dimmi che parte non ha preso il GPS</span></div>'+
+    return '<div class="rsec" id="gpa-sez"><div class="rsec-head"><h3>GPS e parti fatte</h3><span class="rsec-n">chi ha meno minuti della maggioranza: scegli le parti che il GPS non ha preso</span></div>'+
       corpo+nota+(btn ? '<div class="gps-btn">'+btn+'</div>' : '')+'</div>';
   }
   function cosaFattoHTML(m){

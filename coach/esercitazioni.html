@@ -1641,7 +1641,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         divisa:!!s.divisa, gruppi:s.gruppi||[], ft:s.ft||null, assenti:s.assenti||[],
         nAtlete:s.n_atlete||0,
         drills:(s.drills||[]).map((d,i)=>({ descrizione:d.descrizione, dup:!!d.dup, manual:false, id:null,
-          load:d.load||null, n:d.n||0, atlete:d.atlete||null, i:i }))
+          load:d.load||null, n:d.n||0, atlete:d.atlete||null, stime:d.stime||null, i:i }))
       });
     });
     manualDiStagione(loadManual()).forEach(m=>{
@@ -1941,7 +1941,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   const SORT = {};   // chiave pannello -> { c:'nm' oppure indice metrica, dir:1|-1 }
   const PANEL = {};  // chiave pannello -> { s, d } per ricostruire il contenuto
   const ORD_OPEN = {}; // data|slot delle sedute con "Ordina" acceso, per non spegnerlo a ogni render
-  function athTableHTML(atlete, key){
+  function athTableHTML(atlete, key, stime){
     const names = Object.keys(atlete||{});
     if(!names.length) return '';
     const st = SORT[key] || (SORT[key] = { c:'nm', dir:1 });
@@ -1967,7 +1967,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     h += '</tr></thead><tbody>';
     rows.forEach(r=>{
-      h += '<tr><td class="nm">'+esc(disp(r.nm))+'</td>';
+      // minuti aggiunti dal mister nel Report (GPS spento): la riga e' in parte stimata
+      const sti = stime && stime[r.nm];
+      h += '<tr><td class="nm">'+esc(disp(r.nm))+
+        (sti ? ' <span class="badge arc" title="GPS spento: '+esc(NF1.format(sti))+' minuti aggiunti con i valori di squadra">stima +'+esc(NF0.format(Math.round(sti)))+'&#39;</span>' : '')+'</td>';
       vis.forEach(i=>{
         const v = vnum(r.v, i);
         h += '<td'+(i===I_DIST?' class="key"':'')+'>'+(v==null?'&#8211;':fmtLoad(LOAD[i], v))+'</td>';
@@ -2086,7 +2089,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   function panelHTML(s, d, key){
     const nAth = d.atlete ? Object.keys(d.atlete).length : 0;
     const att = attese(d.descrizione);
-    let h = loadStripMini(d.load) + athTableHTML(d.atlete, key);
+    let h = loadStripMini(d.load) + athTableHTML(d.atlete, key, d.stime);
     if(att!=null && nAth && att!==nAth){
       const diff = nAth - att;
       h += '<div class="warnline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+
