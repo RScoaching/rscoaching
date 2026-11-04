@@ -608,7 +608,9 @@ body.vlib #addform, body.vlib #athwrap, body.vlib #natpick{ display:none !import
 .lcmp .cq.su b{ color:var(--violet2); }
 .lcmp .cq.giu b{ color:var(--faint); }
 /* la stima a serie: quattro caselle in fila, che sul telefono vanno a due */
-.lstp{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; padding:2px 0 8px; max-width:560px; }
+.lstp{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; padding:2px 0 8px; max-width:560px; }
+.lspz, .simrow .so .spz{ display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+.lspz b, .simrow .so .spz b{ color:var(--violet2); font-weight:700; }
 .lstp label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); }
 .lstp input, .simrow input, .simtop input{ width:100%; min-height:44px; font-family:inherit; font-size:15px; font-weight:600; color:var(--ink);
   background:var(--surface); border:1px solid var(--violet-border); border-radius:8px; padding:8px 10px; }
@@ -673,7 +675,7 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simrow .ib:active{ transform:scale(.96); }
 .simrow .ib:disabled{ opacity:.4; cursor:default; }
 .simrow .ib svg{ width:16px; height:16px; }
-.simrow .sf{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin:8px 0 6px; }
+.simrow .sf{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin:8px 0 6px; }
 .simrow .sf label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); }
 .simrow .so{ font-size:12px; color:var(--muted); }
 .simrow .so b{ color:var(--violet2); font-weight:700; }
@@ -2686,12 +2688,20 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         const med = x.met[LIBM_I.min].med;
         const la = numOr(val('la'), med ? Math.round(med) : 15);
         const re = numOr(val('re'), 0);
-        const mq = parseFloat(val('mq'));
-        return { se:se, la:la, re:re, mq:(isFinite(mq) && mq > 0 ? mq : null) };
+        const num = n=>{ const v = parseFloat(val(n)); return isFinite(v) && v > 0 ? v : null; };
+        // le caselle partono con il campo della scheda: lo spazio conta solo se cambia
+        const parte = { lu: x.area ? Math.round(x.area.l) : null, lg: x.area ? Math.round(x.area.w) : null, ng: giocDi(x) };
+        const sp = {};
+        ['lu','lg','ng'].forEach(k=>{ if(num(k) !== parte[k] && num(k)) sp[k] = num(k); });
+        const z = spazioVoce(x, { lu:num('lu'), lg:num('lg'), ng:num('ng') });
+        if(!Object.keys(sp).length) z.mqa = null;
+        return { se:se, la:la, re:re, mq:z.mqa, z:z, sp:sp };
       }
       function calc(){
         const a = leggi();
         const p = produce(x, a.se, a.la, a.re, a.mq);
+        const lz = wrap.querySelector('.lspz');
+        if(lz) lz.innerHTML = spazioTxt(x, a.z);
         const dc = wrap.querySelector('[data-dur]');
         if(dc) dc.innerHTML = lfmt(p.dur, 0)+'<small>min</small>';
         wrap.querySelectorAll('.lcell[data-mk]').forEach(cell=>{
@@ -2714,10 +2724,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       if(add) add.addEventListener('click', e=>{
         e.stopPropagation();
         const a = leggi();
-        const mq = (a.mq && x.mqa && Math.round(a.mq) !== Math.round(x.mqa)) ? a.mq : null;
         const med = x.met[LIBM_I.min].med;
         simAdd(x, a.se > 1 ? a.se : null, (med && Math.round(a.la) === Math.round(med) && a.se === 1) ? null : a.la,
-          a.re > 0 ? a.re : null, mq);
+          a.re > 0 ? a.re : null, null, a.sp);
         toast('In fila in Simula: '+x.nome+' ('+loadSim().items.length+' in tutto)');
       });
       calc();
@@ -2941,12 +2950,14 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     let h = '<div class="lsec">Quanto rende</div><div class="lstw" data-k="'+esc(x.k)+'">'+
       '<div class="lstp">'+
         fld('se', 'Serie', 1, 1) + fld('la', 'Lavoro per serie (min)', lav, 0.5) +
-        fld('re', 'Recupero tra serie (min)', 0, 0.5) + fld('mq', 'Mq a testa', x.mqa ? Math.round(x.mqa) : '', 5, !x.mqa) +
-      '</div>'+
+        fld('re', 'Recupero tra serie (min)', 0, 0.5) +
+        fld('lu', 'Lunghezza (m)', x.area ? Math.round(x.area.l) : '', 1) +
+        fld('lg', 'Larghezza (m)', x.area ? Math.round(x.area.w) : '', 1) +
+        fld('ng', 'Giocatrici', giocDi(x) || '', 1) +
+      '</div><div class="lspz"></div>'+
       '<div class="lstx">'+(med ? 'Di solito dura <b>'+lfmt(med,1)+' min</b>. ' : 'Durata mai registrata. ')+
         'Durante il recupero si conta quanto si produce tra un esercizio e l&#39;altro ('+lfmt(G.rate.pm, 0)+' m/min, niente accelerazioni ne&#39; alta velocita&#39;). '+
-        (x.mqa ? 'Cambiando i mq a testa la stima segue la regola dello spazio '+(Object.keys(S.daDati).some(k=> S.daDati[k]) ? 'dell&#39;archivio.' : 'di partenza.')
-               : 'Senza metraggio scritto lo spazio non si puo&#39; cambiare.')+
+        'Cambiando campo o giocatrici la pagina rifa&#39; i mq a testa e la stima segue la regola dello spazio '+(Object.keys(S.daDati).some(k=> S.daDati[k]) ? 'dell&#39;archivio.' : 'di partenza.')+
         ' Sotto ogni numero la fascia in cui sta la meta&#39; delle volte.</div>';
     h += '<div class="load mini sproj">'+
       '<div class="lcell"><div class="ll">Durata</div><div class="lv tnum" data-dur="1">'+lfmt(lav, 0)+'<small>min</small></div></div>'+
@@ -3292,6 +3303,57 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      sedute gia' fatte, la media no, e su una seduta quello che conta e' la somma. */
   const MEDIA_K = { v20:1, v23:1, dec:1 };
   function proj(mt, k){ return (MEDIA_K[k] && mt.avg != null) ? mt.avg : mt.med; }
+  /* Lo spazio si scrive come in campo: lunghezza, larghezza e quante giocatrici
+     ci stanno dentro; i mq a testa li fa la pagina. Il riferimento e' il campo
+     della scheda; se la scheda non ha mai avuto un metraggio si parte da quello
+     tipico delle esercitazioni con lo stesso numero di giocatrici, e lo si dice. */
+  function giocDi(x){
+    const n = nGioc(x);
+    if(n) return n;
+    return x.nAth ? Math.round(x.nAth) : null;
+  }
+  function mqRif(x){
+    if(x.mqa) return { mqa:x.mqa, stim:false };
+    if(x._mqr !== undefined) return x._mqr;
+    const fi = fasciaDi(x, false);
+    const simili = MOD.lib.filter(y=> y.mqa && (fi < 0 || fasciaDi(y, false) === fi));
+    const m = median(simili.map(y=> y.mqa));
+    if(m){ x._mqr = { mqa:m, stim:true, n:simili.length }; return x._mqr; }
+    /* Nessuna scheda con metraggio per confrontarla: si parte dai campi tipici
+       delle partite a campo ridotto per quel numero di giocatrici, finche' i
+       Metraggi delle sedute non danno il riferimento vero. */
+    const g = giocDi(x);
+    x._mqr = g ? { mqa: g <= 6 ? 60 : (g <= 10 ? 100 : (g <= 14 ? 140 : (g <= 18 ? 180 : 220))), stim:true, n:0 } : null;
+    return x._mqr;
+  }
+  /* Lo spazio di una voce: quello che si e' scritto, e per il resto il campo
+     della scheda. Restituisce i mq a testa solo se qualcosa e' cambiato. */
+  function spazioVoce(x, sp){
+    sp = sp || {};
+    const lu = sp.lu > 0 ? sp.lu : (x.area ? x.area.l : null);
+    const lg = sp.lg > 0 ? sp.lg : (x.area ? x.area.w : null);
+    const ng = sp.ng > 0 ? sp.ng : giocDi(x);
+    const scritto = sp.lu > 0 || sp.lg > 0 || sp.ng > 0;
+    let mqa = null;
+    if(scritto && lu > 0 && lg > 0 && ng > 0) mqa = lu * lg / ng;
+    else if(!scritto && sp.mq > 0) mqa = sp.mq;
+    return { lu:lu, lg:lg, ng:ng, mqa:mqa, mq:(lu > 0 && lg > 0) ? lu * lg : null, scritto: scritto || sp.mq > 0 };
+  }
+  function spazioTxt(x, z){
+    const rif = mqRif(x);
+    if(!z.mq && !z.mqa && !rif) return 'Senza misure del campo lo spazio non sposta la stima: scrivi lunghezza e larghezza.';
+    const p = (rif && z.mqa) ? pctTxt(z.mqa, rif.mqa) : null;
+    const dif = (p && p !== '0%') ? ' ('+p+' sul riferimento)' : '';
+    let t = '';
+    if(z.mq) t += 'Campo <b>'+lfmt(z.lu, 0)+' x '+lfmt(z.lg, 0)+'</b> = '+lfmt(z.mq, 0)+' mq'+(z.ng ? ', '+z.ng+' giocatrici: <b>'+lfmt(z.mq / z.ng, 0)+' mq a testa</b>' : '')+dif+'. ';
+    else if(z.mqa) t += '<b>'+lfmt(z.mqa, 0)+' mq a testa</b>'+dif+'. ';
+    if(rif){
+      t += !rif.stim ? 'Riferimento: '+lfmt(rif.mqa, 0)+' mq a testa, il campo della scheda.'
+        : (rif.n ? 'Riferimento: '+lfmt(rif.mqa, 0)+' mq a testa, tipici delle '+rif.n+' esercitazioni con lo stesso numero di giocatrici (la scheda non ha metraggio).'
+                 : 'Riferimento: '+lfmt(rif.mqa, 0)+' mq a testa, un campo tipico per '+giocDi(x)+' giocatrici, finche&#39; nei Metraggi delle sedute non ci sono i vostri campi.');
+    }
+    return t;
+  }
   // il lavoro giocato piu' largo o piu' stretto di com'era in archivio
   function fattoreSpazio(e, mqNew, mqOld){
     if(!(mqNew > 0) || !(mqOld > 0) || e==null) return 1;
@@ -3307,7 +3369,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     LIBM.forEach((m, mi)=>{
       if(!m.t) return;
       const mt = x.met[mi];
-      const f = fattoreSpazio(MOD.spz.el[m.k], mq, x.mqa);
+      const rif = mq > 0 ? mqRif(x) : null;
+      const f = fattoreSpazio(MOD.spz.el[m.k], mq, rif ? rif.mqa : null);
       const g = MOD.fuori.rate[m.k] || 0;
       const c = proj(mt, m.k);
       if(c==null){ out.v[m.k] = out.lo[m.k] = out.hi[m.k] = null; return; }
@@ -3403,10 +3466,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return { items:[], fuori:null, salvate:[], obj:null, tar:{} };
   }
   function saveSim(o){ try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){} }
-  function simAdd(x, se, la, re, mq){
+  function simAdd(x, se, la, re, mq, sp){
     const o = loadSim();
+    sp = sp || {};
     o.items.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      k:x.k, lk:x.lk, nome:x.nome, se:se, la:la, re:re, mq:(mq > 0 ? mq : null) });
+      k:x.k, lk:x.lk, nome:x.nome, se:se, la:la, re:re, mq:(mq > 0 ? mq : null),
+      lu:(sp.lu > 0 ? sp.lu : null), lg:(sp.lg > 0 ? sp.lg : null), ng:(sp.ng > 0 ? sp.ng : null) });
     saveSim(o);
   }
   /* La chiave della scheda contiene anche lo spazio, e cambia appena si scrive
@@ -3424,7 +3489,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const se = Math.max(1, Math.round(numOr(it.se, 1)));
     const la = numOr(it.la, med ? Math.round(med) : 10);
     const re = numOr(it.re, 0);
-    return { x:x, p:produce(x, se, la, re, it.mq > 0 ? it.mq : null) };
+    const z = spazioVoce(x, it);
+    return { x:x, z:z, p:produce(x, se, la, re, z.mqa) };
   }
   function simFuori(o){
     if(o.fuori != null) return o.fuori;
@@ -3711,6 +3777,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
+  function simSoHTML(r, t){
+    return '<span class="spz">'+spazioTxt(r.x, r.z)+'</span>'+simOutTxt(r.p, t);
+  }
   function simTotHTML(o){
     const t = simTotali(o);
     let h = '<h3 id="simtot-t">A fine allenamento</h3>';
@@ -3757,8 +3826,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       via:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>'
     };
     // la forma si ripete solo se il nome non la dice gia'
-    const sk = x ? [(x.forma && cercaNorm(it.nome).replace(/\s+/g, '').indexOf(x.forma) < 0) ? x.forma : '',
-      x.mqa ? lfmt(x.mqa, 0)+' mq/atleta' : ''].filter(Boolean).join(' &#183; ') : '';
+    const sk = x ? [(x.forma && cercaNorm(it.nome).replace(/\s+/g, '').indexOf(x.forma) < 0) ? x.forma : ''].filter(Boolean).join(' &#183; ') : '';
     const fld = (n, l, v, step, ph, dis)=> '<label for="'+fid+'-'+n+'">'+l+
       '<input id="'+fid+'-'+n+'" class="tnum" type="number" inputmode="decimal" min="0" step="'+step+'" data-f="'+n+'" value="'+(v==null?'':v)+'"'+
       (ph ? ' placeholder="'+ph+'"' : '')+(dis ? ' disabled' : '')+' autocomplete="off"></label>';
@@ -3771,8 +3839,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           fld('se', 'Serie', it.se, 1, '1') +
           fld('la', 'Lavoro per serie (min)', it.la, 0.5, med ? lfmt(med, 0) : '') +
           fld('re', 'Recupero tra serie (min)', it.re, 0.5, '0') +
-          fld('mq', 'Mq a testa', it.mq, 5, x.mqa ? String(Math.round(x.mqa)) : 'manca', !x.mqa) +
-        '</div><div class="so">'+simOutTxt(r.p, t)+'</div>'
+          fld('lu', 'Lunghezza (m)', it.lu, 1, x.area ? String(Math.round(x.area.l)) : '') +
+          fld('lg', 'Larghezza (m)', it.lg, 1, x.area ? String(Math.round(x.area.w)) : '') +
+          fld('ng', 'Giocatrici', it.ng, 1, giocDi(x) ? String(giocDi(x)) : '') +
+        '</div><div class="so">'+simSoHTML(r, t)+'</div>'
         : '<div class="so">Questa esercitazione non e&#39; piu&#39; in archivio con il GPS: resta in fila ma non conta.</div>')+
     '</div>';
   }
@@ -3917,7 +3987,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     let h = '<section class="simbox simtot" id="simtot" aria-labelledby="simtot-t" aria-live="polite">'+simTotHTML(o)+'</section>';
     h += '<section class="simbox simtar" aria-labelledby="simtar-t">'+simTarHTML(o)+'</section>';
     h += '<section class="simbox" aria-labelledby="simfila-t"><h3 id="simfila-t">In fila</h3>'+
-      '<p class="ss">Serie, minuti di lavoro e recupero per ognuna. Senza serie vale la durata solita. I mq a testa spostano la stima con la regola dello spazio dell&#39;archivio.</p>'+
+      '<p class="ss">Serie, minuti di lavoro e recupero per ognuna. Senza serie vale la durata solita. Scrivi il campo e quante giocatrici ci stanno: i mq a testa li calcola la pagina e spostano la stima con la regola dello spazio dell&#39;archivio. In grigio il campo della scheda.</p>'+
       '<div class="simtop"><label for="sim-fuori">Tempo fuori esercitazioni (min)'+
         '<input id="sim-fuori" class="tnum" type="number" inputmode="decimal" min="0" step="1" value="'+(o.fuori==null ? '' : o.fuori)+'" placeholder="'+lfmt(fu, 0)+'" autocomplete="off"></label>'+
         '<span class="simhint">Di solito '+lfmt(MOD.fuori.cambio, 1)+' min per ogni cambio di esercitazione ('+
@@ -3967,7 +4037,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       o2.items.forEach(it=>{
         const row = host.querySelector('.simrow[data-id="'+it.id+'"] .so');
         const r = simVoce(it);
-        if(row && r) row.innerHTML = simOutTxt(r.p, t);
+        if(row && r) row.innerHTML = simSoHTML(r, t);
       });
       if(SIMF.ord==='buco') pick();
       renderKPIs(all);
@@ -4090,6 +4160,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(!it) return;
         const v = parseFloat(inp.value);
         it[inp.getAttribute('data-f')] = (inp.value.trim()==='' || !isFinite(v) || v < 0) ? null : v;
+        if(/^(lu|lg|ng)$/.test(inp.getAttribute('data-f'))) it.mq = null;
         saveSim(o2); aggiorna();
       }));
       row.querySelectorAll('.ib').forEach(b=> b.addEventListener('click', ()=>{
