@@ -657,6 +657,30 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simpick .pn small{ display:block; font-size:11px; font-weight:500; color:var(--faint); margin-top:2px; }
 .simpick .btn{ min-height:44px; }
 .simmore{ margin-top:8px; min-height:44px; }
+/* in Simula la ricerca sta dentro la sezione dell'archivio: quella in alto si
+   nasconde, due caselle uguali sulla stessa pagina confonderebbero */
+body.vsim .controls .search{ display:none; }
+.simq{ max-width:none; margin:0 0 10px; }
+.simq input{ min-height:44px; }
+.simfo, .simord{ margin-bottom:8px; }
+.simfo .pill, .simord .pill{ min-height:36px; }
+.pkn{ font-size:11.5px; color:var(--faint); margin:4px 0 2px; }
+.simpick .pn small.pm{ color:var(--muted); }
+.simpick .pn small.pm span.on{ color:var(--violet2); font-weight:700; }
+.simpick .pn .badge{ margin-left:6px; vertical-align:1px; }
+.simrow .so .sq2{ display:block; margin-top:3px; font-size:11.5px; color:var(--faint); }
+.simcp, .simsv{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+.simcp label, .simsv > label{ display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:var(--muted); flex:1 1 260px; max-width:420px; }
+.simcp select, .simsv input{ width:100%; min-height:44px; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--violet-border); border-radius:8px; padding:8px 10px; }
+.simcp select:focus-visible, .simsv input:focus-visible{ outline:2px solid var(--violet2); outline-offset:1px; }
+.simcp .btn, .simsv .btn{ min-height:44px; }
+.svl{ flex:1 1 100%; display:flex; flex-direction:column; }
+.svh{ font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+.sv{ display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); }
+.sv:first-of-type{ border-top:0; }
+.sv .svn{ flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:600; color:var(--text); }
+.sv .svn small{ display:block; font-size:11px; font-weight:500; color:var(--faint); }
 @media screen and (max-width:640px){
   .lstp, .simrow .sf{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .simtop label{ width:calc(50% - 6px); }
@@ -3312,13 +3336,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
 
   // ---------- Simula ----------
   const LS_SIM = 'rs_fio_eserc_sim';
-  let SIM_TUTTE = false;
   function loadSim(){
     try{
       const o = JSON.parse(localStorage.getItem(LS_SIM) || '{}');
-      if(o && Array.isArray(o.items)) return { items:o.items, fuori: (typeof o.fuori==='number' ? o.fuori : null) };
+      if(o && Array.isArray(o.items)) return { items:o.items, fuori: (typeof o.fuori==='number' ? o.fuori : null),
+        salvate: Array.isArray(o.salvate) ? o.salvate.filter(v=> v && Array.isArray(v.items)) : [] };
     }catch(e){}
-    return { items:[], fuori:null };
+    return { items:[], fuori:null, salvate:[] };
   }
   function saveSim(o){ try{ localStorage.setItem(LS_SIM, JSON.stringify(o)); }catch(e){} }
   function simAdd(x, se, la, re, mq){
@@ -3371,10 +3395,22 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
   // sotto i dieci un decimale, come nella stima della scheda
   function lfmtA(v){ return lfmt(v, (v != null && v < 10) ? 1 : 0); }
-  function simOutTxt(p){
+  /* Sotto ogni esercitazione in fila: quanto produce, e quanto pesa sulla
+     seduta. Il peso dice subito chi porta l'alta velocita' della giornata e chi
+     le frenate, che e' la domanda quando si sceglie cosa togliere. */
+  function simOutTxt(p, t){
     const hs = (p.v.v20 || 0) + (p.v.v23 || 0);
-    return '<b>'+lfmt(p.dur, 0)+'</b> min &#183; <b>'+lfmt(p.v.pm, 0)+'</b> m &#183; oltre 20 km/h <b>'+lfmtA(hs)+
+    let h = '<b>'+lfmt(p.dur, 0)+'</b> min &#183; <b>'+lfmt(p.v.pm, 0)+'</b> m &#183; oltre 20 km/h <b>'+lfmtA(hs)+
       '</b> m &#183; acc <b>'+lfmtA(p.v.acc)+'</b> &#183; dec <b>'+lfmtA(p.v.dec)+'</b>';
+    if(t && t.n > 1){
+      const q = (a, b)=> (b > 0 && a != null) ? Math.round(a / b * 100) : null;
+      const thS = (t.v.v20 || 0) + (t.v.v23 || 0);
+      const pz = [['della distanza', q(p.v.pm, t.v.pm)], ['dell&#39;alta velocita&#39;', thS >= 1 ? q(hs, thS) : null],
+        ['di acc e dec', q((p.v.acc || 0) + (p.v.dec || 0), (t.v.acc || 0) + (t.v.dec || 0))]]
+        .filter(x=> x[1] != null).map(x=> x[1]+'% '+x[0]);
+      if(pz.length) h += '<span class="sq2">Pesa '+pz.join(', ')+'.</span>';
+    }
+    return h;
   }
   function simTotHTML(o){
     const t = simTotali(o);
@@ -3410,7 +3446,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
-  function simRigaHTML(it, i, tot){
+  function simRigaHTML(it, i, tot, t){
     const r = simVoce(it);
     const x = r ? r.x : null;
     const med = x ? x.met[LIBM_I.min].med : null;
@@ -3421,7 +3457,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       via:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>'
     };
     // la forma si ripete solo se il nome non la dice gia'
-    const sk = x ? [(x.forma && exKey(it.nome).replace(/\s|vs|v/g, 'c').indexOf(x.forma) < 0) ? x.forma : '', x.mqa ? lfmt(x.mqa, 0)+' mq/atleta' : ''].filter(Boolean).join(' &#183; ') : '';
+    const sk = x ? [(x.forma && cercaNorm(it.nome).replace(/\s+/g, '').indexOf(x.forma) < 0) ? x.forma : '',
+      x.mqa ? lfmt(x.mqa, 0)+' mq/atleta' : ''].filter(Boolean).join(' &#183; ') : '';
     const fld = (n, l, v, step, ph, dis)=> '<label for="'+fid+'-'+n+'">'+l+
       '<input id="'+fid+'-'+n+'" class="tnum" type="number" inputmode="decimal" min="0" step="'+step+'" data-f="'+n+'" value="'+(v==null?'':v)+'"'+
       (ph ? ' placeholder="'+ph+'"' : '')+(dis ? ' disabled' : '')+' autocomplete="off"></label>';
@@ -3435,16 +3472,126 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           fld('la', 'Lavoro per serie (min)', it.la, 0.5, med ? lfmt(med, 0) : '') +
           fld('re', 'Recupero tra serie (min)', it.re, 0.5, '0') +
           fld('mq', 'Mq a testa', it.mq, 5, x.mqa ? String(Math.round(x.mqa)) : 'manca', !x.mqa) +
-        '</div><div class="so">'+simOutTxt(r.p)+'</div>'
+        '</div><div class="so">'+simOutTxt(r.p, t)+'</div>'
         : '<div class="so">Questa esercitazione non e&#39; piu&#39; in archivio con il GPS: resta in fila ma non conta.</div>')+
     '</div>';
   }
+
+  /* La ricerca dentro Simula. Ha la sua casella perche' qui si cerca per
+     scegliere, non per guardare: oltre al nome si filtra per forma di gioco e
+     si ordina per quello che l'esercitazione produce, cosi' "mi serve alta
+     velocita'" si risolve in un tocco. Ordine e forma restano su questo
+     dispositivo; la fila invece si sincronizza. */
+  const LS_SIMP = 'rs_fio_eserc_simpick';
+  const SIMF = { q:'', fo:'all', ord:'uso', n:15 };
+  try{
+    const p0 = JSON.parse(localStorage.getItem(LS_SIMP) || '{}');
+    if(p0 && typeof p0.ord==='string') SIMF.ord = p0.ord;
+    if(p0 && typeof p0.fo==='string') SIMF.fo = p0.fo;
+  }catch(e){}
+  function saveSimp(){ try{ localStorage.setItem(LS_SIMP, JSON.stringify({ ord:SIMF.ord, fo:SIMF.fo })); }catch(e){} }
+  const SIM_ORD = [
+    { v:'uso',    l:'Piu&#39; fatte' },
+    { v:'ultima', l:'Piu&#39; recenti' },
+    { v:'pm',     l:'Piu&#39; corsa' },
+    { v:'hs',     l:'Piu&#39; alta velocita&#39;' },
+    { v:'ad',     l:'Piu&#39; acc e dec' },
+    { v:'w20',    l:'Piu&#39; potenza' }
+  ];
+  // quanto produce ogni 10 minuti: e' la misura con cui si sceglie
+  function dieci(x){
+    const g = k=> x.met[LIBM_I[k]].med;
+    const hs = (g('v20')==null && g('v23')==null) ? null : ((g('v20') || 0) + (g('v23') || 0)) * 10;
+    const ad = (g('acc')==null && g('dec')==null) ? null : ((g('acc') || 0) + (g('dec') || 0)) * 10;
+    return { pm: g('pm')==null ? null : g('pm') * 10, hs:hs, ad:ad, w20: g('w20')==null ? null : g('w20') * 10 };
+  }
+  function simPool(){
+    const q = cercaParole(SIMF.q);
+    const pool = MOD.lib.filter(x=>{
+      if(!x.gps) return false;
+      if(state.tipo!=='all' && x.tipo!==state.tipo) return false;
+      if(SIMF.fo==='nf'){ if(fasciaDi(x, false) >= 0) return false; }
+      else if(SIMF.fo!=='all' && String(fasciaDi(x, false)) !== SIMF.fo) return false;
+      if(q.length && !x.occ.some(o=> cercaOk(q, o.d.descrizione))) return false;
+      return true;
+    });
+    const by = SIMF.ord;
+    const val = x=>{ const d = dieci(x); const v = d[by]; return v==null ? -1 : v; };
+    pool.sort((a,b)=>{
+      if(by==='uso') return (b.volte - a.volte) || (a.ultima < b.ultima ? 1 : -1);
+      if(by==='ultima') return a.ultima===b.ultima ? (b.volte - a.volte) : (a.ultima < b.ultima ? 1 : -1);
+      return (val(b) - val(a)) || (b.volte - a.volte);
+    });
+    return pool;
+  }
+  function simPickHTML(){
+    const pool = simPool();
+    const vis = pool.slice(0, SIMF.n);
+    const inFila = Object.create(null);
+    loadSim().items.forEach(it=>{ inFila[it.lk] = (inFila[it.lk] || 0) + 1; });
+    const plus = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
+    let h = '<div class="pkn">'+(pool.length ? pool.length+(pool.length===1?' esercitazione':' esercitazioni')+' con il GPS' : '')+'</div>';
+    if(!pool.length){
+      return h + '<div class="simempty">Nessuna esercitazione con il GPS risponde a questa ricerca. Prova con meno parole o togli il filtro di forma.</div>';
+    }
+    h += '<div class="simpick">'+vis.map(x=>{
+      const med = x.met[LIBM_I.min].med;
+      const u = parseDate(x.ultima);
+      const info = [x.forma && cercaNorm(x.nome).replace(/\s+/g, '').indexOf(x.forma) < 0 ? x.forma : '',
+        x.mqa ? lfmt(x.mqa, 0)+' mq/atleta' : '', med ? 'di solito '+lfmt(med, 0)+' min' : '',
+        'fatta '+x.volte+(x.volte===1?' volta':' volte'), u ? 'ultima '+DTFS.format(u).replace('.','') : ''].filter(Boolean).join(' &#183; ');
+      const d = dieci(x);
+      const hl = k=> SIMF.ord===k ? ' class="on"' : '';
+      const met = 'Ogni 10&#39;: <span'+hl('pm')+'>'+lfmt(d.pm, 0)+' m</span> &#183; <span'+hl('hs')+'>oltre 20 km/h '+lfmtA(d.hs)+' m</span> &#183; '+
+        '<span'+hl('ad')+'>acc+dec '+lfmtA(d.ad)+'</span> &#183; <span'+hl('w20')+'>oltre 20 W/kg '+lfmt(d.w20, 0)+' m</span>';
+      const nf = inFila[x.lk];
+      return '<div class="pk"><span class="pn">'+esc(x.nome)+(nf ? ' <span class="badge arc">in fila'+(nf>1?' x'+nf:'')+'</span>' : '')+
+        '<small>'+info+'</small><small class="pm">'+met+'</small></span>'+
+        '<button class="btn sm" type="button" data-add="'+esc(x.k)+'" aria-label="Aggiungi '+esc(x.nome)+' alla fila">'+plus+'Aggiungi</button></div>';
+    }).join('')+'</div>';
+    if(pool.length > vis.length){
+      h += '<button class="btn sm simmore" type="button" id="sim-altre">Mostra altre '+Math.min(15, pool.length - vis.length)+' (restano '+(pool.length - vis.length)+')</button>';
+    }
+    return h;
+  }
+
+  // le sedute gia' fatte che si possono copiare nella fila, dalla piu' recente
+  function simSedute(all){
+    return all.filter(s=> (s.allDrills || s.drills).some(d=> !d.manual && d.load && lnum(d.load['Minuti']))).slice(0, 60);
+  }
+  function simCopia(s){
+    const di = new Map();
+    MOD.lib.forEach(x=> x.occ.forEach(o=> di.set(o.d, x)));
+    const o = loadSim();
+    const vuota = !o.items.length;
+    let n = 0;
+    (s.allDrills || s.drills).forEach(d=>{
+      const x = di.get(d);
+      if(!x || !x.gps || !d.load || !lnum(d.load['Minuti'])) return;
+      o.items.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        k:x.k, lk:x.lk, nome:x.nome, se:null, la: Math.round(d.load['Minuti'] * 2) / 2, re:null, mq:null });
+      n++;
+    });
+    // il tempo fuori di quel giorno vale solo se la fila parte da li'
+    const g = sedutaGps(s);
+    if(vuota && g && g.fuori >= 0) o.fuori = Math.round(g.fuori);
+    saveSim(o);
+    return n;
+  }
+  function sedLbl(s){
+    const dt = parseDate(s.date);
+    const n = (s.allDrills || s.drills).filter(d=> !d.manual).length;
+    return (dt ? DTF.format(dt).replace('.','') : s.date)+' '+s.slot+' &#183; '+n+(n===1?' esercitazione':' esercitazioni');
+  }
+
   function renderSim(all){
     const host = document.getElementById('simula');
     if(!host) return;
     modelli(all);
     const o = loadSim();
     const fu = simFuori(o);
+    const t0 = simTotali(o);
+    const sed = simSedute(all);
     let h = '<section class="simbox simtot" id="simtot" aria-labelledby="simtot-t" aria-live="polite">'+simTotHTML(o)+'</section>';
     h += '<section class="simbox" aria-labelledby="simfila-t"><h3 id="simfila-t">In fila</h3>'+
       '<p class="ss">Serie, minuti di lavoro e recupero per ognuna. Senza serie vale la durata solita. I mq a testa spostano la stima con la regola dello spazio dell&#39;archivio.</p>'+
@@ -3454,37 +3601,70 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         lfmt(MOD.fuori.min, 0)+' a seduta), a '+lfmt(MOD.fuori.rate.pm, 0)+' m/min.</span>'+
         (o.items.length ? '<button class="btn sm" type="button" id="sim-svuota">Svuota la fila</button>' : '')+
       '</div>'+
-      (o.items.length ? '<div class="simlist">'+o.items.map((it, i)=> simRigaHTML(it, i, o.items.length)).join('')+'</div>'
-                      : '<div class="simempty">Nessuna esercitazione in fila: aggiungile da qui sotto.</div>')+
+      (o.items.length ? '<div class="simlist">'+o.items.map((it, i)=> simRigaHTML(it, i, o.items.length, t0)).join('')+'</div>'
+                      : '<div class="simempty">Nessuna esercitazione in fila: cercale qui sotto nell&#39;archivio, oppure parti da una seduta gia&#39; fatta.</div>')+
+      // partire da una seduta vera, poi cambiare quello che serve
+      (sed.length ? '<div class="simcp"><label for="sim-sed">Parti da una seduta gia&#39; fatta'+
+        '<select id="sim-sed">'+sed.map((s, i)=> '<option value="'+i+'">'+sedLbl(s)+'</option>').join('')+'</select></label>'+
+        '<button class="btn sm" type="button" id="sim-copia">Copia nella fila</button></div>' : '')+
+      // le file salvate: le sedute pensate per la settimana, da riprendere
+      '<div class="simsv">'+
+        (o.items.length ? '<label for="sim-nome">Salva questa fila'+
+          '<input id="sim-nome" type="text" maxlength="40" placeholder="es. MD-3 possesso e alta velocita&#39;" autocomplete="off"></label>'+
+          '<button class="btn sm" type="button" id="sim-salva">Salva</button>' : '')+
+        (o.salvate.length ? '<div class="svl"><div class="svh">File salvate</div>'+o.salvate.map(v=>
+          '<div class="sv" data-sv="'+esc(v.id)+'"><span class="svn">'+esc(v.nome)+
+            '<small>'+v.items.length+(v.items.length===1?' esercitazione':' esercitazioni')+'</small></span>'+
+            '<button class="btn sm" type="button" data-sa="carica">Carica</button>'+
+            '<button class="btn sm" type="button" data-sa="via" aria-label="Elimina la fila salvata '+esc(v.nome)+'">Elimina</button></div>'
+        ).join('')+'</div>' : '')+
+      '</div>'+
       '</section>';
-    const pool = libBuild(all).filter(x=> x.gps);
-    const vis = SIM_TUTTE ? pool : pool.slice(0, 12);
-    const plus = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>';
-    h += '<section class="simbox" aria-labelledby="simpick-t"><h3 id="simpick-t">Dall&#39;archivio</h3>'+
-      '<p class="ss">Le esercitazioni gia&#39; fatte con il GPS, nell&#39;ordine scelto in Archivio. Si filtrano con la ricerca e le tipologie qui sopra.</p>'+
-      (pool.length ? '<div class="simpick">'+vis.map(x=>{
-        const med = x.met[LIBM_I.min].med, pm = x.met[LIBM_I.pm].med;
-        const info = [x.forma || '', x.mqa ? lfmt(x.mqa, 0)+' mq/atleta' : '', med ? 'di solito '+lfmt(med, 0)+' min' : '',
-          pm!=null ? lfmt(pm, 0)+' m/min' : '', 'fatta '+x.volte+(x.volte===1?' volta':' volte')].filter(Boolean).join(' &#183; ');
-        return '<div class="pk"><span class="pn">'+esc(x.nome)+'<small>'+info+'</small></span>'+
-          '<button class="btn sm" type="button" data-add="'+esc(x.k)+'">'+plus+'Aggiungi</button></div>';
-      }).join('')+'</div>'+
-      (pool.length > vis.length ? '<button class="btn sm simmore" type="button" id="sim-tutte">Mostra tutte ('+pool.length+')</button>' : '')
-      : '<div class="simempty">Con questi filtri non c&#39;e&#39; nessuna esercitazione con il GPS.</div>')+
+    h += '<section class="simbox" aria-labelledby="simpick-t"><h3 id="simpick-t">Cerca nell&#39;archivio</h3>'+
+      '<p class="ss">Solo le esercitazioni gia&#39; fatte con il GPS. Si scrive come in campo: "possesso 7v7" trova anche "Possesso 7c7".</p>'+
+      '<div class="search simq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'+
+        '<input id="sim-q" type="search" placeholder="Nome, forma o tipologia..." aria-label="Cerca nell&#39;archivio" value="'+esc(SIMF.q)+'" autocomplete="off"></div>'+
+      '<div class="pills simfo" role="group" aria-label="Forma di gioco">'+
+        [['all','Tutte le forme']].concat(FO_FASCE.map((f, i)=> [String(i), f.l])).concat([['nf','Senza forma']]).map(f=>
+          '<button class="pill sm'+(SIMF.fo===f[0]?' on':'')+'" type="button" data-fo="'+f[0]+'" aria-pressed="'+(SIMF.fo===f[0])+'">'+f[1]+'</button>').join('')+
+      '</div>'+
+      '<div class="pills simord" role="group" aria-label="Ordine">'+
+        SIM_ORD.map(r=> '<button class="pill sm'+(SIMF.ord===r.v?' on':'')+'" type="button" data-ord="'+r.v+'" aria-pressed="'+(SIMF.ord===r.v)+'">'+r.l+'</button>').join('')+
+      '</div>'+
+      '<div id="simpick">'+simPickHTML()+'</div>'+
       '</section>';
     host.innerHTML = h;
 
     function ridisegna(){ renderSim(all); renderKPIs(all); }
     function aggiorna(){
       const o2 = loadSim();
+      const t = simTotali(o2);
       const tb = document.getElementById('simtot');
       if(tb) tb.innerHTML = simTotHTML(o2);
       o2.items.forEach(it=>{
         const row = host.querySelector('.simrow[data-id="'+it.id+'"] .so');
         const r = simVoce(it);
-        if(row && r) row.innerHTML = simOutTxt(r.p);
+        if(row && r) row.innerHTML = simOutTxt(r.p, t);
       });
       renderKPIs(all);
+    }
+    function pick(){
+      const ph = document.getElementById('simpick');
+      if(ph){ ph.innerHTML = simPickHTML(); wirePick(); }
+    }
+    function wirePick(){
+      host.querySelectorAll('#simpick [data-add]').forEach(b=> b.addEventListener('click', ()=>{
+        const x = MOD.lib.filter(y=> y.k === b.getAttribute('data-add'))[0];
+        if(!x) return;
+        simAdd(x, null, null, null, null);
+        // si ridisegna tutto ma la ricerca resta dov'era, con il fuoco sul tasto
+        ridisegna();
+        const again = host.querySelector('#simpick [data-add="'+CSS.escape(x.k)+'"]');
+        if(again) again.focus({ preventScroll:true });
+        toast('In fila: '+x.nome+' ('+loadSim().items.length+' in tutto)');
+      }));
+      const al = document.getElementById('sim-altre');
+      if(al) al.addEventListener('click', ()=>{ SIMF.n += 15; pick(); });
     }
     const fin = document.getElementById('sim-fuori');
     if(fin) fin.addEventListener('input', ()=>{
@@ -3497,8 +3677,51 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(sv) sv.addEventListener('click', ()=>{
       const o2 = loadSim();
       const n = o2.items.length;
-      o2.items = []; saveSim(o2); ridisegna();
+      o2.items = []; o2.fuori = null; saveSim(o2); ridisegna();
       toast('Fila svuotata: '+n+(n===1?' esercitazione tolta':' esercitazioni tolte'));
+    });
+    const cp = document.getElementById('sim-copia');
+    if(cp) cp.addEventListener('click', ()=>{
+      const s = sed[parseInt(document.getElementById('sim-sed').value, 10)];
+      if(!s) return;
+      const n = simCopia(s);
+      ridisegna();
+      // in una seduta a gruppi le esercitazioni corrono in parallelo: sommarle
+      // tutte allungherebbe la giornata, e quale gruppo tenere lo sa solo chi c'era
+      toast(!n ? 'Quella seduta non ha esercitazioni con il GPS in archivio'
+        : 'Copiate '+n+(n===1?' esercitazione':' esercitazioni')+' con i minuti di quel giorno'+
+          (s.divisa ? '. Era divisa in gruppi: togli quelle dell&#39;altro gruppo'.replace('&#39;', "'") : ''));
+    });
+    const sa = document.getElementById('sim-salva');
+    if(sa) sa.addEventListener('click', ()=>{
+      const inp = document.getElementById('sim-nome');
+      const o2 = loadSim();
+      const nome = (inp.value.trim() || ('Fila del '+DTFS.format(new Date()).replace('.',''))).slice(0, 40);
+      // stesso nome: si sovrascrive, non si duplica
+      o2.salvate = o2.salvate.filter(v=> v.nome.toLowerCase() !== nome.toLowerCase());
+      o2.salvate.unshift({ id: Date.now().toString(36), nome:nome, items:JSON.parse(JSON.stringify(o2.items)), fuori:o2.fuori, ts:Date.now() });
+      o2.salvate = o2.salvate.slice(0, 20);
+      saveSim(o2); ridisegna();
+      toast('Fila salvata: '+nome);
+    });
+    host.querySelectorAll('.sv').forEach(row=>{
+      const id = row.getAttribute('data-sv');
+      row.querySelectorAll('[data-sa]').forEach(b=> b.addEventListener('click', ()=>{
+        const o2 = loadSim();
+        const v = o2.salvate.filter(y=> y.id === id)[0];
+        if(!v) return;
+        if(b.getAttribute('data-sa')==='via'){
+          if(!window.confirm('Eliminare la fila salvata "'+v.nome+'"?')) return;
+          o2.salvate = o2.salvate.filter(y=> y.id !== id);
+          saveSim(o2); ridisegna();
+          toast('Fila eliminata: '+v.nome);
+          return;
+        }
+        o2.items = JSON.parse(JSON.stringify(v.items)).map(it=> Object.assign(it, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }));
+        o2.fuori = v.fuori == null ? null : v.fuori;
+        saveSim(o2); ridisegna();
+        toast('Fila caricata: '+v.nome);
+      }));
     });
     host.querySelectorAll('.simrow').forEach(row=>{
       const id = row.getAttribute('data-id');
@@ -3519,20 +3742,27 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         else {
           const j = a==='su' ? i - 1 : i + 1;
           if(j < 0 || j >= o2.items.length) return;
-          const t = o2.items[i]; o2.items[i] = o2.items[j]; o2.items[j] = t;
+          const tmp = o2.items[i]; o2.items[i] = o2.items[j]; o2.items[j] = tmp;
         }
         saveSim(o2); ridisegna();
       }));
     });
-    host.querySelectorAll('[data-add]').forEach(b=> b.addEventListener('click', ()=>{
-      const x = pool.filter(y=> y.k === b.getAttribute('data-add'))[0];
-      if(!x) return;
-      simAdd(x, null, null, null, null);
-      ridisegna();
-      toast('In fila: '+x.nome);
+    const sq = document.getElementById('sim-q');
+    if(sq){
+      let tq;
+      sq.addEventListener('input', ()=>{ clearTimeout(tq); tq = setTimeout(()=>{ SIMF.q = sq.value; SIMF.n = 15; pick(); }, 120); });
+    }
+    host.querySelectorAll('.simfo [data-fo]').forEach(b=> b.addEventListener('click', ()=>{
+      SIMF.fo = b.getAttribute('data-fo'); SIMF.n = 15; saveSimp();
+      host.querySelectorAll('.simfo [data-fo]').forEach(y=>{ const on = y===b; y.classList.toggle('on', on); y.setAttribute('aria-pressed', String(on)); });
+      pick();
     }));
-    const tt = document.getElementById('sim-tutte');
-    if(tt) tt.addEventListener('click', ()=>{ SIM_TUTTE = true; renderSim(all); });
+    host.querySelectorAll('.simord [data-ord]').forEach(b=> b.addEventListener('click', ()=>{
+      SIMF.ord = b.getAttribute('data-ord'); SIMF.n = 15; saveSimp();
+      host.querySelectorAll('.simord [data-ord]').forEach(y=>{ const on = y===b; y.classList.toggle('on', on); y.setAttribute('aria-pressed', String(on)); });
+      pick();
+    }));
+    wirePick();
   }
 
   // seduta arrivata da calendario o da oggi: si apre e si porta a schermo
