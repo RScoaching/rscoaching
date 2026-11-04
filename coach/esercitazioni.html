@@ -680,6 +680,19 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .simrow .so{ font-size:12px; color:var(--muted); }
 .simrow .so b{ color:var(--violet2); font-weight:700; }
 .simrow.persa{ border-style:dashed; }
+.simalt{ margin-top:8px; border-top:1px solid var(--border); padding-top:6px; }
+.simalt summary{ cursor:pointer; min-height:44px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:var(--violet2); }
+.simalt .alh{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:8px 0 4px; }
+.simalt .av, .simalt .ali{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:8px 0; border-top:1px solid var(--border); }
+.simalt .av:first-child, .simalt .ali:first-child{ border-top:0; }
+.simalt .av.on .avt b{ color:var(--violet2); }
+.simalt .avt, .simalt .aln{ flex:1 1 240px; min-width:0; font-size:12.5px; color:var(--text); }
+.simalt .avt small, .simalt .aln small{ display:block; font-size:11.5px; color:var(--faint); margin-top:2px; }
+.simalt .avt small.nt{ color:var(--muted); font-style:italic; }
+.simalt .aln{ font-weight:600; }
+.simalt .aln small{ font-weight:500; }
+.simalt .avb{ display:flex; gap:8px; flex-wrap:wrap; }
+.simalt .btn{ min-height:44px; text-decoration:none; }
 .simempty{ font-size:12.5px; color:var(--muted); padding:6px 0; }
 .simpick{ display:flex; flex-direction:column; }
 .simpick .pk{ display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--border); }
@@ -3308,6 +3321,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      della scheda; se la scheda non ha mai avuto un metraggio si parte da quello
      tipico delle esercitazioni con lo stesso numero di giocatrici, e lo si dice. */
   function giocDi(x){
+    // una volta precisa porta le sue atlete: 11c11 con 16 presenti e' 16
+    if(x.volta && nAthOf(x.volta.d)) return nAthOf(x.volta.d);
     const n = nGioc(x);
     if(n) return n;
     return x.nAth ? Math.round(x.nAth) : null;
@@ -3489,9 +3504,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
   function numOr(v, d){ const n = parseFloat(v); return isFinite(n) && n >= 0 ? n : d; }
   function simVoce(it){
-    const x = simTrova(it);
-    if(!x) return null;
-    const med = x.met[LIBM_I.min].med;
+    const x0 = simTrova(it);
+    if(!x0) return null;
+    const x = voltaX(x0, it.vo);
+    const med = x.volta ? lnum(x.volta.d.load['Minuti']) : x.met[LIBM_I.min].med;
     const se = Math.max(1, Math.round(numOr(it.se, 1)));
     const la = numOr(it.la, med ? Math.round(med) : 10);
     const re = numOr(it.re, 0);
@@ -3693,16 +3709,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return { ob:ob, g:g, T:T, min: Math.max(0, (ob.val.min || 0) - t.dur), manca:manca };
   }
   // cosa porta un'esercitazione nella sua durata solita
-  function porta(x){
-    const L = x.met[LIBM_I.min].med || 10;
+  function porta(x, Lf){
+    const L = Lf || x.met[LIBM_I.min].med || 10;
     const r = k=>{ const v = proj(x.met[LIBM_I[k]], k); return v==null ? 0 : v * L; };
     return { L:L, pm:r('pm'), v20:r('v20'), v23:r('v23'), w20:r('w20'), ad:r('acc') + r('dec') };
   }
   /* Ogni voce che manca conta per il suo peso nel giorno; andare oltre conta in
      negativo, tanto piu' quanto il giorno la tiene bassa (alta velocita' di
      mercoledi). Un lavoro piu' lungo dei minuti rimasti vale per la parte che ci sta. */
-  function chiude(x, B){
-    const p = porta(x);
+  function chiude(x, B, Lf){
+    const p = porta(x, Lf);
     let sc = 0;
     const sta = (B.min >= 3 && p.L > B.min + 3) ? B.min / p.L : 1;
     OBV.forEach(b=>{
@@ -3720,50 +3736,231 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(!vv.length) return '';
     return vv.map(x=> (x.p > 1 ? 'piu&#39; ' : 'meno ')+x.b.l.toLowerCase().replace('acc e dec', 'acc e dec')+' ('+pctTxt(x.p, 1)+')').join(', ');
   }
-  /* Componi la seduta. Si aggiunge un'esercitazione alla volta, sempre quella
-     che avvicina di piu' la fila all'obiettivo nei minuti che restano (la stessa
-     misura dell'ordine "Chiude cio' che manca"), finche' mancano meno di cinque
-     minuti o niente aiuta piu'. Solo esercitazioni fatte almeno due volte, mai
-     la stessa due volte, niente amichevoli; quelle piu' fatte hanno un piccolo
-     vantaggio, perche' sono quelle che la squadra conosce. I test (30-15,
-     yo-yo) stanno in archivio ma non sono lavoro da proporre. Se la fila e' vuota
-     si parte dall'attivazione usata piu' spesso, come in campo. Una lunga si
-     accorcia ai minuti rimasti. */
+  /* Che lavoro e': la parola che il mister usa per la parte di seduta, non la
+     tipologia dell'archivio. "contrapposizione 11c11 + palle inattive" e' una
+     contrapposizione, "attivazione + sprint" un'attivazione. L'ordine dei
+     controlli conta. */
+  function catOf(nome){
+    const t = cercaNorm(nome);
+    if(/attivaz|riscald/.test(t)) return /11c0/.test(t) ? 'tattica' : 'attivazione';
+    if(/contrappos/.test(t)) return 'contrapposizione';
+    if(/inattiv|calci piazzat|corner|punizion/.test(t)) return 'palleinattive';
+    if(/\brond/.test(t)) return 'rondo';
+    if(/possess|costruzion/.test(t)) return 'possesso';
+    if(/duell|1c1|2c2/.test(t)) return 'duelli';
+    if(/sprint|\brsa\b|rapidit|navett|\bcod\b|velocit/.test(t)) return 'sprint';
+    if(/aerobic|intermitt|resistenz|intervall|\bz2\b/.test(t)) return 'aerobico';
+    if(/partita|\bssg\b|\d+c\d+/.test(t)) return 'partita';
+    if(/tir|cross|finalizz|passing|idp|tecnic|reparto/.test(t)) return 'tecnica';
+    return 'altro';
+  }
+  const CAT_L = { attivazione:'attivazione', contrapposizione:'contrapposizione', palleinattive:'palle inattive', rondo:'rondos',
+    possesso:'possessi', duelli:'duelli', sprint:'sprint e RSA', aerobico:'lavoro aerobico', partita:'partite', tecnica:'tecnica', tattica:'tattica', altro:'altro' };
+  /* La forma della settimana come la fa il mister: per ogni giorno le parti in
+     ordine. Le esercitazioni per riempirle si prendono fra quelle fatte proprio
+     in quel giorno della settimana, con i loro minuti; "pref" premia le varianti
+     tipiche (l'attivazione con i cambi di direzione del mercoledi), "piccola"
+     chiede una partita a numeri ridotti, "opz" una parte che si fa solo se
+     servono ancora metri. */
+  const SCHELETRO = {
+    2: [ { c:['attivazione'], l:'attivazione, spesso tecnica', pref:/tecnic/ },
+         { c:['possesso','partita'], l:'possesso o partita iniziale' },
+         { c:['possesso','rondo'], l:'possessi' },
+         { c:['partita'], l:'partita finale' },
+         { c:['sprint','aerobico'], l:'RSA o lavoro aerobico' } ],
+    3: [ { c:['attivazione'], l:'attivazione con cambi di direzione', pref:/\bcod\b|cambi/ },
+         { c:['rondo'], l:'rondos' },
+         { c:['duelli'], l:'duelli' },
+         { c:['partita'], l:'partita libera o a sponde', pref:/sponde|liber/ } ],
+    4: [ { c:['attivazione'], l:'attivazione' },
+         { c:['rondo','possesso'], l:'rondos o possessi' },
+         { c:['contrapposizione'], l:'contrapposizione 11c11 lunga' },
+         { c:['partita'], l:'partita' } ],
+    5: [ { c:['attivazione'], l:'attivazione' },
+         { c:['sprint'], l:'sprint' },
+         { c:['possesso','partita'], l:'possesso o partita a numeri ridotti', piccola:true, opz:true },
+         { c:['contrapposizione'], l:'contrapposizione 11c11' },
+         { c:['palleinattive'], l:'palle inattive' } ]
+  };
+  function volteGiorno(x, g){ return x.occ.filter(q=> parseDate(q.s.date).getDay() === g); }
+  function minGiorno(x, g){
+    const m = median(volteGiorno(x, g).filter(q=> q.d.load).map(q=> lnum(q.d.load['Minuti'])));
+    return m || x.met[LIBM_I.min].med;
+  }
+  function proponibile(x){
+    return x.gps && x.volte >= 1 && x.met[LIBM_I.min].med && !/amichevol|partita ufficiale|\bgara\b|\btest\b|yo-?yo/i.test(x.nome);
+  }
+
+  /* Le volte in cui un'esercitazione e' stata fatta, una per una. Scegliendone
+     una la stima riparte da quel giorno: i suoi valori al minuto, i suoi minuti,
+     il suo campo. Poi si cambiano tempi e misure e la stima segue. */
+  function voltaKey(q){ return q.s.date+'|'+q.s.slot+'|'+drillKey(q.d); }
+  function voltaX(x, vo){
+    if(!vo) return x;
+    const q = x.occ.filter(o=> o.d.load && voltaKey(o) === vo)[0];
+    if(!q) return x;
+    const met = x.met.map(m=>{
+      const v = m.m.f(q.d.load);
+      if(v==null) return m;
+      const sc = a=> (a!=null && m.med) ? v * a / m.med : v;
+      return Object.assign({}, m, { med:v, avg:v, q1:sc(m.q1), q3:sc(m.q3) });
+    });
+    const nat = nAthOf(q.d);
+    return Object.assign({}, x, { met:met, area: q.ar || x.area, nAth: nat || x.nAth,
+      mqa: (q.ar && nat) ? q.ar.mq / nat : x.mqa, _mqr:undefined, volta:q });
+  }
+  function voltaLbl(q){
+    const dt = parseDate(q.s.date);
+    return (dt ? DTFS.format(dt).replace('.','') : q.s.date);
+  }
+  function altVolteHTML(it, x0){
+    const DETM = loadDet();
+    const vs = x0.occ.filter(q=> q.d.load).sort((a,b)=> a.s.date < b.s.date ? 1 : -1).slice(0, 10);
+    if(!vs.length) return '';
+    let h = '<div class="alh">Le volte in cui e&#39; stata fatta</div><div class="alv">';
+    vs.forEach(q=>{
+      const L = q.d.load;
+      const det = detOf(DETM, q.s, q.d);
+      const hs = (lnum(L['Dist 20-23 Km/h']) || 0) + (lnum(L['DIST > 23km/h']) || 0);
+      const ad = (lnum(L['N ACC > 3 m/s^2']) || 0) + (lnum(L['N DEC < -3 m/s^2']) || 0);
+      const dt = parseDate(q.s.date);
+      const k = voltaKey(q), on = it.vo === k;
+      const dl = detLine(det);
+      h += '<div class="av'+(on ? ' on' : '')+'"><div class="avt"><b>'+(dt ? esc(DTF.format(dt).replace('.','')) : q.s.date)+' '+q.s.slot+'</b> &#183; '+
+          lfmt(L['Minuti'], 0)+'&#39; &#183; '+lfmt(L['Dist tot'], 0)+' m &#183; oltre 20 km/h '+lfmtA(hs)+' m &#183; acc+dec '+lfmtA(ad)+
+          (nAthOf(q.d) ? ' &#183; '+nAthOf(q.d)+' atlete' : '')+
+          (dl ? '<small>'+dl+'</small>' : '')+(det.note ? '<small class="nt">'+esc(det.note)+'</small>' : '')+'</div>'+
+        '<div class="avb">'+(on ? '<span class="badge arc">in uso</span>'
+            : '<button class="btn sm" type="button" data-vo="'+esc(k)+'">Usa questa volta</button>')+
+          '<a class="btn sm" href="esercitazioni.html?d='+q.s.date+'&s='+q.s.slot+'&e='+q.d.i+'" target="_blank" rel="noopener">Apri la seduta</a></div></div>';
+    });
+    h += '</div>'+(it.vo ? '<button class="btn sm" type="button" data-vo0="1">Torna alla media di tutte le volte</button>' : '');
+    return h;
+  }
+  // le esercitazioni dello stesso tipo che producono di piu' le stesse cose
+  function simili(x0, g){
+    const c = catOf(x0.nome);
+    const pr = y=>{ const d = dieci(y); return [d.pm || 0, d.hs || 0, d.ad || 0, d.w20 || 0]; };
+    const a = pr(x0);
+    return MOD.lib.filter(y=> y !== x0 && y.lk !== x0.lk && proponibile(y) && catOf(y.nome) === c).map(y=>{
+      const b = pr(y);
+      let dist = 0;
+      a.forEach((v, i)=>{ dist += Math.abs(Math.log((v + 1) / (b[i] + 1))); });
+      const ng = g==null ? 0 : volteGiorno(y, g).length;
+      return { y:y, ng:ng, sc: dist - 0.4 * Math.min(ng, 3) / 3 };
+    }).sort((p, q)=> p.sc - q.sc).slice(0, 4);
+  }
+  function altSimiliHTML(it, x0){
+    const ob = simObiettivo(loadSim());
+    const g = ob && ob.gt ? ob.gt.g : null;
+    const ss = simili(x0, g);
+    if(!ss.length) return '';
+    return '<div class="alh">Simili ('+esc(CAT_L[catOf(x0.nome)] || 'stesso tipo')+')</div><div class="als">'+ss.map(s=>{
+      const d = dieci(s.y);
+      return '<div class="ali"><span class="aln">'+esc(s.y.nome)+'<small>di solito '+lfmt(s.y.met[LIBM_I.min].med, 0)+'&#39;'+
+        (s.ng ? ' &#183; fatta '+s.ng+(s.ng===1?' volta':' volte')+' di '+GIORNI[g] : '')+
+        ' &#183; ogni 10&#39;: '+lfmt(d.pm, 0)+' m, oltre 20 km/h '+lfmtA(d.hs)+' m, acc+dec '+lfmtA(d.ad)+'</small></span>'+
+        '<button class="btn sm" type="button" data-sost="'+esc(s.y.k)+'">Sostituisci</button></div>';
+    }).join('')+'</div>';
+  }
+  /* Componi la seduta. Se l'obiettivo e' un giorno della settimana, la seduta
+     segue la forma di quel giorno (SCHELETRO): una parte alla volta, e per ogni
+     parte l'esercitazione fatta piu' spesso proprio quel giorno che avvicina di
+     piu' la fila all'obiettivo, con i minuti che ha di solito quel giorno. Poi,
+     se mancano ancora metri e minuti, si aggiunge quello che chiude meglio, come
+     prima. Mai la stessa due volte, niente amichevoli e test (30-15, yo-yo).
+     Alla fine, se la seduta sfora la durata dell'obiettivo, i minuti si
+     accorciano in proporzione, attivazione esclusa. */
   function simComponi(){
     const o = loadSim();
     const prima = { items: JSON.parse(JSON.stringify(o.items)), fuori:o.fuori };
     const usate = Object.create(null);
     o.items.forEach(it=> usate[it.lk] = 1);
-    const pool = MOD.lib.filter(x=> x.gps && x.volte >= 2 && x.met[LIBM_I.min].med && !/amichevol|partita ufficiale|gara|\btest\b|yo-?yo/i.test(x.nome));
-    const nuovo = x=> ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      k:x.k, lk:x.lk, nome:x.nome, se:null, la:null, re:null, mq:null, lu:null, lg:null, ng:null });
+    const pool = MOD.lib.filter(proponibile);
+    const nuovo = (x, la)=> ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      k:x.k, lk:x.lk, nome:x.nome, se:null, la:(la ? Math.round(la * 2) / 2 : null), re:null, mq:null, lu:null, lg:null, ng:null });
+    const ob0 = simObiettivo(o);
+    const g = ob0 && ob0.gt ? ob0.gt.g : null;
+    const sch = (g!=null && !o.items.length) ? SCHELETRO[g] : null;
     let n = 0;
-    if(!o.items.length){
-      const att = pool.filter(x=> /attivaz|riscald/i.test(x.nome)).sort((a,b)=> b.volte - a.volte)[0];
+    const libero = ()=>{
+      const B = simBuco(o, simTotali(o));
+      return { B:B, min: B ? B.min - (o.fuori == null ? MOD.fuori.cambio : 0) : 0 };
+    };
+    if(sch){
+      /* Per ogni parte le candidate sono quelle fatte proprio quel giorno della
+         settimana (le altre solo se quel giorno non ce n'e' nessuna). I minuti si
+         dividono fra le parti come si dividono di solito quel giorno, scalati
+         sulla durata dell'obiettivo; l'attivazione tiene i suoi. */
+      const parti = sch.map(sl=>{
+        let cs = pool.filter(x=> sl.c.indexOf(catOf(x.nome)) >= 0 && !(sl.piccola && nGioc(x) > 12));
+        const cg = cs.filter(x=> volteGiorno(x, g).length);
+        if(cg.length) cs = cg;
+        const tip = median((cg.length ? cg.map(x=> minGiorno(x, g)) : cs.map(x=> x.met[LIBM_I.min].med)).filter(v=> v > 0)) || 10;
+        return { sl:sl, cs:cs, tip:tip, att: sl.c.length === 1 && sl.c[0] === 'attivazione' };
+      }).filter(pt=> pt.cs.length);
+      const fuoriP = o.fuori == null ? MOD.fuori.cambio * parti.length : o.fuori;
+      const durA = parti.filter(pt=> pt.att).reduce((a, pt)=> a + pt.tip, 0);
+      const durR = parti.filter(pt=> !pt.att && !pt.sl.opz).reduce((a, pt)=> a + pt.tip, 0);
+      const sc = (ob0.val.min > 0 && durR > 0) ? Math.max(0.5, Math.min(1.6, (ob0.val.min - fuoriP - durA) / durR)) : 1;
+      parti.forEach(pt=>{
+        const B = simBuco(o, simTotali(o));
+        if(!B) return;
+        if(pt.sl.opz && !B.manca) return;
+        const L = pt.att ? pt.tip : Math.max(4, pt.tip * sc);
+        let best = null, bv = -Infinity;
+        pt.cs.forEach(x=>{
+          if(usate[x.lk]) return;
+          const nd = volteGiorno(x, g).length;
+          const pf = pt.sl.pref && pt.sl.pref.test(cercaNorm(x.nome)) ? 1 : 0;
+          // l'attivazione e' quella di sempre; per il resto conta cosa porta in quei minuti
+          const v = pt.att ? nd + 1.5 * pf + 0.1 * Math.log(x.volte)
+                           : chiude(x, Object.assign({}, B, { min:0 }), L) + 0.15 * Math.min(nd, 3) + 0.3 * pf + 0.05 * Math.log(x.volte);
+          if(v > bv){ bv = v; best = x; }
+        });
+        if(!best) return;
+        o.items.push(nuovo(best, L));
+        usate[best.lk] = 1;
+        n++;
+      });
+    } else if(!o.items.length){
+      const att = pool.filter(x=> catOf(x.nome) === 'attivazione').sort((a,b)=> b.volte - a.volte)[0];
       if(att){ o.items.push(nuovo(att)); usate[att.lk] = 1; n++; }
     }
-    for(let giro = 0; giro < 10; giro++){
-      const t = simTotali(o);
-      const B = simBuco(o, t);
-      // il tempo fuori cresce con ogni cambio: va contato prima di scegliere
-      const libero = B ? B.min - (o.fuori == null ? MOD.fuori.cambio : 0) : 0;
-      if(!B || !B.manca || libero < 5) break;
-      const B2 = Object.assign({}, B, { min:libero });
+    for(let giro = 0; giro < (sch ? 2 : 10); giro++){
+      const L0 = libero();
+      if(!L0.B || !L0.B.manca || L0.min < (sch ? 8 : 5)) break;
+      const B2 = Object.assign({}, L0.B, { min:L0.min });
       let best = null, bv = 0;
       pool.forEach(x=>{
-        if(usate[x.lk]) return;
-        const v = chiude(x, B2) * (1 + 0.08 * Math.log(x.volte));
+        if(usate[x.lk] || x.volte < 2) return;
+        const v = chiude(x, B2) * (1 + 0.08 * Math.log(x.volte)) + (g!=null ? 0.05 * Math.min(volteGiorno(x, g).length, 3) : 0);
         if(v > bv){ bv = v; best = x; }
       });
       if(!best) break;
-      const it = nuovo(best);
       const L = best.met[LIBM_I.min].med;
-      if(L > libero + 3) it.la = Math.max(4, Math.round(libero));
-      o.items.push(it);
+      o.items.push(nuovo(best, L > L0.min + 3 ? Math.max(4, L0.min) : null));
       usate[best.lk] = 1;
       n++;
     }
     if(!n) return 0;
+    // troppo lunga: si accorcia tutto in proporzione, l'attivazione resta com'e'
+    const t = simTotali(o);
+    if(ob0 && ob0.val.min > 0 && t.dur > ob0.val.min * 1.08){
+      const fissi = o.items.filter(it=> catOf(it.nome) === 'attivazione');
+      const durF = fissi.reduce((a, it)=>{ const r = simVoce(it); return a + (r ? r.p.dur : 0); }, 0);
+      const resto = t.dur - t.fuori - durF, spazio = ob0.val.min - t.fuori - durF;
+      if(resto > 0 && spazio > 0){
+        const f = spazio / resto;
+        o.items.forEach(it=>{
+          if(catOf(it.nome) === 'attivazione') return;
+          const r = simVoce(it);
+          if(!r) return;
+          it.la = Math.max(3, Math.round(r.p.work * f * 2) / 2);
+          it.se = null; it.re = null;
+        });
+      }
+    }
     saveSim(o, true);
     SIM_PRIMA = prima;
     return n;
@@ -3777,6 +3974,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     if(B.ob.gt){
       const c = carattere(B.ob.gt);
       if(c) h += '<div class="cmpft">Il '+B.ob.gt.nome+' tipo, al minuto, rispetto alla settimana: '+c+'. La ricerca da&#39; piu&#39; peso a queste voci.</div>';
+      const sch = SCHELETRO[B.ob.gt.g];
+      if(sch) h += '<div class="cmpft">Di '+B.ob.gt.nome+' la seduta va cosi&#39;: '+sch.map(sl=> sl.l+(sl.opz ? ' (se serve)' : '')).join(', ')+
+        '. &quot;Componi la seduta&quot; segue quest&#39;ordine con le esercitazioni fatte di '+B.ob.gt.nome+'.</div>';
     }
     h += '<div class="obt"><table class="gtbl"><thead><tr><th class="nm" scope="col">Voce</th>'+
       '<th scope="col">In fila</th><th scope="col">Obiettivo</th><th scope="col">Diff.</th></tr></thead><tbody>';
@@ -3834,6 +4034,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     }
     return h;
   }
+  // quali righe hanno il riquadro delle alternative aperto, per non chiuderlo a ogni ridisegno
+  const SIM_ALT = Object.create(null);
+  function altHTML(it){
+    const x0 = simTrova(it);
+    if(!x0) return '';
+    return altVolteHTML(it, x0) + altSimiliHTML(it, x0);
+  }
   function simSoHTML(r, t){
     return '<span class="spz">'+spazioTxt(r.x, r.z)+'</span>'+simOutTxt(r.p, t);
   }
@@ -3890,7 +4097,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       '<input id="'+fid+'-'+n+'" class="tnum" type="number" inputmode="decimal" min="0" step="'+step+'" data-f="'+n+'" value="'+(v==null?'':v)+'"'+
       (ph ? ' placeholder="'+ph+'"' : '')+(dis ? ' disabled' : '')+' autocomplete="off"></label>';
     return '<div class="simrow'+(x ? '' : ' persa')+'" data-id="'+esc(it.id)+'">'+
-      '<div class="sh"><span class="sn">'+(i+1)+'. '+esc(it.nome)+(sk ? ' <span class="sk">'+sk+'</span>' : '')+'</span>'+
+      '<div class="sh"><span class="sn">'+(i+1)+'. '+esc(it.nome)+(sk ? ' <span class="sk">'+sk+'</span>' : '')+
+        (x && x.volta ? ' <span class="badge arc">come il '+voltaLbl(x.volta)+'</span>' : '')+'</span>'+
         '<button class="ib" type="button" data-a="su" aria-label="Sposta su"'+(i===0?' disabled':'')+'>'+ico.su+'</button>'+
         '<button class="ib" type="button" data-a="giu" aria-label="Sposta giu&#39;"'+(i===tot-1?' disabled':'')+'>'+ico.giu+'</button>'+
         '<button class="ib" type="button" data-a="via" aria-label="Togli dalla fila">'+ico.via+'</button></div>'+
@@ -3901,7 +4109,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
           fld('lu', 'Lunghezza (m)', it.lu, 1, x.area ? String(Math.round(x.area.l)) : '') +
           fld('lg', 'Larghezza (m)', it.lg, 1, x.area ? String(Math.round(x.area.w)) : '') +
           fld('ng', 'Giocatrici', it.ng, 1, giocDi(x) ? String(giocDi(x)) : '') +
-        '</div><div class="so">'+simSoHTML(r, t)+'</div>'
+        '</div><div class="so">'+simSoHTML(r, t)+'</div>'+
+        '<details class="simalt"'+(SIM_ALT[it.id] ? ' open' : '')+'><summary>Le volte, le note e le alternative</summary><div class="altb">'+
+          (SIM_ALT[it.id] ? altHTML(it) : '')+'</div></details>'
         : '<div class="so">Questa esercitazione non e&#39; piu&#39; in archivio con il GPS: resta in fila ma non conta.</div>')+
     '</div>';
   }
@@ -4138,6 +4348,29 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(n && tb) tb.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block:'start' });
         return;
       }
+      const vb = cl('[data-vo]'), v0 = cl('[data-vo0]'), sb = cl('[data-sost]');
+      if(vb || v0 || sb){
+        const row = cl('.simrow');
+        if(!row) return;
+        const o2 = loadSim();
+        const it = o2.items.filter(y=> y.id === row.getAttribute('data-id'))[0];
+        if(!it) return;
+        if(sb){
+          const y = MOD.perK.get(sb.getAttribute('data-sost'));
+          if(!y) return;
+          const vecchio = it.nome;
+          Object.assign(it, { k:y.k, lk:y.lk, nome:y.nome, vo:null, la:null, se:null, re:null, mq:null, lu:null, lg:null, ng:null });
+          saveSim(o2); ridisegna();
+          toast(vecchio+' sostituita con '+y.nome);
+          return;
+        }
+        // una volta precisa: i suoi minuti e il suo campo, le misure scritte a mano si azzerano
+        it.vo = vb ? vb.getAttribute('data-vo') : null;
+        it.la = null; it.se = null; it.re = null; it.lu = null; it.lg = null; it.ng = null; it.mq = null;
+        saveSim(o2); ridisegna();
+        toast(vb ? 'Stima rifatta su quella volta: cambia tempi e campo per vedere cosa succede' : 'Stima di nuovo sulla media di tutte le volte');
+        return;
+      }
       if(cl('#sim-annulla')){
         if(!SIM_PRIMA) return;
         const o2 = loadSim();
@@ -4232,6 +4465,14 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     });
     host.querySelectorAll('.simrow').forEach(row=>{
       const id = row.getAttribute('data-id');
+      const det = row.querySelector('.simalt');
+      if(det) det.addEventListener('toggle', ()=>{
+        SIM_ALT[id] = det.open;
+        if(det.open){
+          const it = loadSim().items.filter(y=> y.id === id)[0];
+          if(it) det.querySelector('.altb').innerHTML = altHTML(it);
+        }
+      });
       row.querySelectorAll('input[data-f]').forEach(inp=> inp.addEventListener('input', ()=>{
         const o2 = loadSim();
         const it = o2.items.filter(y=> y.id === id)[0];
