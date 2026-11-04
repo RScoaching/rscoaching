@@ -1581,6 +1581,21 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      allo stesso modo. */
   const SQ_SRC = '(\\d{1,2})\\s*(?:vs|v|c|contro)\\s*(\\d{1,2})';
   function reSq(g){ return new RegExp(SQ_SRC, g ? 'g' : ''); }
+  /* La ricerca legge come si scrive in campo: "possesso 7v7", "possesso 7 contro
+     7" e "Possesso 7c7" sono la stessa cosa, gli accenti non contano e ogni
+     parola scritta deve esserci, in qualsiasi ordine. Conta anche la
+     tipologia: "rondo" trova i rondo anche se il nome dice "torello". */
+  function cercaNorm(t){
+    let x = String(t==null?'':t).toLowerCase();
+    if(x.normalize) x = x.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return x.replace(reSq(true), '$1c$2').replace(/[^a-z0-9+]+/g, ' ').trim();
+  }
+  function cercaParole(q){ const n = cercaNorm(q); return n ? n.split(' ') : []; }
+  function cercaOk(parole, desc){
+    if(!parole.length) return true;
+    const t = ' ' + cercaNorm(desc) + ' ' + cercaNorm(TIPO_LBL[tipoOf(desc)] || '') + ' ';
+    return parole.every(w=> t.indexOf(w) >= 0);
+  }
   function attese(desc){
     const t = String(desc||'').toLowerCase();
     let n = 0, trovato = false, m;
@@ -1633,7 +1648,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   }
 
   function filtered(all){
-    const q = state.q.trim().toLowerCase();
+    const q = cercaParole(state.q);
     const nm = FOCUS ? '' : state.ath;
     const from = nm ? perFrom(all) : null;
     return all.map(s=>{
@@ -1662,7 +1677,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         drills = drills.filter(d=> natOf(d)===state.nat);
         if(!drills.length) return null;
       }
-      if(q){ drills = drills.filter(d=> d.descrizione.toLowerCase().includes(q)); if(!drills.length) return null; }
+      if(q.length){ drills = drills.filter(d=> cercaOk(q, d.descrizione)); if(!drills.length) return null; }
       return Object.assign({}, s, { drills });
     }).filter(Boolean);
   }
@@ -2758,13 +2773,13 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
   // con `tutte` si ignorano ricerca e tipologia: i modelli dello spazio e della
   // seduta simulata si costruiscono sull'archivio intero, non su quello filtrato
   function libBuild(all, tutte){
-    const q = tutte ? '' : state.q.trim().toLowerCase();
+    const q = tutte ? [] : cercaParole(state.q);
     const DETM = loadDet();
     const map = new Map();
     all.forEach(s=>{
       (s.allDrills || s.drills).forEach(d=>{
         if(!tutte && state.tipo!=='all' && tipoOf(d.descrizione)!==state.tipo) return;
-        if(q && !String(d.descrizione||'').toLowerCase().includes(q)) return;
+        if(q.length && !cercaOk(q, d.descrizione)) return;
         const bk = baseKey(d.descrizione);
         if(!bk) return;
         // lo spazio si legge dai Metraggi: quelli scritti sulla seduta vincono,
