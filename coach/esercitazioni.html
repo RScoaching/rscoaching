@@ -3763,11 +3763,39 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     return 'altro';
   }
   const CAT_L = { attivazione:'attivazione', tattica:'tattica 11c0', sprint:'sprint e rapidita&#39;', tecnica:'tecnica e reparto',
-    rondo:'rondos', possesso:'possessi', duelli:'duelli', partitaP:'partite a numeri ridotti', contrapposizione:'contrapposizione',
+    rondo:'rondos', possesso:'possessi', possessoI:'possessi a inizio seduta', possessoF:'possessi a fine seduta', duelli:'duelli',
+    partitaP:'partite a numeri ridotti', partitaI:'partite a inizio seduta', partitaF:'partita a fine seduta', contrapposizione:'contrapposizione',
     partita:'partita', palleinattive:'palle inattive', tiri:'tiri e cross', rsa:'RSA', aerobico:'lavoro aerobico', altro:'altro' };
   // dove sta di solito ogni parte in una seduta, quando l'ordine vero non e' stato salvato
-  const CAT_POS = { attivazione:0, tattica:1, sprint:2, tecnica:3, rondo:4, possesso:5, duelli:6, altro:6.5, partitaP:7,
-    contrapposizione:8, partita:9, palleinattive:10, tiri:11, rsa:12, aerobico:13 };
+  const CAT_POS = { attivazione:0, tattica:1, sprint:2, tecnica:3, rondo:4, partitaI:4.5, possessoI:4.8, possesso:5, duelli:6, altro:6.5, partitaP:7,
+    contrapposizione:8, possessoF:8.5, partitaF:9, partita:9, palleinattive:10, tiri:11, rsa:12, aerobico:13 };
+  /* Dove sta un'esercitazione nella sua seduta, da 0 (prima) a 1 (ultima),
+     dall'ordine salvato con "Ordina". Le partite e i possessi cambiano lavoro a
+     seconda di dove stanno: quelle piccole subito dopo l'attivazione servono ad
+     accendere, quella a fine seduta e' un'altra cosa. Senza ordine salvato per
+     le partite decide la grandezza (fino a 6c6 di inizio, oltre di fine). */
+  let POSQ = null;
+  function posDi(s, d){
+    if(!POSQ){
+      POSQ = Object.create(null);
+      const ORD = loadOrd();
+      Object.keys(ORD).forEach(k=>{
+        const ks = ORD[k];
+        if(Array.isArray(ks) && ks.length > 1) ks.forEach((dk, j)=>{ POSQ[k+'|'+dk] = j / (ks.length - 1); });
+      });
+    }
+    const v = POSQ[ordKey(s)+'|'+drillKey(d)];
+    return v==null ? null : v;
+  }
+  function catQ(s, d){
+    const c = catOf(d.descrizione);
+    const p = posDi(s, d);
+    if(c === 'partita' || c === 'partitaP') return 'partita' + (p!=null ? (p < 0.5 ? 'I' : 'F') : (c === 'partitaP' ? 'I' : 'F'));
+    if(c === 'possesso' && p!=null) return 'possesso' + (p < 0.5 ? 'I' : 'F');
+    return c;
+  }
+  // la famiglia di una parte: partitaI e partitaF sono partite, possessoI possessi
+  function famDi(c){ return (c === 'partitaP' || /^partita[IF]?$/.test(c)) ? 'partita' : (/^possesso[IF]?$/.test(c) ? 'possesso' : c); }
   /* La forma di ogni giorno si impara dallo storico. Per ogni giorno della
      settimana le ultime 8 sedute: quali parti ci sono, in quante sedute su 8,
      quante volte nella stessa seduta e per quanti minuti. Una parte presente in
@@ -3778,7 +3806,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
      quello in cui si e' lavorato. */
   const FORMA_N = 8;
   function formaGiorni(all){
-    const ORD = loadOrd();
+    POSQ = null;
     const per = {};
     all.forEach(s=>{
       const ds = (s.allDrills || s.drills).filter(d=> !d.manual || d.descrizione);
@@ -3794,19 +3822,16 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const st = {};
       ss.forEach(s=>{
         const ds = s.allDrills || s.drills;
-        const keys = ORD[ordKey(s)];
         const cnt = {}, mins = {};
-        ds.forEach((d, i)=>{
-          const c = catOf(d.descrizione);
+        ds.forEach(d=>{
+          const c = catQ(s, d);
           cnt[c] = (cnt[c] || 0) + 1;
           const m = d.load ? lnum(d.load['Minuti']) : null;
           if(m) (mins[c] || (mins[c] = [])).push(m);
-          if(keys){
-            const j = keys.indexOf(drillKey(d));
-            if(j >= 0 && keys.length > 1){
-              const e = st[c] || (st[c] = { n:0, cnt:[], min:[], pos:[] });
-              e.pos.push(j / (keys.length - 1));
-            }
+          const p = posDi(s, d);
+          if(p != null){
+            const e = st[c] || (st[c] = { n:0, cnt:[], min:[], pos:[] });
+            e.pos.push(p);
           }
         });
         Object.keys(cnt).forEach(c=>{
@@ -3822,9 +3847,9 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         if(f < 0.25 || c === 'altro') return;
         const rip = f >= 0.5 ? Math.max(1, Math.round(median(e.cnt))) : 1;
         // ordine: posizione salvata se c'e' su almeno due sedute, senno' quella tipica (scalata su 0-1)
-        const pos = e.pos.length >= 2 ? median(e.pos) : CAT_POS[c] / 13;
+        const pos = e.pos.length >= 2 ? median(e.pos) : (CAT_POS[c]==null ? 6.5 : CAT_POS[c]) / 13;
         for(let r = 0; r < rip; r++){
-          parti.push({ c:c, l:CAT_L[c] || c, opz: f < 0.5, n:e.n, su:ss.length, tip: median(e.min) || null, pos: pos + r * 0.001, daOrd: e.pos.length >= 2 });
+          parti.push({ c:c, l:CAT_L[c] || c, opz: f < 0.5, n:e.n, r:r, su:ss.length, tip: median(e.min) || null, pos: pos + r * 0.001, daOrd: e.pos.length >= 2 });
         }
       });
       parti.sort((a,b)=> a.pos - b.pos);
@@ -3906,7 +3931,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const c = catOf(x0.nome);
     const pr = y=>{ const d = dieci(y); return [d.pm || 0, d.hs || 0, d.ad || 0, d.w20 || 0]; };
     const a = pr(x0);
-    return MOD.lib.filter(y=> y !== x0 && y.lk !== x0.lk && proponibile(y) && catOf(y.nome) === c).map(y=>{
+    return MOD.lib.filter(y=> y !== x0 && y.lk !== x0.lk && proponibile(y) && famDi(catOf(y.nome)) === famDi(c)).map(y=>{
       const b = pr(y);
       let dist = 0;
       a.forEach((v, i)=>{ dist += Math.abs(Math.log((v + 1) / (b[i] + 1))); });
@@ -3958,9 +3983,10 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
          dividono fra le parti come si dividono di solito quel giorno, scalati
          sulla durata dell'obiettivo; l'attivazione tiene i suoi. */
       const parti = sch.map(sl=>{
-        let cs = pool.filter(x=> catOf(x.nome) === sl.c);
-        const cg = cs.filter(x=> volteGiorno(x, g).length);
-        if(cg.length) cs = cg;
+        // quelle fatte quel giorno proprio in quella parte (una partita di inizio seduta resta di inizio);
+        // se non ce ne sono, quelle della stessa famiglia
+        const cg = pool.filter(x=> volteGiorno(x, g).some(q=> catQ(q.s, q.d) === sl.c));
+        const cs = cg.length ? cg : pool.filter(x=> famDi(catOf(x.nome)) === famDi(sl.c));
         const tip = sl.tip || median((cg.length ? cg.map(x=> minGiorno(x, g)) : cs.map(x=> x.met[LIBM_I.min].med)).filter(v=> v > 0)) || 10;
         return { sl:sl, cs:cs, tip:tip, att: sl.c === 'attivazione' };
       }).filter(pt=> pt.cs.length);
@@ -3971,7 +3997,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       let obb = parti.filter(pt=> !pt.sl.opz);
       const opt = parti.filter(pt=> pt.sl.opz).sort((a,b)=> b.sl.n - a.sl.n);
       if(obb.length > fg.nTip){
-        const keep = obb.slice().sort((a,b)=> (b.att - a.att) || (b.sl.n - a.sl.n)).slice(0, fg.nTip);
+        // a parita' di sedute pesa di piu' la parte lunga, e la seconda copia dello stesso lavoro viene dopo
+        const keep = obb.slice().sort((a,b)=> (b.att - a.att) || (b.sl.n - a.sl.n) || (a.sl.r - b.sl.r) || (b.tip - a.tip)).slice(0, fg.nTip);
         obb = obb.filter(pt=> keep.indexOf(pt) >= 0);
       }
       const fuoriP = o.fuori == null ? MOD.fuori.cambio * obb.length : o.fuori;
