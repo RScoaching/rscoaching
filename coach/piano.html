@@ -6540,6 +6540,56 @@ window.FORZA = window.FORZA || { roster:[] };
   };
   const TG_GEN = { dist:0.80, hi:0.50, mid:0.60, acc:0.90, dec:0.85 };
 
+  /* I PESI SOPRA SONO IL PUNTO DI PARTENZA, NON LA REGOLA. Appena ci sono
+     settimane di gara gia' corse, il peso di ogni giorno si rilegge da quello che
+     la squadra ha fatto davvero: la mediana del Full Training delle ultime sei
+     volte di quel giorno (MD-4, MD-3...), divisa per la gara di riferimento della
+     squadra. Cosi' se il mercoledi' e' il giorno della forza, con poca alta
+     velocita' e tante frenate, il piano lo sa gia' e non serve riscriverlo ogni
+     settimana; se il venerdi' e' quello sopra i 23, i metri vanno li'. Con meno di
+     tre volte resta il peso di partenza. Due sedute nello stesso giorno contano
+     come una giornata sola, sommate. */
+  const TG_COL = { dist:'Dist tot', hi:'DIST > 23km/h', mid:'Dist 20-23 Km/h', acc:'N ACC > 3 m/s^2', dec:'N DEC < -3 m/s^2' };
+  const TG_AP_N = 6, TG_AP_MIN = 3;
+  function tgGiornate(){
+    const E = window.ESERC_2627;
+    const g = {};
+    if(!E || !Array.isArray(E.sessions)) return g;
+    E.sessions.forEach(function(s){
+      const F = s.ft && s.ft.load;
+      if(!F || !(F['Minuti'] > 0) || !s.date || s.date >= TSTR) return;
+      const o = g[s.date] || (g[s.date] = { d:s.date, v:{} });
+      Object.keys(TG_COL).forEach(function(k){
+        const v = +F[TG_COL[k]];
+        if(isFinite(v)) o.v[k] = (o.v[k] || 0) + v;
+      });
+    });
+    return g;
+  }
+  const TG_GIORNATE = tgGiornate();
+  const TG_MD_APPRESO = (function(){
+    const R = TG_REF['Squadra'];
+    const per = {};
+    Object.keys(TG_GIORNATE).forEach(function(d){
+      const k = mdOf(d);
+      if(!k || k === 'MD' || !TG_MD[k]) return;
+      (per[k] = per[k] || []).push(TG_GIORNATE[d]);
+    });
+    const out = {};
+    Object.keys(per).forEach(function(k){
+      const xs = per[k].sort(function(a, b){ return a.d < b.d ? 1 : -1; }).slice(0, TG_AP_N);
+      if(xs.length < TG_AP_MIN) return;
+      const c = {};
+      Object.keys(TG_COL).forEach(function(m){
+        const vs = xs.map(function(x){ return x.v[m]; }).filter(function(v){ return isFinite(v); });
+        c[m] = (vs.length && R[m] > 0) ? Math.round(med(vs) / R[m] * 100) / 100 : TG_MD[k][m];
+      });
+      out[k] = { n:xs.length, dal:xs[xs.length - 1].d, prima:TG_MD[k] };
+      TG_MD[k] = c;
+    });
+    return out;
+  })();
+
   const TG_METRICS = [
     { k:'hi',   lbl:'Sopra 23 km/h',    u:'m', step:5,  key:true  },
     { k:'mid',  lbl:'Tra 20 e 23 km/h', u:'m', step:5,  key:true  },
@@ -6895,7 +6945,40 @@ window.FORZA = window.FORZA || { roster:[] };
     dec: [2, 2.5, 3, 3.5, 4, 4.5, 5]
   };
   function wkxOpts(k){ return WKX_OPTS_MET[k] || WKX_OPTS; }
-  const WKX_DEF   = { hi:2, mid:2.5, dist:3.5, acc:4, dec:4 };
+  /* Anche il moltiplicatore di partenza si rilegge dalle settimane gia' corse:
+     quante gare ha consegnato davvero la settimana, voce per voce, nelle ultime
+     sei settimane di gara con almeno tre giornate. Si prende il gradino della
+     tendina piu' vicino; la scelta fatta a mano resta quella. */
+  const WKX_FISSO = { hi:2, mid:2.5, dist:3.5, acc:4, dec:4 };
+  const WKX_APPRESO = (function(){
+    const R = TG_REF['Squadra'];
+    const sett = {};
+    Object.keys(TG_GIORNATE).forEach(function(d){
+      if(!mdOf(d)) return;
+      const lun = dstr(mondayOf(parse(d)));
+      if(lun >= dstr(mondayOf(NOW))) return;
+      const w = sett[lun] || (sett[lun] = { lun:lun, n:0, v:{} });
+      w.n++;
+      Object.keys(TG_COL).forEach(function(k){ w.v[k] = (w.v[k] || 0) + (TG_GIORNATE[d].v[k] || 0); });
+    });
+    const ws = Object.keys(sett).map(function(k){ return sett[k]; }).filter(function(w){ return w.n >= 3; })
+      .sort(function(a, b){ return a.lun < b.lun ? 1 : -1; }).slice(0, TG_AP_N);
+    if(ws.length < TG_AP_MIN) return null;
+    const o = { n:ws.length, x:{} };
+    Object.keys(TG_COL).forEach(function(k){
+      o.x[k] = R[k] > 0 ? med(ws.map(function(w){ return w.v[k] / R[k]; })) : null;
+    });
+    return o;
+  })();
+  const WKX_DEF = (function(){
+    const o = {};
+    Object.keys(WKX_FISSO).forEach(function(k){
+      const x = WKX_APPRESO && WKX_APPRESO.x[k];
+      if(!(x > 0)){ o[k] = WKX_FISSO[k]; return; }
+      o[k] = wkxOpts(k).reduce(function(b, v){ return Math.abs(v - x) < Math.abs(b - x) ? v : b; });
+    });
+    return o;
+  })();
   const WKX_KEY   = K('rs_fio_wkx_all');
   const WKX_P_KEY = K('rs_fio_wkx');
 
@@ -7424,11 +7507,36 @@ window.FORZA = window.FORZA || { roster:[] };
       'e si spalmano sui soli giorni scritti a calendario con il peso che ogni giorno ha nel microciclo: '+
       'il giorno dello sprint prende molto piu\' dei metri della rifinitura. Cambia una casella e resta quella. '+
       'Man mano che i file arrivano, i giorni gia\' corsi escono dal preventivo e quello che manca si '+
-      'ridistribuisce da solo su quelli che restano.</p>'+ modu +
+      'ridistribuisce da solo su quelli che restano.</p>'+ tgApTxt() + modu +
       (man ? '<button type="button" class="tg-x" data-wkrst="1">Torna ai numeri calcolati</button>' : '')+
       '</div></div></div>';
 
     box.innerHTML = h;
+  }
+  // da dove vengono pesi e moltiplicatore, detto in una riga sotto il piano
+  function tgApTxt(){
+    const ks = Object.keys(TG_MD_APPRESO);
+    if(!ks.length && !WKX_APPRESO) return '';
+    const ord = ['MD+1','MD+2','MD-5','MD-4','MD-3','MD-2','MD-1'];
+    ks.sort(function(a, b){ return ord.indexOf(a) - ord.indexOf(b); });
+    const f2 = function(v){ return (Math.round(v * 100) / 100).toFixed(2).replace('.', ','); };
+    let t = '<p>';
+    if(ks.length){
+      t += 'Il peso dei giorni viene dalle settimane gia\' corse (mediana delle ultime '+TG_AP_N+' volte, gara di squadra = 1): '+
+        ks.map(function(k){
+          const c = TG_MD[k];
+          return '<b>'+esc(k)+'</b> sopra 23 '+f2(c.hi)+', 20-23 '+f2(c.mid)+', distanza '+f2(c.dist)+', acc '+f2(c.acc)+', dec '+f2(c.dec);
+        }).join('; ')+'. ';
+      const fissi = TG_WK_DAYS.filter(function(k){ return !TG_MD_APPRESO[k]; });
+      if(fissi.length) t += 'Per '+fissi.join(', ')+' le volte sono poche e resta il peso di partenza. ';
+    }
+    if(WKX_APPRESO){
+      const f1 = function(v){ return (Math.round(v * 10) / 10).toFixed(1).replace('.', ','); };
+      t += 'Nelle ultime '+WKX_APPRESO.n+' settimane di gara la squadra ha fatto '+
+        WK_MET.map(function(k){ return f1(WKX_APPRESO.x[k])+' gare '+({ hi:'sopra 23', mid:'tra 20 e 23', dist:'di distanza', acc:'di acc', dec:'di dec' })[k]; }).join(', ')+
+        ': da qui il moltiplicatore di partenza.';
+    }
+    return t + '</p>';
   }
 
   /* LE VOCI DA COLPIRE PER PRIME IN SETTIMANA.
