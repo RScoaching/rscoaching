@@ -696,6 +696,14 @@ body.vsim #addform, body.vsim #athwrap, body.vsim #natpick{ display:none !import
 .sbar .g-aerobico{ background:oklch(55% 0.09 200); }
 .sbar .g-palleinattive{ background:oklch(50% 0.06 250); }
 .sbar .g-tecnica, .sbar .g-altro{ background:oklch(48% 0.05 270); }
+.simatl .atlt td .u{ display:block; font-size:10px; font-weight:600; color:var(--faint); }
+.simatl .atlt td.su{ color:var(--violet2); font-weight:700; }
+.simatl .atlt td.su .u{ color:var(--violet2); }
+.simatl .atlt td.giu{ color:var(--faint); }
+.simatl .atlt td.nm .u{ display:block; font-size:10px; font-weight:600; color:var(--faint); }
+.simatl .obt{ overflow-x:auto; margin:8px 0; }
+.simatl .btn{ min-height:44px; }
+.simatl .cmpft{ font-size:11.5px; color:var(--faint); margin-top:8px; }
 .simalt{ margin-top:8px; border-top:1px solid var(--border); padding-top:6px; }
 .simalt summary{ cursor:pointer; min-height:44px; display:flex; align-items:center; font-size:12.5px; font-weight:600; color:var(--violet2); }
 .simalt .alh{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:8px 0 4px; }
@@ -3322,6 +3330,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       if(l) l.push(x); else MOD.perLk.set(x.lk, [x]);
     });
     MOD.perLk.forEach(l=> l.sort((a,b)=> b.gps - a.gps));
+    MOD.atl = atlModello(all, lib);
     MOD.mc = microciclo(all);
     MOD.forma = formaGiorni(all);
     MOD.ob = simObiettivi(all, MOD.tipo, MOD.mc);
@@ -4276,6 +4285,149 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       }).join('')+'</div>';
     return h + '</div>';
   }
+  /* LE ATLETE. La fila dice cosa fa la squadra; ogni atleta pero' sta in
+     un'esercitazione a modo suo: c'e' chi in partita fa molta piu' alta
+     velocita' della media e chi la meta'. Il rapporto si legge dalle volte in
+     cui ha fatto quella stessa esercitazione (lei al minuto contro la squadra al
+     minuto, nella stessa volta) e, quando le volte sono poche, si avvicina al
+     suo rapporto di sempre. Chi nella Rosa di oggi e' assente, in
+     differenziato, dal fisioterapista o in prima squadra resta fuori. */
+  const ATL_K = { pm:'Dist tot', v20:'Dist 20-23 Km/h', v23:'DIST > 23km/h', w20:'D>20 W/kg', acc:'N ACC > 3 m/s^2', dec:'N DEC < -3 m/s^2' };
+  // sotto questi ritmi di squadra il rapporto non vuol dire niente (zero diviso quasi zero)
+  const ATL_MINT = { pm:10, v20:0.4, v23:0.25, w20:1, acc:0.04, dec:0.04 };
+  const ATL_FUORI = { differenziato:1, ft:1, fisico:1, assente:1 };
+  function atlModello(all, lib){
+    const idx = {};
+    Object.keys(ATL_K).forEach(k=> idx[k] = LOAD.indexOf(ATL_K[k]));
+    const lkDi = new Map();
+    lib.forEach(x=> x.occ.forEach(q=> lkDi.set(q.d, x.lk)));
+    const per = {};
+    const nuova = ()=> ({ tutte:{}, lk:{}, ft:[], ultima:'' });
+    all.forEach(s=>{
+      (s.allDrills || s.drills).forEach(d=>{
+        if(!d.atlete || !d.load || !lnum(d.load['Minuti'])) return;
+        const lk = lkDi.get(d);
+        Object.keys(d.atlete).forEach(nm=>{
+          const v = d.atlete[nm], mn = vnum(v, I_MIN);
+          if(!mn || mn < 2) return;
+          const a = per[nm] || (per[nm] = nuova());
+          if(s.date > a.ultima) a.ultima = s.date;
+          Object.keys(ATL_K).forEach(k=>{
+            const t = lpm(d.load, ATL_K[k]), av = vnum(v, idx[k]);
+            if(t==null || av==null || t < ATL_MINT[k]) return;
+            const r = (av / mn) / t;
+            (a.tutte[k] || (a.tutte[k] = [])).push(r);
+            if(lk){ const L = a.lk[lk] || (a.lk[lk] = {}); (L[k] || (L[k] = [])).push(r); }
+          });
+        });
+      });
+      const FA = s.ft && s.ft.atlete;
+      if(FA) Object.keys(FA).forEach(nm=>{
+        const v = FA[nm], mn = vnum(v, I_MIN);
+        if(!mn) return;
+        const a = per[nm] || (per[nm] = nuova());
+        if(s.date > a.ultima) a.ultima = s.date;
+        const o = { min:mn };
+        Object.keys(ATL_K).forEach(k=> o[k] = vnum(v, idx[k]));
+        a.ft.push({ date:s.date, g:parseDate(s.date).getDay(), v:o });
+      });
+    });
+    Object.keys(per).forEach(nm=>{
+      const a = per[nm];
+      a.r = {};
+      Object.keys(ATL_K).forEach(k=>{
+        const m = median(a.tutte[k] || []);
+        a.r[k] = m==null ? 1 : Math.max(0.2, Math.min(4, m));
+      });
+      a.ft.sort((p, q)=> p.date < q.date ? 1 : -1);
+    });
+    return per;
+  }
+  // il rapporto dell'atleta in quell'esercitazione, avvicinato al suo di sempre se le volte sono poche
+  /* Provato sulle sedute gia' fatte (ogni atleta ricostruita dalle altre
+     sedute, contro il suo Full Training vero): sulla distanza il rapporto pieno
+     sbaglia il 6% contro il 9% della media di squadra; sull'alta velocita' conta
+     meta' dello scostamento (34% contro 37% sopra i 23, 27% contro 30% fra 20 e
+     23), perche' li' l'atleta cambia molto da una volta all'altra. */
+  const ATL_MEZZO = { v20:1, v23:1 };
+  function atlRapporto(a, lk, k){
+    const arr = (a.lk[lk] && a.lk[lk][k]) || [];
+    const r = arr.length ? Math.max(0.2, Math.min(4, (arr.length * median(arr) + 2 * a.r[k]) / (arr.length + 2))) : a.r[k];
+    return ATL_MEZZO[k] ? 1 + 0.5 * (r - 1) : r;
+  }
+  function atlDispo(){
+    try{
+      const key = (typeof window.fioKey === 'function') ? window.fioKey('rs_fio_avail') : 'rs_fio_avail';
+      const v = JSON.parse(localStorage.getItem(key) || '{}');
+      return (v && typeof v === 'object') ? v : {};
+    }catch(e){ return {}; }
+  }
+  const ATL_ST_L = { differenziato:'differenziato', ft:'prima squadra', fisico:'fisioterapista', assente:'assente', parziale:'parziale' };
+  let SIM_ATL_TUTTE = false;
+  // si segnala solo quello che supera l'errore tipico del modello su quella voce
+  const ATL_SOGLIA = { pm:0.12, v20:0.35, v23:0.4, ad:0.25 };
+  function simAtlHTML(o){
+    const A = MOD.atl;
+    let h = '<h3 id="simatl-t">Le atlete</h3>';
+    const rr = o.items.map(it=> simVoce(it)).filter(Boolean);
+    if(!rr.length || !A) return h + '<p class="ss">Con le esercitazioni in fila qui compare quanto fa ogni atleta, a modo suo.</p>';
+    // chi c'e': le atlete viste nelle ultime tre settimane di dati, meno chi oggi e' fuori
+    const ult = Object.keys(A).reduce((m, n)=> A[n].ultima > m ? A[n].ultima : m, '');
+    const lim = ult ? isoOf(new Date(parseDate(ult).getTime() - 21 * 86400000)) : '';
+    const AV = atlDispo();
+    const fuori = [], dentro = [];
+    Object.keys(A).filter(n=> A[n].ultima >= lim && A[n].ft.length).forEach(n=>{
+      if(ATL_FUORI[AV[n]]) fuori.push(n); else dentro.push(n);
+    });
+    if(!dentro.length) return h + '<p class="ss">Nessuna atleta con dati GPS nelle ultime tre settimane.</p>';
+    const t = simTotali(o);
+    const ob = simObiettivo(o);
+    const g = ob && ob.gt ? ob.gt.g : null;
+    const VOCI = [['pm','Distanza','m'],['v20','20-23 km/h','m'],['v23','Oltre 23','m'],['ad','Acc e dec','']];
+    const righe = dentro.map(nm=>{
+      const a = A[nm];
+      const p = { pm:0, v20:0, v23:0, w20:0, acc:0, dec:0 };
+      rr.forEach(r=>{ Object.keys(p).forEach(k=>{ p[k] += (r.p.v[k] || 0) * atlRapporto(a, r.x.lk, k); }); });
+      Object.keys(p).forEach(k=>{ p[k] += (MOD.fuori.rate[k] || 0) * (t.fuori || 0) * (ATL_MEZZO[k] ? 1 + 0.5 * (a.r[k] - 1) : a.r[k]); });
+      p.ad = p.acc + p.dec;
+      // il suo solito: le ultime sei volte di quel giorno della settimana, o le ultime sei in assoluto
+      let base = g!=null ? a.ft.filter(f=> f.g === g).slice(0, 6) : [];
+      const delGiorno = base.length >= 2;
+      if(!delGiorno) base = a.ft.slice(0, 6);
+      const sol = {};
+      ['pm','v20','v23','acc','dec'].forEach(k=> sol[k] = median(base.map(f=> f.v[k])));
+      sol.ad = (sol.acc==null && sol.dec==null) ? null : (sol.acc || 0) + (sol.dec || 0);
+      const dif = {};
+      let mx = 0;
+      VOCI.forEach(v=>{
+        const k = v[0], s0 = sol[k];
+        const minS = k==='v23' ? 15 : (k==='v20' ? 20 : (k==='ad' ? 8 : 300));
+        dif[k] = (s0 != null && s0 >= minS) ? p[k] / s0 - 1 : null;
+        if(dif[k] != null) mx = Math.max(mx, Math.abs(dif[k]) / ATL_SOGLIA[k]);
+      });
+      return { nm:nm, p:p, sol:sol, dif:dif, mx:mx, delGiorno:delGiorno, parz: AV[nm] === 'parziale' };
+    }).sort((x, y)=> y.mx - x.mx);
+    const sopra = righe.filter(r=> VOCI.some(v=> r.dif[v[0]] != null && r.dif[v[0]] >= ATL_SOGLIA[v[0]])).length;
+    const sotto = righe.filter(r=> VOCI.some(v=> r.dif[v[0]] != null && r.dif[v[0]] <= -ATL_SOGLIA[v[0]])).length;
+    h += '<p class="ss">'+righe.length+' atlete in gruppo. Per ognuna la seduta in fila con il suo modo di stare in quelle esercitazioni, confrontata con il suo solito'+
+      (g!=null ? ' del '+GIORNI[g] : '')+'. In viola chi va sopra il suo solito piu&#39; dell&#39;errore tipico (distanza 12%, 20-23 km/h 35%, oltre 23 40%, acc e dec 25%), in grigio chi resta sotto di altrettanto.'+
+      (sopra || sotto ? ' Oggi: '+[sopra ? sopra+' sopra' : '', sotto ? sotto+' sotto' : ''].filter(Boolean).join(', ')+'.' : '')+'</p>';
+    const vis = SIM_ATL_TUTTE ? righe : righe.slice(0, 10);
+    h += '<div class="obt"><table class="gtbl atlt"><thead><tr><th class="nm" scope="col">Atleta</th>'+
+      VOCI.map(v=> '<th scope="col">'+v[1]+(v[2] ? '<span class="u">'+v[2]+'</span>' : '')+'</th>').join('')+'</tr></thead><tbody>'+
+      vis.map(r=> '<tr><td class="nm">'+esc(disp(r.nm))+(r.parz ? '<span class="u">parziale</span>' : (!r.delGiorno && g!=null ? '<span class="u">solito generale</span>' : ''))+'</td>'+
+        VOCI.map(v=>{
+          const k = v[0], d = r.dif[k];
+          const c = d==null ? '' : (d >= ATL_SOGLIA[k] ? ' class="su"' : (d <= -ATL_SOGLIA[k] ? ' class="giu"' : ''));
+          return '<td'+c+'>'+lfmtA(r.p[k])+(d==null ? '' : '<span class="u">'+(Math.abs(d) < 0.05 ? 'come sempre' : pctTxt(1 + d, 1))+'</span>')+'</td>';
+        }).join('')+'</tr>').join('')+
+      '</tbody></table></div>';
+    if(righe.length > 10) h += '<button class="btn sm" type="button" id="sim-atl-tutte">'+(SIM_ATL_TUTTE ? 'Mostra le prime 10' : 'Mostra tutte ('+righe.length+')')+'</button>';
+    if(fuori.length) h += '<div class="cmpft">Fuori oggi, dalla Rosa di oggi: '+fuori.sort(dispSort).map(n=> esc(disp(n))+' ('+(ATL_ST_L[AV[n]] || AV[n])+')').join(', ')+'.</div>';
+    h += '<div class="cmpft">Il rapporto di ogni atleta viene dalle volte in cui ha fatto quelle esercitazioni; con poche volte conta di piu&#39; il suo rapporto di sempre. '+
+      'Provato sulle sedute gia&#39; fatte: errore tipico per atleta distanza 7%, acc e dec 20%, 20-23 km/h 27%, oltre 23 km/h 34%.</div>';
+    return h;
+  }
   function simSoHTML(r, t){
     return '<span class="spz">'+spazioTxt(r.x, r.z)+'</span>'+simOutTxt(r.p, t)+prudenza(r);
   }
@@ -4512,6 +4664,7 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
     const t0 = simTotali(o);
     const sed = simSedute(all);
     let h = '<section class="simbox simtot" id="simtot" aria-labelledby="simtot-t" aria-live="polite">'+simTotHTML(o)+'</section>';
+    h += '<section class="simbox simatl" id="simatl" aria-labelledby="simatl-t">'+simAtlHTML(o)+'</section>';
     h += '<section class="simbox simtar" aria-labelledby="simtar-t">'+simTarHTML(o)+'</section>';
     h += '<section class="simbox" aria-labelledby="simfila-t"><h3 id="simfila-t">In fila</h3>'+
       '<p class="ss">Serie, minuti di lavoro e recupero per ognuna. Senza serie vale la durata solita. Scrivi il campo e quante giocatrici ci stanno: i mq a testa li calcola la pagina e spostano la stima con la regola dello spazio dell&#39;archivio. In grigio il campo della scheda.</p>'+
@@ -4561,6 +4714,8 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
       const t = simTotali(o2);
       const tb = document.getElementById('simtot');
       if(tb) tb.innerHTML = simTotHTML(o2);
+      const ta = document.getElementById('simatl');
+      if(ta) ta.innerHTML = simAtlHTML(o2);
       o2.items.forEach(it=>{
         const row = host.querySelector('.simrow[data-id="'+it.id+'"] .so');
         const r = simVoce(it);
@@ -4638,6 +4793,12 @@ window.ESERC = window.ESERC || {generato:'',stagione:'2025-26',squadra:'Fiorenti
         it.la = null; it.se = null; it.re = null; it.lu = null; it.lg = null; it.ng = null; it.mq = null;
         saveSim(o2); ridisegna();
         toast(vb ? 'Stima rifatta su quella volta: cambia tempi e campo per vedere cosa succede' : 'Stima di nuovo sulla media di tutte le volte');
+        return;
+      }
+      if(cl('#sim-atl-tutte')){
+        SIM_ATL_TUTTE = !SIM_ATL_TUTTE;
+        const ta = document.getElementById('simatl');
+        if(ta) ta.innerHTML = simAtlHTML(loadSim());
         return;
       }
       if(cl('#sim-annulla')){
