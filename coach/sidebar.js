@@ -882,7 +882,18 @@ window.RSGarmin = (function(){
   }
   // zone FC leggibili: Z1..Z5 dai limiti inferiori
   function zoneTxt(z){if(!z||!Array.isArray(z.z))return null;const L=z.z.slice(0,5),o={};L.forEach((v,k)=>{const n=L[k+1];o['Z'+(k+1)]=n?v+'-'+(n-1):'>'+v;});return o;}
-  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt,rpeDaFc};
+  /* I giri da dare all'analisi della corsa. La traccia sta sulla copia di intervals.icu, che i giri li ha
+     ma non sa a quale passo dell'allenamento appartengono: senza passo l'analisi li raggruppava per cambio
+     di ritmo e spezzava una ripetuta in due. Se la stessa uscita c'e' anche da Garmin con i passi, valgono quelli. */
+  function giri(gd,id){
+    const A=gd&&gd.activities||{},arr=x=>x?(Array.isArray(x)?x:Object.values(x)):null,a=A[id];if(!a)return null;
+    const mie=arr(a.laps);if(mie&&mie.some(l=>l&&l.step!=null))return mie;
+    const t=quando(a.start);
+    for(const k in A){const b=A[k];if(!b||k===id||b.source===a.source)continue;const L=arr(b.laps);
+      if(!L||!L.some(l=>l&&l.step!=null))continue;const tb=quando(b.start);if(t&&tb&&Math.abs(t-tb)<=180000)return L;}
+    return mie;
+  }
+  return {tipo,NOMI,attivita,giorno,sintesi,sonno5,riga,oreTxt,prontezza,fondi,iso,quando,chiave,profilo,zoneTxt,rpeDaFc,giri};
 })();
 
 
