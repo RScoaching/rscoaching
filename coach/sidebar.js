@@ -1005,8 +1005,15 @@ window.RSTraccia = (function(){
     // tratti dai giri dell'orologio (per passo dell'allenamento o cambio di ritmo), posati sulla traccia per distanza
     let tratti=[];
     if(opz.giri&&window.RSOrologio&&D[n-1]){let acc=0;const B=window.RSOrologio.blocchi(opz.giri);const med=quant(B.map(b=>b.passo),0.5);
-      tratti=B.map((b,k)=>{const a=acc;acc+=b.m;const i0=D.findIndex(x=>x!=null&&x>=a),i1=D.findIndex(x=>x!=null&&x>=acc);return {k,i0:Math.max(0,i0),i1:i1<0?n-1:i1,m:b.m,s:b.s,passo:b.passo,fc:b.fc,lav:B.length>1&&b.passo<med-5};}).filter(x=>x.i1>x.i0);}
-    const kmSplit=[];if(D[n-1]){let a=0;for(let k=1;k<=Math.ceil(D[n-1]/1000);k++){const lim=k*1000;let b=D.findIndex((x,i)=>i>a&&x!=null&&x>=lim);if(b<0)b=n-1;if(b>a&&(D[b]-D[a])>=150)kmSplit.push({i0:a,i1:b,nome:k<=Math.floor(D[n-1]/1000)?String(k):kmTxt(D[n-1])});a=b;if(b>=n-1)break;}}
+      tratti=B.map((b,k)=>{const a=acc;acc+=b.m;const i0=D.findIndex(x=>x!=null&&x>=a),i1=D.findIndex(x=>x!=null&&x>=acc);return {k,i0:Math.max(0,i0),i1:i1<0?n-1:i1,m:b.m,s:b.s,passo:b.passo,fc:b.fc,lav:B.length>1&&b.passo<med-5,fix:b.m&&b.s?{dist:b.m,dur:b.s}:null};}).filter(x=>x.i1>x.i0);}
+    /* Split per km. La traccia ha un punto ogni 10 s: preso il punto piu' vicino i tempi uscivano a scatti
+       di 10" e una sosta finiva nel km sbagliato. Se l'orologio ha fatto i giri da 1 km valgono quelli (stesso
+       cronometro di Garmin, pause escluse); se no il passaggio di ogni km si interpola fra i due punti vicini. */
+    const kmSplit=[];
+    const tAl=lim=>{const b=D.findIndex(x=>x!=null&&x>=lim);if(b<=0)return b<0?T[n-1]:T[0];let a=b-1;while(a>0&&D[a]==null)a--;return D[b]>D[a]?T[a]+(lim-D[a])/(D[b]-D[a])*(T[b]-T[a]):T[b];};
+    const giriKm=Array.isArray(opz.giri)&&opz.giri.length>2&&opz.giri.slice(0,-1).every(g=>g&&Math.abs((+g.m||0)-1000)<=25&&+g.s>0)?opz.giri:null;
+    if(giriKm){let acc=0;giriKm.forEach((g,k)=>{const a0=acc;acc+=+g.m;const i0=Math.max(0,D.findIndex(x=>x!=null&&x>=a0)),i1b=D.findIndex(x=>x!=null&&x>=acc),i1=i1b<0?n-1:i1b;if(i1>i0)kmSplit.push({i0,i1,nome:k<giriKm.length-1||Math.abs(+g.m-1000)<=25?String(k+1):kmTxt(+g.m),fix:{dist:+g.m,dur:+g.s}});});}
+    else if(D[n-1]){let a=0,ta=T[0],da=D[0]||0;for(let k=1;k<=Math.ceil(D[n-1]/1000);k++){const lim=k*1000;let b=D.findIndex((x,i)=>i>a&&x!=null&&x>=lim);const ult=b<0;if(ult)b=n-1;const tb=ult?T[n-1]:tAl(lim),db=ult?D[n-1]:lim;if(b>a&&(db-da)>=150)kmSplit.push({i0:a,i1:b,nome:k<=Math.floor(D[n-1]/1000)?String(k):kmTxt(D[n-1]),fix:{dist:db-da,dur:tb-ta}});a=b;ta=tb;da=db;if(ult||b>=n-1)break;}}
     let SP=(()=>{try{return localStorage.getItem('rs_trk_split')||'km';}catch(e){return 'km';}})();
     const MG=migliori(tr);   // migliori tratti della corsa, una scheda degli split
     let B=null,Bnome='';   // corsa di confronto: curve tratteggiate sulla stessa scala
@@ -1130,9 +1137,9 @@ window.RSTraccia = (function(){
     function split(){
       const tabs=`<div class="trk2-sph"><b>Split</b><button type="button" data-sp="km" class="${SP!=='tratti'&&SP!=='migliori'?'on':''}">Per km</button>${tratti.length>1?`<button type="button" data-sp="tratti" class="${SP==='tratti'?'on':''}">Per allenamento</button>`:''}${MG.length?`<button type="button" data-sp="migliori" class="${SP==='migliori'?'on':''}">Migliori tratti</button>`:''}<i>clic per zoomare</i></div>`;
       if(SP==='migliori'&&MG.length){spBox.innerHTML=tabs+`<div class="trk2-mgl">${MG.map((x,k)=>`<button type="button" data-mg="${k}" class="${x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1)?'sel':''}"><span>${DMNOME[x.m]}</span><b>${hms(x.s)}</b><i>${mmss(x.s/(x.m/1000))}/km</i></button>`).join('')}</div>`;spBox._S=null;return;}
-      const L=SP==='tratti'&&tratti.length>1?tratti.map(t=>({i0:t.i0,i1:t.i1,nome:String(t.k+1),lav:t.lav})):kmSplit;
+      const L=SP==='tratti'&&tratti.length>1?tratti.map(t=>({i0:t.i0,i1:t.i1,nome:String(t.k+1),lav:t.lav,fix:t.fix})):kmSplit;
       if(L.length<2){spBox.innerHTML=MG.length?tabs:'';return;}
-      const S=L.map(x=>Object.assign({},x,stat(x.i0,x.i1))).filter(x=>x.passo),ps=S.map(x=>x.passo),lo=Math.min(...ps),hi=Math.max(...ps),med=quant(ps,0.5);
+      const S=L.map(x=>{const o=Object.assign({},x,stat(x.i0,x.i1));if(x.fix&&x.fix.dist>0&&x.fix.dur>0){o.dist=x.fix.dist;o.dur=x.fix.dur;o.passo=o.dur/(o.dist/1000);}return o;}).filter(x=>x.passo),ps=S.map(x=>x.passo),lo=Math.min(...ps),hi=Math.max(...ps),med=quant(ps,0.5);
       const tot=S.reduce((t,x)=>t+x.dist,0);
       if(SEMP){spBox.innerHTML=tabs+`<div class="trk2-sl"><div class="trk2-slh"><span>${SP==='tratti'?'Tratto':'Km'}</span><span>Dist.</span><span>Passo</span><span>FC</span></div>${S.map((x,k)=>`<button type="button" data-k="${k}" class="${x.passo<med-3?'svelto':x.passo>med+8?'lento':''}${x.i0>=v0&&x.i1<=v1&&!(v0===0&&v1===n-1)?' sel':''}"><span>${x.nome}</span><span>${kmTxt(x.dist)}</span><b>${mmss(x.passo)}</b><span>${x.fc||'-'}</span></button>`).join('')}</div>`;spBox._S=S;return;}
       spBox.innerHTML=tabs+`
