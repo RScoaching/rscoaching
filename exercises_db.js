@@ -1,0 +1,920 @@
+// ============================================================
+// RS Coaching - Exercise Database
+// 404 exercises (270 inglese + 134 italiano) with YouTube video links
+// Nomi verificati con titoli reali dei video YouTube
+// Video ricontrollati il 07/10/2026: ogni link aperto su YouTube e il titolo confrontato
+// con l'esercizio; corretti i link scalati di una riga, i video spariti e quelli generici
+// ============================================================
+// Structure: { name, cat, group, url }
+// cat values: forza | pliometria | velocita_sprint | mobilita | recupero | priming | resistenza | olimpico
+// ============================================================
+
+(function(){
+// lo stesso file fa anche da service worker dell'app atleta (vedi in fondo): li' non c'e' window
+var window = typeof document !== 'undefined' ? globalThis : self;
+
+var _db = [
+
+  // ─── LOWER BODY: Squat Variations ───────────────────────────
+  {name:'Box Squat',                              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=LYtagQH6P5k'},
+  {name:'Bodyweight Squat',                       cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=yzL1543i1-o'},
+  {name:'Dumbbell Goblet Box Squat',              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=r0dFQWHNrRA'},
+  {name:'Dumbbell Goblet Squat',                  cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=_oZYSM-5ZEs'},
+  {name:'Heel Elevated Goblet Squat',             cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=2r4JzdrMycw'},
+  {name:'High Bar Back Squat',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=kG4iPzsdofA'},
+  {name:'Barbell Front Squat',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=dQS2i7DsnN0'},
+  {name:'Zercher Squat',                          cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=EuDizUUiHEo'},
+  {name:'Leg Press',                              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=B8KqmwdomoU'},
+  {name:'Horizontal Leg Press',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=gKQxAgT7etM'},
+  {name:'Single Leg Leg Press',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=gspQiEILqOw'},
+  {name:'Pendulum Squat',                         cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=J8czl8DDnJ4'},
+  {name:'Hack Squat',                             cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=sw-5KcVZVk8'},
+  {name:'Single Leg Box Squat',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=0m9Xuq4q6W4'},
+  {name:'Kickstand Box Squat',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=YjDnq3oVfXQ'},
+  {name:'Heels Elevated Wall Squat',              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/shorts/hL82TgLzpxg'},
+  {name:'Wall Sit',                               cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=RG7z0P9qrLk'},
+  {name:'Weighted Wall Sit',                      cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=3pf2ZQEAKyM'},
+  {name:'Single Leg Wall Sit',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=PVyBgh_MouM'},
+  {name:'Split Squat',                            cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=LKpxNE_WZDY'},
+  {name:'Hand Supported Split Squat',             cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=0EZWlS2fZQY'},
+  {name:'Upright Split Squat',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=U7fM_XEC0mM'},
+  {name:'Constrained Split Squat',                cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=hwyRKUnFrdU'},
+  {name:'Dumbbell Split Squat',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=U-Tx5BNPqwk'},
+  {name:'Smith Machine Split Squat',              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=SQO9oQvlvu0'},
+  {name:'Reverse Lunge',                          cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=9De3B6tUMsA'},
+  {name:'Dumbbell Reverse Lunge',                 cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=APwE_swEBT4'},
+  {name:'Smith Machine Reverse Lunge',            cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=TK-5lUZZUOs'},
+  {name:'Walking Lunge',                          cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=OeMiq8gEpiE'},
+  {name:'Dumbbell Walking Lunge',                 cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=M8TwYZ2z9VQ'},
+  {name:'RFESS',                                  cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=tcEAeBjSkHI'},
+  {name:'Smith Machine RFESS',                    cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=UMWT44JPP0E'},
+  {name:'Goblet Lateral Lunge',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=jU9fS1pl0rk'},
+  {name:'Lateral Lunge to Bench',                 cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=lfY5SWL4qa4'},
+  {name:'Hand Supported Step Up',                 cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=-DfdJaAepdE'},
+  {name:'Step Up',                                cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=ORE0cd7k85c'},
+  {name:'Lateral Step Down',                      cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=_r_vsI64pyw'},
+  {name:'Wall Constrained Lateral Step Down',     cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=tyyYyAdUEDY'},
+
+  // ─── LOWER BODY: Hinging ────────────────────────────────────
+  {name:'Dumbbell RDL',                           cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=F5ZGAP-ZMaI'},
+  {name:'Kettlebell RDL',                         cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=P0VM5afBhao'},
+  {name:'Barbell RDL',                            cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=sxMZ4Z98wYw'},
+  {name:'Single Leg Deadlift',                    cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Iok3nSFXLUU'},
+  {name:'Single Leg RDL Smith Machine',           cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=XWj6VS-FNvg'},
+  {name:'Trap Bar Deadlift',                      cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=wHadKZqjYDE'},
+  {name:'Conventional Deadlift',                  cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Nr45jEcvKZI'},
+  {name:'Back Extension',                         cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=2pp8UJ6FOFM'},
+  {name:'Back Extension Isometric',               cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=mnNdgr23DU8'},
+  {name:'Weighted Back Extension',                cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=hYhAMi7F2z0'},
+  {name:'Single Leg Back Extension',              cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=nOKCJnV0WTQ'},
+  {name:'GHR Back Extension',                     cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=bzhkOyu4Srk'},
+  {name:'Weighted GHR Back Extension',            cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=LCi5GY-lGpE'},
+  {name:'GHR Back Extension Isometric',           cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=F7udL_EDVwM'},
+  {name:'Bridge',                                 cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=_bCmHW_mLCU'},
+  {name:'Single Leg Bridge',                      cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=U9M8dsoRYzU'},
+  {name:'Feet Elevated Bridge Isometric',         cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=21PQq3Jr7y0'},
+  {name:'Single Leg Feet Elevated Bridge Iso',    cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=8A58oebWtMw'},
+  {name:'Feet Elevated Bridge',                   cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=sMnVc7TFHqM'},
+  {name:'Single Leg Feet Elevated Bridge',        cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=XYH8Vxv-vw0'},
+  {name:'Hip Thrust',                             cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=QatGP6bFeEg'},
+  {name:'Barbell Hip Thrust',                     cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Pw1OFZYuDCg'},
+  {name:'Smith Machine Hip Thrust',               cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=hR8f64fXl88'},
+  {name:'Single Leg Hip Thrust',                  cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=AMk-RkRaqNE'},
+  {name:'Single Leg Weighted Hip Thrust',         cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=IwrJHxrkRjI'},
+
+  // ─── LOWER BODY: Quad Isolation ─────────────────────────────
+  {name:'Leg Extension (45°)',                    cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=xlyePpNZ6tM'},
+  {name:'Single Leg Extension (45°)',             cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=zQhwjsp0RoU'},
+  {name:'Leg Extension Machine',                  cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=s1JfTvyWdTs'},
+  {name:'Single Leg Extension',                   cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=thPi-7zNgBw'},
+  {name:'Isometric Leg Extension (60°) SL',       cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=A2xZFjPUX5M'},
+  {name:'Isometric Leg Extension (60°)',          cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=7A8sZqkqI6s'},
+  {name:'Isometric Leg Extension (90°)',          cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=RiPLR5Dn45Q'},
+  {name:'Isometric Leg Extension (90°) SL',       cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=JyW_wiKq4K0'},
+
+  // ─── LOWER BODY: Hamstring ──────────────────────────────────
+  {name:'Hamstring Curl Sliders Eccentric',       cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=a_FmZ4kz00s'},
+  {name:'Single Leg Hamstring Curl Sliders Ecc',  cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=SLRv1VZIpQs'},
+  {name:'Single Leg Hamstring Curl Sliders',      cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=9zX35aP4Fgs'},
+  {name:'Prone Hamstring Curl',                   cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=041CRsFYBkw'},
+  {name:'Single Leg Prone Hamstring Curl',        cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=2x5VUTGDGlo'},
+  {name:'Seated Hamstring Curl Machine',          cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=ceG0f6ntNcw'},
+  {name:'Single Leg Seated Hamstring Curl',       cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=h5NievMGthk'},
+  {name:'Nordic Hamstring Curl',                  cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=9TemDaazL8A'},
+
+  // ─── LOWER BODY: Adductor ───────────────────────────────────
+  {name:'Glute Bridge with Adductor Squeeze',     cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=y6kquy65vnc'},
+  {name:'Seated Hip Adduction Isometric',         cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=muBqkAeu8WE'},
+  {name:'Hip Adduction Machine',                  cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=CjAVezAggkI'},
+  {name:'Short Copenhagen Plank',                 cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=X0c2IYsnz9s'},
+  {name:'Short Copenhagen Plank Thruster',        cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=f4WdwcwPQnc'},
+  {name:'Copenhagen Plank',                       cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=aDsaGBnvDQo'},
+  {name:'Copenhagen Plank Thruster',              cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=BHhvUNVbaI0'},
+
+  // ─── LOWER BODY: Abductor ───────────────────────────────────
+  {name:'Hip Abduction Machine',                  cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=G_8LItOiZ0Q'},
+  {name:'Lateral Band Walk',                      cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=0cahZCQAR4g'},
+  {name:'Short Side Plank',                       cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=QAg3vvgnbXE'},
+  {name:'Side Plank',                             cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=eRygfYEe1hs'},
+  {name:'Side Plank Thrusters',                   cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=xltPDPYLePU'},
+  {name:'Side Bend Roman Chair',                  cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=K94AABAKps8'},
+  {name:'Side Bend Isometric Roman Chair',        cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=MwyGfdROx7s'},
+
+  // ─── LOWER BODY: Calf ───────────────────────────────────────
+  {name:'Heel Raise',                             cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=zvZp4FJjME4'},
+  {name:'Isometric Heel Raise',                   cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=jkEZDU-V9Cs'},
+  {name:'Single Leg Heel Raise',                  cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=2fiF2Ku8Y_U'},
+  {name:'Isometric Single Leg Heel Raise',        cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=W4CpE2fLtzU'},
+  {name:'Deficit Heel Raise',                     cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=i3tGgGc_PpE'},
+  {name:'Single Leg Deficit Heel Raise',          cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=fpPkZxEDL1U'},
+  {name:'Weighted Single Leg Deficit Heel Raise', cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=eD1kh9WDNqs'},
+  {name:'Smith Machine Deficit Heel Raise',       cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=n4xxSywkAzY'},
+  {name:'Smith Machine SL Deficit Heel Raise',    cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=xHtcneuhBR4'},
+  {name:'Leg Press Heel Raise',                   cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=L5uHusE1wHo'},
+  {name:'Seated Heel Raise',                      cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=rbDYKkYuRmI'},
+  {name:'Seated Single Leg Heel Raise',           cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=4I-b4yKDR54'},
+  {name:'Calf Raise',                             cat:'forza', group:'Calf', url:'https://www.youtube.com/shorts/WuLAyKAHvEY'},
+  {name:'Front Foot Elevated SL Heel Raise',      cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=HrD9me9ui5s'},
+
+  // ─── UPPER BODY: Horizontal Press ───────────────────────────
+  {name:'Dumbbell Floor Press',                   cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=jjlekYs1cfQ'},
+  {name:'Dumbbell Bench Press',                   cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=ZaDlbm8E8Tg'},
+  {name:'Barbell Bench Press',                    cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=ejI1Nlsul9k'},
+  {name:'Machine Chest Press',                    cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=vwGmRvGIfwU'},
+  {name:'Hands Elevated Push Up',                 cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=lLlsJw_FTzg'},
+  {name:'Smith Machine Incline Push Up',          cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=EkQT7HjHWkY'},
+  {name:'Push Up',                                cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=EH9mTZKjDtA'},
+  {name:'Deficit Push Up',                        cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=TVge5xrwlT0'},
+  {name:'Weighted Push Up',                       cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=ljYSjoKSJHg'},
+  {name:'Smith Machine Bench Press',              cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=1UMDU-HmGYc'},
+
+  // ─── UPPER BODY: Horizontal Row ─────────────────────────────
+  {name:'TRX Row',                                cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=6MdRWQlxgSk'},
+  {name:'DB Row',                                 cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/shorts/Vr6yA3LdIak'},
+  {name:'3 Point Row',                            cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=EvXXKK7mhvw'},
+  {name:'Barbell Bent Over Row',                  cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=mzvLvYZmc_g'},
+  {name:'Seated Row (Narrow Grip)',               cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=5Qqw-aXagNs'},
+  {name:'Chest Supported Machine Row',            cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=7oqpWiwSjtY'},
+  {name:'Chest Supported Dumbbell Row',           cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=7oqpWiwSjtY'},
+  {name:'Feet Elevated Inverted Row',             cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=NeaONUgPfWk'},
+  {name:'Kettlebell Gorilla Row',                 cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=UsxcaALqr2c'},
+  {name:'Kettlebell Gorilla Row (Alternating)',    cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=UsxcaALqr2c'},
+
+  // ─── UPPER BODY: Vertical Press ─────────────────────────────
+  {name:'Incline Dumbbell Bench Press',           cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=jMQA3XtJSgo'},
+  {name:'Incline Barbell Bench Press',            cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=PZ7waXzAzZc'},
+  {name:'Single Arm Landmine Press',              cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=ptsbUL-_I38'},
+  {name:'Seated Dumbbell Press',                  cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=RgkzQ008m3I'},
+  {name:'Strict Press',                           cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=I7ND5OficOo'},
+  {name:'Incline Chest Press Machine',            cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=ArMbAy4emuA'},
+  {name:'Shoulder Press Machine',                 cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=ago256sqP8E'},
+  {name:'Smith Machine Incline Press',            cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=8urE8Z8AMQ4'},
+  {name:'Smith Machine Seated Shoulder Press',    cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=OLqZDUUD2b0'},
+  {name:'Handstand Push Up',                      cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=0wDEO6shVjc'},
+
+  // ─── UPPER BODY: Vertical Pull ──────────────────────────────
+  {name:'Assisted Pull Up (Machine)',             cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=oBGH9Uq43cY'},
+  {name:'Chin Up',                                cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=9oLqZ3CQfLI'},
+  {name:'Pull Up',                                cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=VErbHKhPC7Q'},
+  {name:'Half Kneeling Single Arm Lat Pulldown',  cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=XbZgoSNJXm4'},
+  {name:'Alternating Lat Pulldown',               cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=PVisHHBsemk'},
+  {name:'Lat Pulldown',                           cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=sxbFnGt-EFc'},
+  {name:'Close Grip Lat Pulldown',                cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=IjoFCmLX7z0'},
+
+  // ─── UPPER BODY: Bicep / Tricep ─────────────────────────────
+  {name:'Dumbbell Curl',                          cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=l1tXK8CzxB4'},
+  {name:'Incline Bicep Curl',                     cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=XVQBeug_9LU'},
+  {name:'Single Arm Cable Curl',                  cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=0Fofg1WBvFY'},
+  {name:'Cable Curl',                             cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=h9DPY5pCaGA'},
+  {name:'Barbell Curl',                           cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=arUUE_4-boQ'},
+  {name:'Dumbbell Skull Crusher',                 cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=jO2Jl9eZpXk'},
+  {name:'Rope Cable Tricep Pushdown',             cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=y6EdXBdL75A'},
+  {name:'Overhead Cable Tricep Extension',        cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=KvrP8c6eVBc'},
+  {name:'Seated Overhead Tricep Extension',       cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=HADoxgsslvw'},
+
+  // ─── UPPER BODY: Forearm / Elbow ────────────────────────────
+  {name:'Band Wrist Extension',                   cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=RMCR4QFnXz8'},
+  {name:'Band Wrist Flexion',                     cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=Zh6JlA4ABaM'},
+  {name:'Weighted Wrist Flexion',                 cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=vzWj37n7p8E'},
+  {name:'Weighted Wrist Extension',               cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=YkUuq7FFdsY'},
+  {name:'Weighted Wrist Pronation Supination',    cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=TwRnf0T0Be8'},
+  {name:'Weighted Radial Deviation',              cat:'forza', group:'Forearm Elbow', url:'https://www.youtube.com/watch?v=znLSt0AZwHQ'},
+
+  // ─── UPPER BODY: Shoulder / Dips / Chest Flies ──────────────
+  {name:'Strict Dip',                             cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=_YAwqEDgURk'},
+  {name:'Assisted Dip Machine',                   cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=zQ9ELqwBgAE'},
+  {name:'Weighted Dip',                           cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=VNa0hX_y6Fk'},
+  {name:'Dumbbell Neutral Grip Fly',              cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=AVIBmE5iQrQ'},
+  {name:'Incline Dumbbell Neutral Grip Fly',      cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=if2ntm01ty4'},
+  {name:'Chest Fly Machine',                      cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=X3Nj2ZPwW04'},
+  {name:'Dumbbell Reverse Fly',                   cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=hYXnvBRA_SE'},
+  {name:'Machine Reverse Fly',                    cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=5YK4bgzXDp0'},
+  {name:'Chest Supported Rear Delt Fly',          cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=tcHwAmcUMxQ'},
+  {name:'Dumbbell Lateral Raise',                 cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=8aUc9snLOxU'},
+  {name:'Dumbbell Front Raise',                   cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=E-E0EqERFBg'},
+  {name:'Dumbbell Scaption Raise',                cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=whRoFG4LlNo'},
+  {name:'Scaption with Band',                     cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=hZyDvFUoAXk'},
+  {name:'Lateral Raise Band (90°)',               cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=nYiGpQi7OC8'},
+  {name:'Banded Face Pull with ER',               cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=MJEKj5KnW88'},
+  {name:'Banded T (Palms Up)',                    cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=IJLN6YUFwDg'},
+  {name:'Rope Face Pull (ER)',                    cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=qCTlaGin9dQ'},
+  {name:'Sidelying External Rotation',            cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=YzL3koB1mE4'},
+  {name:'Standing Banded ER (Neutral)',           cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=UyBb2-bP0CU'},
+  {name:'Cable Shoulder External Rotation',       cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=X-JP6sJTZAI'},
+  {name:'External Rotation Supported',            cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=aOUM1BrCjUQ'},
+  {name:'Cable Shoulder ER 90/90',                cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=QqX_p9yNqCQ'},
+  {name:'Standing Cable IR (Neutral)',             cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=UXJTk06QMlk'},
+  {name:'Standing Cable IR',                      cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=tk3_vnhav4Q'},
+  {name:'Kneeling Cable IR',                      cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=EnV_cQcjGEE'},
+
+  // ─── UPPER BODY: Cervical / Shoulder Isometrics ─────────────
+  {name:'Cervical Flexion Isometric',             cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=dAl0amB6pjI'},
+  {name:'Cervical Extension Isometric',           cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=KAm0r7ayscE'},
+  {name:'Cervical Side Bend Isometric',           cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=WQaXhEQdNXA'},
+  {name:'Cervical Rotation Isometric',            cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=XNo-P9J11bo'},
+  {name:'Shoulder ER Isometric (Band)',           cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=cVheIBttq1o'},
+  {name:'Shoulder ER Isometric',                  cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=NoNzQc3jLfA'},
+  {name:'Shoulder IR Isometric (Wall)',           cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=Y5PbMAMEwpk'},
+  {name:'Shoulder Flexion Isometric (Wall)',      cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=YfHajwyiXHU'},
+  {name:'Shoulder Extension Isometric (Wall)',    cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=Yhcq_McAyUc'},
+  {name:'Cable Shoulder ER Isometric',            cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=17lysTUp9Qs'},
+  {name:'Shoulder IR Isometric (Band)',           cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=XU9GuyAttoQ'},
+  {name:'Dead Hang',                              cat:'forza', group:'Isometrics', url:'https://www.youtube.com/watch?v=0Bx_Ap7-EwU'},
+
+  // ─── ROM / Mobility ─────────────────────────────────────────
+  {name:'Elbow Flexion Extension ROM',            cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=s-1c9nzQrqA'},
+  {name:'Supine Shoulder Flexion (Dowel)',         cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=3KIZy8lGcWA'},
+  {name:'Supine Shoulder Flexion (Weighted Dowel)',cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=wYvRtqgFn2E'},
+  {name:'Supine Shoulder Flexion',                cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=vlX7l0-0a-U'},
+  {name:'Single Arm Supine Shoulder Flexion',     cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=nTh7AI0AdyM'},
+  {name:'Single Arm Supine Shoulder Flexion (Bench)',cat:'mobilita',group:'ROM',url:'https://www.youtube.com/watch?v=vLD4jxOJsAw'},
+  {name:'Supine Shoulder External Rotation',      cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=VVJrfu8sgkE'},
+  {name:'Thoracic Extension',                     cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=7CQc5JpyZso'},
+  {name:'Supine Shoulder ER (Weighted)',          cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=KuASC28mXLs'},
+  {name:'Supine Shoulder ER (Elevated + Weight)', cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=4NsijLSJdFg'},
+  {name:'Supine Shoulder Internal Rotation',      cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=mrtJi8JWqrs'},
+  {name:'Supine Shoulder IR (Weighted)',          cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=8ChEpZXJUpQ'},
+  {name:'Shoulder Abduction AAROM',               cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=buvA3OXA1iQ'},
+  {name:'Open Book',                              cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=XmpMtdllbfQ'},
+  {name:"Child's Pose",                           cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=_ZX_zTOBgp8'},
+  {name:'Half Kneeling Thoracic Rotation',        cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=rwOYXQianAI'},
+  {name:'Cervical Rotation ROM',                  cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=jbluKek_ubU'},
+  {name:'Cervical Lateral Flexion ROM',           cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=P7T_9ittmwY'},
+  {name:'Cervical Extension ROM',                 cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=dNBWcS2AKes'},
+  {name:'Cervical Flexion ROM',                   cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=gKZjXsXlL9M'},
+  {name:'Shoulder ER 90° Abduction ROM',          cat:'mobilita', group:'ROM', url:'https://www.youtube.com/watch?v=dB2aLpI83wc'},
+
+  // ─── JUMPING / PLYOMETRICS ───────────────────────────────────
+  {name:'Pogo - Hands On Hips',                     cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=Fe8_xhN1CWE'},
+  {name:'Double Leg Lateral Pogo Hops',           cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=8f2pN2KW0bM'},
+  {name:'Double Leg Pogo Jump Fwd & Back',        cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=gdKcGIzqmjw'},
+  {name:'Single Leg Vertical Pogo Hops',          cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=_o0KYe9wjdE'},
+  {name:'Single Leg Lateral Pogo Hops',           cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=ULIYS48NF6I'},
+  {name:'Single Leg Front to Back Pogo Hops',     cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=2ridGndVWbQ'},
+  {name:'Double Leg Box Jump (Step Down)',         cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=QN8aAKRhyQI'},
+  {name:'Single Leg Box Jump',                    cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/shorts/zZtb8DdZ4dg'},
+  {name:'Double Leg Box Jump (Drop Landing)',     cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=f80FDg3g4v0'},
+  {name:'Altitude Drop Box Jump',                 cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=mK8WmsxaQLk'},
+  {name:'Countermovement Jump',                   cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=09yR5a4u-6A'},
+  {name:'Seated Vertical Jump',                   cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=OOG5peEdHyw'},
+  {name:'Repeated Countermovement Jumps',         cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=St2RywvRJWE'},
+  {name:'Weighted Vertical Jump',                 cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=6ETN-gaUOKA'},
+  {name:'Weighted Repeated Vertical Jump',        cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=-BqKZIv_4Rs'},
+  {name:'Pogo Hop',                               cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=8f2pN2KW0bM'},
+  {name:'Hurdle 2 Leg Stick',                     cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=z3hcUdd8K2U'},
+  {name:'Double Leg Hurdle Hop (Mini Bounce)',    cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=9FEPNlVKC-U'},
+  {name:'Double Leg Continuous Hurdle Hop',       cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=c045DJ1R1Hg'},
+  {name:'Single Leg Hurdle Forward Jumps',        cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=LsWN3HQU5oc'},
+  {name:'Single Leg Lateral Hurdle Hops',         cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=iPNiem2uJA8'},
+  {name:'Single Leg Box Jump (CMJ)',              cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/shorts/zZtb8DdZ4dg'},
+  {name:'Broad Jump',                             cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=vPQv1gmrfUo'},
+  {name:'Lateral Box Jump',                       cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=bNHwR90FO0I'},
+  {name:'Depth Drop',                             cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=_ZQ2WHZtLYM'},
+  {name:'Jump 180°',                              cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=lXyiqwNA5ZU'},
+  {name:'Box Drop to Jump',                       cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=2Ph0BRVfLno'},
+  {name:'Lateral Bound to Box',                   cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=jp-zdP1FcJM'},
+  {name:'Depth Jump to Box',                      cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=DxzbXy0lC6Y'},
+
+  // ─── MEDICINE BALL ──────────────────────────────────────────
+  {name:'Med Ball Slam',                          cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=JWJCzl8dNY0'},
+  {name:'Med Ball Rotational Throw',              cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/shorts/2Gu98kumjDc'},
+  {name:'Med Ball Chest Pass',                    cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/shorts/d0AvIcUXjdc'},
+  {name:'Med Ball Overhead Throw',                cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=JWJCzl8dNY0'},
+  {name:'Med Ball Hip Toss',                      cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=qLtiQ3OdQzk'},
+  {name:'Med Ball Overhead Slam',                 cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=PJtAeldIRRU'},
+  {name:'Med Ball Front Facing Rotational Throw', cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=PJtAeldIRRU'},
+  {name:'Med Ball Scoop Toss',                    cat:'pliometria', group:'Medicine Ball', url:'https://www.youtube.com/watch?v=rYwbiNgEw60'},
+
+  // ─── CHANGE OF DIRECTION ────────────────────────────────────
+  {name:'Low Box Shuffle',                        cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=mF8m_hCc5sI'},
+  {name:'Low Box Straddle Jump',                  cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=fwdCibBgV2k'},
+  {name:'Anti-Rotation Loaded Shuffle',           cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=vrTbRJ3uUvM'},
+  {name:'Back Pedal Power',                       cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=zReopyaus3E'},
+  {name:'Hip Turn',                               cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=RXz8A8dq7wk'},
+  {name:'Hip Turn 45° Shuffle',                   cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=c8523JbE6Rk'},
+  {name:'Hip Turn 90° Shuffle',                   cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=e5ULwYNWjjs'},
+  {name:'Hip Turn Angled Lateral Run',            cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=TisM5MaSLOs'},
+  {name:'Hip Turn Vertical Lateral Run',          cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=6m1wpq5nWrQ'},
+  {name:'Lateral Stop',                           cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=8J1QaMk8VDs'},
+  {name:'Lateral Stop to Lateral Run',            cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=sXFwRnqXr64'},
+  {name:'Lunge Stop',                             cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=kvfm8XuLepI'},
+  {name:'Reverse T Stop',                         cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=dGNL6bfDAIw'},
+  {name:'T-Step Backpedal',                       cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=j7Z_e6BPAxI'},
+  {name:'Single Leg Box Jump (Strength)',         cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/shorts/zZtb8DdZ4dg'},
+  {name:'Single Leg CMJ',                         cat:'velocita_sprint', group:'Change of Direction', url:'https://www.youtube.com/watch?v=DOrgis760UY'},
+
+  // ─── SPRINT / VELOCITÀ PREPARATORIA ─────────────────────────
+  // Drills tecnici: URL di tutorial collettivi (no singolo esercizio)
+  {name:'A-Skip',                                  cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=rWZdDUGFjoI'},
+  {name:'B-Skip',                                  cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=3QlxJEZYBxA'},
+  {name:'C-Skip',                                  cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=0yqta_g4Plw'},
+  {name:'Marcia A',                                cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=VWGDgp_Jphg'},
+  {name:'Marcia B',                                cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=TEsQapdgLaM'},
+  {name:'Carioca',                                 cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=R3__Q_SulyM'},
+  {name:'Corsa Calciata',                          cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=iHgbjIbU7zw'},
+  {name:'Butt Kicks',                              cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=iHgbjIbU7zw'},
+  {name:'Corsa Laterale',                          cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=Rtr14W46K1I'},
+  {name:'Passo Strisciato',                        cat:'velocita_prep', group:'Sprint Drills', url:null},
+  {name:'Galloping',                               cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=pFidLNBg5Hc'},
+  {name:'Rimbalzo Elastico',                       cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=gKFNFiwxBR0'},
+  {name:'Corsa Progressiva 30m',                   cat:'velocita_prep', group:'Sprint Drills', url:null},
+  {name:'Sprint Tecnico 20m',                      cat:'velocita_prep', group:'Sprint Drills', url:null},
+  {name:'High Knees',                              cat:'velocita_prep', group:'Sprint Drills', url:'https://www.youtube.com/watch?v=VKc58tjEVfs'},
+
+  // ─── SPRINT VERI ─────────────────────────────────────────────
+  {name:'Sprint 5m',                               cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Sprint 10m',                              cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Sprint 20m',                              cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Sprint 30m',                              cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Sprint 40m',                              cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Sprint 60m',                              cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Accelerazione 0-10m',                     cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Accelerazione 0-20m',                     cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Volante 20m',                             cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=TZPHg7F3G7I'},
+  {name:'Flying Sprint 30m',                       cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=TZPHg7F3G7I'},
+  {name:'Sprint con Sled',                         cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=jIqTuErNI1Y'},
+  {name:'Sprint in Salita',                        cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=VzHQUh5jzsI'},
+  {name:'Sprint con Elastico',                     cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=kW3mLx54b5M'},
+  {name:'Sprint Curve',                            cat:'velocita_sprint', group:'Sprint', url:null},
+  {name:'Partenza da Fermo',                       cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=w4kDDcCjCto'},
+  {name:'Change of Direction 5-10-5',              cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=z-wV9O8y-a0'},
+  {name:'Illinois Agility Test',                   cat:'velocita_sprint', group:'Sprint', url:'https://www.youtube.com/watch?v=k9CYW5NRMAk'},
+
+  // ─── OLYMPIC WEIGHTLIFTING ───────────────────────────────────
+  {name:'Power Clean',                             cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=KwYJTpQ_x5A'},
+  {name:'Hang Power Clean',                        cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=0aP3tgKZcHQ'},
+  {name:'Squat Clean',                             cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=g9Y8QwctmhU'},
+  {name:'Hang Clean',                              cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=DaKC_BEN5bk'},
+  {name:'High Hang Power Clean',                   cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=WZHu9VeusOs'},
+  {name:'Power Snatch',                            cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=tuOiNeTvLJs'},
+  {name:'Hang Power Snatch',                       cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=-mLzQdVAwlw'},
+  {name:'Squat Snatch',                            cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=Iy0vPROslAA'},
+  {name:'Push Jerk',                               cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=VrHNJXoSyXw'},
+  {name:'Split Jerk',                              cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=2GPA-cjUFnA'},
+  {name:'Clean & Jerk',                            cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=PjY1rH4_MOA'},
+  {name:'Clean Pull',                              cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=xx8WkFrST2Y'},
+  {name:'Snatch Pull',                             cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=G1QygZ3Kd3w'},
+  {name:'Dumbbell Power Clean',                    cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=G8a_998VEE8'},
+  {name:'Dumbbell Hang Power Clean',               cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=_1Tp01g9ciU'},
+  {name:'Kettlebell Swing',                        cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=cKx8xE8jJZs'},
+  {name:'Kettlebell Snatch',                       cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=Pm-b2XFeABA'},
+  {name:'Kettlebell Clean',                        cat:'olimpico', group:'Olympic', url:'https://www.youtube.com/watch?v=H4C21y08Wfw'},
+
+  // ─── CONDIZIONAMENTO ─────────────────────────────────────────
+  {name:'Sled Push',                               cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=QwscR2BhdEg'},
+  {name:'Sled Pull',                               cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=EOa0-MNaw6k'},
+  {name:'Sled Row',                                cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=2aFhPAKBUHc'},
+  {name:'Battle Rope Waves',                       cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=62p00uh160Y'},
+  {name:'Battle Rope Alternating Waves',           cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=ZujykKeVZpM'},
+  {name:'Kettlebell Swing (Conditioning)',         cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=qW6ax_Wp0P4'},
+  {name:'Burpees',                                 cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=auBLPXO8Fww'},
+  {name:'Box Jump Burpee',                         cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=HWkusQYVQAo'},
+  {name:'AMRAP',                                   cat:'condizionamento', group:'Conditioning', url:null},
+  {name:'EMOM',                                    cat:'condizionamento', group:'Conditioning', url:null},
+  {name:'Tabata',                                  cat:'condizionamento', group:'Conditioning', url:null},
+  {name:'Complex Barbell',                         cat:'condizionamento', group:'Conditioning', url:null},
+  {name:'Farmer Carry',                            cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=8OtwXwrJizk'},
+  {name:'Single Arm Farmer Carry',                 cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=Hh3EFRiRobc'},
+  {name:'Waiter Carry',                            cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=5ySD7kqFiHw'},
+  {name:'Zercher Carry',                           cat:'condizionamento', group:'Conditioning', url:'https://www.youtube.com/watch?v=VdX_7o6nK4U'},
+
+  // ─── RESISTENZA / ENDURANCE ──────────────────────────────────
+  {name:'Corsa Continua',                          cat:'resistenza', group:'Endurance', url:null},
+  {name:'Corsa Aerobica',                          cat:'resistenza', group:'Endurance', url:null},
+  {name:'Corsa Progressiva',                       cat:'resistenza', group:'Endurance', url:null},
+  {name:'Fartlek',                                 cat:'resistenza', group:'Endurance', url:null},
+  {name:'Intermittente 10-10',                     cat:'resistenza', group:'Endurance', url:null},
+  {name:'Intermittente 15-15',                     cat:'resistenza', group:'Endurance', url:null},
+  {name:'Intermittente 20-20',                     cat:'resistenza', group:'Endurance', url:null},
+  {name:'Intermittente 30-30',                     cat:'resistenza', group:'Endurance', url:null},
+  {name:'30-15 IFT',                               cat:'resistenza', group:'Endurance', url:'https://www.youtube.com/watch?v=-leAotbXVsg'},
+  {name:'Ripetute 100m',                           cat:'resistenza', group:'Endurance', url:null},
+  {name:'Ripetute 200m',                           cat:'resistenza', group:'Endurance', url:null},
+  {name:'Ripetute 400m',                           cat:'resistenza', group:'Endurance', url:null},
+  {name:'Ripetute 800m',                           cat:'resistenza', group:'Endurance', url:null},
+  {name:'Ripetute 1000m',                          cat:'resistenza', group:'Endurance', url:null},
+  {name:'Cooper Test',                             cat:'resistenza', group:'Endurance', url:null},
+  {name:'Yoyo Test IR1',                           cat:'resistenza', group:'Endurance', url:'https://www.youtube.com/watch?v=lAC5iCJTQ08'},
+  {name:'Yoyo Test IR2',                           cat:'resistenza', group:'Endurance', url:'https://www.youtube.com/watch?v=yiAX6oXUTvQ'},
+  {name:'Bici Stazionaria',                        cat:'resistenza', group:'Endurance', url:null},
+  {name:'Vogatore',                                cat:'resistenza', group:'Endurance', url:'https://www.youtube.com/watch?v=4zWu1yuJ0_g'},
+  {name:'Nuoto Continuo',                          cat:'resistenza', group:'Endurance', url:null},
+
+  // ─── PRIMING / ATTIVAZIONE ───────────────────────────────────
+  {name:'CMJ',                                     cat:'priming', group:'Priming', url:'https://www.youtube.com/watch?v=09yR5a4u-6A'},
+  {name:'Drop Jump Reattivo',                      cat:'priming', group:'Priming', url:'https://www.youtube.com/watch?v=3JY0pxIPaC4'},
+  {name:'Contrasto Pliometrico',                   cat:'priming', group:'Priming', url:null},
+  {name:'Attivazione Neuromuscolare',              cat:'priming', group:'Priming', url:null},
+  {name:'Probing',                                 cat:'priming', group:'Priming', url:null},
+  {name:'Sprint Progressivo 20m',                  cat:'priming', group:'Priming', url:null},
+  {name:'Glute Activation Circuit',                cat:'priming', group:'Priming', url:null},
+  {name:'Band Walk Laterale',                      cat:'priming', group:'Priming', url:'https://www.youtube.com/watch?v=0cahZCQAR4g'},
+  {name:'CNS Ramp Up',                             cat:'priming', group:'Priming', url:null},
+  {name:'Reactive Sprint 5m',                      cat:'priming', group:'Priming', url:null},
+  {name:'Hip Activation Circuit',                  cat:'priming', group:'Priming', url:null},
+  {name:'Dynamic Stretching',                      cat:'priming', group:'Priming', url:'https://www.youtube.com/watch?v=ZJBprx7oWAM'},
+  {name:"World's Greatest Stretch",               cat:'priming', group:'Priming', url:'https://www.youtube.com/watch?v=-CiWQ2IvY34'},
+  {name:'Ballistic Warm-Up',                       cat:'priming', group:'Priming', url:null},
+
+  // ─── RECUPERO ────────────────────────────────────────────────
+  {name:'Corsa Blanda',                            cat:'recupero', group:'Recovery', url:null},
+  {name:'Camminata',                               cat:'recupero', group:'Recovery', url:null},
+  {name:'Nuoto Rigenerativo',                      cat:'recupero', group:'Recovery', url:null},
+  {name:'Bici Leggera',                            cat:'recupero', group:'Recovery', url:null},
+  {name:'Stretching Statico',                      cat:'recupero', group:'Recovery', url:null},
+  {name:'Ice Bath',                                cat:'recupero', group:'Recovery', url:null},
+  {name:'Doccia Fredda Contrasto',                 cat:'recupero', group:'Recovery', url:null},
+  {name:'Yoga Atletico',                           cat:'recupero', group:'Recovery', url:null},
+  {name:'Respiro Diaframmatico',                   cat:'recupero', group:'Recovery', url:'https://www.youtube.com/watch?v=vMjTJf4-xz0'},
+  {name:'Foam Rolling Quadricipiti',               cat:'recupero', group:'Recovery', url:'https://www.youtube.com/watch?v=D67EaqRR-fY'},
+  {name:'Foam Rolling IT Band',                    cat:'recupero', group:'Recovery', url:'https://www.youtube.com/watch?v=ENz6C36PLgY'},
+  {name:'Foam Rolling Polpacci',                   cat:'recupero', group:'Recovery', url:'https://www.youtube.com/watch?v=nZZe9ai7Vvw'},
+  {name:'Foam Rolling Dorsali',                    cat:'recupero', group:'Recovery', url:'https://www.youtube.com/watch?v=5S2suclGl7o'},
+  {name:'Massaggio Gambe',                         cat:'recupero', group:'Recovery', url:null},
+
+  // ─── MOBILITÀ AGGIUNTIVA ─────────────────────────────────────
+  {name:'Hip 90/90',                               cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=6o1DGr9oLL4'},
+  {name:'Hip Flexor Stretch',                      cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=vIDzsqJiAIo'},
+  {name:'Pigeon Pose',                             cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=1o7awuDGzag'},
+  {name:'Mobilità Anca Circoli',                   cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=hRMrq6G81p8'},
+  {name:'Mobilità Caviglia',                       cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=ElrpduJn92Y'},
+  {name:'T-Spine Rotation',                        cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=z2zv526I7M8'},
+  {name:'Cat-Cow',                                 cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=kqnua4rHVVA'},
+  {name:'Scorpion Stretch',                        cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=uNDfgnWN2G0'},
+  {name:'Dead Bug',                                cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=4XLEnwUr1d8'},
+  {name:'Pallof Press',                            cat:'mobilita', group:'Hip Mobility', url:'https://www.youtube.com/watch?v=HXrLaqNIkTs'},
+
+  // ─── ESERCIZI IN ITALIANO (alias + esercizi S&C calcio) ──────
+  // Lower Body
+  {name:'Squat',                                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=yzL1543i1-o'},
+  {name:'Back Squat',                              cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=kG4iPzsdofA'},
+  {name:'Stacco da Terra',                         cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Nr45jEcvKZI'},
+  {name:'Romanian Deadlift',                       cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=sxMZ4Z98wYw'},
+  {name:'Sumo Deadlift',                           cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=pfSMst14EFk'},
+  {name:'Hip Thrust Bilanciere',                   cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Pw1OFZYuDCg'},
+  {name:'Glute Bridge',                            cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=_bCmHW_mLCU'},
+  {name:'Nordic Curl',                             cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=9TemDaazL8A'},
+  {name:'Leg Curl',                                cat:'forza', group:'Hamstring', url:'https://www.youtube.com/watch?v=041CRsFYBkw'},
+  {name:'Leg Extension',                           cat:'forza', group:'Quad Isolation', url:'https://www.youtube.com/watch?v=s1JfTvyWdTs'},
+  {name:'Calf Raises',                             cat:'forza', group:'Calf', url:'https://www.youtube.com/watch?v=zvZp4FJjME4'},
+  {name:'Copenhagen Plank',                        cat:'forza', group:'Adductor', url:'https://www.youtube.com/watch?v=aDsaGBnvDQo'},
+  {name:'Affondi',                                 cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=9De3B6tUMsA'},
+  {name:'Affondi Cammino',                         cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=OeMiq8gEpiE'},
+  {name:'Bulgarian Split Squat',                   cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=tcEAeBjSkHI'},
+  {name:'Single Leg RDL',                          cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=Iok3nSFXLUU'},
+  {name:'Single Leg Squat',                        cat:'forza', group:'Squat Variations', url:'https://www.youtube.com/watch?v=0m9Xuq4q6W4'},
+  {name:'Good Morning',                            cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=vKPGe8zb2S4'},
+  {name:'45° Back Extension',                      cat:'forza', group:'Hinging', url:'https://www.youtube.com/watch?v=2pp8UJ6FOFM'},
+  // Upper Body Italian
+  {name:'Panca Piana',                             cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=ejI1Nlsul9k'},
+  {name:'Panca Inclinata',                         cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=PZ7waXzAzZc'},
+  {name:'Panca Declinata',                         cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=LfyQBUKR8SE'},
+  {name:'Panca Piana Manubri',                     cat:'forza', group:'Horizontal Press', url:'https://www.youtube.com/watch?v=ZaDlbm8E8Tg'},
+  {name:'Panca Inclinata Manubri',                 cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=jMQA3XtJSgo'},
+  {name:'Military Press',                          cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=I7ND5OficOo'},
+  {name:'Push Press',                              cat:'forza', group:'Vertical Press', url:'https://www.youtube.com/watch?v=iaBVSJm78ko'},
+  {name:'Dips',                                    cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=_YAwqEDgURk'},
+  {name:'Trazioni',                                cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=VErbHKhPC7Q'},
+  {name:'Lat Machine Presa Larga',                 cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=sxbFnGt-EFc'},
+  {name:'Lat Machine Presa Stretta',               cat:'forza', group:'Vertical Pull', url:'https://www.youtube.com/watch?v=IjoFCmLX7z0'},
+  {name:'Rematore Bilanciere',                     cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/watch?v=mzvLvYZmc_g'},
+  {name:'Rematore Manubrio',                       cat:'forza', group:'Horizontal Row', url:'https://www.youtube.com/shorts/Vr6yA3LdIak'},
+  {name:'Alzate Laterali',                         cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=8aUc9snLOxU'},
+  {name:'Alzate Anteriori',                        cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=E-E0EqERFBg'},
+  {name:'Face Pull',                               cat:'forza', group:'Shoulder RTC', url:'https://www.youtube.com/watch?v=qCTlaGin9dQ'},
+  {name:'Curl Bilanciere',                         cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=arUUE_4-boQ'},
+  {name:'Curl Manubri',                            cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=l1tXK8CzxB4'},
+  {name:'Curl Martello',                           cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=l1tXK8CzxB4'},
+  {name:'Skull Crusher',                           cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=jO2Jl9eZpXk'},
+  {name:'Tricep Pushdown',                         cat:'forza', group:'Bicep Tricep', url:'https://www.youtube.com/watch?v=y6EdXBdL75A'},
+  // Core Italian
+  {name:'Plank',                                   cat:'forza', group:'Core Carry', url:'https://www.youtube.com/watch?v=ASdvN_XEl_c'},
+  {name:'Side Plank',                              cat:'forza', group:'Abductor', url:'https://www.youtube.com/watch?v=eRygfYEe1hs'},
+  {name:'Rollout Ab Wheel',                        cat:'forza', group:'Core Carry', url:'https://www.youtube.com/watch?v=A3uK5TPzHq8'},
+  // Plyometria Italian
+  {name:'Box Jump',                                cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=QN8aAKRhyQI'},
+  {name:'Box Jump Down',                           cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=f80FDg3g4v0'},
+  {name:'Depth Jump',                              cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=3JY0pxIPaC4'},
+  {name:'Hop Unilaterale',                         cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=ULIYS48NF6I'},
+  {name:'Bounding',                                cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=5gmcEuYmk3c'},
+  {name:'Ankle Hop',                               cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=Fe8_xhN1CWE'},
+  {name:'Salto con la Corda',                      cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=vEJ7XbbAMAg'},
+  {name:'Salto in Lungo',                          cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=vPQv1gmrfUo'},
+  {name:'Balzi Orizzontali',                       cat:'pliometria', group:'Jumping', url:'https://www.youtube.com/watch?v=vPQv1gmrfUo'},
+
+  // ─── NOMI ITALIANI (dai programmi atleti) ────────────────────────────────
+  // Panca / Chest Press
+  {name:'Panca Piana',                             cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=rT7DgCr-3pg'},
+  {name:'Panca Piana Manubri',                     cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=QsYre__-aro'},
+  {name:'Panca Inclinata Bilanciere',              cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=DbFgADa2PL8'},
+  {name:'Panca Inclinata Manubri',                 cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=8iPEnn-ltC8'},
+  {name:'Panca Inclinata Multipower',              cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=DbFgADa2PL8'},
+  {name:'Panca Declinata Multipower',              cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=74TpXRT3zj8'},
+  {name:'Panca Presa Stretta',                     cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=nEF0bv2FW94'},
+  {name:'Panca Piana con Fermo',                   cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=rT7DgCr-3pg'},
+  {name:'Chest Press',                             cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=sqNwDkUU_Ps'},
+  {name:'Chest Press Inclinata',                   cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=ig0NyNlSce4'},
+  {name:'Chest Press Presa Stretta',               cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=vKZv8RkmUb8'},
+  {name:'Pec Deck',                                cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=Z57CtFmRMxA'},
+  {name:'Pectoral Machine',                        cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=Z57CtFmRMxA'},
+  {name:'Push Up con Disco',                       cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=IODxDxX7oi4'},
+  {name:'Push Up Piedi Rialzati',                  cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=yvBlNJCvTOI'},
+  // Croci / Flies
+  {name:'Croci Cavi Alti',                         cat:'forza', group:'Croci / Flies',              url:'https://www.youtube.com/watch?v=Iwe6AmxVf7o'},
+  {name:'Croci Cavi Bassi',                        cat:'forza', group:'Croci / Flies',              url:'https://www.youtube.com/watch?v=taI4XduLpTk'},
+  {name:'Croci Cavi Alto e Basso Superset',        cat:'forza', group:'Croci / Flies',              url:'https://www.youtube.com/watch?v=Iwe6AmxVf7o'},
+  {name:'Croci Manubri Panca Inclinata',           cat:'forza', group:'Croci / Flies',              url:'https://www.youtube.com/watch?v=eozdVDA78K0'},
+  {name:'Croci Panca Piana Manubri',               cat:'forza', group:'Croci / Flies',              url:'https://www.youtube.com/watch?v=eozdVDA78K0'},
+  // Spalle
+  {name:'Military Press Bilanciere',               cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=2yjwXTZQDDI'},
+  {name:'Military Press Multipower',               cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=2yjwXTZQDDI'},
+  {name:'Lento Avanti Manubri',                    cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=qEwKCR5JCog'},
+  {name:'Lento Avanti Manubri Seduto',             cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=qEwKCR5JCog'},
+  {name:'Arnold Press',                            cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=vj2w851ZHRM'},
+  {name:'Machine Shoulder Press',                  cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=ago256sqP8E'},
+  {name:'Alzate Laterali Manubri',                 cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=3VcKaXpzqRo'},
+  {name:'Alzate Laterali Cavi',                    cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=Z5FA9aq3L6A'},
+  {name:'Alzate Laterali Manubri Seduto',          cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=3VcKaXpzqRo'},
+  {name:'Alzate Laterali Y su Panca',              cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=3VcKaXpzqRo'},
+  {name:'Alzate Frontali Disco',                   cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=v7tac1hXOfU'},
+  {name:'Alzate Posteriori Manubri',               cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=bwtQHyqwnus'},
+  {name:'Alzate Posteriori Cavi',                  cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=er15V96hG5U'},
+  {name:'Alzate Posteriori Testa Appoggiata',      cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=iCbVhDNpG-Y'},
+  {name:'Face Pull Corda',                         cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=0Po47vvj9g4'},
+  // Schiena
+  {name:'Stacco da Terra',                         cat:'forza', group:'Catena Posteriore',          url:'https://www.youtube.com/watch?v=op9kVnSso6Q'},
+  {name:'Stacchi Rumeni Manubri',                  cat:'forza', group:'Catena Posteriore',          url:'https://www.youtube.com/watch?v=xAL7lHwj30E'},
+  {name:'Stacchi con Manubri',                     cat:'forza', group:'Catena Posteriore',          url:'https://www.youtube.com/watch?v=plb5jEO4Unw'},
+  {name:'Rematore Bilanciere',                     cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=9efgcAjQe7E'},
+  {name:'Rematore Manubrio Singolo',               cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=pYcpY20QaE8'},
+  {name:'Rematore Manubri Appoggiato Panca',       cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=pYcpY20QaE8'},
+  {name:'T-Bar Row',                               cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=KDEl3AmZbVE'},
+  {name:'Trap Bar Squat',                          cat:'forza', group:'Catena Posteriore',          url:'https://www.youtube.com/watch?v=ezWS07xkIzE'},
+  {name:'Lat Machine Presa Larga',                 cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=CAwf7n6Luuc'},
+  {name:'Lat Machine Presa Neutra',                cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=lD7kUhsYO3Y'},
+  {name:'Lat Machine Presa Inversa',               cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=SNiwpA13ZLU'},
+  {name:'Lat Machine Trazybar',                    cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=CAwf7n6Luuc'},
+  {name:'Lat Machine Triangolo',                   cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=gNFMkFL5yPQ'},
+  {name:'Pulley Triangolo',                        cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=GZbfZ033f74'},
+  {name:'Pulley Maniglia',                         cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=GZbfZ033f74'},
+  {name:'Pulley Maniglia Singolo',                 cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=GZbfZ033f74'},
+  {name:'Pulley Presa Larga',                      cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=YKAeU55CkVk'},
+  {name:'Low Row Singolo',                         cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=GZbfZ033f74'},
+  {name:'Low Row',                                 cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=GZbfZ033f74'},
+  {name:'Iliac Pulldown',                          cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=CAwf7n6Luuc'},
+  {name:'Iliac Pulldown in Ginocchio',             cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=H9pRHdfS5J4'},
+  {name:'Pulldown Corda',                          cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=CAwf7n6Luuc'},
+  {name:'Pulldown Braccia Tese',                   cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=G9uNaXGTJ4w'},
+  {name:'Trazioni Presa Larga',                    cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=eGo4IYlbE5g'},
+  {name:'Trazioni Presa Neutra',                   cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=eGo4IYlbE5g'},
+  {name:'Trazioni Solo Eccentrica',                cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=eGo4IYlbE5g'},
+  {name:'Australian Pull Up',                      cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=KOaCM1HMwU0'},
+  {name:'Scrollate Manubri',                       cat:'forza', group:'Schiena',                    url:'https://www.youtube.com/watch?v=_t3lrPI6Ns4'},
+  // Bicipiti
+  {name:'Curl Bilanciere',                         cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=kwG2ipFRgfo'},
+  {name:'Curl Bilanciere EZ',                      cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=aEscWJ3dS3w'},
+  {name:'Curl Bilanciere EZ Schiena Appoggiata',   cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=aEscWJ3dS3w'},
+  {name:'Curl Panca Scott',                        cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=sxA__DoLsgo'},
+  {name:'Curl Panca Inclinata Manubri',            cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=soxrZlIl35U'},
+  {name:'Curl Cavi Alti',                          cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=xaMJYDzqTZg'},
+  {name:'Curl Cavo',                               cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=rfRdD5PKrko'},
+  {name:'Bayesian Curl Cavi',                      cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=S6HnE1fDlaI'},
+  {name:'Bayesian Curl Singolo',                   cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=S6HnE1fDlaI'},
+  {name:'Hammer Curl',                             cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=zC3nLlEvin4'},
+  {name:'Hammer Curl Gomiti Appoggiati',           cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=zC3nLlEvin4'},
+  {name:'Hammer Curl Cavo',                        cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=zC3nLlEvin4'},
+  {name:'Concentration Curl',                      cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=0AUGkch3tzc'},
+  {name:'Spider Curl',                             cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=ke2shAeQ0O8'},
+  {name:'Spider Curl su Panca',                    cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=OK6vpxXZ2pk'},
+  {name:'Curl Manubrio Singolo',                   cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=soxrZlIl35U'},
+  {name:'Curl Alternati con Isometria',            cat:'forza', group:'Bicipiti',                   url:'https://www.youtube.com/watch?v=jo10u7OOg2s'},
+  // Tricipiti
+  {name:'French Press Bilanciere EZ',              cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=d_KZxkY_0cM'},
+  {name:'French Press Manubri',                    cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=YbX7Wd8jQ-Q'},
+  {name:'Rope Pushdown',                           cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=vB5OHsJ3EME'},
+  {name:'Pushdown Corda',                          cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=vB5OHsJ3EME'},
+  {name:'Pushdown Sbarra',                         cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=2-LAMcpzODU'},
+  {name:'Overhead Tricipiti Estensione Cavo',      cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=ns-RGsbzqok'},
+  {name:'Distensioni Sopra la Testa Corda',        cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=ns-RGsbzqok'},
+  {name:'Dip',                                     cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=2z8JmcrW-As'},
+  {name:'Dip Petto Avanti',                        cat:'forza', group:'Panca / Chest Press',        url:'https://www.youtube.com/watch?v=2z8JmcrW-As'},
+  {name:'Dip su Panca',                            cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=0326dy_-CzM'},
+  {name:'Dip Assistite',                           cat:'forza', group:'Tricipiti',                  url:'https://www.youtube.com/watch?v=2z8JmcrW-As'},
+  // Squat e Gambe
+  {name:'Back Squat',                              cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=ultWZbUMPL8'},
+  {name:'Squat',                                   cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=ultWZbUMPL8'},
+  {name:'Squat Bulgaro',                           cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=2C-uNgKwPLE'},
+  {name:'Split Squat Manubri',                     cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=2C-uNgKwPLE'},
+  {name:'Split Squat Multipower',                  cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=2C-uNgKwPLE'},
+  {name:'Goblet Squat Talloni Rialzati',           cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=2r4JzdrMycw'},
+  {name:'Pistol Squat',                            cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=qDcniqddTeE'},
+  {name:'Sissy Squat',                             cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=FTmbNjUu7CI'},
+  {name:'Belt Squat',                              cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=Zj3oT1AauYs'},
+  {name:'Pressa 45°',                              cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=B8KqmwdomoU'},
+  {name:'Pressa Piedi Uniti e Bassi',              cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=B8KqmwdomoU'},
+  {name:'Pressa 1 Gamba',                          cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=gspQiEILqOw'},
+  {name:'Affondi',                                 cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=D7KaRcUTQeE'},
+  {name:'Affondi in Camminata',                    cat:'forza', group:'Squat Variations',           url:'https://www.youtube.com/watch?v=L8fvypPrzzs'},
+  {name:'Leg Extension',                           cat:'forza', group:'Quadricipiti',               url:'https://www.youtube.com/watch?v=YyvSfVjQeL0'},
+  {name:'Leg Extension Singola Eccentrica',        cat:'forza', group:'Quadricipiti',               url:'https://www.youtube.com/watch?v=YyvSfVjQeL0'},
+  {name:'Leg Curl Seduto',                         cat:'forza', group:'Femorali',                   url:'https://www.youtube.com/watch?v=ELOCsoDSmrg'},
+  {name:'Leg Curl Prone',                          cat:'forza', group:'Femorali',                   url:'https://www.youtube.com/watch?v=1Tq3QdYUuHs'},
+  {name:'Calf Leg Press',                          cat:'forza', group:'Polpacci',                   url:'https://www.youtube.com/watch?v=dhRz1Ns60Zg'},
+  {name:'Calf alla Pressa',                        cat:'forza', group:'Polpacci',                   url:'https://www.youtube.com/watch?v=dhRz1Ns60Zg'},
+  {name:'Smith Machine Calf Raises',               cat:'forza', group:'Polpacci',                   url:'https://www.youtube.com/watch?v=JbyjNymZOt0'},
+  {name:'Hip Trust',                               cat:'forza', group:'Glutei',                     url:'https://www.youtube.com/watch?v=SEdqd1n0cvg'},
+  {name:'Kick Rear Cavo',                          cat:'forza', group:'Glutei',                     url:'https://www.youtube.com/watch?v=kBClX5iOtfA'},
+  {name:'Alzate Cavo Cavigliera',                  cat:'forza', group:'Glutei',                     url:'https://www.youtube.com/watch?v=pvnR8CDb4BU'},
+  // Core
+  {name:'Plank',                                   cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=pvIjsG5Svck'},
+  {name:'Plank Laterale',                          cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=Oe9Tp9SvTCE'},
+  {name:'Barchetta Isometrica',                    cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=Gkh7ZF_lcGw'},
+  {name:'Crunch',                                  cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=Xyd_fa5zoEU'},
+  {name:'Crunch Inverso',                          cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=XY8KzdDcMFg'},
+  {name:'Crunch su Panca Declinata',               cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=NPttpwI1vdU'},
+  {name:'Crunch Cavo Alto',                        cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=jBtiDLz0y7s'},
+  {name:'Dead Bug',                                cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=GbSC02oU3To'},
+  {name:'Weighted Russian Twist',                  cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=JyUqwkVpsi8'},
+  {name:'Landmine Rotation',                       cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=e5DP6961WEk'},
+  {name:'Hyperextension',                          cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=ph3pddpKzzw'},
+  {name:'Hyperextension Laterale',                 cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=-aAhcIGcGh4'},
+  {name:'Handstand al Muro',                       cat:'forza', group:'Core',                       url:'https://www.youtube.com/watch?v=hUC_f45ZStI'},
+  // Funzionale / Altro
+  {name:'Single Farmer Carry KB',                  cat:'forza', group:'Funzionale',                 url:'https://www.youtube.com/watch?v=eC7a3Q8QAwE'},
+  {name:'V Push Up Piedi su Rialzo',               cat:'forza', group:'Spalle',                     url:'https://www.youtube.com/watch?v=8URA3YSur2M'}
+
+];
+
+// ============================================================
+// TAGGING ENGINE - inferisce pattern / muscles / equip / side
+// da name + group + cat. Deterministico, nessun campo bloccante.
+// Phase 5: tagging multidimensionale (libreria filtrabile).
+// ============================================================
+function tagExercise(e){
+  var name=(e.name||''); var n=name.toLowerCase();
+  var grp=(e.group||''); var g=grp.toLowerCase();
+  var cat=(e.cat||'');
+  var has=function(){ for(var i=0;i<arguments.length;i++){ if(n.indexOf(arguments[i])>=0) return true; } return false; };
+  var gis=function(){ for(var i=0;i<arguments.length;i++){ if(grp===arguments[i]) return true; } return false; };
+
+  // ---- EQUIP (singolo primario, per priorità) ----
+  var equip='corpo_libero';
+  if(has('smith')) equip='smith';
+  else if(has('sled','slitta')) equip='sled';
+  else if(has('battle rope','corda')) equip='corda';
+  else if(has('med ball','medicine ball','palla medica','wall ball')) equip='palla_medica';
+  else if(has('cable','cavo','pulley','pulldown','lat machine','pushdown')) equip='cavi';
+  else if(has('machine','macchina','leg press','hack squat','pendulum','leg extension','leg curl','pec deck','pec dec','chest press machine','reverse fly machine','calf machine')) equip='macchina';
+  else if(has('barbell','bilanciere','trap bar','zercher','high bar','low bar','front squat','power clean','clean','snatch','jerk','good morning','hip thrust',' bar ')) equip='bilanciere';
+  else if(has('kettlebell','kb ','kb)',' kb','goblet','farmer')) equip='kettlebell';
+  else if(has('dumbbell','manubrio','manubri','db ',' db','incline db')) equip='manubri';
+  else if(has('band','banded','elastico','elastic')) equip='elastico';
+  if(gis('Olympic') && equip==='corpo_libero') equip='bilanciere';
+
+  // ---- SIDE ----
+  var side='bilaterale';
+  if(has('single leg','single arm','single-leg','single-arm','single ','singola','singolo','unilateral','split squat','lunge','affondo','step up','step-up','rfess','bulgarian','pistol','kickstand','b-stance','b stance','skater','one arm','1-arm','one-arm','step down','staggered','sl ','copenhagen','side plank','plank laterale','suitcase','single farmer','offset'))
+    side='unilaterale';
+
+  // ---- PATTERN ----
+  var pattern='altro';
+  if(gis('Squat Variations')){
+    if(has('lunge','affondo','split squat','step up','step-up','rfess','bulgarian','step down','kickstand')) pattern='affondo';
+    else pattern='squat';
+  }
+  else if(gis('Hinging','Hamstring','Femorali','Catena Posteriore','Glutei')) pattern='hinge';
+  else if(gis('Quad Isolation','Quadricipiti')) pattern='isolamento';
+  else if(gis('Calf','Polpacci')) pattern='isolamento';
+  else if(gis('Adductor','Abductor')) pattern='isolamento';
+  else if(gis('Panca / Chest Press','Croci / Flies','Horizontal Press')) pattern='spinta_orizz';
+  else if(gis('Vertical Press','Spalle')) pattern='spinta_vert';
+  else if(gis('Shoulder RTC')){
+    if(has('dip')) pattern='spinta_orizz';
+    else if(has('fly','croci','press','pressa')) pattern='spinta_orizz';
+    else pattern='cuffia_rotatori';
+  }
+  else if(gis('Horizontal Row')) pattern='tirata_orizz';
+  else if(gis('Schiena')){ pattern=has('pull up','pullup','chin up','chinup','pulldown','lat machine','trazion')?'tirata_vert':'tirata_orizz'; }
+  else if(gis('Vertical Pull')) pattern='tirata_vert';
+  else if(gis('Core','Core Carry')) pattern=has('carry','farmer','trasporto')?'trasporto':'core';
+  else if(gis('Bicipiti','Tricipiti','Bicep Tricep','Forearm Elbow')) pattern='isolamento';
+  else if(gis('Olympic')) pattern='olimpico';
+  else if(gis('Jumping','Medicine Ball')) pattern='pliometria';
+  else if(gis('Sprint','Sprint Drills')) pattern='sprint';
+  else if(gis('Change of Direction')) pattern='cambio_direzione';
+  else if(gis('Conditioning','Endurance')) pattern='condizionamento';
+  else if(gis('ROM','Hip Mobility')) pattern='mobilita';
+  else if(gis('Isometrics')) pattern='isometrico';
+  else if(gis('Recovery')) pattern='recupero';
+  else if(gis('Priming')) pattern='priming';
+  else if(gis('Funzionale')) pattern=has('carry','farmer','trasporto')?'trasporto':'condizionamento';
+  if(pattern==='altro'){
+    if(cat==='mobilita') pattern='mobilita';
+    else if(cat==='pliometria') pattern='pliometria';
+    else if(cat==='velocita_sprint'||cat==='velocita_prep') pattern='sprint';
+    else if(cat==='recupero') pattern='recupero';
+    else if(cat==='priming') pattern='priming';
+    else if(cat==='olimpico') pattern='olimpico';
+    else if(cat==='resistenza'||cat==='condizionamento') pattern='condizionamento';
+  }
+
+  // ---- MUSCLES (array) ----
+  var m=[];
+  var add=function(){ for(var i=0;i<arguments.length;i++){ if(m.indexOf(arguments[i])<0) m.push(arguments[i]); } };
+  if(gis('Squat Variations')) add('quadricipiti','glutei');
+  if(gis('Quad Isolation','Quadricipiti')) add('quadricipiti');
+  if(gis('Hinging','Catena Posteriore')) add('femorali','glutei');
+  if(gis('Hamstring','Femorali')) add('femorali');
+  if(gis('Glutei')) add('glutei');
+  if(gis('Calf','Polpacci')) add('polpacci');
+  if(gis('Adductor')) add('adduttori');
+  if(gis('Abductor')) add('abduttori','glutei');
+  if(gis('Panca / Chest Press','Croci / Flies','Horizontal Press')) add('pettorali');
+  if(gis('Horizontal Press')) add('tricipiti','spalle');
+  if(gis('Vertical Press','Spalle')) add('spalle','tricipiti');
+  if(gis('Shoulder RTC')){ if(has('reverse fly','rear','reverse')) add('spalle','schiena'); else if(has('dip')) add('pettorali','tricipiti'); else if(has('fly','croci')) add('pettorali','spalle'); else add('spalle'); }
+  if(gis('Horizontal Row','Vertical Pull','Schiena')) add('schiena','bicipiti');
+  if(gis('Bicipiti')) add('bicipiti');
+  if(gis('Tricipiti')) add('tricipiti');
+  if(gis('Bicep Tricep')) add('bicipiti','tricipiti');
+  if(gis('Forearm Elbow')) add('avambracci');
+  if(gis('Core','Core Carry','Isometrics')) { if(has('cervical','collo')) add('collo'); else if(has('shoulder','spalla')) add('spalle'); else add('core'); }
+  if(gis('Jumping','Sprint','Sprint Drills','Change of Direction')) add('quadricipiti','glutei','femorali','polpacci');
+  if(gis('Olympic')) add('full_body');
+  if(gis('Medicine Ball')) add('core','spalle');
+  if(gis('Conditioning','Endurance')) add('full_body');
+  if(gis('Hip Mobility')) add('anca');
+  if(gis('Funzionale')) add('full_body');
+  if(gis('Priming','Recovery')) add('full_body');
+  if(gis('ROM')){
+    if(has('cervical','collo')) add('collo');
+    else if(has('thoracic','t-spine','open book','child','cat-cow','scorpion')) add('schiena');
+    else if(has('elbow','wrist','gomito','polso')) add('avambracci');
+    else if(has('shoulder','spalla')) add('spalle');
+    else if(has('hip','anca')) add('anca');
+    else add('full_body');
+  }
+  if(m.length===0) add('altro');
+
+  return { pattern:pattern, muscles:m, equip:equip, side:side };
+}
+
+// Arricchisce ogni voce statica con i tag inferiti
+_db.forEach(function(e){ var t=tagExercise(e); e.pattern=t.pattern; e.muscles=t.muscles; e.equip=t.equip; e.side=t.side; });
+
+// Etichette IT per la UI (label leggibili dai tag)
+var TAG_LABELS = {
+  pattern: {squat:'Squat', affondo:'Affondo', hinge:'Hinge', spinta_orizz:'Spinta orizz.', spinta_vert:'Spinta vert.', tirata_orizz:'Tirata orizz.', tirata_vert:'Tirata vert.', isolamento:'Isolamento', core:'Core', trasporto:'Trasporto', cuffia_rotatori:'Cuffia rotatori', olimpico:'Olimpico', pliometria:'Pliometria', sprint:'Sprint', cambio_direzione:'Cambio direzione', condizionamento:'Condizionamento', mobilita:'Mobilità', isometrico:'Isometrico', recupero:'Recupero', priming:'Priming', altro:'Altro'},
+  muscles: {quadricipiti:'Quadricipiti', femorali:'Femorali', glutei:'Glutei', polpacci:'Polpacci', adduttori:'Adduttori', abduttori:'Abduttori', pettorali:'Pettorali', schiena:'Schiena', spalle:'Spalle', bicipiti:'Bicipiti', tricipiti:'Tricipiti', avambracci:'Avambracci', core:'Core', collo:'Collo', anca:'Anca', full_body:'Full body', altro:'Altro'},
+  equip: {corpo_libero:'Corpo libero', bilanciere:'Bilanciere', manubri:'Manubri', kettlebell:'Kettlebell', macchina:'Macchina', smith:'Smith', cavi:'Cavi', elastico:'Elastico', palla_medica:'Palla medica', sled:'Sled', corda:'Battle rope'},
+  side: {bilaterale:'Bilaterale', unilaterale:'Unilaterale'}
+};
+
+// ─── Public API ──────────────────────────────────────────────
+window.EXERCISES_DB = _db;
+window.tagExercise = tagExercise;
+window.EX_TAG_LABELS = TAG_LABELS;
+
+// Name → URL lookup (case-insensitive)
+window.EX_URL_MAP = {};
+_db.forEach(function(e){
+  if(e.url) window.EX_URL_MAP[e.name.toLowerCase().trim()] = e.url;
+});
+
+// vecchia grafia con il trattino lungo: i programmi gia' salvati la usano ancora
+window.EX_URL_MAP['pogo \u2013 hands on hips'] = window.EX_URL_MAP['pogo - hands on hips'];
+
+window.getExUrl = function(name){
+  return window.EX_URL_MAP[(name||'').toLowerCase().trim()] || null;
+};
+
+// Get all exercises for a category
+window.getExBycat = function(cat){
+  return _db.filter(function(e){ return e.cat === cat; });
+};
+
+})();
+
+// ============================================================
+// SERVICE WORKER DELL'APP ATLETA (recupero visibile a schermo bloccato)
+// La lista dei file pubblicati e' fissa, percio' il service worker vive in questo file, che e' gia'
+// online e sta nella cartella principale (scope di tutto il sito). Le pagine lo registrano con
+// navigator.serviceWorker.register('../exercises_db.js', {scope:'../'}). Non intercetta la rete
+// (niente fetch, niente cache): mostra le notifiche del recupero e riapre la seduta al tocco.
+// Messaggi dalla seduta: {tipo:'rec', fine:ms, dopo:testo, url} e {tipo:'stop'}.
+// ============================================================
+if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
+  // Il recupero in corso: un timer che scala nella notifica (aggiornata ogni secondo, senza suono)
+  // quando la seduta non e' in vista; tasti +15 s e Salta; alla fine "Recupero finito" con vibrazione.
+  var R = { id: 0, fine: 0, tot: 0, dopo: '', url: '', icon: '' };
+  var TAG = 'rs-rec';
+  function mmss(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function inVista() {
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
+      return L.some(function(c){ return c.visibilityState === 'visible' && c.focused; });
+    });
+  }
+  function chiudi() {
+    fermaId = 0;
+    return self.registration.getNotifications({ tag: TAG }).then(function(L){ L.forEach(function(n){ n.close(); }); });
+  }
+  function opz(extra) {
+    var o = { tag: TAG, data: { url: R.url }, icon: R.icon || undefined, badge: R.icon || undefined };
+    for (var k in extra) o[k] = extra[k];
+    return o;
+  }
+  // Una sola notifica per recupero. Dove il telefono la aggiorna sul posto senza avvisare di nuovo
+  // (Android, Chrome) il tempo scala dentro la stessa notifica. Su iPhone ogni aggiornamento arriva
+  // come un avviso nuovo, uno al secondo: li' se ne mostra una sola, ferma, con l'ora a cui si riparte.
+  var FERMA = /iPhone|iPad|iPod/.test(navigator.userAgent) || !(self.Notification && 'maxActions' in self.Notification);
+  var fermaId = 0;
+  function ora(ms) { var d = new Date(ms); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2); }
+  function mostra(l) {
+    if (FERMA) {
+      // niente avviso all'inizio: uno solo quando mancano 30 secondi (se il recupero e' abbastanza lungo), poi "Recupero finito"
+      if (l > 30 || R.tot < 45 || fermaId === R.id) return Promise.resolve();
+      fermaId = R.id;
+      return self.registration.showNotification(l >= 28 ? 'Mancano 30 secondi' : 'Mancano ' + l + ' secondi', opz({
+        body: R.dopo ? 'Preparati: ' + R.dopo : 'Preparati a ripartire', silent: true
+      }));
+    }
+    return self.registration.showNotification('Recupero ' + mmss(l), opz({
+      body: R.dopo ? 'Dopo: ' + R.dopo : '', silent: true, renotify: false, requireInteraction: true,
+      actions: [{ action: 'piu', title: '+15 s' }, { action: 'salta', title: 'Salta' }]
+    }));
+  }
+  function finito() {
+    return self.registration.showNotification('Recupero finito', opz({
+      body: R.dopo ? 'Si riparte: ' + R.dopo : 'Si riparte', silent: false, renotify: true,
+      vibrate: [220, 100, 220, 100, 320]
+    }));
+  }
+  function avvisa(msg) {
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){ L.forEach(function(c){ c.postMessage(msg); }); });
+  }
+  // un giro ogni secondo finche' il recupero e' quello in corso (il service worker resta sveglio col waitUntil)
+  function conta(id) {
+    return new Promise(function(fine){
+      function giro() {
+        if (id !== R.id) return fine();
+        var l = Math.ceil((R.fine - Date.now()) / 1000);
+        inVista().then(function(vis){
+          if (id !== R.id) return fine();
+          if (l <= 0) { R.id++; return (vis ? chiudi() : finito()).then(fine, fine); }
+          (vis ? chiudi() : mostra(l)).then(function(){ setTimeout(giro, 1000 - (Date.now() % 1000) + 20); }, function(){ setTimeout(giro, 1000); });
+        });
+      }
+      giro();
+    });
+  }
+  self.addEventListener('install', function(e){ self.skipWaiting(); });
+  self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
+  self.addEventListener('message', function(e){
+    var m = e.data || {};
+    // stop dalla pagina: via il timer, ma l'avviso "Recupero finito" resta finche' l'atleta non lo vede
+    if (m.tipo === 'stop') { R.id++; e.waitUntil(self.registration.getNotifications({ tag: TAG }).then(function(L){ L.forEach(function(n){ if (n.title !== 'Recupero finito') n.close(); }); })); return; }
+    if (m.tipo !== 'rec' || !m.fine) return;
+    R.id++; R.fine = m.fine; R.tot = Math.round((m.fine - Date.now()) / 1000); R.dopo = m.dopo || ''; R.url = m.url || R.url; R.icon = m.icon || R.icon;
+    e.waitUntil(conta(R.id));
+  });
+  self.addEventListener('notificationclick', function(e){
+    var a = e.action;
+    if (a === 'piu' && R.fine) {
+      R.fine += 15000; R.id++;
+      e.waitUntil(Promise.all([avvisa({ tipo: 'rec-fine', fine: R.fine }), conta(R.id)]));
+      return;
+    }
+    if (a === 'salta') {
+      R.id++; e.notification.close();
+      e.waitUntil(Promise.all([chiudi(), avvisa({ tipo: 'rec-salta' })]));
+      return;
+    }
+    e.notification.close();
+    var url = e.notification.data && e.notification.data.url;
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(L){
+      var c = L.find(function(x){ return /session\.html/.test(x.url); }) || L[0];
+      if (c) return c.focus();
+      if (url) return self.clients.openWindow(url);
+    }));
+  });
+}

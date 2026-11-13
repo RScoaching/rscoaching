@@ -1,0 +1,835 @@
+/* Libreria esercizi di prevenzione */
+(function () {
+  'use strict';
+  var ZONE = [["anca","Anca"],["adduttori","Adduttori"],["glutei","Glutei"],["hamstring","Hamstring"],["quadricipite","Quadricipite"],["ginocchio","Ginocchio"],["polpaccio","Polpaccio"],["caviglia","Caviglia"],["piede","Piede"],["core","Core"],["colonna","Colonna"],["spalle","Spalle e dorso"],["mobilita","Mobilita"],["foam","Foam roller"],["potenza","Potenza"]];
+  var TIPO = [["rinforzo","Rinforzo"],["mobilita","Mobilita"],["stretching","Stretching"],["pliometria","Pliometria"]];
+  var DOSE = {"rinforzo":"3x10","mobilita":"2x8","stretching":"2x30s","pliometria":"3x6"};
+  var DB = [
+    {k:'90-90',n:'90-90',z:['anca'],t:'mobilita'},
+    {k:'90-90-con-intrarotazione-anca',n:'90-90 con intrarotazione anca',z:['anca'],t:'mobilita'},
+    {k:'90-90-get-up',n:'90/90 get-Up',z:['mobilita'],t:'rinforzo'},
+    {k:'90-90-heel-lift',n:'90/90 Heel Lift',z:['mobilita'],t:'rinforzo'},
+    {k:'90-90-knee-lift',n:'90/90 knee lift',z:['mobilita'],t:'rinforzo'},
+    {k:'90-90-leg-sweeps',n:'90/90 leg sweeps',z:['mobilita'],t:'mobilita'},
+    {k:'active-hamstring-stretch',n:'Active Hamstring Stretch',z:['mobilita'],t:'stretching'},
+    {k:'addominali-crunch',n:'Addominali crunch',z:['core'],t:'rinforzo'},
+    {k:'adductor-foam-rolling',n:'Adductor foam rolling',z:['foam'],t:'mobilita'},
+    {k:'adductor-machine',n:'Adductor machine',z:['adduttori'],t:'rinforzo'},
+    {k:'adductor-squeeze-wall-sit',n:'Adductor Squeeze Wall Sit',z:['adduttori'],t:'rinforzo'},
+    {k:'adduttor-rock',n:'Adduttor Rock',z:['adduttori'],t:'rinforzo'},
+    {k:'adduzione-anca-con-loop-band',n:'Adduzione anca con loop band',z:['glutei'],t:'rinforzo'},
+    {k:'adduzione-anca-con-miniband',n:'Adduzione anca con miniband',z:['adduttori'],t:'rinforzo'},
+    {k:'adduzione-con-elastico',n:'Adduzione con elastico',z:['adduttori'],t:'rinforzo'},
+    {k:'adduzione-con-elastico-in-divaricata-sagittale',n:'Adduzione con elastico in divaricata sagittale',z:['anca'],t:'rinforzo'},
+    {k:'affondi-con-manubri',n:'Affondi con manubri',z:['quadricipite'],t:'rinforzo'},
+    {k:'affondi-in-avanzamento-con-acquabag',n:'Affondi in avanzamento con acquabag',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-avanti-con-bastone-ed-estensione-colonna',n:'Affondo avanti con bastone ed estensione colonna',z:['colonna'],t:'rinforzo'},
+    {k:'affondo-avanti-con-spinta-su-bosu',n:'Affondo avanti con spinta su Bosu',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-avanti-con-superamento-punta-del-piede-con-elastico',n:'Affondo avanti con superamento punta del piede con elastico',z:['caviglia'],t:'rinforzo'},
+    {k:'affondo-con-angoli-chiusi',n:'Affondo con angoli chiusi',z:['quadricipite'],t:'rinforzo'},
+    {k:'affondo-con-manubri-passo-largo',n:'Affondo con manubri passo largo',z:['anca'],t:'rinforzo'},
+    {k:'affondo-dietro-con-elastico',n:'Affondo dietro con elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-dietro-con-elastico-laterale',n:'Affondo dietro con elastico laterale',z:['core','ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-dietro-con-kb',n:'Affondo dietro con KB',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-dietro-con-spinta',n:'Affondo dietro con spinta',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-dietro-disco-con-elastici',n:'Affondo dietro disco con elastici',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-incrociato-con-trx',n:'Affondo incrociato con TRX',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-laterale-con-elastico',n:'Affondo laterale con elastico',z:['adduttori'],t:'rinforzo'},
+    {k:'affondo-laterale-e-lift-con-elastico',n:'Affondo laterale e lift con elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'affondo-statico-con-peso-monolaterale',n:'Affondo statico con peso monolaterale',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'allungamento-busto',n:'Allungamento busto',z:['mobilita'],t:'stretching'},
+    {k:'allungamento-busto-1',n:'Allungamento busto 1',z:['colonna'],t:'stretching'},
+    {k:'allungamento-busto-2',n:'Allungamento busto 2',z:['colonna'],t:'stretching'},
+    {k:'allungamento-catena-posteriore',n:'Allungamento catena posteriore',z:['caviglia'],t:'stretching'},
+    {k:'allungamento-con-avampiede-rialzato',n:'Allungamento con avampiede rialzato',z:['hamstring'],t:'stretching'},
+    {k:'allungamento-con-elastico',n:'Allungamento con elastico',z:['hamstring'],t:'stretching'},
+    {k:'allungamento-con-ginocchio-al-petto',n:'Allungamento con ginocchio al petto',z:['hamstring'],t:'stretching'},
+    {k:'allungamento-con-tallone-rialzato',n:'Allungamento con tallone rialzato',z:['hamstring'],t:'stretching'},
+    {k:'allungamento-con-trx',n:'Allungamento con TRX',z:['hamstring'],t:'stretching'},
+    {k:'allungamento-dita-dal-piede',n:'Allungamento dita dal piede',z:['piede'],t:'stretching'},
+    {k:'allungamento-dorso-su-fitball',n:'Allungamento dorso su Fitball',z:['mobilita'],t:'stretching'},
+    {k:'allungamento-flessore-e-polpaccio',n:'Allungamento flessore e polpaccio',z:['mobilita'],t:'stretching'},
+    {k:'allungamento-flessori',n:'Allungamento flessori',z:['mobilita'],t:'stretching'},
+    {k:'allungamento-flessori-d-anca-in-ginocchio',n:'Allungamento flessori d\'anca in ginocchio',z:['anca'],t:'stretching'},
+    {k:'allungamento-laterale-anca',n:'Allungamento laterale anca',z:['anca'],t:'stretching'},
+    {k:'allungamento-psoas',n:'Allungamento psoas',z:['anca'],t:'stretching'},
+    {k:'allungamento-psoas-con-foam-roller',n:'Allungamento psoas con foam roller',z:['anca'],t:'stretching'},
+    {k:'allungamento-schiena',n:'Allungamento schiena',z:['mobilita'],t:'stretching'},
+    {k:'allungamento-tensore',n:'Allungamento tensore',z:['anca'],t:'stretching'},
+    {k:'allungamento-tfl',n:'Allungamento TFL',z:['anca'],t:'stretching'},
+    {k:'alzate-frontali-con-manubri',n:'Alzate frontali con manubri',z:['spalle'],t:'rinforzo'},
+    {k:'alzate-frontali-e-alzate-laterali',n:'Alzate frontali e alzate laterali',z:['spalle'],t:'rinforzo'},
+    {k:'alzate-laterali-con-manubri',n:'Alzate laterali con manubri',z:['spalle'],t:'rinforzo'},
+    {k:'ankle-scour',n:'Ankle Scour',z:['caviglia'],t:'mobilita'},
+    {k:'ankle-sit-deep-squat',n:'Ankle sit-deep squat',z:['caviglia'],t:'rinforzo'},
+    {k:'apertura-anca-con-miniband',n:'Apertura anca con miniband',z:['glutei'],t:'mobilita'},
+    {k:'apertura-torace-1',n:'Apertura torace 1',z:['colonna'],t:'mobilita'},
+    {k:'apertura-torace-2',n:'Apertura torace 2',z:['colonna'],t:'mobilita'},
+    {k:'aperture-su-un-fianco-con-elastico',n:'Aperture su un fianco con elastico',z:['glutei'],t:'mobilita'},
+    {k:'aperture-trx',n:'Aperture TRX',z:['spalle'],t:'mobilita'},
+    {k:'aperture-chiusure-in-piedi',n:'Aperture/Chiusure in piedi',z:['mobilita'],t:'mobilita'},
+    {k:'aquabag-sit-up',n:'Aquabag sit up',z:['core'],t:'rinforzo'},
+    {k:'arnold-press',n:'Arnold press',z:['spalle'],t:'rinforzo'},
+    {k:'attivazione-plantare-con-pressione-su-pallina-morbida',n:'Attivazione plantare con pressione su pallina morbida',z:['piede'],t:'rinforzo'},
+    {k:'baby-cobra',n:'Baby Cobra',z:['mobilita'],t:'stretching'},
+    {k:'back-squat',n:'Back squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'balzi-continui-su-ostacoli',n:'Balzi continui su ostacoli',z:['quadricipite'],t:'pliometria'},
+    {k:'balzi-piede-su-step',n:'Balzi piede su step',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'balzo-avanti-con-elastico',n:'Balzo avanti con elastico',z:['hamstring'],t:'pliometria'},
+    {k:'balzo-laterale-con-piede-su-plinto',n:'Balzo laterale con piede su plinto',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'balzo-laterale-con-sprint',n:'Balzo laterale con sprint',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'band-assisted-straight-leg-raise',n:'Band Assisted Straight Leg Raise',z:['mobilita'],t:'rinforzo'},
+    {k:'band-pull-dead-bug',n:'Band pull dead bug',z:['core'],t:'rinforzo'},
+    {k:'banded-ankle-dorsiflexion',n:'Banded ankle Dorsiflexion',z:['mobilita'],t:'rinforzo'},
+    {k:'banded-fire-hydrant',n:'Banded Fire Hydrant',z:['glutei'],t:'rinforzo'},
+    {k:'banded-hamstring-curl',n:'Banded Hamstring Curl',z:['hamstring'],t:'rinforzo'},
+    {k:'banded-hip-shift',n:'Banded hip shift',z:['anca'],t:'mobilita'},
+    {k:'bear-squat',n:'Bear squat',z:['mobilita'],t:'rinforzo'},
+    {k:'bicipiti-curl-manubri-seduto-panca-alta',n:'Bicipiti curl manubri seduto panca alta',z:['spalle'],t:'rinforzo'},
+    {k:'bird-dog',n:'Bird dog',z:['core'],t:'rinforzo'},
+    {k:'bird-dog-su-bosu',n:'Bird dog su bosu',z:['core'],t:'rinforzo'},
+    {k:'bosu-ball-glute-bridge',n:'Bosu ball glute bridge',z:['glutei'],t:'rinforzo'},
+    {k:'bosu-ball-push-ups',n:'Bosu Ball Push Ups',z:['spalle'],t:'rinforzo'},
+    {k:'box-jump',n:'Box Jump',z:['potenza','quadricipite'],t:'pliometria'},
+    {k:'bretzel',n:'Bretzel',z:['quadricipite'],t:'stretching'},
+    {k:'bridge-toe-touch',n:'Bridge toe touch',z:['core'],t:'rinforzo'},
+    {k:'bulgarian-hip-hinge',n:'Bulgarian hip hinge',z:['hamstring'],t:'rinforzo'},
+    {k:'bulgarian-split-squat',n:'Bulgarian split squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'bulgarian-split-squat-con-kettlebell-ed-elastico',n:'Bulgarian split squat con kettlebell ed elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'bulgarian-squat-con-salto',n:'Bulgarian Squat con salto',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'busto-in-ginocchio-1',n:'Busto in ginocchio 1',z:['colonna'],t:'rinforzo'},
+    {k:'busto-in-ginocchio-2',n:'Busto in ginocchio 2',z:['colonna'],t:'rinforzo'},
+    {k:'cadute-da-box',n:'Cadute da Box',z:['quadricipite'],t:'pliometria'},
+    {k:'cadute-da-box-monopodaliche',n:'Cadute da Box monopodaliche',z:['quadricipite'],t:'pliometria'},
+    {k:'calciata-gambe-tese-con-elastico',n:'Calciata gambe tese con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'calf-raise',n:'Calf raise',z:['polpaccio'],t:'rinforzo'},
+    {k:'calf-stretch',n:'Calf Stretch',z:['mobilita'],t:'stretching'},
+    {k:'camminata-in-diagonale-con-elastico',n:'Camminata in diagonale con elastico',z:['glutei'],t:'rinforzo'},
+    {k:'camminata-in-supinazione',n:'Camminata in supinazione',z:['piede'],t:'rinforzo'},
+    {k:'camminata-laterale-a-gambe-tese',n:'Camminata Laterale a Gambe Tese',z:['glutei'],t:'rinforzo'},
+    {k:'camminata-laterale-con-elastico',n:'Camminata laterale con elastico',z:['glutei'],t:'rinforzo'},
+    {k:'camminata-laterale-con-miniband',n:'Camminata laterale con miniband',z:['glutei'],t:'rinforzo'},
+    {k:'camminata-laterale-su-avampiede',n:'Camminata laterale su avampiede',z:['caviglia'],t:'rinforzo'},
+    {k:'camminata-sulle-punte',n:'Camminata sulle punte',z:['polpaccio'],t:'rinforzo'},
+    {k:'camminate-sui-talloni',n:'Camminate sui talloni',z:['polpaccio'],t:'rinforzo'},
+    {k:'cammino-sulle-punte-con-peso',n:'Cammino sulle punte con peso',z:['piede'],t:'rinforzo'},
+    {k:'cat-cow',n:'Cat Cow',z:['mobilita'],t:'mobilita'},
+    {k:'cat-cow-con-scivolamento-bacino-all-indietro',n:'Cat cow con scivolamento bacino all\'indietro',z:['colonna'],t:'mobilita'},
+    {k:'childs-pose',n:'Childs pose',z:['mobilita'],t:'stretching'},
+    {k:'chop-con-elastico',n:'Chop con elastico',z:['core'],t:'rinforzo'},
+    {k:'chop-frontale-monopodalico',n:'Chop frontale monopodalico',z:['core'],t:'rinforzo'},
+    {k:'clam-shell',n:'Clam shell',z:['glutei'],t:'rinforzo'},
+    {k:'clamshells',n:'Clamshells',z:['glutei'],t:'rinforzo'},
+    {k:'copenaghen',n:'Copenaghen',z:['adduttori'],t:'rinforzo'},
+    {k:'copenaghen-flessione-anca-con-elastico',n:'Copenaghen flessione anca con elastico',z:['adduttori'],t:'rinforzo'},
+    {k:'copenhagen-gamba-sotto-flessa-con-peso',n:'Copenhagen gamba sotto flessa con peso',z:['adduttori'],t:'rinforzo'},
+    {k:'copenhagen-gamba-tesa',n:'Copenhagen gamba tesa',z:['adduttori'],t:'rinforzo'},
+    {k:'copenhagen-half-planks',n:'Copenhagen Half Planks',z:['adduttori'],t:'rinforzo'},
+    {k:'copenhagen-in-appoggio-sul-ginocchio',n:'Copenhagen in appoggio sul ginocchio',z:['adduttori'],t:'rinforzo'},
+    {k:'copenhagen-planks',n:'Copenhagen Planks',z:['adduttori'],t:'rinforzo'},
+    {k:'crab-walks',n:'Crab Walks',z:['glutei'],t:'rinforzo'},
+    {k:'croci-con-manubri-su-panca-inclinata',n:'Croci con manubri su panca inclinata',z:['spalle'],t:'rinforzo'},
+    {k:'crunch-alternato-palla-medica',n:'Crunch alternato palla medica',z:['core'],t:'rinforzo'},
+    {k:'crunch-inverso-fitball',n:'Crunch inverso fitball',z:['core'],t:'rinforzo'},
+    {k:'crunch-laterale-con-elastico-e-palla-medica',n:'Crunch laterale con elastico e palla medica',z:['core'],t:'rinforzo'},
+    {k:'crunch-su-fitball',n:'Crunch su fitball',z:['core'],t:'rinforzo'},
+    {k:'curl-con-presa-neutra-o-a-martello-con-manubri-in-piedi',n:'Curl con presa neutra o a martello con manubri in piedi',z:['spalle'],t:'rinforzo'},
+    {k:'curl-manubri-alternato',n:'Curl manubri alternato',z:['spalle'],t:'rinforzo'},
+    {k:'dead-bug-bridge-con-elastico-e-cambio-gamba',n:'Dead bug Bridge con elastico e cambio gamba',z:['core'],t:'rinforzo'},
+    {k:'dead-bug-con-elastico-e-loop-band',n:'Dead bug con elastico e loop band',z:['core'],t:'rinforzo'},
+    {k:'dead-bug-con-rotazione-busto-e-flesso-estensione-ginocchia-c',n:'Dead bug con rotazione busto e flesso estensione ginocchia con loop band',z:['core'],t:'mobilita'},
+    {k:'dead-bug-con-rotazione-palla-medica',n:'Dead bug con rotazione palla medica',z:['core'],t:'mobilita'},
+    {k:'dead-bug-elastico-gambe-alternate',n:'Dead bug elastico gambe alternate',z:['core'],t:'rinforzo'},
+    {k:'deadbug',n:'Deadbug',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-disco',n:'Deadbug con disco',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-elastico',n:'Deadbug con elastico',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-elastico-ai-piedi',n:'Deadbug con elastico ai piedi',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-elastico-dietro',n:'Deadbug con elastico dietro',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-fitball',n:'Deadbug con Fitball',z:['core'],t:'rinforzo'},
+    {k:'deadbug-con-miniband',n:'Deadbug con miniband',z:['core'],t:'rinforzo'},
+    {k:'deadlift',n:'Deadlift',z:['hamstring'],t:'rinforzo'},
+    {k:'deep-squat-rotations',n:'Deep Squat Rotations',z:['mobilita'],t:'rinforzo'},
+    {k:'discesa-cuneo-con-kettlebell',n:'Discesa cuneo con kettlebell',z:['caviglia'],t:'rinforzo'},
+    {k:'distensioni-con-bilanciere-su-panca-piana',n:'Distensioni con bilanciere su panca piana',z:['spalle'],t:'rinforzo'},
+    {k:'distensioni-con-manubri-su-panca-inclinata',n:'Distensioni con manubri su panca inclinata',z:['spalle'],t:'rinforzo'},
+    {k:'divaricata-frontale-anca-con-kettlebell-e-spostamento-latera',n:'Divaricata frontale anca con kettlebell e spostamento laterale peso',z:['anca'],t:'rinforzo'},
+    {k:'dorsali-lat-machine-inverso',n:'Dorsali lat machine inverso',z:['spalle'],t:'rinforzo'},
+    {k:'dorsali-trazioni-sbarra-avanti',n:'Dorsali trazioni sbarra avanti',z:['spalle'],t:'rinforzo'},
+    {k:'dorsiflessione-appoggiato-al-muro',n:'Dorsiflessione appoggiato al muro',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-caviglia-a-muro',n:'Dorsiflessione caviglia a muro',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-caviglia-con-kettlebell',n:'Dorsiflessione caviglia con kettlebell',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-caviglia-in-affondo-con-bastone',n:'Dorsiflessione caviglia in affondo con bastone',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-caviglia-in-affondo-piede-su-plinto-e-porto-g',n:'Dorsiflessione caviglia in affondo piede su plinto e porto ginocchio avanti',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-caviglia-in-piedi-con-loop-band',n:'Dorsiflessione caviglia in piedi con loop band',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-con-elastico',n:'Dorsiflessione con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-in-isometria',n:'Dorsiflessione in Isometria',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-in-plank-sulle-mani',n:'Dorsiflessione in plank sulle mani',z:['caviglia'],t:'mobilita'},
+    {k:'dorsiflessione-su-kb',n:'Dorsiflessione su KB',z:['piede'],t:'mobilita'},
+    {k:'dorsiflexion-march',n:'Dorsiflexion March',z:['anca'],t:'rinforzo'},
+    {k:'dowel-stiff-leg-hinge',n:'Dowel Stiff Leg Hinge',z:['hamstring'],t:'rinforzo'},
+    {k:'drop-squat-to-stick',n:'Drop squat to stick',z:['potenza'],t:'pliometria'},
+    {k:'eccentrica-polpaccio-al-castello',n:'Eccentrica Polpaccio al castello',z:['polpaccio'],t:'rinforzo'},
+    {k:'eccentriche-monopodaliche',n:'Eccentriche monopodaliche',z:['quadricipite'],t:'rinforzo'},
+    {k:'eccentriche-polpaccio',n:'Eccentriche polpaccio',z:['caviglia'],t:'rinforzo'},
+    {k:'eccentriche-soleo-da-seduto-al-castello',n:'Eccentriche Soleo da seduto al castello',z:['polpaccio'],t:'rinforzo'},
+    {k:'elevate-glute-bridge-march',n:'Elevate Glute Bridge March',z:['glutei'],t:'rinforzo'},
+    {k:'elevated-glute-bridge',n:'Elevated Glute Bridge',z:['glutei'],t:'rinforzo'},
+    {k:'elevated-single-leg-bridge',n:'Elevated Single Leg Bridge',z:['glutei'],t:'rinforzo'},
+    {k:'estensione-colonna',n:'Estensione Colonna',z:['colonna'],t:'rinforzo'},
+    {k:'estensione-colonna-con-fitball',n:'Estensione colonna con Fitball',z:['colonna'],t:'rinforzo'},
+    {k:'estensione-colonna-foam-roller-peso',n:'Estensione colonna foam roller + peso',z:['colonna'],t:'mobilita'},
+    {k:'estensione-da-seduto',n:'Estensione da seduto',z:['caviglia'],t:'rinforzo'},
+    {k:'estensione-dita-con-dorsiflessione-caviglia',n:'Estensione dita con dorsiflessione caviglia',z:['piede'],t:'mobilita'},
+    {k:'estensione-flessione-colonna',n:'Estensione flessione colonna',z:['colonna'],t:'rinforzo'},
+    {k:'estensione-laterale-gamba-in-quadrupedia',n:'Estensione laterale gamba in quadrupedia',z:['anca'],t:'rinforzo'},
+    {k:'estensione-toracica-con-foam-roller',n:'Estensione Toracica con Foam Roller',z:['colonna'],t:'mobilita'},
+    {k:'estensione-trasversale-fascia-plantare',n:'Estensione trasversale fascia plantare',z:['piede'],t:'rinforzo'},
+    {k:'estensioni-da-sdraiato',n:'Estensioni da sdraiato',z:['spalle'],t:'rinforzo'},
+    {k:'estensioni-in-quadrupedia',n:'Estensioni in quadrupedia',z:['anca'],t:'rinforzo'},
+    {k:'estensioni-su-fitball',n:'Estensioni su fitball',z:['colonna'],t:'rinforzo'},
+    {k:'estensioni-tricipiti-con-manubrio-a-90-gradi',n:'Estensioni tricipiti con manubrio a 90 gradi',z:['spalle'],t:'rinforzo'},
+    {k:'extrarotatori',n:'Extrarotatori',z:['spalle'],t:'rinforzo'},
+    {k:'figure-4-stretch',n:'Figure 4 Stretch',z:['mobilita'],t:'stretching'},
+    {k:'fire-hydrant',n:'Fire Hydrant',z:['glutei'],t:'rinforzo'},
+    {k:'flessione-anca-con-rotazione-in-piedi',n:'Flessione anca con rotazione in piedi',z:['anca'],t:'mobilita'},
+    {k:'flessione-anca-gamba-tesa-loop-band',n:'Flessione anca gamba tesa loop band',z:['anca'],t:'rinforzo'},
+    {k:'flessione-anca-gambe-tese-con-loop-band',n:'Flessione anca gambe tese con loop band',z:['anca'],t:'rinforzo'},
+    {k:'flessione-anca-loop-bad-panca',n:'Flessione anca loop bad panca',z:['anca'],t:'rinforzo'},
+    {k:'flessione-busto-con-elastico',n:'Flessione busto con elastico',z:['core'],t:'rinforzo'},
+    {k:'flessione-d-anca-con-superamento-ostacolo-da-seduto',n:'Flessione d\'anca con superamento ostacolo da seduto',z:['anca'],t:'rinforzo'},
+    {k:'flessione-d-anca-con-superamento-ostacolo-in-ginocchio',n:'Flessione d\'anca con superamento ostacolo in ginocchio',z:['anca'],t:'rinforzo'},
+    {k:'flessione-dita-con-panno',n:'Flessione dita con panno',z:['piede'],t:'rinforzo'},
+    {k:'flessione-laterale-con-elastico',n:'Flessione laterale con elastico',z:['piede'],t:'rinforzo'},
+    {k:'flessione-passiva-anca-con-elastico',n:'Flessione passiva anca con elastico',z:['anca'],t:'rinforzo'},
+    {k:'flessione-plantare-cdd',n:'Flessione plantare cdd',z:['caviglia'],t:'rinforzo'},
+    {k:'flessione-plantare-in-affondo',n:'Flessione plantare in affondo',z:['caviglia'],t:'rinforzo'},
+    {k:'flessioni-estensioni-con-elastico',n:'Flessioni-estensioni con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'flessioni-estensioni-con-fitball',n:'Flessioni-estensioni con Fitball',z:['hamstring'],t:'rinforzo'},
+    {k:'flessioni-estensioni-con-slide',n:'Flessioni-estensioni con Slide',z:['hamstring'],t:'rinforzo'},
+    {k:'flessioni-estensioni-monopodaliche',n:'Flessioni-estensioni monopodaliche',z:['hamstring'],t:'rinforzo'},
+    {k:'flesso-estensione-ginocchio-con-elastico',n:'Flesso estensione ginocchio con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'flesso-estensione-ginocchio-e-stretching-piriforme',n:'Flesso estensione ginocchio e stretching piriforme',z:['anca'],t:'stretching'},
+    {k:'foam-roll-prayer-stretch',n:'Foam Roll Prayer Stretch',z:['mobilita'],t:'stretching'},
+    {k:'foam-roller-adduttori',n:'Foam Roller adduttori',z:['foam'],t:'mobilita'},
+    {k:'foam-roller-flessori',n:'Foam Roller flessori',z:['foam'],t:'mobilita'},
+    {k:'foam-roller-glute-bridge',n:'Foam Roller Glute Bridge',z:['hamstring'],t:'mobilita'},
+    {k:'foam-roller-glutei',n:'Foam Roller glutei',z:['foam'],t:'mobilita'},
+    {k:'foam-roller-hamstring-walk',n:'Foam Roller Hamstring Walk',z:['hamstring'],t:'mobilita'},
+    {k:'foam-roller-polpacci',n:'Foam Roller Polpacci',z:['foam'],t:'mobilita'},
+    {k:'foam-roller-quadricipite',n:'Foam Roller quadricipite',z:['foam'],t:'mobilita'},
+    {k:'foam-roller-single-leg-bridge',n:'Foam Roller Single Leg Bridge',z:['hamstring'],t:'mobilita'},
+    {k:'forward-hip-thrust',n:'Forward Hip Thrust',z:['mobilita'],t:'rinforzo'},
+    {k:'frenata-flessori-su-step',n:'Frenata flessori su step',z:['hamstring'],t:'rinforzo'},
+    {k:'front-raise-pulse',n:'Front raise pulse',z:['spalle'],t:'rinforzo'},
+    {k:'giri-kettlebell-intorno-alla-gamba-in-monopodalico',n:'Giri kettlebell intorno alla gamba in monopodalico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'glute-bridge',n:'Glute bridge',z:['glutei'],t:'rinforzo'},
+    {k:'glutei-elastico',n:'Glutei elastico',z:['glutei'],t:'rinforzo'},
+    {k:'half-knee-archer',n:'Half knee archer',z:['mobilita'],t:'rinforzo'},
+    {k:'half-kneel-quads-stretch',n:'Half kneel quads stretch',z:['mobilita'],t:'stretching'},
+    {k:'half-kneeling-t-spine-rotation',n:'Half kneeling t spine rotation',z:['mobilita'],t:'mobilita'},
+    {k:'hamstring-bridge',n:'Hamstring Bridge',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-bridge-kicks',n:'Hamstring Bridge Kicks',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-bridge-monopodalico',n:'Hamstring Bridge monopodalico',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-bridge-walks',n:'Hamstring Bridge Walks',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-isoinerziale',n:'Hamstring isoinerziale',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-marching-bridge',n:'Hamstring marching bridge',z:['hamstring'],t:'rinforzo'},
+    {k:'hamstring-walk',n:'Hamstring Walk',z:['hamstring'],t:'rinforzo'},
+    {k:'high-to-low-split-squat-chop',n:'High to Low Split Squat Chop',z:['core'],t:'rinforzo'},
+    {k:'hip-adductor-rock-back',n:'Hip adductor rock back',z:['anca'],t:'rinforzo'},
+    {k:'hip-circles',n:'Hip circles',z:['glutei'],t:'rinforzo'},
+    {k:'hip-hinge',n:'Hip hinge',z:['hamstring'],t:'rinforzo'},
+    {k:'hip-hinge-a-gambe-tese',n:'Hip Hinge a gambe tese',z:['hamstring'],t:'rinforzo'},
+    {k:'hip-hinge-con-bastone',n:'Hip Hinge con bastone',z:['hamstring'],t:'rinforzo'},
+    {k:'hip-hinge-con-elastico',n:'Hip Hinge con elastico',z:['glutei','hamstring'],t:'rinforzo'},
+    {k:'hip-hinge-monopodalico-con-elastico',n:'Hip Hinge monopodalico con elastico',z:['glutei'],t:'rinforzo'},
+    {k:'hip-thrust',n:'Hip Thrust',z:['glutei'],t:'rinforzo'},
+    {k:'hip-thrust-elastico-con-cambio-gamba',n:'Hip thrust elastico con cambio gamba',z:['glutei'],t:'rinforzo'},
+    {k:'hip-thrust-monopodalico',n:'Hip thrust monopodalico',z:['glutei'],t:'rinforzo'},
+    {k:'inchworm-walk',n:'Inchworm Walk',z:['hamstring'],t:'rinforzo'},
+    {k:'inclinazione-laterale-colonna-da-prono',n:'Inclinazione laterale colonna da prono',z:['colonna'],t:'rinforzo'},
+    {k:'incline-bench-ankle-dorsiflexions',n:'Incline Bench Ankle Dorsiflexions',z:['caviglia'],t:'rinforzo'},
+    {k:'intrarotatori',n:'Intrarotatori',z:['spalle'],t:'rinforzo'},
+    {k:'intrarotazione-anca-con-bastone',n:'Intrarotazione anca con bastone',z:['anca'],t:'mobilita'},
+    {k:'intrarotazione-anca-in-piedi',n:'Intrarotazione anca in piedi',z:['anca'],t:'mobilita'},
+    {k:'intrarotazione-anca-su-un-fianco',n:'Intrarotazione anca su un fianco',z:['anca'],t:'mobilita'},
+    {k:'intrarotazione-supina-con-miniband',n:'Intrarotazione supina con miniband',z:['anca'],t:'mobilita'},
+    {k:'isometria-con-miniband',n:'Isometria con miniband',z:['anca'],t:'rinforzo'},
+    {k:'isometria-ginocchio-sollevato',n:'Isometria ginocchio sollevato',z:['anca'],t:'rinforzo'},
+    {k:'isometria-polpaccio-a-gamba-estesa-alla-pressa',n:'Isometria Polpaccio a gamba estesa alla pressa',z:['polpaccio'],t:'rinforzo'},
+    {k:'isometria-polpaccio-a-gamba-flessa-al-castello',n:'Isometria Polpaccio a gamba flessa al castello',z:['polpaccio'],t:'rinforzo'},
+    {k:'isometria-polpaccio-a-gamba-flessa-alla-pressa',n:'Isometria Polpaccio a gamba flessa alla pressa',z:['polpaccio'],t:'rinforzo'},
+    {k:'isometria-polpaccio-a-gamba-stesa-al-castello',n:'Isometria Polpaccio a gamba stesa al castello',z:['polpaccio'],t:'rinforzo'},
+    {k:'isometric-kick-back',n:'Isometric Kick Back',z:['glutei'],t:'rinforzo'},
+    {k:'isometric-row-squats',n:'Isometric Row Squats',z:['glutei'],t:'rinforzo'},
+    {k:'isometrie',n:'Isometrie',z:['hamstring'],t:'rinforzo'},
+    {k:'isometrie-con-carico',n:'Isometrie con carico',z:['caviglia'],t:'rinforzo'},
+    {k:'japanese-sit-stretch',n:'Japanese Sit Stretch',z:['mobilita'],t:'stretching'},
+    {k:'kettlebell-ankle-dorsiflexion',n:'Kettlebell ankle dorsiflexion',z:['caviglia'],t:'rinforzo'},
+    {k:'kettlebell-around-the-world-su-mezzo-rullo',n:'Kettlebell around the world su mezzo rullo',z:['caviglia'],t:'rinforzo'},
+    {k:'kettlebell-hip-shift',n:'Kettlebell Hip Shift',z:['mobilita'],t:'mobilita'},
+    {k:'kettlebell-split-squat',n:'Kettlebell split squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'kettlebell-weight-shift',n:'Kettlebell weight shift',z:['mobilita'],t:'mobilita'},
+    {k:'knee-tap-squats',n:'Knee Tap Squats',z:['mobilita'],t:'rinforzo'},
+    {k:'knee-to-elbow-plank',n:'Knee to elbow plank',z:['core'],t:'rinforzo'},
+    {k:'kneeling-hip-and-quad-stretch',n:'Kneeling hip and quad stretch',z:['mobilita'],t:'stretching'},
+    {k:'kneeling-t-spine-mobility',n:'Kneeling T-spine mobility',z:['mobilita'],t:'mobilita'},
+    {k:'landmine-kneeling-hip-thrust',n:'Landmine Kneeling Hip Thrust',z:['glutei'],t:'rinforzo'},
+    {k:'lat-pull-deadlift',n:'Lat Pull Deadlift',z:['glutei'],t:'rinforzo'},
+    {k:'lats-activated-deadbug',n:'Lats activated deadbug',z:['core'],t:'rinforzo'},
+    {k:'leg-balance-warrior',n:'Leg Balance Warrior',z:['hamstring'],t:'rinforzo'},
+    {k:'leg-curl-elastico-divaricata-sagittale',n:'Leg curl elastico divaricata sagittale',z:['hamstring'],t:'rinforzo'},
+    {k:'leg-curl-elastico-gamba-singola',n:'Leg curl elastico gamba singola',z:['hamstring'],t:'rinforzo'},
+    {k:'leg-lower',n:'Leg Lower',z:['core'],t:'rinforzo'},
+    {k:'leg-lower-con-elastico',n:'Leg Lower con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'lift-con-elastico',n:'Lift con elastico',z:['core'],t:'rinforzo'},
+    {k:'loop-band-hamstring-curl',n:'Loop Band Hamstring Curl',z:['hamstring'],t:'rinforzo'},
+    {k:'lunge-reach-twist',n:'Lunge Reach Twist',z:['mobilita'],t:'rinforzo'},
+    {k:'marching-bridge-con-loop-band-intorno-ai-piedi',n:'Marching bridge con loop band intorno ai piedi',z:['glutei'],t:'rinforzo'},
+    {k:'marching-bridge-rialzato-con-miniband',n:'Marching Bridge rialzato con miniband',z:['hamstring'],t:'rinforzo'},
+    {k:'marching-side-plank-con-elastico',n:'Marching side plank con elastico',z:['core'],t:'rinforzo'},
+    {k:'marching-side-plank-con-loop-band',n:'Marching side plank con loop band',z:['core'],t:'rinforzo'},
+    {k:'military-plank',n:'Military plank',z:['core'],t:'rinforzo'},
+    {k:'mobilita-a-90-a-terra',n:'Mobilita a 90 a terra',z:['mobilita'],t:'mobilita'},
+    {k:'mobilita-a-terra-caviglia',n:'Mobilita a terra caviglia',z:['mobilita'],t:'mobilita'},
+    {k:'mobilita-anca-con-panca-in-quadrupedia',n:'Mobilita anca con panca in quadrupedia',z:['anca'],t:'mobilita'},
+    {k:'mobilita-anca-da-posizione-di-piegamento',n:'Mobilita anca da posizione di piegamento',z:['anca'],t:'mobilita'},
+    {k:'mobilita-anca-da-seduti',n:'Mobilita anca da seduti',z:['anca'],t:'mobilita'},
+    {k:'mobilita-anca-su-panca',n:'Mobilita anca su panca',z:['anca'],t:'mobilita'},
+    {k:'mobilita-attiva-da-step',n:'Mobilita attiva da Step',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-bacino-e-anca-da-seduto',n:'Mobilita bacino e anca da seduto',z:['mobilita'],t:'mobilita'},
+    {k:'mobilita-busto-1',n:'Mobilita busto 1',z:['colonna'],t:'mobilita'},
+    {k:'mobilita-busto-2',n:'Mobilita busto 2',z:['colonna'],t:'mobilita'},
+    {k:'mobilita-busto-a-terra',n:'Mobilita busto a terra',z:['mobilita'],t:'mobilita'},
+    {k:'mobilita-caviglia-con-pallina',n:'Mobilita caviglia con pallina',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-con-avampiede-rialzato-e-carico-anteriore',n:'Mobilita con avampiede rialzato e carico anteriore',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-con-elastico',n:'Mobilita con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-dita',n:'Mobilita dita',z:['piede'],t:'mobilita'},
+    {k:'mobilita-in-ginocchio',n:'Mobilita in ginocchio',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-in-ginocchio-con-carico',n:'Mobilita in ginocchio con carico',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-in-piedi',n:'Mobilita in piedi',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-in-piedi-con-elastico',n:'Mobilita in piedi con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-in-squat-profondo',n:'Mobilita in squat profondo',z:['anca'],t:'mobilita'},
+    {k:'mobilita-laterale-con-elastico',n:'Mobilita laterale con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-laterale-tronco',n:'Mobilita Laterale Tronco',z:['colonna'],t:'mobilita'},
+    {k:'mobilita-su-cuneo',n:'Mobilita su cuneo',z:['caviglia'],t:'mobilita'},
+    {k:'mobilita-su-panca',n:'Mobilita su panca',z:['caviglia'],t:'mobilita'},
+    {k:'mobilizzazione-alluce-con-pallina-sotto-la-pianta',n:'Mobilizzazione alluce con pallina sotto la pianta',z:['piede'],t:'rinforzo'},
+    {k:'monster-band-walks',n:'Monster band walks',z:['glutei'],t:'rinforzo'},
+    {k:'monster-walks',n:'Monster Walks',z:['glutei'],t:'rinforzo'},
+    {k:'mountain-climber-con-loop-band',n:'Mountain climber con loop band',z:['anca'],t:'rinforzo'},
+    {k:'mountain-climber-palla-medica',n:'Mountain climber palla medica',z:['core'],t:'rinforzo'},
+    {k:'nordic-hamstring-con-elastico',n:'Nordic Hamstring con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'overhead-squat',n:'Overhead squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'pallof-deadbug',n:'Pallof deadbug',z:['core'],t:'rinforzo'},
+    {k:'pallof-press',n:'Pallof press',z:['core'],t:'rinforzo'},
+    {k:'pallof-press-con-affondo-dietro',n:'Pallof Press con affondo dietro',z:['core'],t:'rinforzo'},
+    {k:'pallof-press-in-ginocchio-con-torsione',n:'Pallof press in ginocchio con torsione',z:['core'],t:'rinforzo'},
+    {k:'pallof-press-monopodalico',n:'Pallof Press Monopodalico',z:['core'],t:'rinforzo'},
+    {k:'pallof-press-monopodalico-e-vado-sulla-punta',n:'Pallof Press monopodalico e vado sulla punta',z:['core'],t:'rinforzo'},
+    {k:'pallof-press-monopodalico-mani-sopra-la-testa',n:'Pallof press monopodalico mani sopra la testa',z:['core'],t:'rinforzo'},
+    {k:'palloff-press-affondo-avanti-mani-sopra-la-testa',n:'Palloff press affondo avanti mani sopra la testa',z:['core'],t:'rinforzo'},
+    {k:'palloff-press-drop-jump',n:'Palloff press drop jump',z:['core'],t:'pliometria'},
+    {k:'palloff-press-in-affondo-con-rotazione',n:'Palloff press in affondo con rotazione',z:['core'],t:'mobilita'},
+    {k:'passaggio-kb-in-monopodalico',n:'Passaggio KB in monopodalico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'passo-laterale-con-elastico-flessione-anca',n:'Passo laterale con elastico + flessione anca',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'passo-laterale-con-rotazione-e-step-up',n:'Passo laterale con rotazione e step up',z:['ginocchio','quadricipite'],t:'mobilita'},
+    {k:'passo-laterale-e-frenata-con-incrocio-con-elastico',n:'Passo laterale e frenata con incrocio con elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'pettorali-spinte-panca-piana-bilanciere',n:'Pettorali spinte panca piana bilanciere',z:['spalle'],t:'rinforzo'},
+    {k:'pidgeon-position',n:'Pidgeon position',z:['anca'],t:'rinforzo'},
+    {k:'pidgeon-stretch',n:'Pidgeon stretch',z:['mobilita'],t:'stretching'},
+    {k:'pidgeon-stretch-piede-su-plinto',n:'Pidgeon stretch piede su plinto',z:['anca'],t:'stretching'},
+    {k:'pidgeon-stretch-hip-hinge-con-kettlebell',n:'Pidgeon stretch-hip hinge con kettlebell',z:['anca'],t:'stretching'},
+    {k:'pidgeon-stretchrotazione-interna-anca-con-elastico',n:'Pidgeon stretchrotazione interna anca con elastico',z:['anca'],t:'stretching'},
+    {k:'pigeon-pose-lateral-distraction',n:'Pigeon Pose Lateral Distraction',z:['mobilita'],t:'stretching'},
+    {k:'pigeon-stretch',n:'Pigeon Stretch',z:['mobilita'],t:'stretching'},
+    {k:'piriformis-stretch',n:'Piriformis stretch',z:['mobilita'],t:'stretching'},
+    {k:'plank-con-adduzione-anca-loop-band',n:'Plank con adduzione anca loop band',z:['core'],t:'rinforzo'},
+    {k:'plank-con-piedi-rialzati-e-spostamento-laterale-kb',n:'Plank con piedi rialzati e spostamento laterale KB',z:['core'],t:'rinforzo'},
+    {k:'plank-frontale',n:'Plank frontale',z:['core'],t:'rinforzo'},
+    {k:'plank-lat-gamba-elevata',n:'Plank lat gamba elevata',z:['core'],t:'rinforzo'},
+    {k:'plank-laterale-crunch',n:'Plank laterale + crunch',z:['core'],t:'rinforzo'},
+    {k:'plank-laterale-con-divaricata-frontale-e-kettlebell',n:'Plank laterale con divaricata frontale e kettlebell',z:['core'],t:'rinforzo'},
+    {k:'plank-laterale-con-divaricata-frontale-loop-band',n:'Plank laterale con divaricata frontale loop band',z:['core'],t:'rinforzo'},
+    {k:'plank-laterale-con-spinta-elastico',n:'Plank laterale con spinta elastico',z:['core'],t:'rinforzo'},
+    {k:'plank-laterale-rotazione-manubrio',n:'Plank laterale rotazione manubrio',z:['core'],t:'mobilita'},
+    {k:'plank-laterale-su-panca-con-gamba-esterna',n:'Plank laterale su panca con gamba esterna',z:['adduttori'],t:'rinforzo'},
+    {k:'plank-palla-medica-e-tocco-spalla-opposta',n:'Plank palla medica e tocco spalla opposta',z:['core'],t:'rinforzo'},
+    {k:'plank-roll-out-ruota',n:'Plank roll out ruota',z:['core'],t:'rinforzo'},
+    {k:'plank-salgo-e-scendo-da-palla-medica',n:'Plank salgo e scendo da palla medica',z:['core'],t:'rinforzo'},
+    {k:'plank-sulle-mani',n:'Plank sulle mani',z:['core'],t:'rinforzo'},
+    {k:'plank-sulle-mani-con-row',n:'Plank sulle mani con Row',z:['core'],t:'rinforzo'},
+    {k:'plank-tocco-mano-piede',n:'Plank tocco mano piede',z:['core'],t:'rinforzo'},
+    {k:'plank-toe-touch',n:'Plank toe touch',z:['core'],t:'rinforzo'},
+    {k:'plank-down-dog',n:'Plank-down dog',z:['core'],t:'rinforzo'},
+    {k:'planta-dorsiflessione-caviglia-in-bridge-su-rullo',n:'Planta-Dorsiflessione caviglia in bridge su rullo',z:['caviglia'],t:'mobilita'},
+    {k:'plantiflessione-caviglia',n:'Plantiflessione caviglia',z:['caviglia'],t:'rinforzo'},
+    {k:'plantiflessione-caviglia-con-kettlebell-su-cuneo-ginocchio-p',n:'Plantiflessione caviglia con kettlebell su cuneo ginocchio piegato e steso',z:['caviglia'],t:'rinforzo'},
+    {k:'plantiflessione-caviglia-in-accosciata-su-disco',n:'Plantiflessione caviglia in accosciata su disco',z:['caviglia'],t:'rinforzo'},
+    {k:'pogo-jump',n:'Pogo Jump',z:['caviglia'],t:'pliometria'},
+    {k:'ponte-con-elastico',n:'Ponte con elastico',z:['glutei'],t:'rinforzo'},
+    {k:'ponte-con-miniband-e-flessione-anca',n:'Ponte con miniband e flessione anca',z:['anca'],t:'rinforzo'},
+    {k:'ponte-con-spinta-su-avampiede',n:'Ponte con spinta su avampiede',z:['caviglia'],t:'rinforzo'},
+    {k:'ponte-glutei-monopodalico',n:'Ponte glutei monopodalico',z:['glutei'],t:'rinforzo'},
+    {k:'ponte-monopodalico-con-elastico',n:'Ponte monopodalico con elastico',z:['glutei'],t:'rinforzo'},
+    {k:'ponte-monopodalico-con-manubrio',n:'Ponte monopodalico con manubrio',z:['glutei'],t:'rinforzo'},
+    {k:'ponte-monopodalico-con-miniband-e-apertura-gamba-stesa',n:'Ponte monopodalico con miniband e apertura gamba stesa',z:['glutei'],t:'mobilita'},
+    {k:'ponte-monopodalico-con-palla-e-adduzione-gamba-stesa',n:'Ponte monopodalico con palla e adduzione gamba stesa',z:['glutei'],t:'rinforzo'},
+    {k:'prone-back-extension',n:'Prone Back Extension',z:['colonna'],t:'rinforzo'},
+    {k:'prone-extension-with-dowel',n:'Prone Extension with Dowel',z:['mobilita'],t:'rinforzo'},
+    {k:'pull-over-con-manubrio',n:'Pull over con manubrio',z:['spalle'],t:'rinforzo'},
+    {k:'push-up-reverse',n:'Push up reverse',z:['spalle'],t:'rinforzo'},
+    {k:'push-up-trx',n:'Push up TRX',z:['spalle'],t:'rinforzo'},
+    {k:'pushdown',n:'Pushdown',z:['spalle'],t:'rinforzo'},
+    {k:'quadruped-rock-back',n:'Quadruped Rock Back',z:['adduttori'],t:'rinforzo'},
+    {k:'rdl-monopodalico',n:'RDL monopodalico',z:['hamstring'],t:'rinforzo'},
+    {k:'rematore-a-un-braccio-con-manubrio-su-panca-piana',n:'Rematore a un braccio con manubrio su panca piana',z:['spalle'],t:'rinforzo'},
+    {k:'rematore-trx',n:'Rematore TRX',z:['spalle'],t:'rinforzo'},
+    {k:'reverse-nordic',n:'Reverse nordic',z:['quadricipite'],t:'rinforzo'},
+    {k:'reverse-nordic-con-elastico',n:'Reverse Nordic con Elastico',z:['quadricipite'],t:'rinforzo'},
+    {k:'rinforzo-con-elastici',n:'Rinforzo con elastici',z:['caviglia'],t:'rinforzo'},
+    {k:'rinforzo-laterale-con-elastico',n:'Rinforzo laterale con elastico',z:['caviglia'],t:'rinforzo'},
+    {k:'rinforzo-soleo',n:'Rinforzo Soleo',z:['caviglia'],t:'rinforzo'},
+    {k:'rombo-con-elastico',n:'Rombo con elastico',z:['caviglia'],t:'rinforzo'},
+    {k:'rotazione-anca-in-quadrupedia',n:'Rotazione anca in quadrupedia',z:['anca'],t:'mobilita'},
+    {k:'rotazione-busto-1',n:'Rotazione busto 1',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-busto-2',n:'Rotazione busto 2',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-caviglia-senso-orario-e-antiorario',n:'Rotazione caviglia senso orario e antiorario',z:['caviglia'],t:'mobilita'},
+    {k:'rotazione-esterna-caviglia-con-elastico',n:'Rotazione esterna caviglia con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'rotazione-esterna-colonna-in-affondo',n:'Rotazione esterna colonna in affondo',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-esterna-con-elastico',n:'Rotazione Esterna con elastico',z:['anca'],t:'mobilita'},
+    {k:'rotazione-esterna-sui-gomiti',n:'Rotazione Esterna sui gomiti',z:['anca'],t:'mobilita'},
+    {k:'rotazione-in-affondo-con-bastone-ed-elastico',n:'Rotazione in affondo con bastone ed elastico',z:['ginocchio','quadricipite'],t:'mobilita'},
+    {k:'rotazione-interna',n:'Rotazione Interna',z:['anca'],t:'mobilita'},
+    {k:'rotazione-interna-caviglia-con-elastico',n:'Rotazione interna caviglia con elastico',z:['caviglia'],t:'mobilita'},
+    {k:'rotazione-interna-colonna',n:'Rotazione interna colonna',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-interna-colonna-in-affondo',n:'Rotazione interna colonna in affondo',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-interna-con-elastico',n:'Rotazione interna con elastico',z:['anca'],t:'mobilita'},
+    {k:'rotazione-interna-da-seduto',n:'Rotazione Interna da seduto',z:['anca'],t:'mobilita'},
+    {k:'rotazione-interna-e-esterna',n:'Rotazione interna e esterna',z:['caviglia'],t:'mobilita'},
+    {k:'rotazione-laterale-supino-piedi-al-muro',n:'Rotazione laterale supino piedi al muro',z:['anca'],t:'mobilita'},
+    {k:'rotazione-monopodalica-piede',n:'Rotazione monopodalica piede',z:['piede'],t:'mobilita'},
+    {k:'rotazione-toracica',n:'Rotazione Toracica',z:['colonna'],t:'mobilita'},
+    {k:'rotazione-trasversale-fascia-plantare',n:'Rotazione trasversale fascia plantare',z:['piede'],t:'mobilita'},
+    {k:'rotazione-tronco-da-seduto',n:'Rotazione tronco da seduto',z:['colonna'],t:'mobilita'},
+    {k:'rotazioni-anca-in-piedi',n:'Rotazioni anca in piedi',z:['anca'],t:'mobilita'},
+    {k:'rotazioni-con-foam-roller',n:'Rotazioni con foam roller',z:['colonna'],t:'mobilita'},
+    {k:'rotazioni-interne-ed-esterne-su-piano-instabile',n:'Rotazioni interne ed esterne su piano instabile',z:['caviglia'],t:'mobilita'},
+    {k:'rotolamento-laterale',n:'Rotolamento laterale',z:['core'],t:'rinforzo'},
+    {k:'rullata-piede-con-salto',n:'Rullata piede con salto',z:['caviglia'],t:'pliometria'},
+    {k:'russian-belt-hip-extension-eccentrica',n:'Russian belt hip extension eccentrica',z:['hamstring'],t:'rinforzo'},
+    {k:'russian-twist-distensione-alternata-gambe',n:'Russian twist distensione alternata gambe',z:['core'],t:'rinforzo'},
+    {k:'russian-twist-palla-medica',n:'Russian twist palla medica',z:['core'],t:'rinforzo'},
+    {k:'saltelli-monopodalici-con-elastico',n:'Saltelli monopodalici con elastico',z:['caviglia'],t:'pliometria'},
+    {k:'salti-monopodalici-laterali-su-ostacoli',n:'Salti monopodalici laterali su ostacoli',z:['quadricipite'],t:'pliometria'},
+    {k:'salti-monopodalici-su-ostacoli',n:'Salti monopodalici su ostacoli',z:['quadricipite'],t:'pliometria'},
+    {k:'scivolamento-gamba-su-rullo',n:'Scivolamento gamba su rullo',z:['hamstring'],t:'rinforzo'},
+    {k:'scivolamento-laterale-e-adduzione-con-disco',n:'Scivolamento laterale e adduzione con disco',z:['adduttori'],t:'rinforzo'},
+    {k:'scorpions',n:'Scorpions',z:['mobilita'],t:'stretching'},
+    {k:'seated-jump-squat',n:'Seated Jump Squat',z:['glutei'],t:'pliometria'},
+    {k:'seated-side-stretch',n:'Seated Side Stretch',z:['mobilita'],t:'stretching'},
+    {k:'side-elbow-plank-leg-lift',n:'Side Elbow Plank Leg Lift',z:['core'],t:'rinforzo'},
+    {k:'side-plank',n:'Side plank',z:['core'],t:'rinforzo'},
+    {k:'side-plank-banded-clamshells',n:'Side Plank Banded Clamshells',z:['glutei'],t:'rinforzo'},
+    {k:'side-plank-con-adduzione-con-elastico',n:'Side Plank con Adduzione con elastico',z:['adduttori'],t:'rinforzo'},
+    {k:'side-plank-con-rematore-con-elastico',n:'Side Plank con rematore con elastico',z:['core'],t:'rinforzo'},
+    {k:'side-plank-dinamico-con-elastico',n:'Side plank dinamico con elastico',z:['core'],t:'rinforzo'},
+    {k:'side-plank-row',n:'Side Plank Row',z:['core'],t:'rinforzo'},
+    {k:'single-leg-box-jump',n:'Single leg Box Jump',z:['quadricipite'],t:'pliometria'},
+    {k:'single-leg-bridge-isometria-monolaterale',n:'Single leg bridge isometria monolaterale',z:['glutei'],t:'rinforzo'},
+    {k:'single-leg-bridge-piede-su-fit-ball',n:'Single leg bridge piede su fit ball',z:['glutei'],t:'rinforzo'},
+    {k:'single-leg-bridge-piede-su-panca-con-loop-band',n:'Single leg bridge piede su panca con loop band',z:['glutei'],t:'rinforzo'},
+    {k:'single-leg-deadlift',n:'Single Leg Deadlift',z:['hamstring'],t:'rinforzo'},
+    {k:'single-leg-extension',n:'Single Leg Extension',z:['quadricipite'],t:'rinforzo'},
+    {k:'single-leg-glute-bridge',n:'Single Leg Glute Bridge',z:['glutei'],t:'rinforzo'},
+    {k:'single-leg-hamstring-bridge-con-manubrio',n:'Single leg hamstring bridge con manubrio',z:['hamstring'],t:'rinforzo'},
+    {k:'single-leg-hamstring-bridge-hold-fitball',n:'Single leg hamstring bridge hold fitball',z:['hamstring'],t:'rinforzo'},
+    {k:'single-leg-kettlebell-drop-and-catch',n:'Single leg kettlebell drop and catch',z:['hamstring'],t:'rinforzo'},
+    {k:'single-leg-squat',n:'Single leg squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'single-leg-squat-con-disco-tocco-con-ginocchio-lo-step',n:'Single leg squat con disco tocco con ginocchio lo step',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'single-leg-squat-con-spinta-palla-a-muro',n:'Single leg squat con spinta palla a muro',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'single-leg-squat-elastico',n:'Single leg squat elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'single-leg-squat-kettlebell',n:'Single leg squat kettlebell',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'slanci-dietro-con-elastico',n:'Slanci dietro con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'sldl-con-elastico',n:'SLDL con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'sldl-con-manubri',n:'SLDL con manubri',z:['hamstring'],t:'rinforzo'},
+    {k:'slide-flessori-a-gamba-stesa',n:'Slide flessori a gamba stesa',z:['hamstring'],t:'rinforzo'},
+    {k:'slide-laterale-con-miniband',n:'Slide laterale con miniband',z:['glutei'],t:'rinforzo'},
+    {k:'sorpione',n:'Sorpione',z:['colonna'],t:'stretching'},
+    {k:'spanish-squat',n:'Spanish Squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'spanish-squat-monopodalico',n:'Spanish Squat Monopodalico',z:['quadricipite'],t:'rinforzo'},
+    {k:'spiderman-stretch',n:'Spiderman Stretch',z:['anca'],t:'stretching'},
+    {k:'spiderman-lunge-with-t-spine-rotation',n:'Spiderman-lunge with t-spine rotation',z:['mobilita'],t:'mobilita'},
+    {k:'spinta-isometrica-su-avampiede',n:'Spinta isometrica su avampiede',z:['caviglia'],t:'rinforzo'},
+    {k:'spinte-con-pallina-tra-i-talloni',n:'Spinte con pallina tra i talloni',z:['caviglia'],t:'rinforzo'},
+    {k:'spinte-laterali-con-miniband',n:'Spinte laterali con miniband',z:['caviglia'],t:'rinforzo'},
+    {k:'split-squat-con-avampiede-rialzato',n:'Split squat con avampiede rialzato',z:['piede'],t:'rinforzo'},
+    {k:'split-squat-con-elastico',n:'Split Squat con elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'split-squat-jump',n:'Split Squat Jump',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'split-squat-low-high-chops',n:'Split Squat Low High Chops',z:['core'],t:'rinforzo'},
+    {k:'squat',n:'Squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'squat-and-reach',n:'Squat and Reach',z:['mobilita'],t:'rinforzo'},
+    {k:'squat-bulgaro-isometrico',n:'Squat bulgaro isometrico',z:['quadricipite'],t:'rinforzo'},
+    {k:'squat-bulgaro-isometrico-su-avampiede-con-rotazione-disco',n:'Squat bulgaro isometrico su avampiede con rotazione disco',z:['caviglia'],t:'mobilita'},
+    {k:'squat-bulgaro-su-avampiede',n:'Squat bulgaro su avampiede',z:['caviglia'],t:'rinforzo'},
+    {k:'squat-con-bilanciere',n:'Squat con bilanciere',z:['quadricipite'],t:'rinforzo'},
+    {k:'squat-con-miniband',n:'Squat con miniband',z:['quadricipite'],t:'rinforzo'},
+    {k:'squat-isoinerziale',n:'Squat isoinerziale',z:['quadricipite'],t:'rinforzo'},
+    {k:'squat-laterale-con-slide',n:'Squat Laterale con slide',z:['adduttori'],t:'rinforzo'},
+    {k:'squat-monopodalico-con-trx',n:'Squat monopodalico con TRX',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'squat-stretch',n:'Squat stretch',z:['mobilita'],t:'stretching'},
+    {k:'stability-ball-curls',n:'Stability Ball Curls',z:['hamstring'],t:'rinforzo'},
+    {k:'stability-ball-glute-bridge',n:'Stability Ball Glute Bridge',z:['glutei'],t:'rinforzo'},
+    {k:'stacchi-rumeni',n:'Stacchi rumeni',z:['hamstring'],t:'rinforzo'},
+    {k:'stacco-con-kb',n:'Stacco con KB',z:['glutei'],t:'rinforzo'},
+    {k:'stacco-gamba-singola-landmine',n:'Stacco gamba singola landmine',z:['hamstring'],t:'rinforzo'},
+    {k:'standing-clamshells',n:'Standing Clamshells',z:['glutei'],t:'rinforzo'},
+    {k:'stella',n:'Stella',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'stella-con-piede-su-mezzo-rullo-ed-elastico',n:'Stella con piede su mezzo rullo ed elastico',z:['caviglia'],t:'rinforzo'},
+    {k:'stella-su-piano-instabile',n:'Stella su piano instabile',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'step-down',n:'Step down',z:['glutei'],t:'rinforzo'},
+    {k:'step-jump-laterale',n:'Step jump laterale',z:['ginocchio','quadricipite'],t:'pliometria'},
+    {k:'step-up',n:'Step up',z:['quadricipite'],t:'rinforzo'},
+    {k:'step-up-con-1-kb',n:'Step Up con 1 KB',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'step-up-con-manubri',n:'Step up con manubri',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'step-up-elastico-intorno-al-piede',n:'Step up elastico intorno al piede',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'step-up-laterale-con-elastico',n:'Step up laterale con elastico',z:['ginocchio','quadricipite'],t:'rinforzo'},
+    {k:'straight-leg-pull-down-con-elastico',n:'Straight leg pull down con elastico',z:['hamstring'],t:'rinforzo'},
+    {k:'stretch-catena-cinetica-anteriore',n:'Stretch catena cinetica anteriore',z:['anca'],t:'stretching'},
+    {k:'stretching-adduttori',n:'Stretching adduttori',z:['mobilita'],t:'stretching'},
+    {k:'stretching-arco-plantare',n:'Stretching arco plantare',z:['piede'],t:'stretching'},
+    {k:'stretching-hamstring-trx',n:'Stretching hamstring TRX',z:['hamstring'],t:'stretching'},
+    {k:'stretching-psoas',n:'Stretching psoas',z:['mobilita'],t:'stretching'},
+    {k:'stretching-psoas-con-elastico',n:'Stretching Psoas con elastico',z:['anca'],t:'stretching'},
+    {k:'superman',n:'Superman',z:['colonna','core'],t:'rinforzo'},
+    {k:'superman-con-elastico',n:'Superman con elastico',z:['core'],t:'rinforzo'},
+    {k:'superman-plank',n:'Superman plank',z:['core'],t:'rinforzo'},
+    {k:'supine-clamshell',n:'Supine Clamshell',z:['glutei'],t:'rinforzo'},
+    {k:'swing-con-elastico-e-kb',n:'Swing con elastico e KB',z:['hamstring'],t:'rinforzo'},
+    {k:'swing-con-kb',n:'Swing con KB',z:['glutei'],t:'rinforzo'},
+    {k:'swing-kettlebell-con-elastico-intorno-ai-fianchi',n:'Swing kettlebell con elastico intorno ai fianchi',z:['hamstring'],t:'rinforzo'},
+    {k:'swiss-ball-straight-leg-bridge',n:'Swiss Ball Straight Leg Bridge',z:['hamstring'],t:'rinforzo'},
+    {k:'swissball-deadbug',n:'SwissBall DeadBug',z:['core'],t:'rinforzo'},
+    {k:'table-top-bridge',n:'Table top bridge',z:['mobilita'],t:'rinforzo'},
+    {k:'tall-kneeling-chest-pass-1',n:'Tall Kneeling chest pass 1',z:['core'],t:'rinforzo'},
+    {k:'tall-kneeling-chest-pass-2',n:'Tall Kneeling chest pass 2',z:['core'],t:'rinforzo'},
+    {k:'thoracic-open-book',n:'Thoracic Open Book',z:['mobilita'],t:'mobilita'},
+    {k:'toe-elevated-deep-squat',n:'Toe elevated deep squat',z:['anca'],t:'rinforzo'},
+    {k:'toe-touch-squat',n:'Toe touch squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'trap-bar-deadlift',n:'Trap Bar Deadlift',z:['glutei','quadricipite'],t:'rinforzo'},
+    {k:'trapbar-squat',n:'Trapbar squat',z:['quadricipite'],t:'rinforzo'},
+    {k:'tricipiti-panca',n:'Tricipiti panca',z:['spalle'],t:'rinforzo'},
+    {k:'trx-row',n:'TRX row',z:['spalle'],t:'rinforzo'},
+    {k:'turkish-get-up',n:'Turkish Get Up',z:['core'],t:'mobilita'},
+    {k:'wall-calf-stretch',n:'Wall calf stretch',z:['mobilita'],t:'stretching'},
+    {k:'wall-sit',n:'Wall Sit',z:['quadricipite'],t:'rinforzo'},
+    {k:'wall-sit-1-gamba',n:'Wall Sit 1 Gamba',z:['quadricipite'],t:'rinforzo'},
+    {k:'wallslide',n:'Wallslide',z:['spalle'],t:'rinforzo'}
+  ];
+  var zl = {}, tl = {};
+  ZONE.forEach(function (r) { zl[r[0]] = r[1]; });
+  TIPO.forEach(function (r) { tl[r[0]] = r[1]; });
+  DB.forEach(function (e) { e.img = "./prev/" + e.k + ".jpg"; });
+  window.PREV_DB = DB;
+  window.PREV_ZONE = ZONE;
+  window.PREV_TIPO = TIPO;
+  window.PREV_DOSE = DOSE;
+  window.prevZonaLabel = function (z) { return zl[z] || z; };
+  window.prevTipoLabel = function (t) { return tl[t] || t; };
+  window.prevById = function (k) {
+    for (var i = 0; i < DB.length; i++) if (DB[i].k === k) return DB[i];
+    return null;
+  };
+
+  // Test di prevenzione: i valori per atleta sono solo nel database protetto.
+  var TEST_FMS = [
+    { k:'squat',    n:'Overhead squat',        bil:false, sc:'fms', as:1, w:{ cav:2, anca:1, spal:1 } },
+    { k:'hurdle',   n:'Hurdle step',           bil:true,  sc:'fms', as:1, w:{ stab:2, anca:1 } },
+    { k:'lunge',    n:'Affondo in linea',      bil:true,  sc:'fms', as:1, w:{ stab:1, anca:1, cav:1 } },
+    { k:'ankle',    n:'Mobilita caviglia',     bil:true,  sc:'vgr', as:0, w:{ cav:3 } },
+    { k:'shoulder', n:'Mobilita spalle',       bil:true,  sc:'fms', as:1, w:{ spal:2 } },
+    { k:'aslr',     n:'Straight leg raise',    bil:true,  sc:'fms', as:1, w:{ stre:2, anca:1 } }
+  ];
+  var TEST_FISIO = [
+    { k:'ankle',  n:'Ankle clearing test',      bil:true, sc:'okd',   as:0, w:{ cav:3 } },
+    { k:'slb',    n:'Single leg bridge',        bil:true, sc:'rif',   as:3, v:15, g:12, w:{ rinf:2, core:1 } },
+    { k:'faber',  n:'Faber',                    bil:true, sc:'faber', as:5, w:{ anca:3 } },
+    { k:'thomas', n:'Thomas test',              bil:true, sc:'okd',   as:0, w:{ anca:2, stre:2 } },
+    { k:'calf',   n:'Single leg calf raises',   bil:true, sc:'rif',   as:3, v:15, g:12, w:{ rinf:2, cav:1 } },
+    { k:'skater', n:'Skater squat 30s',         bil:true, sc:'rif',   as:4, v:19, g:14, w:{ stab:3, rinf:1 } }
+  ];
+  // Valori per atleta. I bilaterali sono [destra, sinistra], null vuol dire
+  // test non eseguito.
+  var V_FMS = {};
+  var V_FISIO = {};
+
+  window.PREV_TEST = {
+    '26-27': {
+      fms:   { data:'Agosto 2026', t:TEST_FMS,   v:V_FMS },
+      fisio: { data:'Agosto 2026', t:TEST_FISIO, v:V_FISIO }
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // DAI TEST ALLE AREE DI LAVORO, IN UN POSTO SOLO.
+  // Questa lettura nasce dentro la pagina Prevenzione, dove i test diventano le
+  // aree della scheda. Serve pero' anche altrove: nell'Oggi, mentre si scrive la
+  // seduta, sapere che una ha la caviglia rossa vale quanto sapere quanti metri
+  // le mancano, e cercarlo aprendo un'altra pagina vuol dire non cercarlo. Se il
+  // conto venisse riscritto di la' avremmo due letture degli stessi test che
+  // prima o poi divergono, che e' esattamente il guaio gia' visto quando il
+  // quadro leggeva la trascrizione e le aree leggevano il registro. Quindi il
+  // conto sta qui, accanto ai valori, e le pagine lo chiamano.
+  //
+  // Le due fonti sono la tabella qui sopra, trascritta a inizio stagione, e il
+  // registro dei test in localStorage, che si aggiorna da solo a ogni foglio
+  // nuovo. Vince la trascrizione dove ha un valore, il registro riempie i buchi
+  // e le atlete che nella tabella non ci sono ancora.
+  // -------------------------------------------------------------------------
+  var NEED = {
+    cav:  { lbl:'Mobilita caviglia',      fam:'A' },
+    anca: { lbl:'Mobilita anca',          fam:'A' },
+    spal: { lbl:'Mobilita spalle',        fam:'A' },
+    stab: { lbl:'Stabilita monopodalica', fam:'A' },
+    core: { lbl:'Core e antirotazione',   fam:'B' },
+    rinf: { lbl:'Rinforzo',               fam:'B' },
+    stre: { lbl:'Allungamento',           fam:'B' }
+  };
+  var NEED_ORDER = ['cav','anca','spal','stab','core','rinf','stre'];
+
+  // "pre" e "xtra" sono il ponte verso il registro: dicono con che nome le
+  // stesse misure sono scritte nel file che arriva dai fogli.
+  var TEST_GROUPS = [
+    { k:'fms',   lbl:'Screening FMS',       pre:'fms_' },
+    { k:'fisio', lbl:'Test fisioterapista', pre:'fis_',
+      xtra:{ kg:'fis_peso', ckcuest:'fis_ckcuest' } }
+  ];
+  var DEF_PT = { v:0, g:1, r:2 };
+
+  function seasonId(){
+    try{ if(window.getStagione) return window.getStagione(); }catch(e){}
+    return '25-26';
+  }
+  function testSet(){
+    var T = window.PREV_TEST;
+    return (T && T[seasonId()]) ? T[seasonId()] : null;
+  }
+  function testNames(){
+    var T = testSet(), out = {};
+    if(!T) return out;
+    TEST_GROUPS.forEach(function(g){
+      var v = T[g.k] && T[g.k].v;
+      if(v) Object.keys(v).forEach(function(n){ out[n] = true; });
+    });
+    return out;
+  }
+  function loadReg(){
+    try{
+      var raw = localStorage.getItem('fio_test_register_v2_' + seasonId());
+      var o = raw ? JSON.parse(raw) : null;
+      return (o && typeof o === 'object') ? o : {};
+    }catch(e){ return {}; }
+  }
+  function regRaw(reg, key, name){
+    var bag = reg && reg[key]; if(!bag) return null;
+    var e = bag[name];
+    if(!e || e.v == null || e.v === '') return null;
+    return e;
+  }
+  function regCell(reg, key, name){
+    var e = regRaw(reg, key, name);
+    if(!e) return null;
+    // Dove il test non e' un numero il registro tiene la lettera in "t" (V/G/R
+    // della caviglia, OK/D del fisioterapista) e in "v" solo il punteggio con
+    // cui la ordina: qui serve la lettera.
+    if(e.t != null && e.t !== ''){
+      var s = String(e.t);
+      return s.toLowerCase() === 'ok' ? 'ok' : s;
+    }
+    return e.v;
+  }
+  function regRow(reg, gd, tests, name){
+    if(!reg || !gd.pre) return null;
+    var out = null;
+    (tests || []).forEach(function(t){
+      var val;
+      if(t.bil){
+        var d = regCell(reg, gd.pre + t.k + '_dx', name);
+        var s = regCell(reg, gd.pre + t.k + '_sx', name);
+        if(d == null && s == null) return;
+        val = [d, s];
+      }else{
+        val = regCell(reg, gd.pre + t.k, name);
+        if(val == null) return;
+      }
+      if(!out) out = {};
+      out[t.k] = val;
+    });
+    var xt = gd.xtra || {};
+    Object.keys(xt).forEach(function(f){
+      var v = regCell(reg, xt[f], name);
+      if(v == null) return;
+      if(!out) out = {};
+      out[f] = v;
+    });
+    return out;
+  }
+  // Il valore scritto a mano resta al suo posto: il registro entra solo dove non
+  // c'e' niente, lato per lato. Cosi' un test fatto piu' tardi su un solo lato si
+  // aggiunge senza cancellare l'altro.
+  function rowMerge(base, add){
+    if(!add) return base;
+    if(!base) return add;
+    var out = {}, k;
+    for(k in base){ if(Object.prototype.hasOwnProperty.call(base, k)) out[k] = base[k]; }
+    Object.keys(add).forEach(function(key){
+      var a = add[key], b = out[key];
+      if(Array.isArray(a)){
+        var bb = Array.isArray(b) ? b : [null, null];
+        out[key] = [ bb[0] == null || bb[0] === '' ? a[0] : bb[0],
+                     bb[1] == null || bb[1] === '' ? a[1] : bb[1] ];
+      }else if(b == null || b === ''){
+        out[key] = a;
+      }
+    });
+    return out;
+  }
+  function lvlOf(t, raw){
+    if(raw == null || raw === '') return null;
+    var s = String(raw).toLowerCase(), n;
+    if(t.sc === 'fms'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= 3 ? 'v' : (n === 2 ? 'g' : 'r');
+    }
+    if(t.sc === 'vgr'){
+      if(s === 'v') return 'v';
+      if(s === 'g') return 'g';
+      if(s === 'r') return 'r';
+      return null;
+    }
+    if(t.sc === 'okd'){
+      if(s.indexOf('d+') >= 0) return 'r';
+      if(s.charAt(0) === 'd') return 'g';
+      if(s.indexOf('ok') >= 0) return 'v';
+      return null;
+    }
+    if(t.sc === 'faber'){
+      if(s.indexOf('ok') >= 0) return 'v';
+      n = +raw; if(isNaN(n)) return null;
+      return n < 10 ? 'v' : (n <= 15 ? 'g' : 'r');
+    }
+    if(t.sc === 'rif'){
+      n = +raw; if(isNaN(n)) return null;
+      return n >= t.v ? 'v' : (n >= t.g ? 'g' : 'r');
+    }
+    return null;
+  }
+  function numOf(raw){
+    if(raw == null || raw === '') return null;
+    var n = +raw;
+    return isNaN(n) ? null : n;
+  }
+  function valTxt(t, raw){
+    if(raw == null || raw === '') return 'n/d';
+    if(t.sc === 'vgr') return String(raw).toUpperCase();
+    return String(raw);
+  }
+  // Il colore conta quanto l'asimmetria: un test rosso uguale a destra e a
+  // sinistra resta un problema anche se i due lati sono identici.
+  function evalTest(t, raw){
+    var dx, sx;
+    if(t.bil){
+      var a = Array.isArray(raw) ? raw : [null, null];
+      dx = a[0]; sx = a[1];
+    }else{ dx = raw; sx = null; }
+    var ld = lvlOf(t, dx), ls = t.bil ? lvlOf(t, sx) : null;
+    if(ld == null && ls == null) return null;
+    var def = Math.max(ld ? DEF_PT[ld] : 0, ls ? DEF_PT[ls] : 0);
+    var asym = false;
+    if(t.bil && ld && ls){
+      if(ld !== ls) asym = true;
+      else{
+        var nd = numOf(dx), ns = numOf(sx);
+        if(t.as && nd != null && ns != null && Math.abs(nd - ns) >= t.as) asym = true;
+      }
+    }
+    if(asym) def += 1;
+    var worst = (ld && ls) ? (DEF_PT[ld] >= DEF_PT[ls] ? ld : ls) : (ld || ls);
+    return {
+      t:t, asym:asym, def:def, worst:worst,
+      dx:{ txt:valTxt(t, dx), lvl:ld },
+      sx:{ txt:valTxt(t, sx), lvl:ls }
+    };
+  }
+  // `why` tiene da parte quali test hanno fatto salire un'area: senza questo la
+  // scheda dice solo "mobilita caviglia" e tocca tornare al quadro test per
+  // capire da dove arriva.
+  function analyzeTests(name, reg){
+    var T = testSet();
+    if(!T) return null;
+    if(!reg) reg = loadReg();
+    var need = {}, why = {}, groups = [], asym = [], reds = [];
+    var nRed = 0, nYel = 0, nOk = 0, defSum = 0, any = false;
+    NEED_ORDER.forEach(function(k){ need[k] = 0; why[k] = []; });
+    TEST_GROUPS.forEach(function(gd){
+      var g = T[gd.k];
+      if(!g) return;
+      var raw = rowMerge((g.v || {})[name] || null, regRow(reg, gd, g.t, name));
+      var rows = [];
+      (g.t || []).forEach(function(t){
+        var ev = raw ? evalTest(t, raw[t.k]) : null;
+        if(!ev) return;
+        rows.push(ev);
+        any = true;
+        if(ev.worst === 'r'){ nRed++; reds.push(t.n); }
+        else if(ev.worst === 'g') nYel++;
+        else nOk++;
+        if(ev.asym) asym.push(t.n);
+        if(!ev.def) return;
+        defSum += ev.def;
+        Object.keys(t.w).forEach(function(k){
+          need[k] += t.w[k] * ev.def;
+          why[k].push({ n:t.n, lvl:ev.worst, asym:ev.asym, p:t.w[k] * ev.def });
+        });
+      });
+      if(raw && (rows.length || raw.kg != null)) any = any || raw.kg != null;
+      groups.push({
+        k:gd.k, lbl:gd.lbl, data:g.data || '', rows:rows,
+        kg: raw && raw.kg != null ? raw.kg : null,
+        ckcuest: raw && raw.ckcuest != null ? raw.ckcuest : null,
+        note: raw && raw.note ? raw.note : ''
+      });
+    });
+    if(!any) return null;
+    var sum = NEED_ORDER.reduce(function(s, k){ return s + need[k]; }, 0);
+    return { name:name, need:need, why:why, sum:sum, defSum:defSum, groups:groups,
+             asym:asym, reds:reds, nRed:nRed, nYel:nYel, nOk:nOk };
+  }
+
+  /* LA VERSIONE CORTA, PER CHI NON STA IN PREVENZIONE.
+     La scheda intera serve dentro Prevenzione. Nell'Oggi serve una riga: le due
+     aree che pesano di piu' e i test rossi, che sono quelli su cui non si passa
+     sopra. Due aree e non tutte e sette perche' una riga con sette voci non si
+     legge scendendo in campo, ed e' lo stesso taglio che la scheda usa da sempre
+     quando deve dire in due parole di cosa si tratta. */
+  function aree(name, reg){
+    var a = analyzeTests(name, reg);
+    if(!a) return null;
+    var top = NEED_ORDER.filter(function(k){ return a.need[k] > 0; })
+      .sort(function(x, y){
+        return a.need[y] - a.need[x] || NEED_ORDER.indexOf(x) - NEED_ORDER.indexOf(y);
+      })
+      .slice(0, 2)
+      .map(function(k){ return { k:k, lbl:NEED[k].lbl, p:a.need[k] }; });
+    return { name:name, top:top, reds:a.reds, asym:a.asym,
+             nRed:a.nRed, nYel:a.nYel, nOk:a.nOk,
+             data:(a.groups[0] && a.groups[0].data) || '' };
+  }
+
+  window.PREV_NEED       = NEED;
+  window.PREV_NEED_ORDER = NEED_ORDER;
+  window.prevTestSet     = testSet;
+  window.prevTestNames   = testNames;
+  window.prevTestReg     = loadReg;
+  window.prevAnalyzeTests = analyzeTests;
+  window.prevAree        = aree;
+})();
