@@ -306,28 +306,31 @@ async function avvia() {
 // Lo tiene aggiornato la pagina coach dove si assegnano i programmi.
 async function indiceProgrammi() {
   if (SENZA_LOGIN || !/\/(index|builder)\.html$|\/coach\/?$/.test(location.pathname)) return;
-  const giro = async () => {
+  // Stessa connessione al database della pagina: i programmi che la pagina ha gia' ricevuto
+  // non si riscaricano una seconda volta.
+  const { getDatabase, ref, onValue } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+  const db = getDatabase(app);
+  let attesa = null;
+  const scrivi = async P => {
+    const idx = {};
+    Object.entries(P || {}).forEach(([pid, p]) => {
+      Object.entries((p && p.assignedTo) || {}).forEach(([aid, on]) => {
+        if (on) (idx[aid] = idx[aid] || {})[pid] = true;
+      });
+    });
+    const firma = JSON.stringify(idx);
+    if (firma === indiceProgrammi.ultimo) return;
     try {
       const t = await gettone();
-      const r = await fetchVero(DB + '/programs.json?auth=' + encodeURIComponent(t), { cache: 'no-store' });
-      if (!r.ok) return;
-      const P = (await r.json()) || {};
-      const idx = {};
-      Object.entries(P).forEach(([pid, p]) => {
-        Object.entries((p && p.assignedTo) || {}).forEach(([aid, on]) => {
-          if (on) (idx[aid] = idx[aid] || {})[pid] = true;
-        });
-      });
-      const firma = JSON.stringify(idx);
-      if (firma === indiceProgrammi.ultimo) return;
-      await fetchVero(DB + '/prog_idx.json?auth=' + encodeURIComponent(t), { method: 'PUT', body: firma });
-      indiceProgrammi.ultimo = firma;
+      const r = await fetchVero(DB + '/prog_idx.json?auth=' + encodeURIComponent(t), { method: 'PUT', body: firma });
+      if (r.ok) indiceProgrammi.ultimo = firma;
     } catch (e) {}
   };
-  setTimeout(giro, 5000);
-  setInterval(giro, 300000);
-  window.addEventListener('pagehide', giro);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') giro(); });
+  onValue(ref(db, 'programs'), snap => {
+    const P = snap.val();
+    clearTimeout(attesa);
+    attesa = setTimeout(() => scrivi(P), 2000); // si aspetta che le modifiche finiscano
+  }, () => {});
 }
 
 // ---------- partenza veloce ----------
