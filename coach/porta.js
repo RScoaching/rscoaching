@@ -70,6 +70,8 @@ function chiediAccesso(errore) {
     '<button id="rs-entra" style="' + BTN + '">Entra con Google</button>');
   v.querySelector('#rs-entra').onclick = () => {
     signInWithPopup(auth, new GoogleAuthProvider()).catch(e => {
+      // a volte il browser segnala "finestra chiusa" anche se l'accesso e' riuscito: in quel caso si ignora
+      if (auth.currentUser || avviata) return;
       chiediAccesso(e && e.code === 'auth/popup-blocked' ? 'Il browser ha bloccato la finestra: consenti i popup per questo sito.' :
         (e && e.code === 'auth/popup-closed-by-user' ? '' : 'Accesso non riuscito (' + ((e && e.code) || 'errore') + ').'));
     });
