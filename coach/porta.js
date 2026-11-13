@@ -81,7 +81,7 @@ function negato(user) {
     '<div style="margin-top:6px;color:#a0a0b8">Questo account non ha accesso all\'area coach.</div>' +
     '<div style="margin-top:10px;color:#6b6b85;font-size:12px;word-break:break-all">' + (user.email || '') + '<br>' + user.uid + '</div>' +
     '<button id="rs-esci" style="' + BTN2 + '">Esci e cambia account</button>');
-  v.querySelector('#rs-esci').onclick = () => svuotaCopia().then(() => signOut(auth));
+  v.querySelector('#rs-esci').onclick = () => { try { localStorage.removeItem('rs_versioni'); localStorage.removeItem('rs_versioni_uid'); } catch (e) {} svuotaCopia().then(() => signOut(auth)); };
 }
 
 // ---------- lasciapassare per le chiamate dirette al database ----------
@@ -328,24 +328,95 @@ async function indiceProgrammi() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') giro(); });
 }
 
+// ---------- partenza veloce ----------
+// Se questo browser ha gia' aperto la pagina con lo stesso account, la pagina si
+// monta subito dalla copia in memoria (niente schermata "Controllo accesso") e
+// parte appena il login e' pronto (di solito pochi decimi di secondo, senza rete).
+// Intanto si controlla online che l'account sia ancora quello del coach e che non
+// ci sia una versione nuova: se l'accesso non e' piu' valido si cancella tutto, se
+// c'e' una versione nuova compare un avviso per ricaricare.
+const K_VER = 'rs_versioni', K_UID = 'rs_versioni_uid';
+const leggiLS = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const scriviLS = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const svuotaTutto = () => { scriviLS(K_VER, null); scriviLS(K_UID, null); return svuotaCopia(); };
+async function inCopia(tipo, k) {
+  const ver = VERSIONI && VERSIONI[tipo] && VERSIONI[tipo][k];
+  if (!ver) return false;
+  try { const c = await caches.open(CACHE); const m = await c.match('https://rs-cache.invalid/' + tipo + '/' + k); return !!(m && m.headers.get('x-ver') === ver); }
+  catch (e) { return false; }
+}
+function avvisoNuovo() {
+  if (document.getElementById('rs-nuovo')) return;
+  const b = document.createElement('button');
+  b.id = 'rs-nuovo';
+  b.textContent = 'Aggiornamento disponibile · Ricarica';
+  b.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483646;padding:10px 16px;border-radius:999px;border:0;' +
+    'background:#7c3aed;color:#fff;font:600 13px Inter,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer';
+  b.onclick = () => location.reload();
+  document.documentElement.appendChild(b);
+}
+// cosa usa questa pagina: la pagina stessa, i dati Fiorentina e i file privati che carica
+function usatiDallaPagina() {
+  const u = [];
+  if (GUSCIO) u.push(['pagine', chiave(GUSCIO.content)]);
+  document.querySelectorAll('script[data-fio]').forEach(s => u.push(['fio_dati', s.getAttribute('data-fio')]));
+  document.querySelectorAll('script[type="text/rs-dopo"][data-fio]').forEach(s => u.push(['fio_dati', s.getAttribute('data-fio')]));
+  PRIVATI.forEach(n => u.push(['pagine', chiave(n)]));
+  return u;
+}
+
 if (SENZA_LOGIN) {
   avvia();
 } else {
-  velo('<div style="color:#a0a0b8">Controllo accesso...</div>');
+  let montata = null;
+  try { const v = JSON.parse(leggiLS(K_VER) || 'null'); if (v && typeof v === 'object') VERSIONI = v; } catch (e) {}
+  const uidCopia = leggiLS(K_UID);
+  // la pagina si prepara subito dalla copia (senza far partire nulla) mentre il login si carica
+  if (GUSCIO && VERSIONI && uidCopia) {
+    montata = inCopia('pagine', chiave(GUSCIO.content)).then(ok => ok ? montaPagina().then(() => true) : false).catch(() => false);
+  } else {
+    velo('<div style="color:#a0a0b8">Controllo accesso...</div>');
+  }
   onAuthStateChanged(auth, async user => {
-    if (!user) { chiediAccesso(''); return; }
-    try {
-      await user.getIdToken();
-      VERSIONI = await caricaVersioni();
-      if (VERSIONI === null) { await svuotaCopia(); negato(user); return; }
-    } catch (e) {
-      velo('<div>Rete non raggiungibile.</div><button style="' + BTN + '" onclick="location.reload()">Riprova</button>');
-      return;
+    if (!user) { await svuotaTutto(); if (montata) { location.reload(); return; } chiediAccesso(''); return; }
+    window.rsEsci = () => svuotaTutto().then(() => signOut(auth)).then(() => location.reload());
+    const veloce = !!(VERSIONI && uidCopia && uidCopia === user.uid);
+    let nuove = null;
+    const controllo = (async () => {
+      const v = await caricaVersioni();
+      if (v === null) return 'negato';
+      nuove = v;
+      const prima = VERSIONI;
+      scriviLS(K_VER, JSON.stringify(v)); scriviLS(K_UID, user.uid);
+      if (prima) {
+        const cambiato = usatiDallaPagina().some(([t, k]) => ((prima[t] || {})[k] || '') !== ((v[t] || {})[k] || ''));
+        if (cambiato) return 'nuovo';
+      }
+      VERSIONI = v;
+      return 'ok';
+    })().catch(() => 'rete');
+
+    if (!veloce) {
+      const esito = await controllo;
+      if (esito === 'negato') { await svuotaTutto(); if (montata) { location.reload(); return; } negato(user); return; }
+      if (esito === 'nuovo' && montata && await montata) { location.reload(); return; }
+      if (nuove) VERSIONI = nuove;
+      if (esito === 'rete' && !VERSIONI) { velo('<div>Rete non raggiungibile.</div><button style="' + BTN + '" onclick="location.reload()">Riprova</button>'); return; }
+      if (montata) await montata.catch(() => {});
+      montata = null;
+    } else {
+      // il controllo online continua da solo: se l'accesso non vale piu' si chiude tutto
+      controllo.then(async esito => {
+        if (esito === 'negato') { await svuotaTutto(); location.reload(); }
+        else if (esito === 'nuovo') avvisoNuovo();
+      });
     }
-    window.rsEsci = () => svuotaCopia().then(() => signOut(auth)).then(() => location.reload());
     if (GUSCIO) {
-      try { await montaPagina(); }
-      catch (e) { velo('<div>Pagina non disponibile.</div><button style="' + BTN + '" onclick="location.reload()">Riprova</button>'); return; }
+      let ok = montata ? await montata : false;
+      if (!ok) {
+        try { await montaPagina(); }
+        catch (e) { velo('<div>Pagina non disponibile.</div><button style="' + BTN + '" onclick="location.reload()">Riprova</button>'); return; }
+      }
     }
     await avvia();
     indiceProgrammi();
