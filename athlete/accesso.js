@@ -36,6 +36,16 @@ const TIT = 'font:800 26px Inter,system-ui,sans-serif;letter-spacing:.01em';
 const SUB = 'margin-top:8px;color:#c9a99c';
 const ERR = 'margin-top:10px;color:#ff8a7a;min-height:1em';
 
+// Messaggio chiaro per ogni tipo di errore di Firebase.
+function spiega(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/network-request-failed') return 'Rete non raggiungibile: controlla la connessione e riprova.';
+  if (c === 'auth/invalid-email') return 'L\'email non corrisponde a quella del link.';
+  if (c === 'auth/invalid-action-code' || c === 'auth/expired-action-code') return 'Link scaduto o gia\' usato: chiedine uno nuovo.';
+  if (c === 'auth/too-many-requests' || c === 'auth/quota-exceeded') return 'Troppi tentativi: riprova tra qualche minuto.';
+  return 'Non riuscito (' + (c || 'errore') + '): riprova.';
+}
+
 function chiudi() { const v = document.getElementById('rs-accesso'); if (v) v.remove(); }
 
 function chiediEmail(auth, aid, msg) {
@@ -58,7 +68,7 @@ function chiediEmail(auth, aid, msg) {
     } catch (e) {
       v.querySelector('#rsa-invia').disabled = false;
       v.querySelector('#rsa-invia').textContent = 'Mandami il link';
-      v.querySelector('#rsa-err').textContent = 'Invio non riuscito, riprova tra poco.';
+      v.querySelector('#rsa-err').textContent = spiega(e);
     }
   };
   v.querySelector('#rsa-invia').onclick = invia;
@@ -84,7 +94,7 @@ function linkInviato(auth, aid, email) {
     if (!link || !isSignInWithEmailLink(auth, link)) { v.querySelector('#rsa-err').textContent = 'Questo non sembra il link dell\'email.'; return; }
     if (!em) { v.querySelector('#rsa-err').textContent = 'Scrivi la tua email.'; return; }
     try { await signInWithEmailLink(auth, em, link); scrivi(CHIAVE_EMAIL, em); location.reload(); }
-    catch (e) { v.querySelector('#rsa-err').textContent = 'Link scaduto o gia\' usato: chiedine uno nuovo.'; }
+    catch (e) { v.querySelector('#rsa-err').textContent = spiega(e); }
   };
 }
 
@@ -98,7 +108,7 @@ function chiediEmailPerLink(auth, aid, href) {
     v.querySelector('#rsa-ok').onclick = async () => {
       const em = v.querySelector('#rsa-email').value.trim().toLowerCase();
       try { await signInWithEmailLink(auth, em, href); scrivi(CHIAVE_EMAIL, em); ok(true); }
-      catch (e) { v.querySelector('#rsa-err').textContent = 'Email diversa da quella del link, oppure link scaduto.'; }
+      catch (e) { v.querySelector('#rsa-err').textContent = spiega(e); }
     };
   });
 }
@@ -117,7 +127,7 @@ export async function accessoAtleta(app, aid, opz) {
       if (em) await signInWithEmailLink(auth, em, location.href);
       else await chiediEmailPerLink(auth, aid, location.href);
     } catch (e) {
-      chiediEmail(auth, aid, 'Link scaduto o gia\' usato: chiedine uno nuovo.');
+      chiediEmail(auth, aid, spiega(e));
     }
     history.replaceState(null, '', location.pathname + '?id=' + encodeURIComponent(aid || ''));
   }
