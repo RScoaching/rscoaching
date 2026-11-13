@@ -182,18 +182,28 @@ async function montaPagina() {
 }
 
 // ---------- avvio della pagina ----------
-// Gli script partono a pagina gia' caricata: chi aspetta "DOMContentLoaded" o
-// "load" verrebbe saltato, quindi li si chiama subito dopo.
+// La pagina vera parte qui, nello stesso ordine in cui il browser l'avrebbe fatta
+// partire da sola: prima gli script normali in ordine, poi i moduli (type=module)
+// uno dopo l'altro, e solo alla fine gli eventi "pagina pronta" (DOMContentLoaded)
+// e "pagina caricata" (load). Chi si registra a quegli eventi mentre la pagina
+// parte viene chiamato al momento giusto, non prima (es. la sidebar del Builder,
+// che si monta su DOMContentLoaded e ha bisogno di sidebar.js gia' caricato).
+let inAvvio = true;
+const inAttesa = { DOMContentLoaded: [], load: [] };
 function eventiTardivi() {
-  const tardi = (bersaglio, tipo, pronto) => {
+  const tardi = (bersaglio, tipo) => {
     const orig = bersaglio.addEventListener.bind(bersaglio);
     bersaglio.addEventListener = function(t, fn, opt) {
-      if (t === tipo && pronto() && typeof fn === 'function') { setTimeout(() => fn.call(bersaglio, new Event(t)), 0); return; }
+      if (t === tipo && (typeof fn === 'function' || (fn && typeof fn.handleEvent === 'function'))) {
+        const chiama = () => { try { typeof fn === 'function' ? fn.call(bersaglio, new Event(t)) : fn.handleEvent(new Event(t)); } catch (e) { setTimeout(() => { throw e; }); } };
+        if (inAvvio) { inAttesa[tipo].push(chiama); return; }
+        if (tipo === 'DOMContentLoaded' || document.readyState === 'complete') { setTimeout(chiama, 0); return; }
+      }
       return orig(t, fn, opt);
     };
   };
-  tardi(document, 'DOMContentLoaded', () => document.readyState !== 'loading');
-  tardi(window, 'load', () => document.readyState === 'complete');
+  tardi(document, 'DOMContentLoaded');
+  tardi(window, 'load');
 }
 
 function carica(src, tipo) {
@@ -205,6 +215,21 @@ function carica(src, tipo) {
     s.src = src;
     s.onload = s.onerror = () => ok();
     document.body.appendChild(s);
+  });
+}
+// Un modulo scritto nella pagina: si aspetta che abbia finito (anche le sue attese iniziali).
+let nModulo = 0;
+function moduloInline(vecchio) {
+  return new Promise(ok => {
+    const id = '__rsMod' + (++nModulo);
+    let fatto = false;
+    const fine = () => { if (!fatto) { fatto = true; try { delete window[id]; } catch (e) {} ok(); } };
+    window[id] = fine;
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.textContent = vecchio.textContent + '\n;window.' + id + '&&window.' + id + '();';
+    vecchio.replaceWith(s);
+    setTimeout(fine, 15000); // se il modulo si ferma per un errore non si blocca tutta la pagina
   });
 }
 
@@ -220,13 +245,16 @@ async function avvia() {
     const base = src ? src.split('?')[0].split('/').pop() : '';
     return (src && !LOCALE && src.indexOf('://') < 0 && PRIVATI.indexOf(base) >= 0) ? base : '';
   };
-  // si parte con tutti gli scaricamenti insieme (prima uno dopo l'altro)
+  // si parte con tutti gli scaricamenti insieme
   for (const el of lista) {
     if (el.getAttribute('data-fio')) datoFio(el.getAttribute('data-fio'));
     else if (privatoDi(el)) testoPrivato(privatoDi(el));
   }
+  const moduli = [];
+  // 1) script normali, in ordine (come durante la lettura della pagina)
   for (const vecchio of lista) {
     const tipo = vecchio.getAttribute('data-tipo') || '';
+    if (tipo === 'module') { moduli.push(vecchio); continue; }
     const fio = vecchio.getAttribute('data-fio');
     if (fio) {
       const testo = await datoFio(fio);
@@ -254,9 +282,20 @@ async function avvia() {
     s.textContent = vecchio.textContent;
     vecchio.replaceWith(s);
   }
+  // 2) moduli, uno alla volta (il browser li esegue dopo la lettura della pagina)
+  for (const vecchio of moduli) {
+    const src = vecchio.getAttribute('data-src');
+    if (src) { vecchio.remove(); await carica(src, 'module'); }
+    else await moduloInline(vecchio);
+  }
   document.documentElement.classList.remove('rs-chiuso');
   const v = document.getElementById('rs-porta');
   if (v) v.remove();
+  // 3) "pagina pronta" e poi "pagina caricata", come farebbe il browser
+  inAvvio = false;
+  inAttesa.DOMContentLoaded.splice(0).forEach(f => f());
+  await new Promise(r => setTimeout(r, 0));
+  inAttesa.load.splice(0).forEach(f => f());
   try { performance.mark('rs-pronto'); } catch (e) {}
 }
 
