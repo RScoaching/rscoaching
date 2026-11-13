@@ -121,14 +121,17 @@ export async function accessoAtleta(app, aid, opz) {
     }
     history.replaceState(null, '', location.pathname + '?id=' + encodeURIComponent(aid || ''));
   }
-  const utente = await new Promise(ok => { const stop = onAuthStateChanged(auth, u => { stop(); ok(u); }); });
   if (!aid) return;
+  const prova = tok => fetch(DB + '/athletes/' + encodeURIComponent(aid) + '/name.json' + (tok ? '?auth=' + encodeURIComponent(tok) : ''), { cache: 'no-store' });
+  // via veloce: atleta senza email per l'accesso (basta il link). Una richiesta, senza aspettare il login.
+  try { const r0 = await prova(''); if (r0.ok) { chiudi(); return; } }
+  catch (e) { return; } // senza rete: l'app mostra quello che ha in memoria, come prima
 
+  const utente = await new Promise(ok => { const stop = onAuthStateChanged(auth, u => { stop(); ok(u); }); });
   let tok = '';
   try { tok = utente ? await utente.getIdToken() : ''; } catch (e) {}
   let r;
-  try { r = await fetch(DB + '/athletes/' + encodeURIComponent(aid) + '/name.json' + (tok ? '?auth=' + encodeURIComponent(tok) : ''), { cache: 'no-store' }); }
-  catch (e) { return; } // senza rete: l'app mostra quello che ha in memoria, come prima
+  try { r = await prova(tok); } catch (e) { return; }
   if (r.ok) { chiudi(); return; }
   if (opz.altrove) { location.replace(opz.altrove); return new Promise(() => {}); }
   chiediEmail(auth, aid, utente && utente.email ? 'Questo link non e\' collegato a ' + utente.email + '.' : '');
