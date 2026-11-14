@@ -104,7 +104,9 @@ function sorvegliaAccesso() {
   });
   const prova = async () => {
     if (avviata || !document.getElementById('rs-porta')) { clearInterval(sorveglia); sorveglia = null; return; }
-    if (auth.currentUser || await ceUtente()) {
+    // se questa pagina sa gia' dell'accesso ci pensa l'avvio normale: qui solo il caso "rimasta indietro"
+    if (auth.currentUser) { clearInterval(sorveglia); sorveglia = null; return; }
+    if (await ceUtente()) {
       // al massimo una ripresa ogni 20 secondi (niente ricariche a catena)
       let ult = 0; try { ult = +sessionStorage.getItem('rs_ripresa') || 0; } catch (e) {}
       if (Date.now() - ult < 20000) return;
@@ -175,8 +177,12 @@ function incollaLink(em) {
     const mail = (em || (v.querySelector('#rs-em2') || {}).value || '').trim().toLowerCase();
     if (!link || !isSignInWithEmailLink(auth, link)) { v.querySelector('#rs-err').textContent = 'Questo non sembra il link dell\'email.'; return; }
     if (!mail) { v.querySelector('#rs-err').textContent = 'Scrivi la tua email.'; return; }
-    try { await signInWithEmailLink(auth, mail, link); try { localStorage.setItem(K_EMAIL, mail); } catch (e) {} location.reload(); }
-    catch (e) { v.querySelector('#rs-err').textContent = spiegaErr(e); }
+    try {
+      v.querySelector('#rs-ok').disabled = true;
+      await signInWithEmailLink(auth, mail, link);   // l'avvio normale parte da solo (onAuthStateChanged)
+      try { localStorage.setItem(K_EMAIL, mail); } catch (e) {}
+      velo('<div style="color:#a0a0b8">Accesso in corso...</div>');
+    } catch (e) { v.querySelector('#rs-ok').disabled = false; v.querySelector('#rs-err').textContent = spiegaErr(e); }
   };
 }
 
@@ -506,8 +512,12 @@ if (!SENZA_LOGIN && isSignInWithEmailLink(auth, location.href)) {
   } else {
     velo('<div style="color:#a0a0b8">Controllo accesso...</div>');
   }
+  let giaPartito = false;
   onAuthStateChanged(auth, async user => {
-    if (!user) { await svuotaTutto(); if (montata) { location.reload(); return; } chiediAccesso(''); return; }
+    if (!user) { if (giaPartito) return; await svuotaTutto(); if (montata) { location.reload(); return; } chiediAccesso(''); return; }
+    if (giaPartito) return;      // l'avvio della pagina si fa una volta sola
+    giaPartito = true;
+    if (sorveglia) { clearInterval(sorveglia); sorveglia = null; }
     window.rsEsci = () => svuotaTutto().then(() => signOut(auth)).then(() => location.reload());
     // Connessione al database aperta subito (la stessa che usera' la pagina): mentre la
     // pagina si prepara, il collegamento e' gia' pronto.
