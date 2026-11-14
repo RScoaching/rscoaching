@@ -17,7 +17,8 @@
      locali, come prima.
    ========================================================================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut,
+         sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const cfg={apiKey:"AIzaSyAayWDWvUQqtAfIlm7qA8kMKxJu2-_y7k4",authDomain:"rscoaching-a6c61.firebaseapp.com",databaseURL:"https://rscoaching-a6c61-default-rtdb.europe-west1.firebasedatabase.app",projectId:"rscoaching-a6c61",storageBucket:"rscoaching-a6c61.firebasestorage.app",messagingSenderId:"499942544251",appId:"1:499942544251:web:bd246cc6846b0fad89e3de"};
 const DB = cfg.databaseURL;
@@ -63,18 +64,119 @@ const BTN = 'display:inline-block;margin-top:18px;padding:12px 22px;border-radiu
   'font:600 15px Inter,-apple-system,system-ui,sans-serif;background:#7c3aed;color:#fff';
 const BTN2 = BTN.replace('background:#7c3aed;color:#fff', 'background:transparent;color:#a0a0b8;border:1px solid #33334a');
 
+// ---------- schermata di accesso ----------
+// Due modi: Google (finestra) oppure un link via email (senza finestre: il piu'
+// affidabile nella web app aperta dall'icona sulla schermata Home).
+const K_EMAIL = 'rs_email_coach';
+const IN_APP = (navigator.standalone === true) || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+const INP = 'width:100%;box-sizing:border-box;margin-top:12px;padding:12px;border-radius:10px;border:1px solid #33334a;background:#141420;color:#e8e8f0;font:15px Inter,system-ui,sans-serif';
+const LNK = 'background:none;border:0;color:#a0a0b8;font:14px Inter,system-ui,sans-serif;text-decoration:underline;cursor:pointer;margin-top:16px;padding:6px';
+const escT = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function spiegaErr(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/network-request-failed') return 'Rete non raggiungibile: riprova.';
+  if (c === 'auth/invalid-action-code' || c === 'auth/expired-action-code') return 'Link scaduto o gia\' usato: chiedine uno nuovo.';
+  if (c === 'auth/invalid-email') return 'L\'email non corrisponde a quella del link.';
+  if (c === 'auth/popup-blocked') return 'Il browser ha bloccato la finestra: usa il link via email qui sotto.';
+  return 'Accesso non riuscito (' + (c || 'errore') + ').';
+}
+
+// Ripresa automatica: se l'accesso e' riuscito in un'altra finestra o scheda ma questa
+// pagina non se n'e' accorta, la pagina si riapre da sola (prima serviva tornare indietro).
+let sorveglia = null;
+function sorvegliaAccesso() {
+  if (sorveglia) return;
+  const chiave = 'firebase:authUser:' + cfg.apiKey + ':[DEFAULT]';
+  const ceUtente = () => new Promise(ok => {
+    try {
+      const rq = indexedDB.open('firebaseLocalStorageDb');
+      rq.onerror = () => ok(false);
+      rq.onsuccess = () => {
+        try {
+          const db = rq.result;
+          if (!db.objectStoreNames.contains('firebaseLocalStorage')) { db.close(); ok(false); return; }
+          const g = db.transaction('firebaseLocalStorage', 'readonly').objectStore('firebaseLocalStorage').get(chiave);
+          g.onsuccess = () => { db.close(); ok(!!g.result); };
+          g.onerror = () => { db.close(); ok(false); };
+        } catch (e) { ok(false); }
+      };
+    } catch (e) { ok(false); }
+  });
+  const prova = async () => {
+    if (avviata || !document.getElementById('rs-porta')) { clearInterval(sorveglia); sorveglia = null; return; }
+    if (auth.currentUser || await ceUtente()) {
+      // al massimo una ripresa ogni 20 secondi (niente ricariche a catena)
+      let ult = 0; try { ult = +sessionStorage.getItem('rs_ripresa') || 0; } catch (e) {}
+      if (Date.now() - ult < 20000) return;
+      try { sessionStorage.setItem('rs_ripresa', String(Date.now())); } catch (e) {}
+      clearInterval(sorveglia); sorveglia = null; location.reload();
+    }
+  };
+  sorveglia = setInterval(prova, 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') prova(); });
+  window.addEventListener('focus', prova);
+  window.addEventListener('pageshow', prova);
+}
+
 function chiediAccesso(errore) {
   const v = velo('<div style="font:700 20px Inter,system-ui,sans-serif;letter-spacing:.02em">RS Coaching</div>' +
-    '<div style="margin-top:6px;color:#a0a0b8">Area riservata. Entra con il tuo account Google.</div>' +
-    (errore ? '<div style="margin-top:12px;color:#f87171">' + errore + '</div>' : '') +
-    '<button id="rs-entra" style="' + BTN + '">Entra con Google</button>');
+    '<div style="margin-top:6px;color:#a0a0b8">Area riservata.</div>' +
+    (errore ? '<div style="margin-top:12px;color:#f87171">' + escT(errore) + '</div>' : '') +
+    '<button id="rs-entra" style="' + BTN + '">Entra con Google</button>' +
+    '<div><button id="rs-mail" style="' + LNK + '">' + (IN_APP ? 'Problemi? Entra con un link via email' : 'Oppure entra con un link via email') + '</button></div>');
   v.querySelector('#rs-entra').onclick = () => {
+    sorvegliaAccesso();
     signInWithPopup(auth, new GoogleAuthProvider()).catch(e => {
       // a volte il browser segnala "finestra chiusa" anche se l'accesso e' riuscito: in quel caso si ignora
       if (auth.currentUser || avviata) return;
-      chiediAccesso(e && e.code === 'auth/popup-blocked' ? 'Il browser ha bloccato la finestra: consenti i popup per questo sito.' :
-        (e && e.code === 'auth/popup-closed-by-user' ? '' : 'Accesso non riuscito (' + ((e && e.code) || 'errore') + ').'));
+      if (e && e.code === 'auth/popup-closed-by-user') return;
+      chiediAccesso(spiegaErr(e));
     });
+  };
+  v.querySelector('#rs-mail').onclick = () => chiediEmailCoach('');
+  sorvegliaAccesso();
+}
+
+function chiediEmailCoach(msg) {
+  const v = velo('<div style="font:700 20px Inter,system-ui,sans-serif">Entra con un link</div>' +
+    '<div style="margin-top:6px;color:#a0a0b8">Scrivi la tua email: ti arriva un link, lo apri e sei dentro.</div>' +
+    '<input id="rs-em" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="nome@email.it" style="' + INP + '" value="' + escT(localStorage.getItem(K_EMAIL) || '') + '">' +
+    '<button id="rs-invia" style="' + BTN + '">Mandami il link</button>' +
+    '<div id="rs-err" style="margin-top:10px;color:#f87171;min-height:1em">' + escT(msg) + '</div>' +
+    '<div><button id="rs-ho" style="' + LNK + '">Ho gia\' il link</button> <button id="rs-gg" style="' + LNK + '">Torna a Google</button></div>');
+  const invia = async () => {
+    const em = v.querySelector('#rs-em').value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { v.querySelector('#rs-err').textContent = 'Controlla l\'email.'; return; }
+    v.querySelector('#rs-invia').disabled = true;
+    try {
+      await sendSignInLinkToEmail(auth, em, { url: location.origin + location.pathname, handleCodeInApp: true });
+      try { localStorage.setItem(K_EMAIL, em); } catch (e) {}
+      incollaLink(em);
+    } catch (e) { v.querySelector('#rs-invia').disabled = false; v.querySelector('#rs-err').textContent = spiegaErr(e); }
+  };
+  v.querySelector('#rs-invia').onclick = invia;
+  v.querySelector('#rs-em').onkeydown = e => { if (e.key === 'Enter') invia(); };
+  v.querySelector('#rs-ho').onclick = () => incollaLink(localStorage.getItem(K_EMAIL) || '');
+  v.querySelector('#rs-gg').onclick = () => chiediAccesso('');
+}
+
+function incollaLink(em) {
+  const v = velo('<div style="font:700 20px Inter,system-ui,sans-serif">Controlla l\'email</div>' +
+    (em ? '<div style="margin-top:6px;color:#a0a0b8">Link mandato a <b>' + escT(em) + '</b>. Aprilo da questo dispositivo.</div>' : '') +
+    '<div style="margin-top:16px;color:#a0a0b8;font-size:13px">Usi l\'app dall\'icona sulla schermata Home? Tieni premuto sul link nell\'email, copialo e incollalo qui:</div>' +
+    '<input id="rs-link" type="url" autocapitalize="off" placeholder="Incolla il link" style="' + INP + '">' +
+    (em ? '' : '<input id="rs-em2" type="email" autocapitalize="off" placeholder="La tua email" style="' + INP + '">') +
+    '<button id="rs-ok" style="' + BTN + '">Entra</button>' +
+    '<div id="rs-err" style="margin-top:10px;color:#f87171;min-height:1em"></div>' +
+    '<div><button id="rs-ind" style="' + LNK + '">Indietro</button></div>');
+  v.querySelector('#rs-ind').onclick = () => chiediEmailCoach('');
+  v.querySelector('#rs-ok').onclick = async () => {
+    const link = v.querySelector('#rs-link').value.trim();
+    const mail = (em || (v.querySelector('#rs-em2') || {}).value || '').trim().toLowerCase();
+    if (!link || !isSignInWithEmailLink(auth, link)) { v.querySelector('#rs-err').textContent = 'Questo non sembra il link dell\'email.'; return; }
+    if (!mail) { v.querySelector('#rs-err').textContent = 'Scrivi la tua email.'; return; }
+    try { await signInWithEmailLink(auth, mail, link); try { localStorage.setItem(K_EMAIL, mail); } catch (e) {} location.reload(); }
+    catch (e) { v.querySelector('#rs-err').textContent = spiegaErr(e); }
   };
 }
 
@@ -376,7 +478,23 @@ function usatiDallaPagina() {
   return u;
 }
 
-if (SENZA_LOGIN) {
+if (!SENZA_LOGIN && isSignInWithEmailLink(auth, location.href)) {
+  const em = (() => { try { return localStorage.getItem(K_EMAIL) || ''; } catch (e) { return ''; } })();
+  const pulisci = () => history.replaceState(null, '', location.pathname);
+  if (em) {
+    signInWithEmailLink(auth, em, location.href).then(() => { pulisci(); location.reload(); })
+      .catch(e => { pulisci(); chiediEmailCoach(spiegaErr(e)); });
+  } else {
+    const href = location.href; pulisci();
+    const v = velo('<div style="font:700 20px Inter,system-ui,sans-serif">Quasi fatto</div><div style="margin-top:6px;color:#a0a0b8">Conferma la tua email per entrare.</div>' +
+      '<input id="rs-em" type="email" autocapitalize="off" placeholder="nome@email.it" style="' + INP + '"><button id="rs-ok" style="' + BTN + '">Entra</button><div id="rs-err" style="margin-top:10px;color:#f87171"></div>');
+    v.querySelector('#rs-ok').onclick = () => {
+      const m = v.querySelector('#rs-em').value.trim().toLowerCase();
+      signInWithEmailLink(auth, m, href).then(() => { try { localStorage.setItem(K_EMAIL, m); } catch (e) {} location.reload(); })
+        .catch(e => { v.querySelector('#rs-err').textContent = spiegaErr(e); });
+    };
+  }
+} else if (SENZA_LOGIN) {
   avvia();
 } else {
   let montata = null;
