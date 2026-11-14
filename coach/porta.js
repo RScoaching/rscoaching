@@ -131,7 +131,13 @@ async function datoFio(nome, fresco) {
     const r = await fetchVero('./' + nome + '_data.js', { cache: 'no-store' });
     return r.ok ? r.text() : '';
   }
-  if (fresco) { const v = await caricaVersioni(); if (v) VERSIONI = v; MEMO.delete('fio_dati/' + nome); }
+  if (fresco) {
+    // una sola richiesta delle versioni anche se si controllano piu' file insieme
+    if (!datoFio.fresche || Date.now() - datoFio.quando > 3000) { datoFio.quando = Date.now(); datoFio.fresche = caricaVersioni(); }
+    const v = await datoFio.fresche;
+    if (v) VERSIONI = v;
+    MEMO.delete('fio_dati/' + nome);
+  }
   return privato('fio_dati', nome);
 }
 function installaFetch() {
