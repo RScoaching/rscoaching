@@ -385,6 +385,13 @@ if (SENZA_LOGIN) {
   onAuthStateChanged(auth, async user => {
     if (!user) { await svuotaTutto(); if (montata) { location.reload(); return; } chiediAccesso(''); return; }
     window.rsEsci = () => svuotaTutto().then(() => signOut(auth)).then(() => location.reload());
+    // Connessione al database aperta subito (la stessa che usera' la pagina): mentre la
+    // pagina si prepara, il collegamento e' gia' pronto.
+    if (document.querySelector('link[rel="modulepreload"][href*="firebase-database"]')) {
+      import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js")
+        .then(({ getDatabase, ref, onValue }) => { onValue(ref(getDatabase(app), '.info/connected'), () => {}); })
+        .catch(() => {});
+    }
     const veloce = !!(VERSIONI && uidCopia && uidCopia === user.uid);
     let nuove = null;
     const controllo = (async () => {
