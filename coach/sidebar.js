@@ -697,9 +697,27 @@ window.RSOrologio = (function(){
     return out.map(b=>({m:b.m,s:b.s,passo:b.s/(b.m/1000),fc:b.fs?Math.round(b.ft/b.fs):null,n:b.n,step:b.step}));
   }
   // confronto fra le fasi in programma e i blocchi corsi: si accoppiano in ordine quando sono tanti quanti
+  /* I giri divisi per km secondo le fasi in programma. Serve quando l'orologio ha corso un allenamento
+     diverso da quello che c'e' adesso nel programma (fasi cambiate dopo nel Builder): i suoi "passi"
+     dividono la corsa nei punti vecchi. Ogni giro va nella fase in cui cade la sua meta'. */
+  function perDistanza(L,fila){
+    const confini=[];let c=0;fila.forEach(x=>{c+=x.dur.m;confini.push(c);});
+    const out=fila.map(()=>({m:0,s:0,ft:0,fs:0,n:0}));let pos=0;
+    L.forEach(l=>{const mid=pos+(+l.m)/2;pos+=+l.m;let i=confini.findIndex(b=>mid<=b);if(i<0)i=fila.length-1;
+      const b=out[i];b.m+=+l.m;b.s+=+l.s;b.ft+=(+l.fc||0)*l.s;b.fs+=l.fc?+l.s:0;b.n++;});
+    if(out.some(b=>!b.n))return null;
+    return out.map(b=>({m:b.m,s:b.s,passo:b.s/(b.m/1000),fc:b.fs?Math.round(b.ft/b.fs):null,n:b.n}));
+  }
   function confrontaGiri(s,laps,R){
-    const B=blocchi(laps);if(!B.length)return null;
+    let B=blocchi(laps);if(!B.length)return null;
     const fila=inFila(passi(s,R,true)).filter(x=>x.dur.tipo!=='open'||x.intens==='active');
+    // fasi tutte a distanza e totale che torna: se i blocchi dell'orologio non coincidono con le fasi
+    // di adesso, la corsa si divide per km secondo le fasi in programma
+    if(fila.length&&fila.every(x=>x.dur.tipo==='dist'&&x.dur.m>0)){
+      const L=(laps||[]).filter(l=>l&&+l.s>0&&+l.m>0),tot=L.reduce((t,l)=>t+(+l.m),0),pian=fila.reduce((t,x)=>t+x.dur.m,0);
+      const diversi=B.length!==fila.length||B.some((b,i)=>Math.abs(b.m-fila[i].dur.m)>Math.max(300,0.1*fila[i].dur.m));
+      if(diversi&&tot>0&&Math.abs(tot-pian)<=Math.max(500,0.06*pian)){const B2=perDistanza(L,fila);if(B2)B=B2;}
+    }
     if(B.length!==fila.length)return {blocchi:B,giri:[],centrati:null};
     const giri=B.map((b,i)=>{const x=fila[i],t=x.target;let e='';
       if(t&&t.tipo==='pace')e=b.passo>t.lo+3?'lento':b.passo<t.hi-3?'veloce':'ok';
@@ -844,11 +862,14 @@ window.RSGarmin = (function(){
       // senza seduta in programma restano i tratti corsi (per km o per cambio di ritmo)
       const giriDi=(c,ps)=>{if(!c||!a.laps||!window.RSOrologio)return c;try{const r=ps?window.RSOrologio.confrontaGiri(ps,a.laps,null):{blocchi:window.RSOrologio.blocchi(a.laps),giri:[],centrati:null};if(!r||!r.blocchi.length)return c;
           const gi=r.giri.length?r.giri.map(x=>({n:x.nome,m:Math.round(x.m),s:Math.round(x.s),fc:x.fc,t:x.bersaglio||null,e:x.esito||null})):r.blocchi.map((x,i)=>({n:'Tratto '+(i+1),m:Math.round(x.m),s:Math.round(x.s),fc:x.fc}));
-          return Object.assign({},c,{giri:gi},r.centrati?{centrati:r.centrati}:{});}catch(e){return c;}};
+          return Object.assign({},c,{giri:gi,centrati:r.centrati||null});}catch(e){return c;}};
       if(k){usati.add(k);const l=out[k];
         const pl=l.progId&&pianificate?pianificate(a.giorno).find(x=>x.pid===l.progId&&x.sid===l.sessId):null;
         if(corsa&&!l.corsa)Object.assign(corsa,giriDi(corsa,pl&&pl.s));
-        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},orologio(a),a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},(!l.corsa&&corsa)?{corsa}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
+        // corsa gia' registrata: il confronto fatto/programma si rifa' con le fasi di adesso (se nel Builder
+        // sono cambiate dopo, gli split seguono la versione nuova). Il registro salvato non si tocca.
+        const corsaAgg=(l.corsa&&pl&&pl.s&&a.laps&&a.laps.length)?giriDi(Object.assign({},l.corsa),pl.s):null;
+        out[k]=Object.assign({},l,{gmId:a.id,gmFonte:a.fonti.join('+')},orologio(a),a.traccia?{gmTraccia:a.traccia}:{},a.zt?{gmZt:a.zt}:{},a.fc?{gmFc:a.fc}:{},a.load?{gmLoad:a.load}:{},(!l.corsa&&corsa)?{corsa}:{},(corsaAgg&&corsaAgg.giri)?{corsa:corsaAgg}:{},(!(+l.duration)&&a.sec)?{duration:Math.round(a.sec/60)}:{},(!(+l.avgRpe)&&a.rpe)?{avgRpe:a.rpe}:{});
         return;}
       const adatta=p=>!fatteProg.has(p.pid+'|'+p.wi+'|'+p.sid)&&(a.tipo==='corsa'?p.tipo==='corsa':a.tipo==='pesi'?p.tipo==='pesi':false);
       let p=(pianificate?pianificate(a.giorno):[]).filter(adatta)[0];
