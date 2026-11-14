@@ -4929,7 +4929,18 @@ window.bnSwitch=(page,btn)=>{
   const pg=document.getElementById('page-'+page);if(pg){pg.classList.remove('pg-in');void pg.offsetWidth;pg.classList.add('pg-in');}
   bnInd();
   if(page==='chat'){renderChat();markChatRead();}
+  // ogni cambio di scheda e' un passo: il tasto Indietro del telefono torna alla scheda prima
+  // invece di chiudere l'app. L'indirizzo resta lo stesso (il link personale non cambia).
+  try{const st=history.state||{};if(!_bnPop&&st.bn!==page)history[st.bn?'pushState':'replaceState']({bn:page},'',location.href);}catch(e){}
 };
+let _bnPop=false;
+// all'apertura si e' su Oggi: il passo attuale lo dice (anche dopo un ricaricamento)
+try{history.replaceState({bn:'oggi'},'',location.href);}catch(e){}
+window.addEventListener('popstate',e=>{
+  const p=(e.state&&e.state.bn)||'oggi',i=['oggi','piano','checkin','profilo','chat'].indexOf(p);if(i<0)return;
+  const b=document.querySelectorAll('.bn-item')[i];if(!b)return;
+  _bnPop=true;try{bnSwitch(p,b);}finally{_bnPop=false;}
+});
 // barra in alto e colore della barra del browser: trasparente col bagliore in cima, scura scorrendo.
 // Un osservatore su un punto in cima alla pagina, niente ascolto dello scroll.
 (()=>{const app=document.getElementById('app'),hd=document.querySelector('#app > .header'),tema=document.getElementById('tema');if(!app||!hd||!('IntersectionObserver' in window))return;
