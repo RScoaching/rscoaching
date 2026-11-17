@@ -1892,7 +1892,8 @@ window.RSCardio = (function(){
 
 /* ===== MOVIMENTO (17/11/2026) =====
    I movimenti rispondono a quello che fai, non decorano:
-   - cambio pagina: il contenuto sfuma e sale di poco, il menu resta fermo;
+   - (il passaggio animato tra pagine e' tolto: le pagine Fiorentina si
+     montano dopo l'accesso e il browser lo annullava);
    - cambio scheda: il contenuto nuovo entra dal lato della scheda scelta
      (a destra se e' piu' avanti, a sinistra se e' piu' indietro);
    - i riquadri che si aprono (? Come si calcola, Settimana per settimana...)
@@ -1908,7 +1909,6 @@ window.RSCardio = (function(){
   st.id = 'rs-movimento';
   st.textContent =
     '@media screen and (prefers-reduced-motion: no-preference){' +
-      '@view-transition{navigation:auto}' +
       '#sidebar,#sb-sidebar{view-transition-name:rs-menu}' +
       '#bt-bar,#fio-bt{view-transition-name:rs-barra}' +
       '::view-transition-group(rs-menu),::view-transition-group(rs-barra){animation:none}' +
@@ -1960,6 +1960,48 @@ window.RSCardio = (function(){
       t = document.startViewTransition(function(){ giro = true; try { b.click(); } finally { giro = false; } });
     } catch (err) { giro = true; try { b.click(); } finally { giro = false; } R.removeAttribute('data-rsm'); return; }
     t.finished.then(fine, fine);
+    if (t.ready) t.ready.catch(function(){});   // annullata (cambio pagina a meta'): niente da fare
+    if (t.updateCallbackDone) t.updateCallbackDone.catch(function(){});
     function fine(){ R.removeAttribute('data-rsm'); }
   }, true);
+})();
+
+/* ===== BASE DI QUALITA' (17/11/2026), regole di interfaccia di Vercel =====
+   - contorno ben visibile quando si usa la tastiera (Tab), mai col mouse;
+   - niente ritardo del doppio tocco sul telefono e niente lampo grigio al tocco;
+   - cifre incolonnate in tutte le tabelle;
+   - titoli che vanno a capo in modo bilanciato;
+   - barre di scorrimento sottili del colore del tema;
+   - colori dei controlli del browser e della barra del telefono uguali al tema. */
+(function(){
+  if (window.__rsBase) return; window.__rsBase = 1;
+  var FOCUS = '#ff8a57';
+  var st = document.createElement('style');
+  st.id = 'rs-base';
+  st.textContent =
+    ':root{color-scheme:dark}' +
+    ':root[data-tema="chiaro"]{color-scheme:light}' +
+    ':where(button,a,[role=tab],summary,[tabindex]):focus-visible{outline:2px solid ' + FOCUS + ' !important;outline-offset:2px !important;border-radius:6px}' +
+    ':where(button,a,[role=tab],summary,label,input,select){touch-action:manipulation;-webkit-tap-highlight-color:transparent}' +
+    ':where(td,th){font-variant-numeric:tabular-nums}' +
+    ':where(h1,h2,h3){text-wrap:balance}' +
+    '@media (pointer:fine){' +
+      'html{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}' +
+      ':root[data-tema="chiaro"]{scrollbar-color:rgba(0,0,0,.22) transparent}' +
+      '*{scrollbar-width:thin}' +
+    '}';
+  document.head.appendChild(st);
+  /* barra del browser sul telefono dello stesso colore della pagina */
+  function tinta(){
+    try {
+      var c = getComputedStyle(document.body).backgroundColor;
+      if (!c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent') c = getComputedStyle(document.documentElement).backgroundColor;
+      if (!c || c === 'rgba(0, 0, 0, 0)') return;
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+      m.content = c;
+    } catch (e) {}
+  }
+  if (document.body) tinta(); else document.addEventListener('DOMContentLoaded', tinta);
+  try { new MutationObserver(tinta).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tema'] }); } catch (e) {}
 })();
