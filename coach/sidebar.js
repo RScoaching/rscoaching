@@ -2005,3 +2005,69 @@ window.RSCardio = (function(){
   if (document.body) tinta(); else document.addEventListener('DOMContentLoaded', tinta);
   try { new MutationObserver(tinta).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tema'] }); } catch (e) {}
 })();
+
+/* ===== TABELLE (17/11/2026) =====
+   - passando il mouse su una riga, la riga si illumina appena (anche sulle
+     celle colorate: e' un velo sopra, il colore della cella resta);
+   - le tabelle piu' larghe dello schermo tengono ferma la prima colonna
+     (i nomi) mentre scorri di lato, e il bordo destro sfuma finche' c'e'
+     ancora qualcosa da vedere.
+   Solo a schermo: la stampa resta com'era. */
+(function(){
+  if (window.__rsTabelle) return; window.__rsTabelle = 1;
+  var st = document.createElement('style');
+  st.id = 'rs-tabelle';
+  st.textContent =
+    '@media screen{' +
+      '@media (hover:hover){tbody tr:hover>td,tbody tr:hover>th{box-shadow:inset 0 0 0 9999px rgba(255,138,87,.06)}}' +
+      'table.rs-larga>tbody>tr>:first-child,table.rs-larga>thead>tr>:first-child,table.rs-larga>tfoot>tr>:first-child{position:sticky;left:0;z-index:2;background-color:var(--rs-fondo)}' +
+      'table.rs-larga>tbody>tr>:first-child::after,table.rs-larga>thead>tr>:first-child::after{content:"";position:absolute;top:0;bottom:0;right:-8px;width:8px;pointer-events:none;background:linear-gradient(to right,rgba(0,0,0,.18),transparent);opacity:0;transition:opacity .2s}' +
+      '.rs-scorre-sx table.rs-larga>tbody>tr>:first-child::after,.rs-scorre-sx table.rs-larga>thead>tr>:first-child::after{opacity:1}' +
+      '.rs-scorre-dx{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}' +
+    '}';
+  document.head.appendChild(st);
+  function fondo(el){
+    while (el && el !== document.documentElement) {
+      var c = getComputedStyle(el).backgroundColor;
+      if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) {
+        var m = c.match(/rgba\(([^,]+),([^,]+),([^,]+),\s*([0-9.]+)\)/);
+        if (!m || +m[4] > 0.85) return c;
+      }
+      el = el.parentElement;
+    }
+    var b = getComputedStyle(document.body).backgroundColor;
+    return b && b !== 'rgba(0, 0, 0, 0)' ? b : getComputedStyle(document.documentElement).backgroundColor;
+  }
+  function bordi(p){
+    var max = p.scrollWidth - p.clientWidth;
+    p.classList.toggle('rs-scorre-dx', p.scrollLeft < max - 2);
+    p.classList.toggle('rs-scorre-sx', p.scrollLeft > 2);
+  }
+  function guarda(){
+    var T = document.querySelectorAll('table');
+    for (var i = 0; i < T.length; i++) {
+      var t = T[i];
+      if (!t.offsetParent || !t.rows.length || t.rows[0].cells.length < 3) continue;
+      var p = t.parentElement;
+      while (p && p !== document.body) { var o = getComputedStyle(p).overflowX; if (o === 'auto' || o === 'scroll') break; p = p.parentElement; }
+      if (!p || p === document.body) continue;
+      var larga = p.scrollWidth > p.clientWidth + 8;
+      if (larga && !t.classList.contains('rs-larga')) {
+        var fc = t.querySelector('tbody tr > :first-child');
+        if (fc && getComputedStyle(fc).position === 'sticky' && !t.classList.contains('rs-larga')) { /* ha gia' la sua colonna ferma */ }
+        else { t.classList.add('rs-larga'); t.style.setProperty('--rs-fondo', fondo(t.parentElement)); }
+      }
+      if (!p.__rsBordi) { p.__rsBordi = 1; p.addEventListener('scroll', function(){ bordi(this); }, { passive: true }); }
+      bordi(p);
+    }
+  }
+  var tm = 0;
+  function piu(){ clearTimeout(tm); tm = setTimeout(guarda, 250); }
+  function via(){
+    guarda();
+    try { new MutationObserver(piu).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    window.addEventListener('resize', piu, { passive: true });
+    document.addEventListener('click', piu, true);   // cambio scheda: le tabelle appena mostrate
+  }
+  if (document.body) via(); else document.addEventListener('DOMContentLoaded', via);
+})();
