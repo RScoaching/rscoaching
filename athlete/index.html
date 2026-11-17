@@ -1509,6 +1509,21 @@ textarea.onb-in{min-height:110px;resize:vertical;line-height:1.5}
 .onb-ri div{display:grid;grid-template-columns:110px 1fr;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,214,196,.08);font-size:14px}
 .onb-ri b{font-weight:500;color:var(--mut8)}.onb-ri span{color:var(--ink8)}
 .onb-ban{appearance:none;width:100%;text-align:left;border:1px solid var(--border2);background:rgba(255,106,46,.08);border-radius:16px;padding:14px 16px;cursor:pointer;color:var(--ink8)}
+.cons{z-index:410}
+.cons .onb-q{font-size:28px;line-height:1.08}
+.cons-cks{display:flex;flex-direction:column;gap:10px;margin-top:22px}
+.cons-ck{display:flex;gap:12px;align-items:flex-start;text-align:left;border:1px solid rgba(255,214,196,.12);background:rgba(255,214,196,.03);color:var(--ink8);border-radius:14px;padding:14px 15px;min-height:48px;font:500 14.5px/1.45 var(--ff);cursor:pointer;transition:border-color .16s,background .16s,transform .16s var(--ease8)}
+.cons-ck:active{transform:scale(.99)}
+.cons-ck:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.cons-ck i{flex:0 0 22px;height:22px;border-radius:7px;border:1.5px solid rgba(255,214,196,.3);margin-top:1px;display:grid;place-items:center;transition:background .16s,border-color .16s}
+.cons-ck.on{border-color:var(--primary);background:rgba(255,106,46,.10)}
+.cons-ck.on i{background:var(--primary);border-color:var(--primary)}
+.cons-ck.on i::after{content:"";width:6px;height:11px;border:solid #1A1210;border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg)}
+.cons-ck a{color:var(--primary2);text-decoration:underline;text-underline-offset:2px}
+.cons-n{font-size:13px;color:var(--mut8);margin:16px 0 0}
+#cons-prof{display:block;margin:2px 0}#cons-prof:empty{display:none}
+#cons-prof button{appearance:none;border:0;background:none;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;padding:6px 2px}
+@media (prefers-reduced-motion:reduce){.cons-ck,.cons-ck i{transition:none}}
 .onb-ban b{display:block;font:600 15px var(--ff)}.onb-ban span{display:block;font-size:13px;color:var(--mut8);margin-top:3px}
 @media (prefers-reduced-motion:reduce){.onb-pr i,.onb-o,.onb-f button{transition:none}}
 /* video di esecuzione */
@@ -2216,7 +2231,7 @@ html body .ps7.oggi{background:var(--primary);color:#1A0B05}
         <div id="t-dnl-res" style="margin-top:12px;"></div>
       </div>
     </div>
-    <p style="margin:28px 0 8px;text-align:center;font-size:12px;color:var(--muted);line-height:2;"><a href="../privacy.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Privacy</a><a href="../termini.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Termini</a><a href="../note-legali.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Note legali</a><br>&copy; 2026 Raoul Simon · P. IVA 02446710515</p>
+    <p style="margin:28px 0 8px;text-align:center;font-size:12px;color:var(--muted);line-height:2;"><a href="../privacy.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Privacy</a><a href="../termini.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Termini</a><a href="../note-legali.html" target="_blank" rel="noopener" style="color:inherit;margin:0 8px;">Note legali</a><span id="cons-prof"></span>&copy; 2026 Raoul Simon · P. IVA 02446710515</p>
   </div>
 
   <!-- ═══ PAGE: CHAT ═══ -->
@@ -2258,6 +2273,7 @@ html body .ps7.oggi{background:var(--primary);color:#1A0B05}
 <!-- Seduta: anteprima dal Piano o registrazione dallo Storico -->
 <div class="bsheet-overlay" id="sv-overlay" onclick="chiudiSeduta()"></div>
 <div id="onb" class="onb" role="dialog" aria-modal="true" aria-labelledby="onb-q" hidden></div>
+<div id="cons" class="onb cons" role="dialog" aria-modal="true" aria-labelledby="cons-q" hidden></div>
 <div id="vd" class="onb vd" role="dialog" aria-modal="true" aria-label="Video dell'esecuzione" hidden></div>
 <div class="bsheet sv-sheet" id="sv-sheet">
   <div class="bsheet-handle"></div>
@@ -2649,7 +2665,8 @@ if(!aid){
       ST.peso=(bc.find(x=>+x.peso>0)||{}).peso||null;renderObiettivi();
     });
     // abitudini e obiettivi scelti dal preparatore
-    setTimeout(()=>onbControlla(athlete),1800);
+    // prima il consenso (dati sulla salute), poi l'eventuale scheda d'ingresso
+    consControlla().then(ok=>{if(ok)setTimeout(()=>onbControlla(athlete),1200);else window._consDopo=()=>setTimeout(()=>onbControlla(athlete),800);});
     onValue(ref(db,'sync_richiesta'),x=>{ST.syR=x.val()||{};syncMostra();},()=>{});
     onValue(ref(db,'sync_stato'),x=>{ST.syS=x.val()||{};syncMostra();},()=>{});
     onValue(ref(db,`video/${aid}`),v=>{ST.video=v.val()||{};if(document.getElementById('prof-video')?.style.display==='block')renderMieiVideo();if(document.getElementById('page-chat')?.style.display!=='none')renderChat();},()=>{});
@@ -3333,6 +3350,68 @@ async function onbControlla(athlete){
     if(_onbInfo.serve&&Date.now()-dopo>3*864e5)onbApri();
   }catch(e){}
 }
+
+// ── CONSENSO (GDPR art. 9): una volta sola, prima di usare l'app
+/* consensi/{aid} = {v, ts, termini, salute, minore, genitore, revocato?}. Se cambia CONS_V
+   (testi nuovi) o il consenso e' stato revocato, si chiede di nuovo. Senza consenso l'app
+   resta chiusa: raccoglie dati sulla salute (check-in, dolori, peso, test). */
+const CONS_V='2026-11-17';
+let CS={eta:'',genitore:'',termini:false,salute:false},_consSalvato=null;
+function consDisegna(){
+  const el=document.getElementById('cons');if(!el)return;
+  const ok=CS.eta&&CS.termini&&CS.salute&&(CS.eta!=='min'||CS.genitore.trim().length>2);
+  const ck=(k,t)=>`<div class="cons-ck${CS[k]?' on':''}" role="checkbox" tabindex="0" aria-checked="${CS[k]}" onclick="consT('${k}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();consT('${k}')}"><i aria-hidden="true"></i><span>${t}</span></div>`;
+  el.innerHTML=`<div class="onb-c">
+    <div class="onb-k">Prima di iniziare</div>
+    <h2 class="onb-q" id="cons-q">I tuoi dati restano tra te e il tuo preparatore</h2>
+    <p class="onb-s">Nell'app segni allenamenti, sensazioni e, quando serve, dolori, infortuni, peso e test. Li vede solo il tuo preparatore e li usa solo per costruire e adattare il tuo allenamento. Non vengono venduti ne' usati per pubblicita'.</p>
+    <div class="onb-l">Chi accetta</div>
+    <div class="onb-op">
+      <button type="button" class="onb-o${CS.eta==='mag'?' on':''}" aria-pressed="${CS.eta==='mag'}" onclick="consEta('mag')">Io, ho almeno 18 anni</button>
+      <button type="button" class="onb-o${CS.eta==='min'?' on':''}" aria-pressed="${CS.eta==='min'}" onclick="consEta('min')">Un genitore o tutore<small>l'atleta ha meno di 18 anni</small></button>
+    </div>
+    ${CS.eta==='min'?`<div class="onb-l">Nome e cognome del genitore o tutore</div><input class="onb-in" autocomplete="name" value="${escH(CS.genitore)}" oninput="consG(this.value)">`:''}
+    <div class="cons-cks">
+      ${ck('termini',`Ho letto l'<a href="../privacy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">informativa privacy</a> e accetto i <a href="../termini.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">termini di servizio</a>`)}
+      ${ck('salute','Acconsento all\'uso dei dati sulla salute (infortuni, dolori, peso, test) per programmare e adattare l\'allenamento')}
+    </div>
+    <p class="cons-n">Puoi rivedere o revocare il consenso quando vuoi dal Profilo.</p>
+  </div>
+  <div class="onb-f"><button type="button" class="onb-n" id="cons-ok" ${ok?'':'disabled'} onclick="consSalva()">Accetta e continua</button></div>`;
+}
+window.consEta=v=>{CS.eta=v;consDisegna();};
+window.consT=k=>{CS[k]=!CS[k];consDisegna();};
+window.consG=v=>{CS.genitore=v;const b=document.getElementById('cons-ok');if(b)b.disabled=!(CS.eta&&CS.termini&&CS.salute&&v.trim().length>2);};
+function consApri(){const el=document.getElementById('cons');if(!el)return;el.hidden=false;document.body.style.overflow='hidden';consDisegna();setTimeout(()=>document.getElementById('cons-q')?.focus?.(),50);}
+window.consSalva=async()=>{
+  const b=document.getElementById('cons-ok');if(b){b.disabled=true;b.textContent='Salvataggio...';}
+  const C={v:CONS_V,ts:Date.now(),termini:true,salute:true,minore:CS.eta==='min'};
+  if(C.minore)C.genitore=CS.genitore.trim().slice(0,80);
+  try{
+    await set(ref(db,`consensi/${aid}`),C);
+    _consSalvato=C;const el=document.getElementById('cons');el.hidden=true;document.body.style.overflow='';
+    consProfilo();showToast('Grazie, puoi iniziare');
+    if(window._consDopo){const f=window._consDopo;window._consDopo=null;f();}
+  }catch(e){if(b){b.disabled=false;b.textContent='Accetta e continua';}showToast('Non salvato: controlla la connessione');}
+};
+function consValido(c){return !!(c&&c.v===CONS_V&&c.termini&&c.salute&&!c.revocato);}
+async function consControlla(){
+  try{
+    const c=(await get(ref(db,`consensi/${aid}`))).val();_consSalvato=c;consProfilo();
+    if(consValido(c))return true;
+  }catch(e){return true;} // senza rete non si blocca l'app: si richiede alla prossima apertura
+  consApri();return false;
+}
+function consProfilo(){
+  const el=document.getElementById('cons-prof');if(!el)return;const c=_consSalvato;
+  if(!consValido(c)){el.textContent='';return;}
+  const d=new Date(c.ts);el.innerHTML=`Consenso dato il ${d.toLocaleDateString('it-IT')}${c.minore?' dal genitore '+escH(c.genitore||''):''} · <button type="button" onclick="consRevoca()">Revoca</button>`;
+}
+window.consRevoca=async()=>{
+  if(!confirm('Revocando il consenso il preparatore non potra\' piu\' usare i dati sulla salute e l\'app si chiudera\' finche\' non lo darai di nuovo. I dati gia\' raccolti restano finche\' non ne chiedi la cancellazione. Continuare?'))return;
+  try{await update(ref(db,`consensi/${aid}`),{revocato:Date.now()});_consSalvato=null;consProfilo();CS={eta:'',genitore:'',termini:false,salute:false};consApri();}
+  catch(e){showToast('Non salvato: controlla la connessione');}
+};
 
 // ── LA GARA: conto alla rovescia, obiettivo e tempo previsto oggi dai ritmi
 function renderGara(){
