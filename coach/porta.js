@@ -248,9 +248,57 @@ async function datoFio(nome, fresco) {
   }
   return privato('fio_dati', nome);
 }
+// ---------- fogli seduta del mister ----------
+// Prima erano immagini pubbliche in coach/prev/seduta-<data>-<slot>.jpg: chiunque poteva
+// scaricarle. Ora stanno nel database (fogli/<chiave>, come immagine in data URL) e arrivano
+// solo dopo l'accesso. Le pagine continuano a scrivere 'prev/seduta-...jpg': qui le richieste
+// fetch ricevono il file dal database, e immagini e link vengono girati su una copia locale.
+const RE_FOGLIO = /(?:^|\/)prev\/seduta-([0-9A-Za-z_-]+)\.jpg(?:[?#].*)?$/;
+const FOGLI_URL = new Map();
+function foglioDato(k) { return LOCALE ? Promise.resolve('') : privato('fogli', chiave('seduta-' + k)); }
+async function foglioUrl(k) {
+  if (FOGLI_URL.has(k)) return FOGLI_URL.get(k);
+  const p = foglioDato(k).then(async d => {
+    if (!d || d.indexOf('data:image/') !== 0) return '';
+    const b = await (await fetchVero(d)).blob();
+    return URL.createObjectURL(b);
+  }).catch(() => '');
+  FOGLI_URL.set(k, p);
+  return p;
+}
+function giraFogli(radice) {
+  if (LOCALE) return;
+  const L = (radice.querySelectorAll ? radice.querySelectorAll('img[src*="prev/seduta-"],a[href*="prev/seduta-"]') : []);
+  L.forEach(el => {
+    const att = el.tagName === 'IMG' ? 'src' : 'href';
+    const m = RE_FOGLIO.exec(el.getAttribute(att) || '');
+    if (!m) return;
+    const k = m[1];
+    if (att === 'src') el.removeAttribute('src');
+    foglioUrl(k).then(u => {
+      if (u) el.setAttribute(att, u);
+      else if (att === 'src') el.dispatchEvent(new Event('error'));
+    });
+  });
+}
+function osservaFogli() {
+  if (LOCALE) return;
+  giraFogli(document);
+  new MutationObserver(lista => lista.forEach(x => {
+    if (x.type === 'attributes') { if (RE_FOGLIO.test(x.target.getAttribute(x.attributeName) || '')) giraFogli(x.target.parentNode || document); }
+    else x.addedNodes.forEach(n => { if (n.nodeType === 1) { if (n.matches && n.matches('img,a')) giraFogli(n.parentNode || document); giraFogli(n); } });
+  })).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src', 'href'] });
+}
+
 function installaFetch() {
   window.fetch = async function(input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || String(input);
+    const mf = LOCALE ? null : RE_FOGLIO.exec(url.split('#')[0]);
+    if (mf && (url.indexOf('://') < 0 || url.indexOf(location.origin + '/') === 0)) {
+      const d = await foglioDato(mf[1]);
+      if (!d) return new Response('', { status: 404 });
+      return fetchVero(d);
+    }
     const m = RE_DATI.exec(url.split('#')[0]);
     if (m && (url.indexOf('://') < 0 || url.indexOf(location.origin + '/') === 0)) {
       const testo = await datoFio(m[1], /[?&]ts=/.test(url));
@@ -354,6 +402,7 @@ async function avvia() {
   if (avviata) return;
   avviata = true;
   installaFetch();
+  osservaFogli();
   eventiTardivi();
   const lista = Array.from(document.querySelectorAll('script[type="text/rs-dopo"]'));
   const privatoDi = el => {
