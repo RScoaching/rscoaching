@@ -2261,7 +2261,7 @@ window.RSCardio = (function(){
   /* ---------- 6. suggerimenti ---------- */
   var tip = null, tipEl = null, tipT = 0, ultimo = 0;
   function tipMostra(el){
-    var testo = el.getAttribute('data-rs-tit'); if (!testo) return;
+    var testo = el.getAttribute('data-rs-tit') || el.getAttribute('data-tip'); if (!testo) return;
     if (!tip) { tip = document.createElement('div'); tip.id = 'rs-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
     tip.textContent = testo; tip.classList.remove('on');
     var r = el.getBoundingClientRect(), tw = tip.offsetWidth, tht = tip.offsetHeight;
@@ -2272,8 +2272,12 @@ window.RSCardio = (function(){
     ultimo = Date.now();
   }
   function tipVia(){ clearTimeout(tipT); if (tip) tip.classList.remove('on'); if (tipEl) { var t = tipEl.getAttribute('data-rs-tit'); if (t != null && !tipEl.hasAttribute('title')) tipEl.setAttribute('title', t); tipEl.removeAttribute('data-rs-tit'); tipEl = null; } }
+  /* punti dei grafici: data-tip, senza ritardo (si passa da un punto all'altro) */
+  function tipDato(el){ if (el === tipEl) return; tipVia(); tipEl = el; tipMostra(el); }
   if (FINE) {
     document.addEventListener('mouseover', function(e){
+      var dt = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (dt) { tipDato(dt); return; }
       var el = e.target && e.target.closest ? e.target.closest('[title]') : null;
       if (!el || el === tipEl || el instanceof SVGElement || !el.getAttribute('title')) return;
       tipVia();
