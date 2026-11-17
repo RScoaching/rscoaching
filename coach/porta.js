@@ -50,6 +50,7 @@ const fetchVero = window.fetch.bind(window);
 // ---------- avvisi a schermo ----------
 function velo(html) {
   let v = document.getElementById('rs-porta');
+  if (v && v.hasAttribute('data-sagoma')) { v.remove(); v = null; }   // la sagoma lascia il posto al messaggio
   if (!v) {
     v = document.createElement('div');
     v.id = 'rs-porta';
@@ -59,6 +60,34 @@ function velo(html) {
   }
   v.innerHTML = '<div style="max-width:360px;width:100%;text-align:center">' + html + '</div>';
   return v;
+}
+// Sagoma della pagina mentre si apre: riquadri grigi al posto dello schermo vuoto.
+// Si toglie da sola quando la pagina e' pronta (stesso id del velo).
+function sagoma() {
+  if (document.getElementById('rs-porta')) return;
+  let chiaro = false;
+  try { chiaro = localStorage.getItem('rs_fio_tema') === 'chiaro' && /fiorentina|piano|carico|hybrid|atlete|piani|esercitazioni|forza|view|calendario|report/.test(location.pathname); } catch (e) {}
+  const fondo = chiaro ? '#f4f3f7' : '#0b0b12', blocco = chiaro ? 'rgba(20,16,30,.07)' : 'rgba(255,255,255,.055)', luce = chiaro ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.06)';
+  const v = document.createElement('div');
+  v.id = 'rs-porta';
+  v.setAttribute('aria-label', 'Caricamento della pagina');
+  v.setAttribute('role', 'status');
+  v.setAttribute('data-sagoma', '1');
+  const b = (w, h, r) => '<div class="rsg" style="width:' + w + ';height:' + h + 'px;border-radius:' + (r || 12) + 'px"></div>';
+  const largo = innerWidth > 820;
+  v.innerHTML = '<style>#rs-porta .rsg{background:' + blocco + ';position:relative;overflow:hidden}' +
+    '@media (prefers-reduced-motion:no-preference){#rs-porta .rsg::after{content:"";position:absolute;inset:0;transform:translateX(-100%);' +
+    'background:linear-gradient(90deg,transparent,' + luce + ',transparent);animation:rsg 1.3s ease-in-out infinite}}' +
+    '@keyframes rsg{to{transform:translateX(100%)}}</style>' +
+    '<div style="display:flex;height:100%">' +
+      (largo ? '<div style="width:218px;flex:none;padding:24px 16px;display:flex;flex-direction:column;gap:14px;border-right:1px solid ' + blocco + '">' + b('120px', 28, 8) + b('100%', 14, 6) + b('80%', 14, 6) + b('90%', 14, 6) + b('70%', 14, 6) + b('85%', 14, 6) + '</div>' : '') +
+      '<div style="flex:1;min-width:0;padding:' + (largo ? '28px 32px' : '18px 16px') + ';display:flex;flex-direction:column;gap:16px">' +
+        b('180px', 30, 8) +
+        '<div style="display:grid;grid-template-columns:repeat(' + (largo ? 4 : 2) + ',1fr);gap:12px">' + b('100%', 86) + b('100%', 86) + b('100%', 86) + b('100%', 86) + '</div>' +
+        b('100%', 40, 10) + b('100%', 220) + b('100%', 160) +
+      '</div></div>';
+  v.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:' + fondo + ';overflow:hidden;visibility:visible';
+  document.documentElement.appendChild(v);
 }
 const BTN = 'display:inline-block;margin-top:18px;padding:12px 22px;border-radius:10px;border:0;cursor:pointer;' +
   'font:600 15px Inter,-apple-system,system-ui,sans-serif;background:#7c3aed;color:#fff';
@@ -557,9 +586,10 @@ if (!SENZA_LOGIN && isSignInWithEmailLink(auth, location.href)) {
   const uidCopia = leggiLS(K_UID);
   // la pagina si prepara subito dalla copia (senza far partire nulla) mentre il login si carica
   if (GUSCIO && VERSIONI && uidCopia) {
+    sagoma();
     montata = inCopia('pagine', chiave(GUSCIO.content)).then(ok => ok ? montaPagina().then(() => true) : false).catch(() => false);
   } else {
-    velo('<div style="color:#a0a0b8">Controllo accesso...</div>');
+    sagoma();
   }
   let giaPartito = false;
   onAuthStateChanged(auth, async user => {
