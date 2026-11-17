@@ -2278,11 +2278,14 @@ window.RSCardio = (function(){
     document.addEventListener('mouseover', function(e){
       var dt = e.target && e.target.closest ? e.target.closest('[data-tip]') : null;
       if (dt) { tipDato(dt); return; }
+      /* NIENTE SUGGERIMENTI passando sopra tasti e riquadri (scelta del 17/11):
+         la scritta del "title" si toglie mentre il mouse e' sopra, cosi' non
+         compare nemmeno quella del browser, e si rimette quando il mouse esce.
+         Restano solo i valori dei punti nei grafici (data-tip). */
       var el = e.target && e.target.closest ? e.target.closest('[title]') : null;
       if (!el || el === tipEl || el instanceof SVGElement || !el.getAttribute('title')) return;
       tipVia();
       tipEl = el; el.setAttribute('data-rs-tit', el.getAttribute('title')); el.removeAttribute('title');
-      tipT = setTimeout(function(){ if (tipEl === el) tipMostra(el); }, Date.now() - ultimo < 700 ? 0 : 380);
     }, true);
     document.addEventListener('mouseout', function(e){ if (tipEl && (!e.relatedTarget || !tipEl.contains(e.relatedTarget))) tipVia(); }, true);
     document.addEventListener('mousedown', tipVia, true);
