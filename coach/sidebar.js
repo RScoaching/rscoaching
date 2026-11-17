@@ -1889,3 +1889,77 @@ window.RSCardio = (function(){
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', monta); else monta();
 })();
+
+/* ===== MOVIMENTO (17/11/2026) =====
+   I movimenti rispondono a quello che fai, non decorano:
+   - cambio pagina: il contenuto sfuma e sale di poco, il menu resta fermo;
+   - cambio scheda: il contenuto nuovo entra dal lato della scheda scelta
+     (a destra se e' piu' avanti, a sinistra se e' piu' indietro);
+   - i riquadri che si aprono (? Come si calcola, Settimana per settimana...)
+     si allungano invece di saltare;
+   - i tasti si abbassano di poco quando li premi.
+   Con "riduci movimento" attivo sul telefono o sul Mac non si muove niente.
+   In stampa non c'e' niente di tutto questo. */
+(function(){
+  if (window.__rsMovimento) return; window.__rsMovimento = 1;
+  var ridotto = false;
+  try { ridotto = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  var st = document.createElement('style');
+  st.id = 'rs-movimento';
+  st.textContent =
+    '@media screen and (prefers-reduced-motion: no-preference){' +
+      '@view-transition{navigation:auto}' +
+      '#sidebar,#sb-sidebar{view-transition-name:rs-menu}' +
+      '#bt-bar,#fio-bt{view-transition-name:rs-barra}' +
+      '::view-transition-group(rs-menu),::view-transition-group(rs-barra){animation:none}' +
+      '::view-transition-old(rs-menu),::view-transition-old(rs-barra){display:none}' +
+      '::view-transition-new(rs-menu),::view-transition-new(rs-barra){animation:none}' +
+      '::view-transition-old(root){animation:rsm-esce .16s cubic-bezier(.4,0,1,1) both}' +
+      '::view-transition-new(root){animation:rsm-entra .26s cubic-bezier(.23,1,.32,1) both}' +
+      'html[data-rsm="dx"]::view-transition-old(root){animation-name:rsm-esce-sx}' +
+      'html[data-rsm="dx"]::view-transition-new(root){animation-name:rsm-entra-dx}' +
+      'html[data-rsm="sx"]::view-transition-old(root){animation-name:rsm-esce-dx}' +
+      'html[data-rsm="sx"]::view-transition-new(root){animation-name:rsm-entra-sx}' +
+      '@keyframes rsm-esce{to{opacity:0}}' +
+      '@keyframes rsm-entra{from{opacity:0;transform:translateY(8px)}}' +
+      '@keyframes rsm-esce-sx{to{opacity:0;transform:translateX(-18px)}}' +
+      '@keyframes rsm-esce-dx{to{opacity:0;transform:translateX(18px)}}' +
+      '@keyframes rsm-entra-dx{from{opacity:0;transform:translateX(24px)}}' +
+      '@keyframes rsm-entra-sx{from{opacity:0;transform:translateX(-24px)}}' +
+      'details{interpolate-size:allow-keywords}' +
+      'details::details-content{height:0;overflow:clip;transition:height .24s cubic-bezier(.23,1,.32,1),content-visibility .24s allow-discrete}' +
+      'details[open]::details-content{height:auto}' +
+      ':where(button,.btn,[role=tab]){transition:scale .14s cubic-bezier(.23,1,.32,1)}' +
+      ':where(button,.btn,[role=tab]):not(:disabled):active{scale:.97}' +
+    '}';
+  document.head.appendChild(st);
+  if (ridotto || !document.startViewTransition) return;
+
+  /* Cambio scheda dentro la pagina: lo stesso clic, rifatto dentro una
+     transizione. Il primo clic si ferma qui e si rilancia uguale sul tasto,
+     cosi' la pagina fa esattamente quello che faceva prima. */
+  var SEL = '[role="tab"],.snav,.pg-btn,.tab';
+  function attiva(b){
+    return b.getAttribute('aria-selected') === 'true' || b.getAttribute('aria-current') === 'true' ||
+      b.classList.contains('on') || b.classList.contains('active');
+  }
+  var giro = false;
+  document.addEventListener('click', function(e){
+    if (giro || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    var b = e.target && e.target.closest ? e.target.closest(SEL) : null;
+    if (!b || b.disabled || b.tagName === 'A' || b.closest('a[href]') || attiva(b)) return;
+    if (e.detail === 0) return;   // da tastiera: niente animazione, deve essere istantaneo
+    var fra = b.parentElement ? Array.prototype.filter.call(b.parentElement.children, function(x){ return x.matches && x.matches(SEL); }) : [];
+    var ora = -1; fra.forEach(function(x, i){ if (attiva(x)) ora = i; });
+    var dove = fra.indexOf(b);
+    e.stopImmediatePropagation(); e.preventDefault();
+    var R = document.documentElement;
+    R.setAttribute('data-rsm', ora < 0 || dove < 0 ? '' : (dove > ora ? 'dx' : 'sx'));
+    var t;
+    try {
+      t = document.startViewTransition(function(){ giro = true; try { b.click(); } finally { giro = false; } });
+    } catch (err) { giro = true; try { b.click(); } finally { giro = false; } R.removeAttribute('data-rsm'); return; }
+    t.finished.then(fine, fine);
+    function fine(){ R.removeAttribute('data-rsm'); }
+  }, true);
+})();
