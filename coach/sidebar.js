@@ -2340,6 +2340,9 @@ window.RSCardio = (function(){
       if (cerca && !cerca.contains(e.target) && e.target !== cSel) chiudiCerca();
       var s = e.target && e.target.closest ? e.target.closest('select') : null;
       if (!s || s.multiple || s.disabled || s.size > 1 || s.options.length < 12 || e.button !== 0) return;
+      /* dentro una finestra aperta (dialog, popover) la lista andrebbe sotto la finestra e non si
+         potrebbe toccare: li' resta la tendina normale del browser (calendario, Modifica blocco) */
+      if (s.closest('dialog, [popover], [aria-modal="true"]')) return;
       e.preventDefault();
       if (cSel === s) { chiudiCerca(); return; }
       apriCerca(s);
