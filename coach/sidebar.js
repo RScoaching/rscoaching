@@ -2403,7 +2403,7 @@ window.RSCardio = (function(){
 (function(){
   if (window.__rsGira) return; window.__rsGira = 1;
   if (!('showPopover' in HTMLElement.prototype)) return;   // browser vecchi: resta la pagina com'era
-  var MQ = matchMedia('(max-width: 760px), (max-height: 520px) and (pointer: coarse)');
+  var MQ = matchMedia('(max-width: 760px), (max-height: 520px) and (max-width: 1000px)');
   var st = document.createElement('style'); st.id = 'rs-gira-css';
   st.textContent =
     '#rs-gira{position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:900;display:none;align-items:center;gap:7px;' +
@@ -2493,7 +2493,7 @@ window.RSCardio = (function(){
       var sv = S[k]; if (!sv.parentElement || sv.parentElement.closest('svg')) continue;
       if (!sv.offsetParent && !(sv.getBoundingClientRect().width)) continue;
       if (sv.closest('dialog,[popover]:not(.rs-gira-on),#fio-bt,#sb-sidebar,.sb-mob-bar,button,a')) continue;
-      var rb = sv.getBoundingClientRect(); if (rb.width < 240 || rb.height < 110) continue;
+      var rb = sv.getBoundingClientRect(); if (rb.width < 240 || rb.height < 60) continue;
       if (sv.querySelectorAll('path,rect,circle,line,polyline,polygon').length < 8) continue;
       var box = sv.parentElement.closest('[class*="chart"],[class*="graf"],[id*="chart"],[class*="plot"]') || sv.parentElement;
       if (!(box instanceof HTMLElement)) continue;
@@ -2513,7 +2513,7 @@ window.RSCardio = (function(){
       var v = Math.min(r.bottom, H - 70) - Math.max(r.top, 60);
       if (v > bv) { bv = v; best = el; }
     }
-    mostra(bv >= Math.min(110, H * 0.22) ? best : null);
+    mostra(bv >= Math.min(70, H * 0.18) ? best : null);
   }
   function mostra(el){
     if (!fab) {
@@ -2524,6 +2524,7 @@ window.RSCardio = (function(){
       document.body.appendChild(fab);
     }
     fab.__el = el;
+    if (el) { var lab = matchMedia('(orientation: landscape)').matches ? 'Schermo intero' : 'Orizzontale'; var sp = fab.querySelector('span'); if (sp && sp.textContent !== lab) sp.textContent = lab; }
     if (el) { if (fab.style.display !== 'inline-flex') { fab.style.display = 'inline-flex'; void fab.offsetWidth; } fab.classList.add('on'); }
     else { fab.classList.remove('on'); fab.style.display = 'none'; }
   }
