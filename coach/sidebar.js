@@ -2390,3 +2390,200 @@ window.RSCardio = (function(){
   }
   if (document.body) via(); else document.addEventListener('DOMContentLoaded', via);
 })();
+
+/* ===== VISTA ORIZZONTALE SUL TELEFONO (19/11/2026) =====
+   Sul telefono le tabelle larghe (carico, sedute, report) e i grafici si
+   leggevano tre colonne alla volta. Quando una di queste e' sullo schermo
+   compare in basso a destra il tasto "Orizzontale": la apre a tutto schermo,
+   gia' girata (basta ruotare il telefono), con la riga dei titoli ferma.
+   Non e' una copia: e' la tabella vera portata davanti a tutto (popover),
+   quindi ordinamenti e tocchi restano quelli della pagina. I grafici si
+   ridisegnano grandi. Se il telefono e' gia' in orizzontale si apre dritta.
+   Sul computer non c'e'. */
+(function(){
+  if (window.__rsGira) return; window.__rsGira = 1;
+  if (!('showPopover' in HTMLElement.prototype)) return;   // browser vecchi: resta la pagina com'era
+  var MQ = matchMedia('(max-width: 760px), (max-height: 520px) and (pointer: coarse)');
+  var st = document.createElement('style'); st.id = 'rs-gira-css';
+  st.textContent =
+    '#rs-gira{position:fixed;right:14px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:900;display:none;align-items:center;gap:7px;' +
+      'min-height:44px;padding:0 15px 0 12px;border-radius:999px;border:1px solid rgba(167,139,250,.45);background:#221d2e;color:#efeaff;' +
+      'font:600 13.5px/1 Inter,-apple-system,system-ui,sans-serif;box-shadow:0 6px 8px rgba(0,0,0,.4);cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+      'opacity:0;transform:translateY(8px);transition:opacity .18s ease,transform .22s cubic-bezier(.23,1,.32,1)}' +
+    '#rs-gira svg{width:18px;height:18px}' +
+    '#rs-gira.on{opacity:1;transform:none}' +
+    '#rs-gira:active{scale:.96}' +
+    '@media print{#rs-gira{display:none!important}}' +
+    '.rs-gira-on:popover-open{position:fixed!important;inset:auto!important;top:0!important;left:0!important;margin:0!important;border:0!important;' +
+      'padding:0 0 0 0!important;box-sizing:border-box!important;width:100vw!important;height:100dvh!important;max-width:none!important;max-height:none!important;' +
+      'overflow:auto!important;overscroll-behavior:contain;background:var(--rs-gira-f,#0e0c0d)!important;color:inherit;border-radius:0!important;' +
+      '-webkit-mask-image:none!important;mask-image:none!important;transform:none;scale:none;translate:none;rotate:none}' +
+    '.rs-gira-on:popover-open::backdrop{background:rgba(0,0,0,.9)}' +
+    '@media (orientation:portrait){.rs-gira-on:popover-open{width:100dvh!important;height:100vw!important;transform-origin:0 0!important;transform:translateX(100vw) rotate(90deg)!important}}' +
+    /* tabelle: titoli fermi in alto, prima colonna ferma, niente spazio sprecato ai lati */
+    '.rs-gira-on.rs-gira-t{padding-bottom:56px!important}' +
+    '.rs-gira-on.rs-gira-t table{margin:0!important;min-width:100%}' +
+    '.rs-gira-on.rs-gira-t thead th{position:sticky!important;top:0!important;z-index:5!important;background-color:var(--rs-gira-th,#1d1830)!important}' +
+    '.rs-gira-on.rs-gira-t tbody>tr>:first-child,.rs-gira-on.rs-gira-t thead>tr>:first-child{position:sticky!important;left:0!important;z-index:4!important;background-color:var(--rs-gira-f,#0e0c0d)}' +
+    '.rs-gira-on.rs-gira-t thead>tr>:first-child{z-index:6!important;background-color:var(--rs-gira-th,#1d1830)!important}' +
+    /* grafici: lo spazio intero, con un margine per le etichette */
+    '.rs-gira-on.rs-gira-g{padding:16px 16px 60px!important;display:block!important}' +
+    '.rs-gira-on.rs-gira-g canvas{max-width:100%!important}' +
+    '.rs-gira-on.rs-gira-g svg.rs-gira-svg{width:100%!important;height:100%!important}' +
+    '#rs-gira-x{position:fixed;inset:auto;margin:0;border:0;padding:0;background:transparent;overflow:visible;width:auto;height:auto}' +
+    '#rs-gira-x button{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.2);' +
+      'background:#1c1820;color:#fff;font:600 14px/1 Inter,-apple-system,system-ui,sans-serif;box-shadow:0 6px 8px rgba(0,0,0,.5);cursor:pointer}' +
+    '#rs-gira-x button svg{width:16px;height:16px}' +
+    '@media (orientation:portrait){#rs-gira-x{right:auto;bottom:auto;left:12px;bottom:12px;transform-origin:0 100%;transform:rotate(90deg) translateX(-100%)}}' +
+    '@media (orientation:landscape){#rs-gira-x{right:12px;bottom:12px}}' +
+    /* telefono girato: la testata scorre via con la pagina, la barra in basso e' piu' bassa e la barra
+       delle schede non resta ferma. Prima le tre barre prendevano 166 dei 390 px e i dati stavano in una striscia. */
+    '@media screen and (orientation:landscape) and (max-height:520px) and (max-width:1000px){' +
+      '.sb-mob-bar{position:absolute!important}' +
+      '#fio-bt{padding:3px 8px calc(3px + env(safe-area-inset-bottom,0px))!important}' +
+      '#fio-bt a,#fio-bt button{min-height:40px!important;flex-direction:row!important;gap:7px!important}' +
+      '#fio-bt svg{width:18px!important;height:18px!important}' +
+      '#fio-bt .fio-gpsn{top:2px!important}' +
+      'body{padding-bottom:calc(50px + env(safe-area-inset-bottom,0px))!important}' +
+      '.rs-segue,#secnav,.pg-nav{position:static!important;box-shadow:none!important}' +
+      '#fio-bt .fio-gpsn{left:calc(50% - 34px)!important;top:1px!important}' +
+      '#rs-gira{bottom:calc(58px + env(safe-area-inset-bottom,0px))}' +
+    '}';
+  document.head.appendChild(st);
+
+  var ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="11" rx="2"/><path d="M8 4h.01M16 21l-2-2 2-2"/></svg>';
+  var XICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  var fab = null, cand = [], aperto = null, chiudi = null;
+
+  function solido(el){
+    while (el && el !== document.documentElement) {
+      var c = getComputedStyle(el).backgroundColor, m = c && c.match(/rgba?\(([^)]+)\)/);
+      if (m) { var p = m[1].split(','); if (p.length < 4 || +p[3] > 0.85) return c; }
+      el = el.parentElement;
+    }
+    var b = getComputedStyle(document.body).backgroundColor;
+    return (b && !/,\s*0\)$/.test(b)) ? b : '#0e0c0d';
+  }
+  function scorre(el){ var o = getComputedStyle(el).overflowX; return o === 'auto' || o === 'scroll'; }
+
+  /* che cosa si puo' girare: il contenitore che scorre di lato di una tabella larga, e i grafici */
+  function cerca(){
+    if (!MQ.matches) { cand = []; mostra(null); return; }
+    var out = [];
+    var T = document.querySelectorAll('table');
+    for (var i = 0; i < T.length; i++) {
+      var t = T[i]; if (!t.offsetParent || t.closest('#rs-gira-x,dialog,[popover]:not(.rs-gira-on)')) continue;
+      if (!t.rows.length || t.rows[0].cells.length < 4) continue;
+      var p = t.parentElement;
+      while (p && p !== document.body && !scorre(p)) p = p.parentElement;
+      if (!p || p === document.body) continue;
+      if (p.scrollWidth <= p.clientWidth + 8) continue;
+      if (out.indexOf(p) < 0) { p.__rsGiraT = 1; out.push(p); }
+    }
+    var C = document.querySelectorAll('canvas');
+    for (var j = 0; j < C.length; j++) {
+      var cv = C[j]; if (!cv.offsetParent || cv.closest('dialog,[popover]:not(.rs-gira-on)')) continue;
+      if (!(window.Chart && window.Chart.getChart && window.Chart.getChart(cv))) continue;
+      if (cv.getBoundingClientRect().width < 160) continue;
+      var w = cv.parentElement; if (w && out.indexOf(w) < 0) { w.__rsGiraT = 0; out.push(w); }
+    }
+    /* grafici disegnati in SVG dalla pagina (Carico, Oggi...): il riquadro che li contiene */
+    var S = document.querySelectorAll('svg');
+    for (var k = 0; k < S.length; k++) {
+      var sv = S[k]; if (!sv.parentElement || sv.parentElement.closest('svg')) continue;
+      if (!sv.offsetParent && !(sv.getBoundingClientRect().width)) continue;
+      if (sv.closest('dialog,[popover]:not(.rs-gira-on),#fio-bt,#sb-sidebar,.sb-mob-bar,button,a')) continue;
+      var rb = sv.getBoundingClientRect(); if (rb.width < 240 || rb.height < 110) continue;
+      if (sv.querySelectorAll('path,rect,circle,line,polyline,polygon').length < 8) continue;
+      var box = sv.closest('[class*="chart"],[class*="graf"],[id*="chart"],[class*="plot"]') || sv.parentElement;
+      if (box && box.querySelector('table')) box = sv.parentElement;
+      if (box && out.indexOf(box) < 0 && !out.some(function(o){ return o.contains(box) || box.contains(o); })) { box.__rsGiraT = 0; out.push(box); }
+    }
+    cand = out;
+    vedi();
+  }
+  /* il tasto c'e' solo quando una di queste e' davvero sullo schermo */
+  function vedi(){
+    if (aperto) return;
+    var best = null, bv = 0, H = innerHeight;
+    for (var i = 0; i < cand.length; i++) {
+      var el = cand[i]; if (!el.isConnected || !el.offsetParent) continue;
+      var r = el.getBoundingClientRect();
+      var v = Math.min(r.bottom, H - 70) - Math.max(r.top, 60);
+      if (v > bv) { bv = v; best = el; }
+    }
+    mostra(bv >= Math.min(110, H * 0.22) ? best : null);
+  }
+  function mostra(el){
+    if (!fab) {
+      fab = document.createElement('button'); fab.type = 'button'; fab.id = 'rs-gira';
+      fab.innerHTML = ICO + '<span>Orizzontale</span>';
+      fab.setAttribute('aria-label', 'Apri a tutto schermo in orizzontale');
+      fab.addEventListener('click', function(){ if (fab.__el) apri(fab.__el); });
+      document.body.appendChild(fab);
+    }
+    fab.__el = el;
+    if (el) { if (fab.style.display !== 'inline-flex') { fab.style.display = 'inline-flex'; void fab.offsetWidth; } fab.classList.add('on'); }
+    else { fab.classList.remove('on'); fab.style.display = 'none'; }
+  }
+  function ridisegna(el){
+    var C = el.querySelectorAll('canvas');
+    for (var i = 0; i < C.length; i++) { try { var ch = window.Chart && window.Chart.getChart(C[i]); if (ch) ch.resize(); } catch (e) {} }
+  }
+  function apri(el){
+    if (aperto) return;
+    aperto = el; el.__rsGiraSx = el.scrollLeft; el.__rsGiraSy = window.scrollY;
+    var tab = !!el.__rsGiraT;
+    el.style.setProperty('--rs-gira-f', solido(el));
+    if (tab) { var th = el.querySelector('thead th'); el.style.setProperty('--rs-gira-th', th ? solido(th) : '#1d1830'); }
+    el.classList.add('rs-gira-on', tab ? 'rs-gira-t' : 'rs-gira-g');
+    el.setAttribute('popover', 'manual');
+    try { el.showPopover(); } catch (e) { fine(); return; }
+    el.scrollLeft = 0; el.scrollTop = 0;
+    if (!chiudi) {
+      chiudi = document.createElement('div'); chiudi.id = 'rs-gira-x'; chiudi.setAttribute('popover', 'manual');
+      chiudi.innerHTML = '<button type="button" aria-label="Chiudi la vista orizzontale">' + XICO + '<span>Chiudi</span></button>';
+      chiudi.querySelector('button').addEventListener('click', fine);
+      document.body.appendChild(chiudi);
+    }
+    try { chiudi.showPopover(); } catch (e) {}
+    mostra(null);
+    /* i grafici della pagina si ridisegnano quando cambia la finestra: qui cambia il loro riquadro */
+    var giro = function(){ ridisegna(el); if (!tab) { try { window.dispatchEvent(new Event('resize')); } catch (e) {} } };
+    requestAnimationFrame(giro); setTimeout(function(){ giro(); allarga(el); }, 160);
+  }
+  /* un grafico SVG che non si ridisegna: lo si ingrandisce com'e' (se ha le sue misure) */
+  function allarga(el){
+    if (el.__rsGiraT) return;
+    var s = el.querySelector('svg'); if (!s) return;
+    var r = s.getBoundingClientRect(), W = Math.max(el.clientWidth, el.clientHeight);
+    if (Math.max(r.width, r.height) > W * 0.7) return;
+    if (!s.getAttribute('viewBox')) { var w = s.width && s.width.baseVal ? s.width.baseVal.value : 0, h = s.height && s.height.baseVal ? s.height.baseVal.value : 0; if (w && h) { s.setAttribute('viewBox', '0 0 ' + w + ' ' + h); s.__rsGiraVb = 1; } }
+    s.classList.add('rs-gira-svg');
+  }
+  function fine(){
+    var el = aperto; if (!el) return;
+    aperto = null;
+    try { if (chiudi) chiudi.hidePopover(); } catch (e) {}
+    try { el.hidePopover(); } catch (e) {}
+    el.removeAttribute('popover');
+    el.classList.remove('rs-gira-on', 'rs-gira-t', 'rs-gira-g');
+    el.scrollLeft = el.__rsGiraSx || 0;
+    window.scrollTo(0, el.__rsGiraSy || window.scrollY);
+    var sg = el.querySelector('svg.rs-gira-svg'); if (sg) { sg.classList.remove('rs-gira-svg'); if (sg.__rsGiraVb) { sg.removeAttribute('viewBox'); sg.__rsGiraVb = 0; } }
+    requestAnimationFrame(function(){ ridisegna(el); if (!el.__rsGiraT) { try { window.dispatchEvent(new Event('resize')); } catch (e) {} } vedi(); });
+  }
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && aperto) fine(); });
+
+  var tm = 0, rq = 0;
+  function presto(){ clearTimeout(tm); tm = setTimeout(cerca, 300); }
+  function via(){
+    cerca();
+    try { new MutationObserver(function(L){ if (aperto) return; for (var i = 0; i < L.length; i++) { var t = L[i].target; if (t && (t === fab || t.id === 'rs-gira-x' || (t.closest && t.closest('#rs-gira,#rs-gira-x')))) continue; presto(); return; } }).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    addEventListener('scroll', function(){ if (rq) return; rq = requestAnimationFrame(function(){ rq = 0; vedi(); }); }, { passive: true });
+    addEventListener('resize', presto, { passive: true });
+    document.addEventListener('click', function(e){ if (!fab || e.target !== fab && !fab.contains(e.target)) presto(); }, true);
+    try { MQ.addEventListener('change', presto); } catch (e) {}
+  }
+  if (document.body) via(); else document.addEventListener('DOMContentLoaded', via);
+})();
