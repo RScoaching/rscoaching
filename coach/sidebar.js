@@ -2495,7 +2495,8 @@ window.RSCardio = (function(){
       if (sv.closest('dialog,[popover]:not(.rs-gira-on),#fio-bt,#sb-sidebar,.sb-mob-bar,button,a')) continue;
       var rb = sv.getBoundingClientRect(); if (rb.width < 240 || rb.height < 110) continue;
       if (sv.querySelectorAll('path,rect,circle,line,polyline,polygon').length < 8) continue;
-      var box = sv.closest('[class*="chart"],[class*="graf"],[id*="chart"],[class*="plot"]') || sv.parentElement;
+      var box = sv.parentElement.closest('[class*="chart"],[class*="graf"],[id*="chart"],[class*="plot"]') || sv.parentElement;
+      if (!(box instanceof HTMLElement)) continue;
       if (box && box.querySelector('table')) box = sv.parentElement;
       if (box && out.indexOf(box) < 0 && !out.some(function(o){ return o.contains(box) || box.contains(o); })) { box.__rsGiraT = 0; out.push(box); }
     }
