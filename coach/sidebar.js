@@ -2052,7 +2052,9 @@ window.RSCardio = (function(){
       while (p && p !== document.body) { var o = getComputedStyle(p).overflowX; if (o === 'auto' || o === 'scroll') break; p = p.parentElement; }
       if (!p || p === document.body) continue;
       var larga = p.scrollWidth > p.clientWidth + 8;
-      if (larga && !t.classList.contains('rs-larga')) {
+      /* una cella che occupa due righe (es. "Atleta" sopra due righe di titoli) sposta
+         la prima colonna delle righe sotto: li' la colonna ferma copriva i titoli */
+      if (larga && !t.classList.contains('rs-larga') && !t.querySelector('[rowspan]:not([rowspan="1"])')) {
         var fc = t.querySelector('tbody tr > :first-child');
         if (fc && getComputedStyle(fc).position === 'sticky' && !t.classList.contains('rs-larga')) { /* ha gia' la sua colonna ferma */ }
         else { t.classList.add('rs-larga'); t.style.setProperty('--rs-fondo', fondo(t.parentElement)); }
@@ -2182,6 +2184,12 @@ window.RSCardio = (function(){
     for (var i = 0; i < T.length; i++) {
       var t = T[i];
       if (!t.offsetParent || !t.tHead) continue;
+      /* la tabella e' diventata piu' larga (finestra piu' stretta, piu' colonne): il contenitore
+         torna a scorrere com'era e i titoli smettono di restare fermi, se no la tabella resta tagliata */
+      if (t.__rsTagli && t.__rsTagli.some(function(x){ return x.scrollWidth > x.clientWidth + 1 || x.scrollHeight > x.clientHeight + 1; })) {
+        t.__rsTagli.forEach(function(x){ x.style.overflow = ''; x.style.overflowX = ''; x.style.overflowY = ''; x.__rsClip = 0; });
+        t.__rsTagli = null; t.classList.remove('rs-testa-ferma'); t.__rsNoFerma = 1; continue;
+      }
       // 4: colonna ordinata
       var th = t.tHead.querySelector('th[aria-sort="ascending"],th[aria-sort="descending"]');
       var col = th ? Array.prototype.indexOf.call(th.parentElement.children, th) : -1;
@@ -2192,14 +2200,14 @@ window.RSCardio = (function(){
         t.__rsCol = col;
       }
       // 3: titoli fermi in alto (solo tabelle piu' alte di meta' schermo)
-      if (!t.classList.contains('rs-testa-ferma') && t.offsetHeight > innerHeight * 0.55) {
+      if (!t.classList.contains('rs-testa-ferma') && !t.__rsNoFerma && t.offsetHeight > innerHeight * 0.55) {
         var w = t.parentElement, cs = w && getComputedStyle(w);
         // contenitore che scorre di lato ma non serve: lo si "taglia" invece di farlo scorrere
-        if (w && /(auto|scroll)/.test(cs.overflowX) && w.scrollWidth <= w.clientWidth + 1 && w.scrollHeight <= w.clientHeight + 1) { w.style.overflowX = 'clip'; w.style.overflowY = 'visible'; w.__rsClip = 1; }
+        if (w && /(auto|scroll)/.test(cs.overflowX) && w.scrollWidth <= w.clientWidth + 1 && w.scrollHeight <= w.clientHeight + 1) { w.style.overflowX = 'clip'; w.style.overflowY = 'visible'; w.__rsClip = 1; t.__rsTagli = (t.__rsTagli || []).concat(w); try { (window.__rsRO = window.__rsRO || new ResizeObserver(function(){ presto(); })).observe(w); } catch (e) {} }
         // riquadri che tagliano solo per gli angoli arrotondati: stesso taglio, ma senza bloccare
         for (var a = t.parentElement; a && a !== document.body; a = a.parentElement) {
           var ca = getComputedStyle(a);
-          if (ca.overflowX === 'hidden' && ca.overflowY === 'hidden' && a.scrollHeight <= a.clientHeight + 1 && a.scrollWidth <= a.clientWidth + 1) { a.style.overflow = 'clip'; a.__rsClip = 1; }
+          if (ca.overflowX === 'hidden' && ca.overflowY === 'hidden' && a.scrollHeight <= a.clientHeight + 1 && a.scrollWidth <= a.clientWidth + 1) { a.style.overflow = 'clip'; a.__rsClip = 1; t.__rsTagli = (t.__rsTagli || []).concat(a); }
         }
         if (libero(t)) { t.classList.add('rs-testa-ferma'); t.style.setProperty('--rs-fondo-t', fondo(t.tHead)); }
       }
