@@ -1762,6 +1762,15 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))!important}
 .pg-wb span{font:600 11px var(--ff);color:var(--mut8);min-height:13px}
 .pg-wb i{display:block;width:100%;max-width:18px;border-radius:999px;background:rgba(255,106,46,.30)}
 /* seduta in corso da riprendere */
+.wk7{margin:0 0 12px;padding:14px;border-radius:16px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.28)}
+.wk7-h{display:flex;align-items:center;gap:10px}.wk7-h div{flex:1}.wk7-h b{display:block;font:700 15px var(--ff);color:var(--ink8,#fff)}.wk7-h span{font-size:12.5px;color:var(--mut8,rgba(255,255,255,.6))}
+.wk7 .wk7-go{appearance:none;border:0;min-height:44px;padding:0 16px;border-radius:12px;background:#A78BFA;color:#1a1028;font:700 14px var(--ff);cursor:pointer}
+.wk7 .wk7-no{appearance:none;border:0;background:none;color:var(--mut8,rgba(255,255,255,.6));font:600 13px var(--ff);min-height:44px;padding:0 8px;cursor:pointer}
+.wk7-f{margin-top:12px;display:flex;flex-direction:column;gap:14px}.wk7-q{display:flex;flex-direction:column;gap:7px}.wk7-q>b{font:600 13.5px var(--ff);color:var(--ink8,#fff)}
+.wk7-o{display:flex;gap:6px;flex-wrap:wrap}.wk7-o button{appearance:none;min-width:44px;min-height:44px;padding:0 12px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:var(--ink8,#fff);font:600 14px var(--ff);cursor:pointer}
+.wk7-o button.on{background:#A78BFA;border-color:#A78BFA;color:#1a1028}
+.wk7 textarea,.wk7 input[type=text]{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:var(--ink8,#fff);font:14px var(--ff);resize:vertical}
+.wk7-ok{font-size:13.5px;color:var(--ink8,#fff)}
 .live7{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:12px 14px;border-radius:16px;background:rgba(255,106,46,.10);border:1px solid var(--border2)}
 .live7[hidden]{display:none}
 /* risposta del coach sulla seduta fatta */
@@ -2026,6 +2035,7 @@ html body .ps7.oggi{background:var(--primary);color:#1A0B05}
       <div class="o9-greet"><span id="hero-greet">Bentornato</span><span class="o9-virg">, </span><span id="hero-name">-</span><button type="button" id="pr-mini" class="pr-mini" hidden onclick="prMiniApri()"></button></div>
       <div class="streak-header" id="streak-header" style="display:none"><span id="streak-header-fire">0</span> </div>
       <div class="live7" id="live7" role="status" hidden></div>
+      <section class="wk7" id="wk7" hidden aria-labelledby="wk7-t"></section>
       <div class="workout-hero o9-today" id="workout-hero-card">
         <div class="workout-hero-head">
           <div>
@@ -2559,6 +2569,47 @@ if(!aid){
     // Store globally for day switching
     window._ath=athlete;try{orScheda();}catch(e){}
     // lo stato dell'orologio lo scrive anche lo script (esito dopo ogni giro): la scheda si aggiorna da sola
+    /* Check-in della settimana: 5 domande, meno di 2 minuti, da sabato a lunedi'. Va in
+       questionnaires/{atleta}/{giorno}/settimana, accanto al check-in del mattino: il coach lo
+       vede nella home e risponde con un messaggio gia' impostato. */
+    const WK7={aperta:false,v:{}};
+    window.wk7Render=function(){
+      const el=document.getElementById('wk7');if(!el)return;
+      const Q=ST.q||{},oggi=new Date(),dw=oggi.getDay();
+      const fatto=Object.keys(Q).some(k=>Q[k]&&Q[k].settimana&&Date.now()-(+Q[k].settimana.ts||0)<5*864e5);
+      let dopo=false;try{dopo=sessionStorage.getItem('rs_wk7_dopo')===isoLoc(oggi);}catch(e){}
+      if(WK7.inviato){el.hidden=false;el.innerHTML='<div class="wk7-ok"><b>Grazie!</b> Il check-in della settimana e\' arrivato al coach.</div>';return;}
+      if(fatto||dopo||[6,0,1].indexOf(dw)<0){el.hidden=true;el.innerHTML='';return;}
+      el.hidden=false;
+      const opz=(k,L)=>'<div class="wk7-o" role="group">'+L.map(o=>'<button type="button" data-k="'+k+'" data-v="'+escH(o[0])+'" class="'+(WK7.v[k]===o[0]?'on':'')+'" aria-pressed="'+(WK7.v[k]===o[0])+'">'+escH(o[1])+'</button>').join('')+'</div>';
+      el.innerHTML='<div class="wk7-h"><div><b id="wk7-t">Com\'e\' andata la settimana?</b><span>5 domande, meno di 2 minuti</span></div>'+
+        (WK7.aperta?'':'<button type="button" class="wk7-no" data-a="dopo">Piu\' tardi</button><button type="button" class="wk7-go" data-a="apri">Compila</button>')+'</div>'+
+        (WK7.aperta?'<div class="wk7-f">'+
+          '<div class="wk7-q"><b>1. Voto alla settimana</b>'+opz('voto',[['1','1'],['2','2'],['3','3'],['4','4'],['5','5']])+'</div>'+
+          '<div class="wk7-q"><b>2. Hai fatto gli allenamenti previsti?</b>'+opz('fatti',[['si','Tutti'],['parte','In parte'],['no','No']])+'</div>'+
+          '<div class="wk7-q"><b>3. Dolori o fastidi?</b>'+opz('dolori',[['no','No'],['si','Si\'']])+
+            (WK7.v.dolori==='si'?'<input type="text" id="wk7-dove" placeholder="Dove e quanto (es. ginocchio destro, leggero)" value="'+escH(WK7.v.dove||'')+'">':'')+'</div>'+
+          '<div class="wk7-q"><b>4. Energia</b>'+opz('energia',[['1','1'],['2','2'],['3','3'],['4','4'],['5','5']])+'</div>'+
+          '<div class="wk7-q"><b>5. Su cosa vuoi lavorare la prossima settimana?</b><textarea id="wk7-pross" rows="2" placeholder="Facoltativo">'+escH(WK7.v.prossima||'')+'</textarea></div>'+
+          '<button type="button" class="wk7-go" data-a="invia">Invia al coach</button></div>':'');
+    };
+    document.addEventListener('click',async e=>{
+      const el=document.getElementById('wk7');if(!el||!el.contains(e.target))return;
+      const b=e.target.closest('button');if(!b)return;
+      const dove=document.getElementById('wk7-dove'),pr=document.getElementById('wk7-pross');
+      if(dove)WK7.v.dove=dove.value;if(pr)WK7.v.prossima=pr.value;
+      if(b.dataset.k){WK7.v[b.dataset.k]=b.dataset.v;wk7Render();return;}
+      if(b.dataset.a==='apri'){WK7.aperta=true;wk7Render();return;}
+      if(b.dataset.a==='dopo'){try{sessionStorage.setItem('rs_wk7_dopo',isoLoc(new Date()));}catch(x){}wk7Render();return;}
+      if(b.dataset.a==='invia'){
+        if(!WK7.v.voto||!WK7.v.fatti){showToast('Rispondi almeno alle prime due domande');return;}
+        const now=new Date(),dat={ts:now.getTime(),voto:+WK7.v.voto,fatti:WK7.v.fatti,dolori:WK7.v.dolori==='si',dove:(WK7.v.dolori==='si'&&WK7.v.dove)?String(WK7.v.dove).slice(0,140):null,
+          energia:WK7.v.energia?+WK7.v.energia:null,prossima:WK7.v.prossima?String(WK7.v.prossima).slice(0,400):null};
+        b.disabled=true;
+        try{await set(ref(db,`questionnaires/${aid}/${isoLoc(now)}/settimana`),dat);WK7.inviato=true;WK7.aperta=false;wk7Render();}
+        catch(x){b.disabled=false;showToast('Non inviato: controlla la connessione e riprova');}
+      }
+    });
     /* una seduta lasciata a meta' (anche in Safari, prima di aprire l'app dall'icona): si riprende da qui */
     onValue(ref(db,`live_sessioni/${aid}`),x=>{
       const el=document.getElementById('live7');if(!el)return;
@@ -2618,6 +2669,7 @@ if(!aid){
     onValue(ref(db,`questionnaires/${aid}`),qSnap=>{
       window._questionnairesCache=qSnap.val()||{};
       ST.q=window._questionnairesCache;
+      try{wk7Render();}catch(e){}
       window._todayReadinessSemaforo=null;
       renderReadinessSparkline();
       oggiAgg();
